@@ -5,6 +5,8 @@
 Handbook](https://epirhandbook.com/index.html)*
 
 <!-- badges: start -->
+
+[![R-CMD-check](https://github.com/epirhandbook/handbookfiles/workflows/R-CMD-check/badge.svg)](https://github.com/epirhandbook/handbookfiles/actions)
 <!-- badges: end -->
 
 The [Epi R Handbook](https://epirhandbook.com/index.html) is an
