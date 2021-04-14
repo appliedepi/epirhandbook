@@ -13,9 +13,6 @@ The [Epi R Handbook](https://epirhandbook.com/index.html) is an
 open-access R reference manual for applied epidemiologists and public
 health practitioners.
 
-This R package provides the datasets used as examples in the handbook.
-You
-
 ## Installation
 
 You can install the latest version of epirhandbook and view the source
