@@ -9,6 +9,7 @@ Handbook](https://epirhandbook.com/index.html)*
 [![R-CMD-check](https://github.com/epirhandbook/handbookfiles/workflows/R-CMD-check/badge.svg)](https://github.com/epirhandbook/handbookfiles/actions)
 [![CC-BY-NC-SA
 4.0](https://img.shields.io/badge/LICENCE-CC--BY--NC--SA-yellowgreen.svg)](http://creativecommons.org/licenses/by-nc-sa/4.0/)
+![Ready-for-use](https://img.shields.io/badge/Ready--for--use-No-red.svg)
 <!-- badges: end -->
 
 The [Epi R Handbook](https://epirhandbook.com/index.html) is an
