@@ -4,13 +4,9 @@
 #'
 #' @param data
 #'
-#' @importFrom rio import
 #' @export
 import_erh <- function(path = NULL){
 
   new_path <- system.file("extdata", path, package = "epirhandbook", mustWork = T)
 
-  data <- rio::import(new_path)
-
-  return(data)
 }
