@@ -1,0 +1,137 @@
+---
+title: "Outbreak dashboard"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+---
+
+```{r setup, include=FALSE}
+pacman::p_load(
+     rio,
+     here,
+     tidyverse,
+     flexdashboard,
+     flextable,
+     incidence2,
+     epicontacts)
+
+```
+
+```{r, echo=F}
+# import the linelist into R
+linelist <- rio::import(here::here("data", "linelist_cleaned.rds"))
+```
+
+
+Column {data-width=650}
+-----------------------------------------------------------------------
+
+### Transmission chain (select cases)
+
+```{r}
+# load package
+pacman::p_load(epicontacts)
+
+## generate contacts
+contacts <- linelist %>%
+  transmute(
+    infector = infector,
+    case_id = case_id,
+    location = sample(c("Community", "Nosocomial"), n(), TRUE),
+    duration = sample.int(10, n(), TRUE)
+  ) %>%
+  drop_na(infector)
+
+## generate epicontacts object
+epic <- make_epicontacts(
+  linelist = linelist,
+  contacts = contacts,
+  id = "case_id",
+  from = "infector",
+  to = "case_id",
+  directed = TRUE
+)
+
+## subset epicontacts object
+sub <- epic %>%
+  subset(
+    node_attribute = list(date_onset = c(as.Date(c("2014-06-30", "2014-06-01"))))
+  ) %>%
+ thin("contacts")
+
+# temporal plot
+plot(
+  sub,
+  x_axis = "date_onset",
+  node_color = "outcome",
+  col_pal = c(Death = "firebrick", Recover = "green"),
+  arrow_size = 0.5,
+  node_size = 13,
+  label = FALSE,
+  height = 700,
+  width = 700
+)
+```
+
+Column {data-width=350}
+-----------------------------------------------------------------------
+
+### Epidemic curve by age
+
+```{r}
+age_outbreak <- incidence(
+  linelist,
+  date_index = date_onset,   # date of onset for x-axis
+  interval = "week",         # weekly aggregation of cases
+  groups = age_cat)
+     
+# plot with different color palette
+plot(age_outbreak, fill = age_cat, col_pal = muted, title = "'muted' incidence2 palette")
+```
+
+### Table of 
+
+```{r}
+table <- linelist %>% 
+  # filter
+  ########
+  filter(!is.na(outcome) & hospital != "Missing") %>%  # Remove cases with missing outcome or hospital
+  
+  # Get summary values per hospital-outcome group
+  ###############################################
+  group_by(hospital, outcome) %>%                      # Group data
+  summarise(                                           # Create new summary columns of indicators of interest
+    N = n(),                                            # Number of rows per hospital-outcome group     
+    ct_value = median(ct_blood, na.rm=T)) %>%           # median CT value per group
+  
+  # add totals
+  ############
+  bind_rows(                                           # Bind the previous table with this mini-table of totals
+    linelist %>% 
+      filter(!is.na(outcome) & hospital != "Missing") %>%
+      group_by(outcome) %>%                            # Grouped only by outcome, not by hospital    
+      summarise(
+        N = n(),                                       # Number of rows for whole dataset     
+        ct_value = median(ct_blood, na.rm=T))) %>%     # Median CT for whole dataset
+  
+  # Pivot wider and format
+  ########################
+  mutate(hospital = replace_na(hospital, "Total")) %>% 
+  pivot_wider(                                         # Pivot from long to wide
+    values_from = c(ct_value, N),                       # new values are from ct and count columns
+    names_from = outcome) %>%                           # new column names are from outcomes
+  mutate(                                              # Add new columns
+    N_Known = N_Death + N_Recover,                      # number with known outcome
+    Pct_Death = N_Death / N_Known * 100,               # percent cases who died
+    Pct_Recover = N_Recover/N_Known * 100) %>%         # percent who recovered
+  select(                                              # Re-order columns
+    hospital, N_Known,                                   # Intro columns
+    N_Recover, Pct_Recover, ct_value_Recover,            # Recovered columns
+    N_Death, Pct_Death, ct_value_Death)  %>%             # Death columns
+  arrange(N_Known)                                    # Arrange rows from lowest to highest (Total row at bottom)
+
+table %>% 
+     flextable::qflextable()
+```
+
