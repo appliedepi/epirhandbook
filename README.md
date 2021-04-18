@@ -7,6 +7,8 @@ Handbook](https://epirhandbook.com/index.html)*
 <!-- badges: start -->
 
 [![R-CMD-check](https://github.com/epirhandbook/handbookfiles/workflows/R-CMD-check/badge.svg)](https://github.com/epirhandbook/handbookfiles/actions)
+[![CC-BY-NC-SA
+4.0](https://img.shields.io/badge/LICENCE-CC--BY--NC--SA-yellowgreen.svg)](http://creativecommons.org/licenses/by-nc-sa/4.0/)
 <!-- badges: end -->
 
 The [Epi R Handbook](https://epirhandbook.com/index.html) is an
@@ -21,3 +23,11 @@ code from [GitHub](https://github.com/epirhandbook/handbookfiles) with:
 ``` r
 remotes::install_git("epirhandbook/handbookfiles")
 ```
+
+# Licence
+
+This work is licensed under a [creative Commons
+Attribution-NonCommercial-ShareAlike 4.0 International
+License](http://creativecommons.org/licenses/by-nc-sa/4.0/)
+
+Read more using the link above or reading the [LICENCE](LICENSE.md)
