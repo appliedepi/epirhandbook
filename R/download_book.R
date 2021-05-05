@@ -13,4 +13,6 @@ download_book <- function(save_loc = rstudioapi::selectDirectory()){
   download.file(url = "https://github.com/epirhandbook/Epi_R_handbook/raw/master/offline_long/Epi_R_Handbook_offline.html",
                 destfile = save_file)
 
+  cli::cli_alert_success("Complete! The Offline version of the hanbook is available here: {save_loc}")
+
 }

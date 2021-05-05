@@ -36,6 +36,8 @@ get_data <- function(file = NULL, path = rstudioapi::selectDirectory()){
 
   files_to_copy <- system.file(package = "handbookfiles", "extdata", files_to_copy)
 
-  lapply(files_to_copy, file.copy, to = path)
+  success <- lapply(files_to_copy, file.copy, to = path)
+
+  if(all(success)) cli::cli_alert_success("File(s) successfully saved here: {path}")
 
 }
