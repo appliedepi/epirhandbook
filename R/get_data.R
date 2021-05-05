@@ -34,7 +34,7 @@ get_data <- function(file = NULL, path = rstudioapi::selectDirectory()){
 
   # files_to_copy <- lapply(files_to_copy, system.file, package = "handbookfiles")
 
-  files_to_copy <- system.file(package = "handbookfiles", files_to_copy)
+  files_to_copy <- system.file(package = "handbookfiles", "extdata", files_to_copy)
 
   lapply(files_to_copy, file.copy, to = path)
 
