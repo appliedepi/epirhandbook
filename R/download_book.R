@@ -3,14 +3,13 @@
 #' @description Need to refer to the Epidemiology R Handbook offline in the field?
 #' Easily download the handbook in advance with this function
 #'
-#' @param save_loc Directory the book should be downloaded to
-#'
-#' @importFrom utils download.file
+#' @param save_loc Directory the book should be downloaded to **Default opens a directory picker interactively**
 #'
 #' @export
-download_book <- function(save_loc = file.choose()){
+download_book <- function(save_loc = rstudioapi::selectDirectory()){
 
   save_file <- paste0(save_loc, "Epi_R_Handbook_offline.html")
+
   download.file(url = "https://github.com/epirhandbook/Epi_R_handbook/raw/master/offline_long/Epi_R_Handbook_offline.html",
                 destfile = save_file)
 

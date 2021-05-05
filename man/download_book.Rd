@@ -4,10 +4,10 @@
 \alias{download_book}
 \title{download_book}
 \usage{
-download_book(save_loc = getwd())
+download_book(save_loc = rstudioapi::selectDirectory())
 }
 \arguments{
-\item{save_loc}{Directory the book should be downloaded to}
+\item{save_loc}{Directory the book should be downloaded to \strong{Default opens a directory picker interactively}}
 }
 \description{
 Need to refer to the Epidemiology R Handbook offline in the field?
