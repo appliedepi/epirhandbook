@@ -38,6 +38,6 @@ get_data <- function(file = NULL, path = rstudioapi::selectDirectory()){
 
   success <- lapply(files_to_copy, file.copy, to = path, overwrite = TRUE)
 
-  if(all(success)) cli::cli_alert_success("File(s) successfully saved here: {path}")
+  if(all(as.logical(success))) cli::cli_alert_success("File(s) successfully saved here: {path}")
 
 }
