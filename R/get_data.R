@@ -1,13 +1,12 @@
 #' @title get_data
 #'
-#' Access data used in examples in the Epi R Handbook. Use get_data("all") to save all data, or give a specific file name. 
+#' Access data used in examples in the Epi R Handbook. Use get_data("all") to save all data, or give a specific file name.
 #'
 #' @param file Name and file extension of the data to be downloaded *string* or "all" which will save all Epidemiology R Handbook example files
-#' @param path **Default opens a directory picker interactively**. Path on your computer where the file(s) should be saved to *string*
+#' @param path **Run with no arguments to pick a directory interactively**. Path on your computer where the file(s) should be saved to *string*
 #'
 #' @export
 get_data <- function(file = NULL, path = rstudioapi::selectDirectory()){
-
   ## must select a file
   stopifnot(!is.null(file))
 

@@ -3,7 +3,7 @@
 #' @description Need to refer to the Epidemiology R Handbook offline in the field?
 #' Easily download the handbook in advance with this function
 #'
-#' @param save_loc Directory the book should be downloaded to **Default opens a directory picker interactively**
+#' @param save_loc **Run with no arguments to pick a directory interactively** Directory the book should be downloaded to
 #'
 #' @export
 download_book <- function(save_loc = rstudioapi::selectDirectory()){

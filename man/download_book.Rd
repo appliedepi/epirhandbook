@@ -7,7 +7,7 @@
 download_book(save_loc = rstudioapi::selectDirectory())
 }
 \arguments{
-\item{save_loc}{Directory the book should be downloaded to \strong{Default opens a directory picker interactively}}
+\item{save_loc}{\strong{Run with no arguments to pick a directory interactively} Directory the book should be downloaded to}
 }
 \description{
 Need to refer to the Epidemiology R Handbook offline in the field?

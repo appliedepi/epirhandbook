@@ -4,17 +4,17 @@
 \alias{get_data}
 \title{get_data
 
-Access data used in examples in the Handbook}
+Access data used in examples in the Epi R Handbook. Use get_data("all") to save all data, or give a specific file name.}
 \usage{
 get_data(file = NULL, path = rstudioapi::selectDirectory())
 }
 \arguments{
-\item{file}{Name and file extension of the data to be downloaded \emph{string} or "ALL" which will save all Epidemiology R Handbook example files}
+\item{file}{Name and file extension of the data to be downloaded \emph{string} or "all" which will save all Epidemiology R Handbook example files}
 
-\item{path}{\strong{Default opens a directory picker interactively}. Path on your computer where the file(s) should be saved to \emph{string}}
+\item{path}{\strong{Run with no arguments to pick a directory interactively}. Path on your computer where the file(s) should be saved to \emph{string}}
 }
 \description{
 get_data
 
-Access data used in examples in the Handbook
+Access data used in examples in the Epi R Handbook. Use get_data("all") to save all data, or give a specific file name.
 }
