@@ -22,7 +22,7 @@ You can install the latest version of epirhandbook and view the source
 code from [GitHub](https://github.com/epirhandbook/epirhandbook) with:
 
 ``` r
-remotes::install_git("epirhandbook/epirhandbook")
+remotes::install_git("appliedepi/epirhandbook")
 ```
 
 # Licence
