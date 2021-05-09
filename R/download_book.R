@@ -8,6 +8,8 @@
 #' @export
 download_book <- function(save_loc = rstudioapi::selectDirectory()){
 
+  stopifnot(!is.null("path"))
+
   save_file <- paste0(save_loc, "/Epi_R_Handbook_offline.html")
 
   download.file(url = "https://github.com/epirhandbook/Epi_R_handbook/raw/master/offline_long/Epi_R_Handbook_offline.html",
