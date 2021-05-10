@@ -21,6 +21,12 @@ You can install the latest version of epirhandbook and view the source
 code from [GitHub](https://github.com/epirhandbook/epirhandbook) with:
 
 ``` r
+# install the latest version of the Epi R Handbook package
+pacman::p_install_gh("appliedepi/epirhandbook")
+```
+Or alternatively:  
+
+``` r
 remotes::install_git("appliedepi/epirhandbook")
 ```
 
