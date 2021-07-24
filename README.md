@@ -18,15 +18,17 @@ health practitioners.
 ## Installation
 
 You can install the latest version of epirhandbook and view the source
-code from [GitHub](https://github.com/epirhandbook/epirhandbook) with:
+code from [GitHub](https://github.com/appliedepi/epirhandbook) with:
 
 ``` r
-# install the latest version of the Epi R Handbook package
+install.packages("pacman")
 pacman::p_install_gh("appliedepi/epirhandbook")
 ```
-Or alternatively:  
+
+Or
 
 ``` r
+install.packages("remotes")
 remotes::install_git("appliedepi/epirhandbook")
 ```
 
