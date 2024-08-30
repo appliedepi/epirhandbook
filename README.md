@@ -29,7 +29,7 @@ Or
 
 ``` r
 install.packages("remotes")
-remotes::install_git("appliedepi/epirhandbook")
+remotes::install_github("appliedepi/epirhandbook")
 ```
 
 # Licence
