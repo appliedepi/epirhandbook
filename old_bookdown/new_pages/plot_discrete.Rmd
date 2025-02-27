@@ -1,0 +1,283 @@
+# Plot categorical data  { }  
+
+
+In this page we cover basic use of **ggplot2** functions to visualise discrete/categorical data. The additional functionality of **ggplot2** compared to **base** R means we recommend it for presentation-ready visualisations. 
+
+We also cover visualising distributions of categorical values, as counts and proportions.
+
+
+```{r echo=F, fig.height=3, fig.show='hold', message=FALSE, warning=FALSE, out.width=c('100%')}
+
+pacman::p_load(tidyverse)
+
+linelist <- rio::import(here::here("data", "case_linelists", "linelist_cleaned.rds"))
+
+linelist <- linelist %>% 
+  mutate(hospital = fct_relevel(hospital, 
+                                c("St. Mark's Maternity Hospital (SMMH)", 
+                                  "Port Hospital", 
+                                  "Central Hospital",
+                                  "Military Hospital",
+                                  "Other",
+                                  "Missing")))
+
+
+ggplot(linelist %>% drop_na(outcome)) + 
+  geom_bar(aes(x=hospital, fill = outcome)) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  coord_flip() +
+  scale_x_discrete(limits=rev) + 
+  scale_fill_manual(values = c("Death"= "#3B1c8C",
+                               "Recover" = "#21908D" )) +
+  labs(fill = "Outcome", y = "Count",x = "Hospital of admission") +
+  labs(subtitle = "Number of Ebola cases per hospital, by outcome")
+
+```
+
+
+<!-- ======================================================= -->
+## Preparation {  }
+
+Preparation includes loading the relevant packages, namely **ggplot2** for examples covered here. We also load the data.
+
+### Load packages {.unnumbered}
+
+This code chunk shows the loading of packages required for the analyses. In this handbook we emphasize `p_load()` from **pacman**, which installs the package if necessary *and* loads it for use. You can also load installed packages with  `library()` from **base** R. See the page on [R basics] for more information on R packages.  
+
+```{r}
+# Load packages we will be using repeatedly
+pacman::p_load(
+  rio,             # file import
+  here,            # locate files
+  janitor,         # tables
+  tidyverse)       # ggplot2, dplyr, and forcats among others 
+```
+
+
+### Import data {.unnumbered}
+
+To begin, we import the cleaned linelist of cases from a simulated Ebola epidemic. If you want to follow along, <a href='https://github.com/appliedepi/epirhandbook_eng/raw/master/data/case_linelists/linelist_cleaned.rds' class='download-button'>click to download the "clean" linelist</a> (as .rds file). Import data with the `import()` function from the **rio** package (it handles many file types like .xlsx, .csv, .rds - see the [Import and export] page for details).  
+
+```{r, echo=F}
+# import the linelist into R
+linelist <- rio::import(here::here("data", "case_linelists", "linelist_cleaned.rds"))
+```
+
+```{r, eval=F}
+# import the linelist
+linelist <- import("linelist_cleaned.rds")
+```
+
+The first 50 rows of the linelist are displayed below.
+
+```{r, message=FALSE, echo=F}
+# display the linelist data as a table
+DT::datatable(head(linelist, 50), rownames = FALSE, filter="top", options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+
+### Clean columns {.unnumbered}
+
+For the examples in this section, we use the simulated Ebola linelist, focusing on the categorical variables `hospital`, and `outcome`. These need to be the correct class and format. 
+
+Let's take a look at the `hospital` column, first with `class()` from **base** R, and with `tabyl()` from **janitor**.  
+
+```{r}
+# View class of hospital column - we can see it is a character
+class(linelist$hospital)
+
+# Look at values held within hospital column
+linelist %>% 
+  tabyl(hospital)
+
+```
+
+We can see the values within are characters, as they are hospital names, and by default they are ordered alphabetically. There are 'other' and 'missing' values, which we would prefer to be the last subcategories when presenting breakdowns. So we change this column into a factor and re-order it. This is covered in more detail in the [Factors] data management section.
+
+
+```{r}
+# Convert to factor and define level order so "Other" and "Missing" are last
+linelist <- linelist %>% 
+  mutate(
+    hospital = fct_relevel(hospital, 
+      "St. Mark's Maternity Hospital (SMMH)",
+      "Port Hospital", 
+      "Central Hospital",
+      "Military Hospital",
+      "Other",
+      "Missing"))
+
+```
+
+### Ensure correct data structure {.unnumbered}
+
+As discussed in the ["Bar plots"](#ggplot_basics_bars)For displaying frequencies and distributions of categorical variables, you have could create creating plots based on: 
+
+* The linelist data, with one row per observation, or 
+* A summary table based on the linelist, with one row per category. An example is below to show the use of `dplyr` to create a table of case counts per hospital. 
+
+Tables can be created using the 'table' method for built-in graphics. The `useNA = "ifany"` arguments ensures that missing values are included, as table otherwise automatically excludes them. 
+
+```{r}
+#Table method
+  outcome_nbar <- table(linelist$outcome, 
+                        useNA = "ifany")
+
+  outcome_nbar # View full table
+```
+
+Or using other data management packages such as dplyr. In this example we add on a percentage column.
+
+```{r}
+#Dplyr method
+  outcome_n <- linelist %>% 
+    group_by(outcome) %>% 
+    count %>% 
+    ungroup() %>% # Ungroup so proportion is out of total
+    mutate(proportion = n/sum(n)*100) # Caculate percentage
+  
+  
+   outcome_n #View full table
+```
+
+### Filter data {.unnumbered}
+
+You may consider dropping rows not needed for this analysis. For instance, for the next few examples we want to understand trends amongst persons with a known outcome, so we drop rows with missing `outcome` column values.
+
+```{r}
+#Drop missing from full linelist
+linelist <- linelist %>% 
+  drop_na(outcome)
+
+#Drop missing from dplyr table
+outcome_n <- outcome_n %>% 
+  drop_na(outcome)
+
+```
+
+<!-- ======================================================= -->
+## Plotting with ggplot2 {  }
+
+See the [ggplot basics] page for the fundamentals, and the [ggplot tips] page for more advanced techniques.  
+
+
+
+### Bar charts using raw data {.unnumbered}
+
+Below is code using `geom_bar` for creating some simple bar charts to show frequencies of Ebola patient outcomes: A) For all cases, and B) By hospital.
+
+In the `aes` bracket, only `x` needs to be specified - or `y` if you want the bars presented horizontally. Ggplot knows that the unspecified y (or x) will be the number of observations that fall into those categories. 
+
+```{r, out.width=c('50%', '50%'), fig.show='hold'}
+# A) Outcomes in all cases
+ggplot(linelist) + 
+  geom_bar(aes(x=outcome)) +
+  labs(title = "A) Number of recovered and dead Ebola cases")
+
+
+# B) Outcomes in all cases by hosptial
+ggplot(linelist) + 
+  geom_bar(aes(x=outcome, fill = hospital)) +
+  theme(axis.text.x = element_text(angle = 90)) + # Add preference to rotate the x axis text
+  labs(title = "B) Number of recovered and dead Ebola cases, by hospital")
+
+```
+
+
+### Bar charts using processed data {.unnumbered}
+
+Below is code using `geom_col` for creating  simple bar charts to show the distribution of Ebola patient outcomes. With geom_col, both x and y need to be specified. Here x is the categorical variable along the x axis, and y is the generated proportions column `proportion`. 
+
+```{r, fig.height = 3, fig.width=4.5}
+# Outcomes in all cases
+ggplot(outcome_n) + 
+  geom_col(aes(x=outcome, y = proportion)) +
+  labs(subtitle = "Number of recovered and dead Ebola cases")
+
+```
+
+To show breakdowns by hospital, an additional table needs to be created for frequencies of the combined categories `outcome` and `hospital`. 
+
+```{r, fig.height = 4, fig.width=6}
+outcome_n2 <- linelist %>% 
+  group_by(hospital, outcome) %>% 
+  count() %>% 
+  group_by(hospital) %>% # Group so proportions are out of hospital total
+  mutate(proportion = n/sum(n)*100)
+
+head(outcome_n2) #Preview data
+```
+
+We then create the ggplot with some added formatting:
+
+  * **Axis flip**: Swapped the axis around with `coord_flip()` so that we can read the hospital names.
+  * **Columns side-by-side**: Added a `position = "dodge"` argument so that the bars for death and recover are presented side by side rather than stacked. Note stacked bars are the default.
+  * **Column width**: Specified 'width', so the columns are half as thin as the full possible width.
+  * **Column order**: Reversed the order of the categories on the y axis so that 'Other' and 'Missing' are at the bottom, with `scale_x_discrete(limits=rev)`. Note that we used that rather than `scale_y_discrete` because hospital is stated in the `x` argument of `aes()`, even if visually it is on the y axis. We do this because Ggplot seems to present categories backwards unless we tell it not to.  
+  * **Other details**: Labels/titles and colours added within `labs` and `scale_fill_color` respectively.
+  
+```{r, fig.height = 4, fig.width=8}
+
+# Outcomes in all cases by hospital
+ggplot(outcome_n2) +  
+  geom_col(aes(x=hospital, 
+               y = proportion, 
+               fill = outcome),
+           width = 0.5,          # Make bars a bit thinner (out of 1)
+           position = "dodge") + # Bars are shown side by side, not stacked
+  scale_x_discrete(limits=rev) + # Reverse the order of the categories
+  theme_minimal() +              # Minimal theme 
+  coord_flip() +
+  labs(subtitle = "Number of recovered and dead Ebola cases, by hospital",
+       fill = "Outcome",        # Legend title
+       x = "Count",             # X axis title
+       y = "Hospital of admission")  + # Y axis title
+  scale_fill_manual(values = c("Death"= "#3B1c8C",
+                               "Recover" = "#21908D" )) 
+
+```
+
+
+
+Note that the proportions are binary, so we may prefer to drop 'recover' and just show the proportion who died. This is just for illustration purposes though. 
+
+### Facetting {.unnumbered} 
+
+We can also use faceting to create futher mini-graphs, which is detailed with examples in the continuous data visualisation section. Specifically, one can use:
+
+* `facet_wrap()` - this will recreate the sub-graphs and present them alphabetically (typically, unless stated otherwise). You can invoke certain options to determine the look of the facets, e.g. `nrow=1` or `ncol=1` to control the number of rows or columns that the faceted plots are arranged within. 
+* `facet_grid()` - this is suited to seeing subgroups for particular combinations of categorical variables. 
+
+
+<!-- ======================================================= -->
+## Plotting with base graphics {  }
+
+**Bar charts**
+
+To create bar plots in R, we create a frequency table using the `table` function. This creates an object of a table class, that R can recognise for plotting. We can create a simple frequency graph showing Ebola case outcomes (A), or add in colours to present outcomes by gender (B).
+
+Note that NA values are excluded from these plots by default.
+
+```{r, out.width=c('50%', '50%'), fig.show='hold'}
+# A) Outcomes in all cases
+outcome_nbar <- table(linelist$outcome)
+barplot(outcome_nbar, main= "A) Outcomes")
+
+# B) Outcomes in all cases by gender of case
+outcome_nbar2 <- table(linelist$outcome, linelist$gender) # The first column is for groupings within a bar, the second is for the separate bars
+barplot(outcome_nbar2, legend.text=TRUE, main = "B) Outcomes by gender") # Specify inclusion of legend
+
+```
+
+
+
+
+<!-- ======================================================= -->
+## Resources {  }
+
+There is a huge amount of help online, especially with ggplot. see:
+
+* http://r-statistics.co/ggplot2-cheatsheet.html
+* https://biostats.w.uib.no/the-ggplot2-cheat-sheet-by-rstudio/
+
