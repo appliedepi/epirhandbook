@@ -1,0 +1,493 @@
+
+# Plot continuous data { }  
+
+```{r echo=F, fig.show='hold', message=FALSE, warning=FALSE, out.width=c('50%', '50%')}
+pacman::p_load(ggplot2,
+               dplyr)
+
+linelist <- rio::import(here::here("data", "case_linelists", "linelist_cleaned.rds")) %>% #Load the data
+  mutate(age = as.numeric(age),
+         wt_kg = as.numeric(wt_kg)) # Converting age and weight to numeric value if needed
+
+# with the boxplot() function
+# graphics::boxplot(age ~ outcome,
+#                   data = linelist,
+#                   col = c("gold", "darkgreen"),
+#                   main = "A) BOX PLOT made using R's built in graphics boxplot")
+
+
+
+# with ggplot2 historgram
+ggplot(data = linelist,
+       mapping = aes(x = age))+
+  geom_histogram(binwidth=2)+
+  labs(title = "A) histogram of age")
+
+
+# with ggplot2 box plots
+ggplot(data = linelist %>% drop_na(gender), mapping = aes(y = age, x = gender, fill = gender))+
+  geom_violin()+
+  #ggforce::geom_sina(aes(color = gender), alpha = 0.5)+
+  geom_boxplot( fill = NA)+
+  labs(title = "B) Box and Violin plots of age by gender")
+
+
+# with ggplot2 - scatter plot
+ggplot(data = linelist,
+       mapping = aes(y = wt_kg, x = age))+
+  geom_point()+
+  labs(title = "C) Scatter plot of weight and age")
+
+
+
+```
+
+
+This page will discuss appropriate plotting of continuous data, such as age, clinical measurements, and distance. We focus on use of **ggplot2** (part of the **tidyverse** family of packages), but also brielfly describe **base** R plotting functions.  
+
+Visualisations covered here include:
+
+* Plots for one continuous variable:  
+  * **Histogram**, a classic graph to present the distribution of a continuous variable. 
+  * **Box plot** (also called box and whisker), to show the 25th, 50th, and 75th percentiles, tail ends of the distribution, and outliers ([important limitations](https://www.data-to-viz.com/caveat/boxplot.html)).  
+  * **Jitter plot**, to show all values as points that are 'jittered' so they can (mostly) all be seen, even where two have the same value.  
+  * **Violin plot**, show the distribution of a continuous variable based on the symmetrical width of the 'violin'. 
+  * **Sina plot**, are a combination of jitter and violin plots, where individual points are shown but in the symmetrical shape of the distribution (via **ggforce** package).  
+* **Scatter plot** for two continuous variables.  
+* **Heat plots** for three continuous variables (linked to [Heat plots] page)  
+
+
+
+
+
+
+
+<!-- ======================================================= -->
+## Preparation {  }
+
+Preparation includes loading the relevant packages, here **ggplot2** and **dplyr** (both part of **tidyverse**), and ensuring your data columns are of the correct class. 
+
+### Load packages {.unnumbered}
+
+This code chunk shows the loading of packages required for the analyses. In this handbook we emphasize `p_load()` from **pacman**, which installs the package if necessary *and* loads it for use. You can also load installed packages with  `library()` from **base** R. See the page on [R basics] for more information on R packages.  
+
+Note: The mega-package **tidyverse** includes the pacakage **ggplot2** and **dplyr** among many others (e.g. **stringr**, **tidyr**, and **forcats**).  
+
+```{r}
+pacman::p_load(
+  rio,            # data import and export
+  here,           # relative file paths
+  tidyverse       # includes ggplot2 and dplyr
+  )
+```
+
+
+
+### Import data {.unnumbered}
+
+For the examples in this page, we import the cleaned linelist of cases from a simulated Ebola epidemic. If you want to follow along, <a href='https://github.com/appliedepi/epirhandbook_eng/raw/master/data/case_linelists/linelist_cleaned.rds' class='download-button'>click to download the "clean" linelist</a> (as .rds file). Import data with the `import()` function from the **rio** package (it handles many file types like .xlsx, .csv, .rds - see the [Import and export] page for details).  
+
+```{r, echo=F}
+# import the linelist into R
+linelist <- rio::import(here::here("data", "case_linelists", "linelist_cleaned.rds"))
+```
+
+```{r, eval=F}
+# import the linelist
+linelist <- import("linelist_cleaned.rds")
+```
+
+The first 50 rows of the linelist are displayed below. We will focus on the continuous variables `age`, `wt_kg` (weight in kilos), `ct_blood` (CT, cycle-threshold values), and `days_onset_hosp` (difference between date of symptom onset and date of hospitalisation).  
+
+```{r, message=FALSE, echo=F}
+# display the linelist data as a table
+DT::datatable(head(linelist, 50), rownames = FALSE, filter="top", options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+
+
+
+
+### Column class {.unnumbered}  
+
+Ensure that the continuous columns are correcly classified in R as class numeric. Below we use `mutate()` and `as.numeric()`to ensure the class of the columns that are important to our analysis. See the page on [Cleaning data and core functions] for more detail.  
+
+```{r}
+linelist <- linelist %>%  
+  mutate(
+    across(                                             # mutate multiple columns at once
+      .cols = c(age, ct_blood, days_onset_hosp, wt_kg), # columns to transform
+      .fns = as.numeric                                 # function to use (without parentheses)
+      )
+    )                               
+ 
+```
+
+Note: You should have conducted various data checks before this point, including checking the missingness of the data. See the page [Missing data] for tips on these analyses.  
+
+
+
+
+
+## One continuous variable  
+
+
+
+### Histograms {.unnumbered}
+
+Below is code for generating **histograms**, which group continuous data into ranges and display in adjacent bars of varying height. This is done using `geom_histogram()`. See the ["Bar plot" section](#ggplot_basics_bars) of the ggplot basics page to understand difference between `geom_histogram()`, `geom_bar()`, and `geom_col()`.  
+
+We will show the distribution of ages of cases. Within `mapping = aes()` specify which column you want to see the distribution of. You can assign this column to either the x or the y axis. 
+
+The rows will be assigned to "bins" based on their numeric age, and these bins will be graphically represented by bars. If you specify a number of bins with the `bins = ` plot aesthetic, the break points are evenly spaced between the minimum and maximum values of the histogram. If `bins = ` is unspecified, an appropriate number of bins will be guessed and this message displayed after the plot:  
+
+```
+## `stat_bin()` using `bins = 30`. Pick better value with `binwidth`.
+``` 
+
+If you do not want to specify a number of bins to `bins = `, you could alternatively specify `binwidth = ` in the units of the axis. We give a few examples showing different bins and bin widths:  
+
+```{r fig.show='hold', message=FALSE, warning=FALSE, out.width=c('50%', '50%')}
+# A) Regular histogram
+ggplot(data = linelist, aes(x = age))+  # provide x variable
+  geom_histogram()+
+  labs(title = "A) Default histogram (30 bins)")
+
+# B) More bins
+ggplot(data = linelist, aes(x = age))+  # provide x variable
+  geom_histogram(bins = 50)+
+  labs(title = "B) Set to 50 bins")
+
+# C) Fewer bins
+ggplot(data = linelist, aes(x = age))+  # provide x variable
+  geom_histogram(bins = 5)+
+  labs(title = "C) Set to 5 bins")
+
+
+# D) More bins
+ggplot(data = linelist, aes(x = age))+  # provide x variable
+  geom_histogram(binwidth = 1)+
+  labs(title = "D) binwidth of 1")
+
+# E) Layered histograms with different bin widths
+ggplot(data = linelist, aes(x = age))+         # provide x variable 
+  geom_histogram(
+    binwidth = 2) +                    # Underlying layer has binwidth of 2
+  geom_histogram(
+    binwidth = 1,                      # Top layer has binwidth of 1
+    alpha = 0.4,                       # Set top layer to be slightly see through
+    fill = "blue")+ 
+  labs(title = "E) Layered histograms with different binwidths")
+
+```
+
+
+
+To get smoothed proportions, you can use `geom_density()`:  
+
+```{r, warning=F, message=F}
+# Frequency with proportion axis, smoothed
+ggplot(data = linelist, mapping = aes(x = age), fill = gender) +
+  geom_density(binwidth = 2, size = 2, alpha = 0.2)+
+  labs(title = "Proportional, smoothed with geom_density()")
+```
+
+
+To get a "stacked" histogram (of a continuous column of data), you can do one of the following:  
+
+1) Use `geom_histogram()` with the `fill = ` argument within `aes()` and assigned to the grouping column, or  
+2) Use `geom_freqpoly()`, which is likely easier to read (you can still set `binwidth = `)  
+3) To see proportions of all values, set the `y = after_stat(density)` (use this syntax exactly - not changed for your data). Note: these proportions will show *per group*.  
+
+Each is shown below (*note use of `color = ` vs. `fill = ` in each):  
+
+```{r, fig.show='hold', message=FALSE, warning=FALSE, out.width=c('50%', '50%')}
+# "Stacked" histogram
+ggplot(data = linelist, mapping = aes(x = age, fill = gender)) +
+  geom_histogram(binwidth = 2)+
+  labs(title = "'Stacked' histogram")
+
+# Frequency 
+ggplot(data = linelist, mapping = aes(x = age, color = gender)) +
+  geom_freqpoly(binwidth = 2, size = 2)+
+  labs(title = "Freqpoly")
+
+# Frequency with proportion axis
+ggplot(data = linelist, mapping = aes(x = age, y = after_stat(density), color = gender)) +
+  geom_freqpoly(binwidth = 5, size = 2)+
+  labs(title = "Proportional freqpoly")
+
+# Frequency with proportion axis, smoothed
+ggplot(data = linelist, mapping = aes(x = age, y = after_stat(density), fill = gender)) +
+  geom_density(binwidth = 2, size = 2, alpha = 0.2)+
+  labs(title = "Proportional, smoothed with geom_density()")
+```
+
+If you want to have some fun, try `geom_density_ridges` from the **ggridges** package ([vignette here](https://cran.r-project.org/web/packages/ggridges/vignettes/introduction.html).  
+
+Read more in detail about histograms at the **tidyverse** [page on geom_histogram()](https://ggplot2.tidyverse.org/reference/geom_histogram.html).  
+
+
+
+### Box plots {.unnumbered}
+
+Box plots are common, but have important limitations. They can obscure the actual distribution - e.g. a bi-modal distribution. See this [R graph gallery](https://www.r-graph-gallery.com/boxplot.html) and this [data-to-viz article](https://www.data-to-viz.com/caveat/boxplot.html) for more details. However, they do nicely display the inter-quartile range and outliers - so they can be overlaid on top of other types of plots that show the distribution in more detail.  
+
+Below is the box plot anatomy ([image source](https://www.leansigmacorporation.com/box-plot-with-minitab/)).  
+
+```{r, out.width = "100%", fig.align = "center", echo=F}
+knitr::include_graphics(here::here("images", "boxplot.png"))
+```
+
+
+When using `geom_boxplot()` to create a box plot, you generally map only one axis (x or y) within `aes()`. The axis specified determines if the plots are horizontal or vertical. 
+
+In most geoms, you create a plot per group by mapping an aesthetic like `color = ` or `fill = ` to a column within `aes()`. However, for box plots achieve this by assigning the grouping column to the un-assigned axis (x or y). Below is code for a boxplot of *all* age values in the dataset, and second is code to display one box plot for each (non-missing) gender in the dataset. Note that `NA` (missing) values will appear as a separate box plot unless removed. In this example we also set the `fill` to the column `outcome` so each plot is a different color - but this is not necessary.  
+
+```{r fig.show='hold', message=FALSE, warning=FALSE, out.width=c('50%', '50%')}
+# A) Overall boxplot
+ggplot(data = linelist)+  
+  geom_boxplot(mapping = aes(y = age))+   # only y axis mapped (not x)
+  labs(title = "A) Overall boxplot")
+
+# B) Box plot by group
+ggplot(data = linelist, mapping = aes(y = age, x = gender, fill = gender)) + 
+  geom_boxplot()+                     
+  theme(legend.position = "none")+   # remove legend (redundant)
+  labs(title = "B) Boxplot by gender")      
+```
+
+For code to add a box plot to the edges of a scatter plot ("marginal" plots) see the page [ggplot tips].  
+
+
+
+
+
+### Violin, jitter, and sina plots {.unnumbered}
+
+Below is code for creating **violin plots** (`geom_violin`) and **jitter plots** (`geom_jitter`) to show distributions. You can specify that the fill or color is also determined by the data, by inserting these options within `aes()`. 
+
+```{r fig.show='hold', message=FALSE, warning=FALSE, out.width=c('50%', '50%')}
+
+
+# A) Jitter plot by group
+ggplot(data = linelist %>% drop_na(outcome),      # remove missing values
+       mapping = aes(y = age,                     # Continuous variable
+           x = outcome,                           # Grouping variable
+           color = outcome))+                     # Color variable
+  geom_jitter()+                                  # Create the violin plot
+  labs(title = "A) jitter plot by gender")     
+
+
+
+# B) Violin plot by group
+ggplot(data = linelist %>% drop_na(outcome),       # remove missing values
+       mapping = aes(y = age,                      # Continuous variable
+           x = outcome,                            # Grouping variable
+           fill = outcome))+                       # fill variable (color)
+  geom_violin()+                                   # create the violin plot
+  labs(title = "B) violin plot by gender")    
+
+
+```
+
+One can combine the two using the `geom_sina()` function from the **ggforce** package. The sina plot the jitter points in the shape of the violin plot. When overlaid on the violin plot (adjusting the transparencies) this can be easier to visually interpret.  
+
+Plot A) on the left shows basic layering of both a `geom_violin()` and `geom_sina()`. Plot B shows slightly more effort put into the appearance of the ggplot (see in-line comments).  
+
+```{r fig.show='hold', message=FALSE, warning=FALSE, out.width=c('50%', '50%')}
+
+pacman::p_load(ggforce)
+
+# A) Sina plot by group
+ggplot(data = linelist %>% drop_na(outcome), 
+       aes(y = age,             # numeric variable
+           x = outcome)) +      # group variable
+  geom_violin()+                # create the violin plot base
+  geom_sina()+                  # add jitter points in shape of violin
+  labs(title = "A) violin and sina plot by gender")      
+
+
+# A) Sina plot by group
+ggplot(
+  data = linelist %>% drop_na(outcome), 
+  aes(y = age,           # numeric variable
+      x = outcome)) +    # group variable
+  geom_violin(
+    aes(fill = outcome), # fill (color of violin background)
+    color = "white",     # white outline
+    alpha = 0.2)+        # transparency
+  geom_sina(
+    size=1,                # Change the size of the jitter
+    aes(color = outcome))+ # color (color of dots)
+  scale_fill_manual(       # Define fill for violin background by death/recover
+    values = c("Death" = "#bf5300", 
+              "Recover" = "#11118c")) + 
+  scale_color_manual(      # Define colours for points by death/recover
+    values = c("Death" = "#bf5300", 
+              "Recover" = "#11118c")) + 
+  theme_minimal() +                                # Remove the gray background
+  theme(legend.position = "none") +                # Remove unnecessary legend
+  labs(title = "B) violin and sina plot by gender, with extra formatting")      
+
+
+
+```
+
+
+
+<!-- ### One continuous variable within facets {.unnumbered} -->
+
+<!-- **Faceting basics**  -->
+
+<!-- To examine further subgroups, one can 'facet' the graph. This means the plot will be recreated within specified subgroups. One can use: -->
+
+<!-- * `facet_wrap()` - this will recreate the sub-graphs and present them alphabetically (typically, unless stated otherwise). You can invoke certain options to determine the look of the facets, e.g. `nrow=1` or `ncol=1` to control the number of rows or columns that the faceted plots are arranged within. See plot A below.  -->
+<!-- * `facet_grid()` - this is suited to seeing subgroups for particular combinations of discrete variables. See plot B  below. `nrow` and `ncol` are not relevant, as the subgroups are presented in a grid, with the subgroups always in the x or y axis (see notes in code below) -->
+
+<!-- You can stipulate up to two faceting variables, with a '~' between them. If only one faceting variable, a '.' is used as a placeholder for a non-used second faceting variable - see code examples. -->
+
+<!-- ```{r fig.show='hold', message=FALSE, warning=FALSE, out.width=c('50%', '50%')} -->
+<!-- # A) Histogram of hospitalisation dates faceted by hospital -->
+<!-- ggplot(data = linelist %>%  -->
+<!--          filter(hospital != "Missing"),               # filter removes unknown hospital -->
+<!--        aes(x = date_hospitalisation ))+ -->
+<!--   geom_histogram(binwidth=7) +                        # Bindwidth = 7 days -->
+<!--   labs(title = "A) 2 histogram of hospitalisation dates by hospital")+ -->
+<!--   facet_wrap(hospital~.,                              # Facet by just hospital -->
+<!--             ncol = 2)                                 # Facet in two columns -->
+
+<!-- # B) Boxplot of age faceted in a grid with two variables, gender and outcome -->
+<!-- ggplot(data = linelist %>%  -->
+<!--          filter(!is.na(gender) & !is.na(outcome)),    # filter retains non-missing gender/outcome -->
+<!--        aes(y = age))+ -->
+<!--   geom_boxplot()+ -->
+<!--   labs(title = "A) A boxplot by gender and outcome")+ -->
+<!--   facet_grid(outcome~gender)                          # Outcome is the row, gender is the column -->
+
+<!-- ``` -->
+
+
+## Two continuous variables  
+
+Following similar syntax, `geom_point()` will allow you to plot two continuous variables against each other in a **scatter plot**. This is useful for showing actual values rather than their distributions.
+
+A basic scatter plot of age vs weight is shown in (A). In (B) we again use `facet_grid()` to show the relationship between two continuous variables in the linelist. 
+
+```{r fig.show='hold', message=FALSE, warning=FALSE, out.width=c('50%', '50%')}
+# Basic scatter plot of weight and age
+ggplot(data = linelist, 
+       mapping = aes(y = wt_kg, x = age))+
+  geom_point() +
+  labs(title = "A) Scatter plot of weight and age")
+
+# Scatter plot of weight and age by gender and Ebola outcome
+ggplot(data = linelist %>% drop_na(gender, outcome), # filter retains non-missing gender/outcome
+       mapping = aes(y = wt_kg, x = age))+
+  geom_point() +
+  labs(title = "B) Scatter plot of weight and age faceted by gender and outcome")+
+  facet_grid(gender ~ outcome) 
+
+```
+
+
+### Three continuous variables {.unnumbered}  
+
+You can display three continuous variables by utilizing the `fill = ` argument to create a *heat plot*. The color of each "cell" will reflect the value of the third continuous column of data. See the page on [Heat plots] for more details and several examples. 
+
+There are ways to make 3D plots in R, but for applied epidemiology these are often difficult to interpret and therefore less useful for decision-making.  
+
+
+
+<!-- ======================================================= -->
+## Plotting with base graphics {  }
+
+We present methods to plot using **base** R graphics in case the user is not yet familiar with **ggplot2** or does not have it installed. The syntax can be more simple, but arguably the plots do not look as nice and are harder to customize.  
+
+### One continuous variable {.unnumbered}
+
+#### Box plots and histograms {.unnumbered}
+
+The in-built **base** R graphics package comes with the `boxplot()` and `hist()` functions, allowing straight-forward visualisation of a continuous variable. These commands can be typed quicky and so are useful for a "quick look". Remember that you need to write *each* data frame and column in the "dollar sign" syntax - `dataframe$column`. The `main = ` argument is used to create a title.  
+
+```{r, fig.show='hold', out.width=c('50%', '50%')}
+
+# Boxplot
+boxplot(linelist$wt_kg, main = "A) Base boxplot") 
+
+
+# Histogram
+hist(linelist$wt_kg, main = "B) Base histogram") 
+
+```
+
+#### Subgroups {.unnumbered}  
+
+Subgroups can be created with formula syntax. Note in plot B below,  ```outcome``` and ```gender``` are written as ```outcome*gender``` such that the boxplots exist for the four combinations of these two columns. They do not get faceted across different rows and columns like in **ggplot2**. We specify `linelist` to `data = ` so we do not need to use the `$` syntax all the time.  
+
+```{r, fig.show='hold', out.width=c('50%', '50%')}
+
+# Box plot by subgroup
+boxplot(age ~ outcome,
+                  data = linelist, 
+                  main = "A) Base boxplot by subgroup")
+
+# Box plot by crossed subgroups
+boxplot(age ~ outcome*gender,
+                  data = linelist, 
+                  main = "B) Base boxplot) by crossed groups")
+
+```
+
+Some further options with `boxplot()` shown below are:  
+
+* Boxplot width proportional to sample size (A)
+* Violin plots, with notched representing the median and x around it (B)
+* Horizontal (C)  
+
+
+```{r, out.width=c('33%', '33%', '33%'), fig.show='hold'}
+
+# Varying width by sample size 
+boxplot(linelist$age ~ linelist$outcome,
+                  varwidth = TRUE, # width varying by sample size
+                  main="A) Proportional boxplot() widths")
+
+                  
+# Notched (violin plot), and varying width
+boxplot(age ~ outcome,
+        data=linelist,
+        notch=TRUE,      # notch at median
+        main="B) Notched boxplot()",
+        col=(c("gold","darkgreen")),
+        xlab="Suppliment and Dose")
+
+# Horizontal
+boxplot(age ~ outcome,
+        data=linelist,
+        horizontal=TRUE,  # flip to horizontal
+        col=(c("gold","darkgreen")),
+        main="C) Horizontal boxplot()",
+        xlab="Suppliment and Dose")
+```
+
+### Two continuous variables {.unnumbered}
+
+Using base R, we can quickly visualise the relationship between two continuous variables with the `plot` function.
+
+
+```{r}
+plot(linelist$age, linelist$wt_kg)
+```
+
+
+<!-- ======================================================= -->
+## Resources {  }
+
+There is a huge amount of help online, especially with ggplot. See:
+
+* [ggplot2 cheat sheet](http://r-statistics.co/ggplot2-cheatsheet.html)
+* [another cheat sheet](https://biostats.w.uib.no/the-ggplot2-cheat-sheet-by-rstudio/)
+* [plotting continuous variables](http://www.sthda.com/english/articles/32-r-graphics-essentials/131-plot-two-continuous-variables-scatter-graph-and-alternatives/)  
+
+

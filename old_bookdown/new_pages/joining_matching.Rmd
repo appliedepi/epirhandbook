@@ -1,0 +1,926 @@
+
+# Joining data { }  
+
+```{r out.width = c('50%'), fig.show='hold', echo=F}
+knitr::include_graphics(here::here("images", "left-join.gif"))
+```
+
+*Above: an animated example of a left join ([image source](https://github.com/gadenbuie/tidyexplain/tree/master/images))*  
+
+
+This page describes ways to "join", "match", "link" "bind", and otherwise combine data frames.  
+
+It is uncommon that your epidemiological analysis or workflow does not involve multiple sources of data, and the linkage of multiple datasets. Perhaps you need to connect laboratory data to patient clinical outcomes, or Google mobility data to infectious disease trends, or even a dataset at one stage of analysis to a transformed version of itself.
+
+In this page we demonstrate code to:  
+
+* Conduct *joins* of two data frames such that rows are matched based on common values in identifier columns  
+* Join two data frames based on *probabilistic* (likely) matches between values  
+* Expand a data frame by directly *binding* or ("appending") rows or columns from another data frame  
+
+
+<!-- ======================================================= -->
+## Preparation { }
+
+### Load packages {.unnumbered}
+
+This code chunk shows the loading of packages required for the analyses. In this handbook we emphasize `p_load()` from **pacman**, which installs the package if necessary *and* loads it for use. You can also load installed packages with  `library()` from **base** R. See the page on [R basics] for more information on R packages.  
+
+```{r}
+pacman::p_load(
+  rio,            # import and export
+  here,           # locate files 
+  tidyverse,      # data management and visualisation
+  RecordLinkage,  # probabilistic matches
+  fastLink        # probabilistic matches
+)
+```
+
+
+
+### Import data {.unnumbered}
+
+To begin, we import the cleaned linelist of cases from a simulated Ebola epidemic. If you want to follow along, <a href='https://github.com/appliedepi/epirhandbook_eng/raw/master/data/case_linelists/linelist_cleaned.rds' class='download-button'>click to download the "clean" linelist</a> (as .rds file). Import data with the `import()` function from the **rio** package (it handles many file types like .xlsx, .csv, .rds - see the [Import and export] page for details).  
+
+```{r, echo=F}
+# import the linelist into R
+linelist <- rio::import(here::here("data", "case_linelists", "linelist_cleaned.rds"))
+```
+
+```{r, eval=F}
+# import case linelist 
+linelist <- import("linelist_cleaned.rds")
+```
+
+The first 50 rows of the linelist are displayed below.
+
+```{r, message=FALSE, echo=F}
+# display the linelist data as a table
+DT::datatable(head(linelist, 50), rownames = FALSE, filter="top", options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+
+
+
+<!-- ======================================================= -->
+### Example datasets {.unnumbered}
+
+In the joining section below, we will use the following datasets:  
+
+1) A "miniature" version of the case `linelist`, containing only the columns `case_id`, `date_onset`, and `hospital`, and only the first 10 rows  
+2) A separate data frame named `hosp_info`, which contains more details about each hospital  
+
+In the section on probabilistic matching, we will use two different small datasets. The code to create those datasets is given in that section.  
+
+
+
+
+#### "Miniature" case linelist {#joins_llmini .unnumbered}  
+
+Below is the the miniature case linelist, which contains only 10 rows and only columns `case_id`, `date_onset`, and `hospital`.  
+
+```{r}
+linelist_mini <- linelist %>%                 # start with original linelist
+  select(case_id, date_onset, hospital) %>%   # select columns
+  head(10)                                    # only take the first 10 rows
+```
+
+```{r message=FALSE, echo=F}
+DT::datatable(linelist_mini, rownames = FALSE, options = list(pageLength = nrow(10)))
+```
+
+
+
+
+#### Hospital information data frame {#joins_hosp_info .unnumbered}  
+
+Below is the code to create a separate data frame with additional information about seven hospitals (the catchment population, and the level of care available). Note that the name "Military Hospital" belongs to two different hospitals - one a primary level serving 10000 residents and the other a secondary level serving 50280 residents.  
+
+```{r}
+# Make the hospital information data frame
+hosp_info = data.frame(
+  hosp_name     = c("central hospital", "military", "military", "port", "St. Mark's", "ignace", "sisters"),
+  catchment_pop = c(1950280, 40500, 10000, 50280, 12000, 5000, 4200),
+  level         = c("Tertiary", "Secondary", "Primary", "Secondary", "Secondary", "Primary", "Primary")
+)
+```
+
+Here is this data frame:  
+
+```{r message=FALSE, echo=F}
+# display the hospital data as a table
+DT::datatable(hosp_info, rownames = FALSE, options = list(pageLength = nrow(hosp_info)))
+```
+
+
+
+
+
+<!-- ======================================================= -->
+### Pre-cleaning {.unnumbered}
+
+Traditional joins (non-probabilistic) are case-sensitive and require exact character matches between values in the two data frames. To demonstrate some of the cleaning steps you might need to do before initiating a join, we will clean and align the `linelist_mini` and `hosp_info` datasets now.  
+
+**Identify differences**  
+
+We need the values of the `hosp_name` column in the `hosp_info` data frame to match the values of the `hospital` column in the `linelist_mini` data frame.  
+
+Here are the values in the `linelist_mini` data frame, printed with the **base** R function `unique()`:  
+
+```{r}
+unique(linelist_mini$hospital)
+```
+
+and here are the values in the `hosp_info` data frame:  
+
+```{r}
+unique(hosp_info$hosp_name)
+```
+
+You can see that while some of the hospitals exist in both data frames, there are many differences in spelling.  
+
+
+
+**Align values**  
+
+We begin by cleaning the values in the `hosp_info` data frame. As explained in the [Cleaning data and core functions] page, we can re-code values with logical criteria using **dplyr**'s `case_when()` function. For the four hospitals that exist in both data frames we change the values to align with the values in `linelist_mini`. The other hospitals we leave the values as they are (`TRUE ~ hosp_name`).   
+
+<span style="color: orange;">**_CAUTION:_** Typically when cleaning one should create a new column (e.g. `hosp_name_clean`), but for ease of demonstration we show modification of the old column</span>
+
+```{r}
+hosp_info <- hosp_info %>% 
+  mutate(
+    hosp_name = case_when(
+      # criteria                         # new value
+      hosp_name == "military"          ~ "Military Hospital",
+      hosp_name == "port"              ~ "Port Hospital",
+      hosp_name == "St. Mark's"        ~ "St. Mark's Maternity Hospital (SMMH)",
+      hosp_name == "central hospital"  ~ "Central Hospital",
+      TRUE                             ~ hosp_name
+      )
+    )
+```
+
+The hospital names that appear in both data frames are aligned. There are two hospitals in `hosp_info` that are not present in `linelist_mini` - we will deal with these later, in the join.  
+
+```{r}
+unique(hosp_info$hosp_name)
+```
+
+Prior to a join, it is often easiest to convert a column to all lowercase or all uppercase. If you need to convert all values in a column to UPPER or lower case, use `mutate()` and wrap the column with one of these functions from **stringr**, as shown in the page on [Characters and strings].  
+
+`str_to_upper()`  
+`str_to_upper()`  
+`str_to_title()`  
+
+
+
+
+<!-- ======================================================= -->
+## **dplyr** joins { }
+
+The **dplyr** package offers several different join functions. **dplyr** is included in the **tidyverse** package. These join functions are described below, with simple use cases.  
+
+Many thanks to [https://github.com/gadenbuie](https://github.com/gadenbuie/tidyexplain/tree/master/images) for the informative gifs!  
+
+
+
+
+<!-- ======================================================= -->
+### General syntax {.unnumbered}
+
+The join commands can be run as standalone commands to join two data frames into a new object, or they can be used within a pipe chain (`%>%`) to merge one data frame into another as it is being cleaned or otherwise modified.  
+
+In the example below, the function `left_join()` is used as a standalone command to create the a new `joined_data` data frame. The inputs are data frames 1 and 2 (`df1` and `df2`). The first data frame listed is the baseline data frame, and the second one listed is joined *to* it.  
+
+The third argument `by = ` is where you specify the columns in each data frame that will be used to aligns the rows in the two data frames. If the names of these columns are different, provide them within a `c()` vector as shown below, where the rows are matched on the basis of common values between the column `ID` in `df1` and the column `identifier` in `df2`.   
+
+```{r, eval=F}
+# Join based on common values between column "ID" (first data frame) and column "identifier" (second data frame)
+joined_data <- left_join(df1, df2, by = c("ID" = "identifier"))
+```
+
+If the `by` columns in both data frames have the exact same name, you can just provide this one name, within quotes.  
+
+```{r, eval=F}
+# Joint based on common values in column "ID" in both data frames
+joined_data <- left_join(df1, df2, by = "ID")
+```
+
+If you are joining the data frames based on common values across multiple fields, list these fields within the `c()` vector. This example joins rows if the values in three columns in each dataset align exactly.  
+
+```{r, eval=F}
+# join based on same first name, last name, and age
+joined_data <- left_join(df1, df2, by = c("name" = "firstname", "surname" = "lastname", "Age" = "age"))
+```
+
+
+The join commands can also be run within a pipe chain. This will modify the data frame being piped. 
+
+In the example below, `df1` is is passed through the pipes, `df2` is joined to it, and `df` is thus modified and re-defined.  
+
+```{r eval=F}
+df1 <- df1 %>%
+  filter(date_onset < as.Date("2020-03-05")) %>% # miscellaneous cleaning 
+  left_join(df2, by = c("ID" = "identifier"))    # join df2 to df1
+```
+
+
+<span style="color: orange;">**_CAUTION:_** Joins are case-specific! Therefore it is useful to convert all values to lowercase or uppercase prior to joining. See the page on characters/strings.</span>
+
+
+
+
+
+<!-- ======================================================= -->
+### Left and right joins {.unnumbered}  
+
+**A left or right join is commonly used to add information to a data frame** - new information is added only to rows that already existed in the baseline data frame. These are common joins in epidemiological work as they are used to add information from one dataset into another. 
+
+In using these joins, the written order of the data frames in the command is important*.  
+
+* In a *left join*, the *first* data frame written is the baseline  
+* In a *right join*, the *second* data frame written is the baseline  
+
+**All rows of the baseline data frame are kept.** Information in the other (secondary) data frame is joined to the baseline data frame *only if there is a match via the identifier column(s)*. In addition:  
+
+* Rows in the secondary data frame that do not match are dropped.  
+* If there are many baseline rows that match to one row in the secondary data frame (many-to-one), the secondary information is added to *each matching baseline row*.  
+* If a baseline row matches to multiple rows in the secondary data frame (one-to-many), all combinations are given, meaning *new rows may be added to your returned data frame!*  
+
+Animated examples of left and right joins ([image source](https://github.com/gadenbuie/tidyexplain/tree/master/images))
+
+```{r out.width = c('50%'), fig.show='hold', echo=F}
+knitr::include_graphics(here::here("images", "left-join.gif"))
+knitr::include_graphics(here::here("images", "right-join.gif"))
+```
+
+**Example**  
+
+Below is the output of a `left_join()` of `hosp_info` (secondary data frame, [view here](#joins_hosp_info))  *into* `linelist_mini` (baseline data frame, [view here](#joins_llmini)). The original `linelist_mini` has ` nrow(linelist_mini)` rows. The modified `linelist_mini` is displayed. Note the following:  
+
+* Two new columns, `catchment_pop` and `level` have been added on the left side of `linelist_mini`  
+* All original rows of the baseline data frame `linelist_mini` are kept  
+* Any original rows of `linelist_mini` for "Military Hospital" are duplicated because it matched to *two* rows in the secondary data frame, so both combinations are returned  
+* The join identifier column of the secondary dataset (`hosp_name`) has disappeared because it is redundant with the identifier column in the primary dataset (`hospital`)  
+* When a baseline row did not match to any secondary row (e.g. when `hospital` is "Other" or "Missing"), `NA` (blank) fills in the columns from the secondary data frame  
+* Rows in the secondary data frame with no match to the baseline data frame ("sisters" and "ignace" hospitals) were dropped  
+
+
+```{r, eval=F}
+linelist_mini %>% 
+  left_join(hosp_info, by = c("hospital" = "hosp_name"))
+```
+
+```{r message=FALSE, echo=F}
+linelist_mini %>% 
+  left_join(hosp_info, by = c("hospital" = "hosp_name")) %>% 
+  DT::datatable(rownames = FALSE, options = list(pageLength = 11))
+```
+
+
+
+
+
+#### "Should I use a right join, or a left join?" {.unnumbered}  
+
+To answer the above question, ask yourself "which data frame should retain all of its rows?" - use this one as the baseline. A *left join* keep all the rows in the first data frame written in the command, whereas a *right join* keeps all the rows in the second data frame.  
+
+The two commands below achieve the same output - 10 rows of `hosp_info` joined *into* a `linelist_mini` baseline, but they use different joins. The result is that the column order will differ based on whether `hosp_info` arrives from the right (in the left join) or arrives from the left (in the right join). The order of the rows may also shift accordingly. But both of these consequences can be subsequently addressed, using `select()` to re-order columns or `arrange()` to sort rows.  
+
+```{r, eval=F}
+# The two commands below achieve the same data, but with differently ordered rows and columns
+left_join(linelist_mini, hosp_info, by = c("hospital" = "hosp_name"))
+right_join(hosp_info, linelist_mini, by = c("hosp_name" = "hospital"))
+```
+
+Here is the result of `hosp_info` into `linelist_mini` via a left join (new columns incoming from the right)
+
+```{r message=FALSE, echo=F}
+left_join(linelist_mini, hosp_info, by = c("hospital" = "hosp_name")) %>% 
+  DT::datatable(rownames = FALSE, options = list(pageLength = 11))
+```
+
+Here is the result of `hosp_info` into  `linelist_mini` via a right join (new columns incoming from the left)  
+
+```{r message=FALSE, echo=F}
+right_join(hosp_info, linelist_mini, by = c("hosp_name" = "hospital")) %>% 
+  DT::datatable(rownames = FALSE, options = list(pageLength = 11))
+```
+
+Also consider whether your use-case is within a pipe chain (`%>%`). If the dataset in the pipes is the baseline, you will likely use a left join to add data to it.
+
+
+<!-- ======================================================= -->
+### Full join {.unnumbered} 
+
+**A full join is the most *inclusive* of the joins** - it returns all rows from both data frames.  
+
+If there are any rows present in one and not the other (where no match was found), the data frame will include them and become longer. `NA` missing values are used to fill-in any gaps created. As you join, watch the number of columns and rows carefully to troubleshoot case-sensitivity and exact character matches. 
+
+The "baseline" data frame is the one written first in the command. Adjustment of this will not impact which records are returned by the join, but it can impact the resulting column order, row order, and which identifier columns are retained.  
+
+```{r out.width = c('50%'), fig.show='hold', echo=F}
+knitr::include_graphics(here::here("images", "full-join.gif"))
+```
+
+Animated example of a full join ([image source](https://github.com/gadenbuie/tidyexplain/tree/master/images))
+
+**Example**  
+
+Below is the output of a `full_join()` of `hosp_info` (originally ` nrow(hosp_info)`, [view here](#joins_hosp_info))  *into* `linelist_mini` (originally ` nrow(linelist_mini)`, [view here](#joins_llmini)). Note the following:  
+
+* All baseline rows are kept (`linelist_mini`)  
+* Rows in the secondary that do not match to the baseline are kept ("ignace" and "sisters"), with values in the corresponding baseline columns  `case_id` and `onset` filled in with missing values  
+* Likewise, rows in the baseline data frame that do not match to the secondary ("Other" and "Missing") are kept, with secondary columns ` catchment_pop` and `level` filled-in with missing values  
+* In the case of one-to-many or many-to-one matches (e.g. rows for "Military Hospital"), all possible combinations are returned (lengthening the final data frame)  
+* Only the identifier column from the baseline is kept (`hospital`)  
+
+
+```{r, eval=F}
+linelist_mini %>% 
+  full_join(hosp_info, by = c("hospital" = "hosp_name"))
+```
+
+```{r message=FALSE, echo=F}
+linelist_mini %>% 
+  full_join(hosp_info, by = c("hospital" = "hosp_name")) %>% 
+  DT::datatable(rownames = FALSE, options = list(pageLength = 15))
+```
+
+
+
+
+
+<!-- ======================================================= -->
+### Inner join {.unnumbered} 
+
+**An inner join is the most *restrictive* of the joins** - it returns only rows with matches across both data frames.  
+This means that the number of rows in the baseline data frame may actually *reduce*. Adjustment of which data frame is the "baseline" (written first in the function) will not impact which rows are returned, but it will impact the column order, row order, and which identifier columns are retained.   
+
+
+```{r out.width = c('50%'), fig.show='hold', echo=F}
+knitr::include_graphics(here::here("images", "inner-join.gif"))
+```
+
+Animated example of an inner join ([image source](https://github.com/gadenbuie/tidyexplain/tree/master/images))
+
+
+**Example**  
+
+Below is the output of an `inner_join()` of `linelist_mini` (baseline) with `hosp_info` (secondary). Note the following:  
+
+* Baseline rows with no match to the secondary data are removed (rows where `hospital` is "Missing" or "Other")  
+* Likewise, rows from the secondary data frame that had no match in the baseline are removed (rows where `hosp_name` is "sisters" or "ignace")  
+* Only the identifier column from the baseline is kept (`hospital`)  
+
+
+```{r, eval=F}
+linelist_mini %>% 
+  inner_join(hosp_info, by = c("hospital" = "hosp_name"))
+```
+
+
+```{r message=FALSE, echo=F}
+linelist_mini %>% 
+  inner_join(hosp_info, by = c("hospital" = "hosp_name")) %>% 
+  DT::datatable(rownames = FALSE, options = list(pageLength = 12))
+```
+
+
+
+
+
+
+<!-- ======================================================= -->
+### Semi join {.unnumbered} 
+
+A semi join is a "filtering join" which uses another dataset *not to add rows or columns, but to perform filtering*.  
+
+A **semi-join keeps all observations in the baseline data frame that have a match in the secondary data frame** (but does not add new columns nor duplicate any rows for multiple matches). Read more about these "filtering" joins [here](https://towardsdatascience.com/level-up-with-semi-joins-in-r-a068426096e0).  
+
+```{r out.width = c('50%'), fig.show='hold', echo=F}
+knitr::include_graphics(here::here("images", "semi-join.gif"))
+```
+
+Animated example of a semi join ([image source](https://github.com/gadenbuie/tidyexplain/tree/master/images))
+
+As an example, the below code returns rows from the `hosp_info` data frame that have matches in `linelist_mini` based on hospital name.  
+
+```{r}
+hosp_info %>% 
+  semi_join(linelist_mini, by = c("hosp_name" = "hospital"))
+```
+
+
+
+<!-- ======================================================= -->
+### Anti join {.unnumbered} 
+
+**The anti join is another "filtering join" that returns rows in the baseline data frame that *do not* have a match in the secondary data frame.**  
+
+Read more about filtering joins [here](https://towardsdatascience.com/level-up-with-semi-joins-in-r-a068426096e0).  
+
+Common scenarios for an anti-join include identifying records not present in another data frame, troubleshooting spelling in a join (reviewing records that *should have* matched), and examining records that were excluded after another join.  
+
+**As with `right_join()` and `left_join()`, the *baseline* data frame (listed first) is important**. The returned rows are from the baseline data frame only. Notice in the gif below that row in the secondary data frame (purple row 4) is not returned even though it does not match with the baseline.  
+
+```{r out.width = c('50%'), fig.show='hold', echo=F}
+knitr::include_graphics(here::here("images", "anti-join.gif"))
+```
+
+Animated example of an anti join ([image source](https://github.com/gadenbuie/tidyexplain/tree/master/images))
+
+
+#### Simple `anti_join()` example {.unnumbered}  
+
+For a simple example, let's find the `hosp_info` hospitals that do not have any cases present in `linelist_mini`. We list `hosp_info` first, as the baseline data frame. The hospitals which are not present in `linelist_mini` are returned.  
+
+```{r, eval=F}
+hosp_info %>% 
+  anti_join(linelist_mini, by = c("hosp_name" = "hospital"))
+```
+
+```{r message=FALSE, echo=F}
+hosp_info %>% 
+  anti_join(linelist_mini, by = c("hosp_name" = "hospital")) %>% 
+  DT::datatable(rownames = FALSE, options = list(pageLength = 12))
+```
+
+
+#### Complex `anti_join()` example {.unnumbered}  
+
+For another example, let us say we ran an `inner_join()` between `linelist_mini` and `hosp_info`. This returns only a subset of the original `linelist_mini` records, as some are not present in `hosp_info`.  
+
+```{r, eval=F}
+linelist_mini %>% 
+  inner_join(hosp_info, by = c("hospital" = "hosp_name"))
+```
+
+```{r message=FALSE, echo=F}
+linelist_mini %>% 
+  inner_join(hosp_info, by = c("hospital" = "hosp_name")) %>% 
+  DT::datatable(rownames = FALSE, options = list(pageLength = 8))
+```
+
+To review the `linelist_mini` records that were excluded during the inner join, we can run an anti-join with the same settings (`linelist_mini` as the baseline).  
+
+```{r, eval = F}
+linelist_mini %>% 
+  anti_join(hosp_info, by = c("hospital" = "hosp_name"))
+```
+
+```{r message=FALSE, echo=F}
+linelist_mini %>% 
+  anti_join(hosp_info, by = c("hospital" = "hosp_name")) %>% 
+  DT::datatable(rownames = FALSE, options = list(pageLength = 8))
+```
+
+
+To see the `hosp_info` records that were excluded in the inner join, we could also run an anti-join with `hosp_info` as the baseline data frame.  
+
+
+
+<!-- ======================================================= -->
+## Probabalistic matching { }
+
+If you do not have a unique identifier common across datasets to join on, consider using a probabilistic matching algorithm. This would find matches between records based on similarity (e.g. Jaro–Winkler string distance, or numeric distance).  Below is a simple example using the package **fastLink** .  
+
+**Load packages**  
+
+```{r}
+pacman::p_load(
+  tidyverse,      # data manipulation and visualization
+  fastLink        # record matching
+  )
+```
+
+
+Here are two small example datasets that we will use to demonstrate the probabilistic matching (`cases` and `test_results`):  
+
+Here is the code used to make the datasets:  
+
+
+```{r}
+# make datasets
+
+cases <- tribble(
+  ~gender, ~first,      ~middle,     ~last,        ~yr,   ~mon, ~day, ~district,
+  "M",     "Amir",      NA,          "Khan",       1989,  11,   22,   "River",
+  "M",     "Anthony",   "B.",        "Smith",      1970, 09, 19,      "River", 
+  "F",     "Marialisa", "Contreras", "Rodrigues",  1972, 04, 15,      "River",
+  "F",     "Elizabeth", "Casteel",   "Chase",      1954, 03, 03,      "City",
+  "M",     "Jose",      "Sanchez",   "Lopez",      1996, 01, 06,      "City",
+  "F",     "Cassidy",   "Jones",      "Davis",     1980, 07, 20,      "City",
+  "M",     "Michael",   "Murphy",     "O'Calaghan",1969, 04, 12,      "Rural", 
+  "M",     "Oliver",    "Laurent",    "De Bordow" , 1971, 02, 04,     "River",
+  "F",      "Blessing",  NA,          "Adebayo",   1955,  02, 14,     "Rural"
+)
+
+results <- tribble(
+  ~gender,  ~first,     ~middle,     ~last,          ~yr, ~mon, ~day, ~district, ~result,
+  "M",      "Amir",     NA,          "Khan",         1989, 11,   22,  "River", "positive",
+  "M",      "Tony",   "B",         "Smith",          1970, 09,   19,  "River", "positive",
+  "F",      "Maria",    "Contreras", "Rodriguez",    1972, 04,   15,  "Cty",   "negative",
+  "F",      "Betty",    "Castel",   "Chase",        1954,  03,   30,  "City",  "positive",
+  "F",      "Andrea",   NA,          "Kumaraswamy",  2001, 01,   05,  "Rural", "positive",      
+  "F",      "Caroline", NA,          "Wang",         1988, 12,   11,  "Rural", "negative",
+  "F",      "Trang",    NA,          "Nguyen",       1981, 06,   10,  "Rural", "positive",
+  "M",      "Olivier" , "Laurent",   "De Bordeaux",  NA,   NA,   NA,  "River", "positive",
+  "M",      "Mike",     "Murphy",    "O'Callaghan",  1969, 04,   12,  "Rural", "negative",
+  "F",      "Cassidy",  "Jones",     "Davis",        1980, 07,   02,  "City",  "positive",
+  "M",      "Mohammad", NA,          "Ali",          1942, 01,   17,  "City",  "negative",
+  NA,       "Jose",     "Sanchez",   "Lopez",        1995, 01,   06,  "City",  "negative",
+  "M",      "Abubakar", NA,          "Abullahi",     1960, 01,   01,  "River", "positive",
+  "F",      "Maria",    "Salinas",   "Contreras",    1955, 03,   03,  "River", "positive"
+  )
+
+```
+
+
+**The `cases` dataset has 9 records** of patients who are awaiting test results.  
+
+```{r message=FALSE, echo=F}
+# display the hospital data as a table
+DT::datatable(cases, rownames = FALSE, options = list(pageLength = nrow(cases), scrollX=T), class = 'white-space: nowrap')
+```
+
+
+
+**The `test_results` dataset** has 14 records and contains the column `result`, which we want to add to the records in `cases` based on probabilistic matching of records.  
+
+```{r message=FALSE, echo=F}
+# display the hospital data as a table
+DT::datatable(results, rownames = FALSE, options = list(pageLength = nrow(results), scrollX=T), class = 'white-space: nowrap')
+```
+
+### Probabilistic matching {.unnumbered}  
+
+The `fastLink()` function from the **fastLink** package can be used to apply a matching algorithm. Here is the basic information. You can read more detail by entering `?fastLink` in your console.  
+
+* Define the two data frames for comparison to arguments `dfA = ` and `dfB = `  
+* In `varnames = ` give all column names to be used for matching. They must all exist in both `dfA` and `dfB`.  
+* In `stringdist.match = ` give columns from those in `varnames` to be evaluated on string "distance".  
+* In `numeric.match = ` give columns from those in `varnames` to be evaluated on numeric distance.  
+* Missing values are ignored  
+* By default, each row in either data frame is matched to at most one row in the other data frame. If you want to see all the evaluated matches, set `dedupe.matches = FALSE`. The deduplication is done using Winkler's linear assignment solution.  
+
+*Tip: split one date column into three separate numeric columns using `day()`, `month()`, and `year()` from **lubridate** package*  
+
+The default threshold for matches is 0.94 (`threshold.match = `) but you can adjust it higher or lower. If you define the threshold, consider that higher thresholds could yield more false-negatives (rows that do not match which actually should match) and likewise a lower threshold could yield more false-positive matches.  
+
+Below, the data are matched on string distance across the name and district columns, and on numeric distance for year, month, and day of birth. A match threshold of 95% probability is set.  
+
+
+```{r, message=F, warning=F}
+fl_output <- fastLink::fastLink(
+  dfA = cases,
+  dfB = results,
+  varnames = c("gender", "first", "middle", "last", "yr", "mon", "day", "district"),
+  stringdist.match = c("first", "middle", "last", "district"),
+  numeric.match = c("yr", "mon", "day"),
+  threshold.match = 0.95)
+```
+
+**Review matches**  
+
+We defined the object returned from `fastLink()` as `fl_output`. It is of class `list`, and it actually contains several data frames within it, detailing the results of the matching. One of these data frames is `matches`, which contains the most likely matches across `cases` and `results`. You can access this "matches" data frame with `fl_output$matches`. Below, it is saved as `my_matches` for ease of accessing later.    
+
+When `my_matches` is printed, you see two column vectors: the pairs of row numbers/indices (also called "rownames") in `cases` ("inds.a") and in `results` ("inds.b") representing the best matches. If a row number from a datafrane is missing, then no match was found in the other data frame at the specified match threshold.    
+
+```{r}
+# print matches
+my_matches <- fl_output$matches
+my_matches
+```
+
+Things to note:  
+
+* Matches occurred despite slight differences in name spelling and dates of birth:  
+  * "Tony B. Smith" matched to "Anthony B Smith"  
+  * "Maria Rodriguez" matched to "Marialisa Rodrigues"  
+  * "Betty Chase" matched to "Elizabeth Chase"  
+  * "Olivier Laurent De Bordeaux" matched to "Oliver Laurent De Bordow" (missing date of birth ignored)  
+* One row from `cases` (for "Blessing Adebayo", row 9) had no good match in `results`, so it is not present in `my_matches`.  
+
+
+
+
+**Join based on the probabilistic matches**  
+
+To use these matches to join `results` to `cases`, one strategy is:  
+
+1) Use `left_join()` to join `my_matches` to `cases` (matching rownames in `cases` to "inds.a" in `my_matches`)  
+2) Then use another `left_join()` to join `results` to `cases` (matching the newly-acquired "inds.b" in `cases` to rownames in `results`)  
+
+Before the joins, we should clean the three data frames:  
+
+* Both `dfA` and `dfB` should have their row numbers ("rowname") converted to a proper column.  
+* Both the columns in `my_matches` are converted to class character, so they can be joined to the character rownames  
+
+```{r}
+# Clean data prior to joining
+#############################
+
+# convert cases rownames to a column 
+cases_clean <- cases %>% rownames_to_column()
+
+# convert test_results rownames to a column
+results_clean <- results %>% rownames_to_column()  
+
+# convert all columns in matches dataset to character, so they can be joined to the rownames
+matches_clean <- my_matches %>%
+  mutate(across(everything(), as.character))
+
+
+
+# Join matches to dfA, then add dfB
+###################################
+# column "inds.b" is added to dfA
+complete <- left_join(cases_clean, matches_clean, by = c("rowname" = "inds.a"))
+
+# column(s) from dfB are added 
+complete <- left_join(complete, results_clean, by = c("inds.b" = "rowname"))
+```
+
+As performed using the code above, the resulting data frame `complete` will contain *all* columns from both `cases` and `results`. Many will be appended with suffixes ".x" and ".y", because the column names would otherwise be duplicated.  
+
+```{r message=FALSE, echo=F}
+DT::datatable(complete, rownames = FALSE, options = list(pageLength = nrow(complete), scrollX=T), class = 'white-space: nowrap')
+```
+
+Alternatively, to achieve only the "original" 9 records in `cases` with the new column(s) from `results`, use `select()` on `results` before the joins, so that it contains only rownames and the columns that you want to add to `cases` (e.g. the column `result`).  
+
+```{r}
+cases_clean <- cases %>% rownames_to_column()
+
+results_clean <- results %>%
+  rownames_to_column() %>% 
+  select(rowname, result)    # select only certain columns 
+
+matches_clean <- my_matches %>%
+  mutate(across(everything(), as.character))
+
+# joins
+complete <- left_join(cases_clean, matches_clean, by = c("rowname" = "inds.a"))
+complete <- left_join(complete, results_clean, by = c("inds.b" = "rowname"))
+```
+
+
+```{r message=FALSE, echo=F}
+DT::datatable(complete, rownames = FALSE, options = list(pageLength = nrow(complete), scrollX=T), class = 'white-space: nowrap')
+```
+
+
+If you want to subset either dataset to only the rows that matched, you can use the codes below:  
+
+```{r}
+cases_matched <- cases[my_matches$inds.a,]  # Rows in cases that matched to a row in results
+results_matched <- results[my_matches$inds.b,]  # Rows in results that matched to a row in cases
+```
+
+Or, to see only the rows that did **not** match:  
+
+```{r}
+cases_not_matched <- cases[!rownames(cases) %in% my_matches$inds.a,]  # Rows in cases that did NOT match to a row in results
+results_not_matched <- results[!rownames(results) %in% my_matches$inds.b,]  # Rows in results that did NOT match to a row in cases
+```
+
+
+### Probabilistic deduplication {.unnumbered}  
+
+Probabilistic matching can be used to deduplicate a dataset as well. See the page on deduplication for other methods of deduplication.  
+
+Here we began with the `cases` dataset, but are now calling it `cases_dup`, as it has 2 additional rows that could be duplicates of previous rows:
+See "Tony" with "Anthony", and "Marialisa Rodrigues" with "Maria Rodriguez".  
+
+```{r, echo=F}
+## Add duplicates
+#cases_dup <- rbind(cases, cases[sample(1:nrow(cases), 3, replace = FALSE),])
+
+cases_dup <- tribble(
+  ~gender, ~first,      ~middle,     ~last,        ~yr,   ~mon, ~day, ~district,
+  "M",     "Amir",      NA,          "Khan",       1989,  11,   22,   "River",
+  "M",     "Anthony",   "B.",        "Smith",      1970, 09, 19,      "River", 
+  "F",     "Marialisa", "Contreras", "Rodrigues",  1972, 04, 15,      "River",
+  "F",     "Elizabeth", "Casteel",   "Chase",      1954, 03, 03,      "City",
+  "M",     "Jose",      "Sanchez",   "Lopez",      1996, 01, 06,      "City",
+  "F",     "Cassidy",   "Jones",      "Davis",     1980, 07, 20,      "City",
+  "M",     "Michael",   "Murphy",     "O'Calaghan",1969, 04, 12,      "Rural", 
+  "M",     "Oliver",    "Laurent",    "De Bordow" , 1971, 02, 04,     "River",
+  "F",      "Blessing",  NA,          "Adebayo",   1955,  02, 14,     "Rural",
+  "M",     "Tony",   "B.",        "Smith",         1970, 09, 19,      "River", 
+  "F",     "Maria",  "Contreras", "Rodriguez",     1972, 04, 15,      "River",
+)
+
+```
+
+```{r message=FALSE, echo=F}
+DT::datatable(cases_dup, rownames = FALSE, options = list(pageLength = nrow(cases_dup)))
+```
+
+
+Run `fastLink()` like before, but compare the `cases_dup` data frame to itself. When the two data frames provided are identical, the function assumes you want to de-duplicate. Note we do not specify `stringdist.match = ` or `numeric.match = ` as we did previously.  
+
+```{r, message = F, warning = F}
+## Run fastLink on the same dataset
+dedupe_output <- fastLink(
+  dfA = cases_dup,
+  dfB = cases_dup,
+  varnames = c("gender", "first", "middle", "last", "yr", "mon", "day", "district")
+)
+```
+
+Now, you can review the potential duplicates with `getMatches()`. Provide the data frame as both `dfA = ` and `dfB = `, and provide the output of the `fastLink()` function as `fl.out = `.  `fl.out` must be of class `fastLink.dedupe`, or in other words, the result of `fastLink()`.  
+
+
+```{r}
+## Run getMatches()
+cases_dedupe <- getMatches(
+  dfA = cases_dup,
+  dfB = cases_dup,
+  fl.out = dedupe_output)
+```
+
+See the right-most column, which indicates the duplicate IDs - the final two rows are identified as being likely duplicates of rows 2 and 3.  
+
+```{r message=FALSE, echo=F}
+DT::datatable(cases_dedupe, rownames = FALSE, options = list(pageLength = nrow(cases_dedupe)))
+```
+
+To return the row numbers of rows which are likely duplicates, you can count the number of rows per unique value in the `dedupe.ids` column, and then filter to keep only those with more than one row. In this case this leaves rows 2 and 3.  
+
+```{r}
+cases_dedupe %>% 
+  count(dedupe.ids) %>% 
+  filter(n > 1)
+```
+
+To inspect the whole rows of the likely duplicates, put the row number in this command:  
+
+```{r}
+# displays row 2 and all likely duplicates of it
+cases_dedupe[cases_dedupe$dedupe.ids == 2,]   
+```
+
+
+
+## Binding and aligning  
+
+Another method of combining two data frames is "binding" them together. You can also think of this as "appending" or "adding" rows or columns.  
+
+This section will also discuss how to "align" the order of rows of one data frame to the order in another data frame. This topic is discussed below in the section on Binding columns.  
+
+
+
+### Bind rows {.unnumbered}
+
+To bind rows of one data frame to the bottom of another data frame, use `bind_rows()` from **dplyr**. It is very inclusive, so any column present in either data frame will be included in the output. A few notes:  
+
+* Unlike the **base** R version `row.bind()`, **dplyr**'s `bind_rows()` does not require that the order of columns be the same in both data frames. As long as the column names are spelled identically, it will align them correctly.  
+* You can optionally specify the argument `.id = `. Provide a character column name. This will produce a new column that serves to identify which data frame each row originally came from.  
+* You can use `bind_rows()` on a `list` of similarly-structured data frames to combine them into one data frame. See an example in the [Iteration, loops, and lists] page involving the import of multiple linelists with **purrr**.  
+
+One common example of row binding is to bind a "total" row onto a descriptive table made with **dplyr**'s `summarise()` function. Below we create a table of case counts and median CT values by hospital with a total row.  
+
+The function `summarise()` is used on data grouped by hospital to return a summary data frame by hospital. But the function `summarise()` does not automatically produce a "totals" row, so we create it by summarising the data *again*, but with the data not grouped by hospital. This produces a second data frame of just one row. We can then bind these data frames together to achieve the final table.  
+
+See other worked examples like this in the [Descriptive tables] and [Tables for presentation] pages.  
+
+
+```{r}
+# Create core table
+###################
+hosp_summary <- linelist %>% 
+  group_by(hospital) %>%                        # Group data by hospital
+  summarise(                                    # Create new summary columns of indicators of interest
+    cases = n(),                                  # Number of rows per hospital-outcome group     
+    ct_value_med = median(ct_blood, na.rm=T))     # median CT value per group
+```
+
+Here is the `hosp_summary` data frame:  
+
+```{r message=FALSE, echo=F}
+DT::datatable(hosp_summary, rownames = FALSE, options = list(pageLength = nrow(10)))
+```
+
+Create a data frame with the "total" statistics (*not grouped by hospital*). This will return just one row.  
+
+```{r}
+# create totals
+###############
+totals <- linelist %>% 
+  summarise(
+    cases = n(),                               # Number of rows for whole dataset     
+    ct_value_med = median(ct_blood, na.rm=T))  # Median CT for whole dataset
+```
+
+And below is that `totals` data frame. Note how there are only two columns. These columns are also in `hosp_summary`, but there is one column in `hosp_summary` that is not in `totals` (`hospital`).  
+
+```{r message=FALSE, echo=F}
+DT::datatable(totals, rownames = FALSE, options = list(pageLength = nrow(10)))
+```
+
+Now we can bind the rows together with `bind_rows()`.  
+
+```{r}
+# Bind data frames together
+combined <- bind_rows(hosp_summary, totals)
+```
+
+Now we can view the result. See how in the final row, an empty `NA` value fills in for the column `hospital` that was not in `hosp_summary`. As explained in the [Tables for presentation] page, you could "fill-in" this cell with "Total" using `replace_na()`.  
+
+```{r message=FALSE, echo=F}
+DT::datatable(combined, rownames = FALSE, options = list(pageLength = nrow(10)))
+```
+
+
+### Bind columns {.unnumbered}
+
+There is a similar **dplyr** function `bind_cols()` which you can use to combine two data frames sideways. Note that rows are matched to each other *by position* (not like a *join* above) - for example the 12th row in each data frame will be aligned.  
+
+For an example, we bind several summary tables together. In order to do this, we also demonstrate how to re-arrange the order of rows in one data frame to match the order in another data frame, with `match()`.    
+
+Here we define `case_info` as a summary data frame of linelist cases, by hospital, with the number of cases and the number of deaths.
+
+
+```{r}
+# Case information
+case_info <- linelist %>% 
+  group_by(hospital) %>% 
+  summarise(
+    cases = n(),
+    deaths = sum(outcome == "Death", na.rm=T)
+  )
+```
+
+```{r message=FALSE, echo=F}
+DT::datatable(case_info, rownames = FALSE, options = list(pageLength = nrow(10)))
+```
+
+And let's say that here is a different data frame `contact_fu` containing information on the percent of exposed contacts investigated and "followed-up", again by hospital. 
+
+```{r}
+contact_fu <- data.frame(
+  hospital = c("St. Mark's Maternity Hospital (SMMH)", "Military Hospital", "Missing", "Central Hospital", "Port Hospital", "Other"),
+  investigated = c("80%", "82%", NA, "78%", "64%", "55%"),
+  per_fu = c("60%", "25%", NA, "20%", "75%", "80%")
+)
+```
+
+```{r message=FALSE, echo=F}
+DT::datatable(contact_fu, rownames = FALSE, options = list(pageLength = nrow(10)))
+```
+
+Note that the hospitals are the same, but are in different orders in each data frame. The easiest solution would be to use a `left_join()` on the `hospital` column, but you could also use `bind_cols()` with one extra step.  
+
+#### Use `match()` to align ordering {.unnumbered}  
+
+Because the row orders are different, a simple `bind_cols()` command would result in a mis-match of data. To fix this we can use `match()` from **base** R to align the rows of a data frame in the same order as in another. We assume for this approach that there are no duplicate values in either data frame.  
+
+When we use `match()`, the syntax is `match(TARGET ORDER VECTOR, DATA FRAME COLUMN TO CHANGE)`, where the first argument is the desired order (either a stand-alone vector, or in this case a column in a data frame), and the second argument is the data frame column in the data frame that will be re-ordered. The output of `match()` is a vector of numbers representing the correct position ordering. You can read more with `?match`.  
+
+```{r}
+match(case_info$hospital, contact_fu$hospital)
+```
+
+You can use this numeric vector to re-order the data frame - place it within subset brackets `[ ]` *before the comma*. Read more about **base** R bracket subset syntax in the [R basics] page. The command below creates a new data frame, defined as the old one in which the rows are ordered in the numeric vector above.  
+
+```{r}
+contact_fu_aligned <- contact_fu[match(case_info$hospital, contact_fu$hospital),]
+```
+
+
+```{r message=FALSE, echo=F}
+DT::datatable(contact_fu_aligned, rownames = FALSE, options = list(pageLength = nrow(10)))
+```
+
+Now we can bind the data frame columns together, with the correct row order. Note that some columns are duplicated and will require cleaning with `rename()`. Read more aboout `bind_rows()` [here](https://dplyr.tidyverse.org/reference/bind.html).  
+
+```{r}
+bind_cols(case_info, contact_fu)
+```
+
+A **base** R alternative to `bind_cols` is `cbind()`, which performs the same operation.  
+
+
+
+
+<!-- ======================================================= -->
+## Resources { }
+
+The [tidyverse page on joins](https://dplyr.tidyverse.org/reference/join.html)  
+
+The [R for Data Science page on relational data](https://r4ds.had.co.nz/relational-data.html)  
+
+Th [tidyverse page on dplyr](https://dplyr.tidyverse.org/reference/bind.html) on binding  
+
+A vignette on [fastLink](https://github.com/kosukeimai/fastLink) at the package's Github page  
+
+Publication describing methodology of [fastLink](https://imai.fas.harvard.edu/research/files/linkage.pdf)  
+
+Publication describing [RecordLinkage package](https://journal.r-project.org/archive/2010/RJ-2010-017/RJ-2010-017.pdf)
+
+
+
+
