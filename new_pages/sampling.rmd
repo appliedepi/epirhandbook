@@ -1,35 +1,62 @@
 # Sampling
 
-Assessing accurately if an intervention (vaccination campaign, distribution of bednets, etc) reached enough individuals could idealy be done by collecting data from ALL those individuals. For obvious logistical constraints it is impossible in a reasonable amount of time and with limited resources. Drawing a representative sample of the population targeted by the intervention, the target population, is a robust strategy to gather information. It allows us to make reliable inferences on the target population by gathering information on a portion of it.
+## Overview
+
+Assessing accurately if an intervention (vaccination campaign, distribution of bed nets, etc) reached enough individuals could idealy be done by collecting data from ALL those individuals. For obvious logistical constraints it is impossible in a reasonable amount of time and with limited resources. Drawing a representative sample of the population targeted by the intervention, the target population, is a robust strategy to gather information. It allows us to make reliable inferences on the target population by gathering information on only a portion of it.
 
 ```{r "concept behind drawing sampling", out.width=c('100%', '100%'), echo=FALSE}
-# knitr::include_graphics(here::here("images", "gis_head_image.png"))
+knitr::include_graphics(here::here("images", "sample_schematic.jpg"))
 ```
 
-Sampling strategies to draw a representative sample differ for descriptive studies, typically field surveys assessing the proportion of a population reached by various interventions (vaccination campaign, bednet distribution, etc), or analtyical studies (case control or cohort studies).
+Sampling strategies to draw a representative sample differ for descriptive studies, typically field surveys assessing the proportion of a population reached by various interventions, or analtyical studies (case control or cohort studies). We will focus on sampling in desciptive studies in this chapter.
 
 Some crucial elements should be defined to reach that goal:
 
 - Target population
 - Sampling scheme
 	- Choose the number of stages
-	- Identify the primary, secondary, tertiary (or more) sampling units and their number
+	- Identify the primary, secondary, tertiary (or more) sampling units
 - Sample size
 
 The last steps would be to draw the sample using the identified sampling frame(s) and collect information.
 
-```{r "package setup"}
+## Preparation
+### Load packages
+
+This code chunk shows the loading of packages required for the analyses. In this handbook we emphasize *p_load()* from pacman, which installs the package if necessary and loads it for use. You can also load installed packages with *library()* from base R. See the page on R basics for more information on R packages.
+
+```{r "package setup", echo=TRUE}
 ## load packages from CRAN
 pacman::p_load(here,         # File locator
-			   randomNames,  # Generate random names
+			   rio,			 # To load files
 			   dplyr,		 # Data management
 			   tidyr,		 # Switching from wide to long
+			   samplingbook, # Calculate sample sizes
 			   ggplot2,      # Ggplot2 graphics
 			   metR,         # Filled contours used with ggplot2
 			   gridExtra,	 # Plotting ggplot2 graphs side by side
-			   DT 			 # Interactive tables
+			   DT, 			 # Interactive tables
+			   data.tree,	 # Creation of a tree
+			   tigris,		 # Access data from the US Census Bureau
+			   sf,			 # Allow the use of sf format for GIS data on R
+			   leaflet,		 # Creation of interactive maps
+			   mapedit,		 # Interactive modification of points/polygons
+			   mapview,		 # Creation of interactive maps
+			   leafpm,		 # Leaflet map plugin
+			   maptools,	 # Some GIS functionalities
+			   rgdal,		 # Some GIS functionalities
+			   osmdata		 # Access OpenStreetMap data
 			)
 ``` 
+
+### Import data
+
+We will use mock data to illustrate how to perform different sampling methods below. It includes a list of students with names, sex, and their vaccination status. In real life we would select a sample to estimate it, here because the data were generated we know the "true" vaccination coverage in this population. We will then be able to compable the estimate based on the sample to the true value.
+
+```{r "loading data", echo=TRUE}
+# Let us load a mock sampling frame with 1000 students with their names and sex. We will use it below to practice sampling.
+student_list <- import(here("data", "student_list.csv"))
+```
 
 ## Target population
 
@@ -47,15 +74,34 @@ This step might seem straightforward and simple, but it can become complex in a 
 
 ## Sampling scheme
 
-Deciding how many stages and wich sampling method you use at each stage is crucial. It directly impacts your final sapling size and the practical logistic of your data collection step.
+Deciding how many stages and wich sampling method you use at each stage is crucial. It directly impacts your final sampling size and the practical logistic of your data collection step.
+
+```{r "decision tree", echo=FALSE, fig.align='center', fig.width=6, fig.height=4}
+tree_dt <- data.frame(
+			group=c(rep("Probability sampling", 4), rep("Non-probability sampling", 3)),
+			subgroup=c("Simple random sampling", "Systematic sampling", "Cluster sampling", "Stratified sampling",
+				"Convenience sampling", "Snowball sampling", "Purposeful sampling")) %>%
+			mutate(
+				pathString=paste("Sampling methods", group, subgroup, sep="/"))
+tree <- as.Node(tree_dt)
+SetGraphStyle(tree, rankdir = "TB")
+SetEdgeStyle(tree, arrowhead = "vee", color = "grey35", penwidth = 2)
+SetNodeStyle(tree,
+	style = "filled,rounded", shape = "box",
+	fillcolor = "steelblue1",
+	fontname = "helvetica", tooltip = GetDefaultTooltip)
+SetNodeStyle(tree$`Non-probability sampling`, fillcolor = "lightgrey")
+
+plot(tree)
+```
 
 There are two main groups of sampling methods:
 
 - **Probability sampling**: every individual has a non-zero probability to be selected and we can estimate its selection probability. Traditionnaly, we want the selected individuals to have equal selection probabilities: a "self-weighted" sample. However, it is not always the case. If it is not a self-weighted sample we must be able to quantify the selection probability of every participant to weight the data appropriately (see Survey analysis). This broad group of methods includes:
-	- **Simple random sampling** (SRS): it involves randomly selecting a smaller group of participants/sampling units out of a population/finite number of sampling units with a probability $p=\frac{n}{N}$.
-	- **Systematic sampling**: it involves selecting a smaller group of participants/sampling units using a sampling frame. Unlike with the SRS, a constant sampling interval $k=\frac{n}{N}$ is used with the $1^{st}$ sampling unit randomly chosen between 1 and $k$ and every following $k^{th}$ sampling unit selected. It is a reasonable approximation of SRS.
-	- **Cluster sampling**: it involves selecting homogeneous groups, clusters, out of a heterogeneous population composed of those groups. The clusters tend to be natural groups, eg: selecting villages to assess the vaccine coverage in a rural area.
-	- **Stratified random sampling**: it involves selecting a smaller group of sampling units out of a population divided into smaller mutually exclusive homgeneous groups: strata. The sampling occurs within each strata. The identified strata should be meaningful regarding what we try to measure, eg: vaccine coverge in rural area vs in urban area. 
+	- **Simple random sampling** (SRS): involves randomly selecting a sub-population (number of individuals or sampling units) out of a total population (population of an area or a finite number of sampling units) with a probability $p=\frac{n}{N}$.
+	- **Systematic sampling**: involves selecting a sub-population (number of individuals or sampling units) using a sampling frame. Unlike with the SRS, a constant sampling interval $k=\frac{n}{N}$ is used with the $1^{st}$ sampling unit randomly chosen between 1 and $k$ and every following $k^{th}$ sampling unit selected (e.g. we select every $n^{th}$ individual). It is a reasonable approximation of SRS.
+	- **Cluster sampling**: involves selecting homogeneous groups, clusters, out of a heterogeneous population composed of those groups. The clusters tend to be natural groups, eg: vaccination coverage by district or by camp block.
+	- **Stratified sampling**: involves selecting a smaller group of sampling units out of a population divided into smaller mutually exclusive homgeneous groups: strata. The sampling occurs within each strata. The identified strata should be meaningful regarding what we try to measure, eg: vaccine coverge in rural area vs in urban area. 
 - **Non-probability sampling**: as opposed to probability sampling some individuals have no chance to be selected and we cannot necessarily estimate their selection probability. This group includes:
 	- **Convenience sampling**
 	- **Snowball sampling**
@@ -67,17 +113,13 @@ Typically, equal selection probabilities in the sample, a self-weighted sample, 
 
 We will not cover non-probability sampling. This type of methods are more often used in qualitative research and do not allow us to make inferences on the distribution of statistics of interest in the target population.
 
-```{r "sampling_methods", echo=TRUE, warning=FALSE, message=FALSE}
-# code chunks to illustrate the probablity sampling methods
-```
-
 ## Sample size calculation
 
 In this chapter, we will focus on the sample size calculation for descriptive studies.
 
-Several R packages XXXXXXXXX can help you make such calculations easily. However you still need to make choices and sometimes some assumptions. We will here use a parametric approach and explicit the formulae used to highlight the choices you need to make and how they matter.
+Several R packages such as [samplesize4surveys](https://cran.r-project.org/web/packages/samplesize4surveys/index.html) or [samplingbook](https://cran.r-project.org/web/packages/samplingbook/index.html) can help you make such calculations easily. You can also use some online applications (like [here](https://dhsprogram.com/data/survey-sampling-online-tools.cfm)) to keep things simple. However you still need to make choices and sometimes make some assumptions. Those choice and assumptions can be invisible if you just apply a command from a package and do not without fully understanding what is happening. Here, we will use a parametric approach and explicit the formulae used to highlight the choices you need to make and how they matter. We will then quickly illustrate how to do it using functions from the package [samplingbook](https://cran.r-project.org/web/packages/samplingbook/index.html). [samplesize4surveys](https://cran.r-project.org/web/packages/samplesize4surveys/index.html) provides more functions and is more thorough, but it is also more complex. We will keep it simple and as you will see below: for surveys you can keep it simple as long as you make reasonable choices/assumptions.
 
-For any sample size calculation it is necessary to decide/identify:
+For any sample size calculation it is necessary to identify or make decisions on:
 
 - The primary variable of interest
 	- Categorical (eg: vaccinated/unvaccinated) or continuous data (eg: score measuring well being on a 1 to 10 scale)
@@ -94,36 +136,13 @@ The sampling scheme influences the sample size calculation. However, it is commo
 
 ### SRS
 
-It is the simplest approach in many ways. The sampling itself is straightforward, as is the anlysis. However, depending on the scale of your survey it often needs to be associated to other sampling methods to avoid logistical hassles.
+It is the simplest approach in many ways. The sampling itself is straightforward, as is the analysis. However, depending on the scale of your survey it often needs to be associated to other sampling methods to avoid logistical hassles.
 
-Building a sampling frame listing all the students of a school to randomly choose some of them is easy enough (1 stage SRS survey). Building such a sampling frame including the students of all the schools of all the cities in an area is less convenient than maybe selecting some cities, then seleting some schools in those cities, and then randomly selecting students in those schools (3 stage surveys with cluster sampling at the first and second stages with SRS at the third stage). Even if the second solution will lead to a higher sample size (see below), it is way easier to plan, to get the necessary data, and eventually to realize.
+We will stick to this simple example for now: randomly selecting people from a list, a sampling frame. Be aware that in most cases, sampling frames are from an external source (see more in the relevant section). Here we will use mock data.
 
-When it comes to sample size calculation, a first step is often to assume that your use 1 stage sampling with SRS. Then you will take into account the specificities of your chosen design (see below).
+When it comes to sample size calculation, assuming a 1 stage sampling with SRS is almost always the first step. So it is crucial to understand that part because you will almost always use it at some point. Taking into account the specificities of your chosen design comes after and will be seen later in this chapter.
 
-```{r "Basic SRS", echo=TRUE, fig.align='center'}
-# Let us create a mock sampling frame with 1000 students with their names and sex
-set.seed(1) # So that the example can be exactly reproduced
-student_list <- data.frame(
-					sex=sample(rep(0:1, each=500), 1000, replace=FALSE)) %>% # 0 is male and 1 is female with a 1/1 ratio here,
-				mutate(
-					prob=ifelse(sex==0, 0.8, 0.6),		 	 # For some reason boys had a higher probability to be vaccinated than girls
-					vacci_status=rbinom(n=1000, size=1, prob=prob)) %>% # 0 is unvaccinated and 1 is vaccinated
-				mutate(names=randomNames(gender=sex)) # Random name generation
-# In real life you will not know the vaccination status of all the students: it could be the reason you are doing the survey, but here we control everything. This will allow us to compare our estimate using our sample to the truth.
-
-# Let us randomly select 250 students
-selected_students <- student_list[sample(1:nrow(student_list), 250),]
-
-# Vaccination coverage in our student population (the "true" vaccination coverage)
-mean(student_list$vacci_status)
-
-# Vaccination coverage based on our randomly selected students (the estimate of the vaccination coverage)
-mean(selected_students$vacci_status)
-
-# The estimate of the vaccination coverage based on the sample is pretty close to the one in the population
-
-datatable(selected_students, rownames=FALSE)
-```
+Before calculating the required sample size, you must answer only one question: what kind of data is my main variable of interest in this survey? It will decide the formula you must apply. It could be categorical (eg: vaccinated: yes/no) or continuous (eg: blood pressure).
 
 #### Primary variable: continuous data
 
@@ -133,8 +152,26 @@ $$
 
 $sd^2$ is the estimate of the variance (squared standard deviation), and $Z=0.196$ for $\alpha=0.05$
 
-```{r "SRS continuous 1", echo=TRUE, fig.align="center", fig.height=4, fig.width=9}
-# Let us see what the different combinations of precision or prevalence lead to in terms of sample size using the example of the score assessing well being (between 0 and 10).
+```{r "SRS continuous 1", echo=TRUE}
+# Let us assume that we are designing a survey with a 1 stage SRS sampling to estimate the value of a score assessing well being (between 0 and 10) in our population.
+# For now let us start with something simple: assume we want our survey to have a precision of 0.2 units and we have some evidence based on previous surveys that the variance is about 1.5.
+var <- 1.5
+delta <- 0.2
+var*qnorm(0.975)^2/(delta^2)
+
+# Then we would need to select 145 individuals in our survey if our assumptions are reasonable.
+
+# Let us quickly show how to do to do it with the package samplingbook. This package is associated to a book explaining exactly that: sampling.
+sample.size.mean(
+	e=0.2, # Here is the precision delta
+	S=sqrt(1.5), # Here is the standard deviation
+	level=0.95) # A risk alpha of 5%
+```
+
+When thinking about sample size, you would consider more than 1 set of assumptions to check the impact of a reasonable range of values on the sample size. It is also useful to identify the values you can be a bit "vague" with in your assumptions and the one you should be more precise with.
+
+```{r "SRS continuous 2", echo=TRUE, fig.align="center", fig.height=4, fig.width=9}
+# Let us see what the different combinations of precision and variance lead to in terms of sample size.
 ssize <- expand.grid(
 			sd=seq(0.1, 1.5, by=0.1),
 			delta=seq(0.01, 1, length=100)) %>%
@@ -163,7 +200,7 @@ ssize_explo <- ggplot(
 					ggtitle("Variation of the sample size (log10)\nfor various combinations of sd and delta") +
 					theme_bw()
 
-# Let us now restrict a bit the range of the assumptions we make
+# Let us now restrict a bit the range of the assumptions we make.
 ssize <- expand.grid(
 			sd=seq(0.4, 1, by=0.025),
 			delta=0.1) %>%
@@ -188,7 +225,7 @@ grid.arrange(
 
 You can see that precision has a strong impact on the sample size. It should help you make pragmatic choices and restrict the range of values to consider based on your objectives and logistics. 
 
-#### Primary variable: Categorical data
+#### Primary variable: categorical data
 
 $$
 n=\frac{p(1-p)Z^2}{\Delta^2}
@@ -196,8 +233,26 @@ $$
 
 $p(1-p)$ is the estimate of the variance, and $Z=0.196$ for $\alpha=0.05$
 
-```{r "SRS categorical 1", echo=TRUE, fig.align="center", fig.height=4, fig.width=9}
-# Let us see what the different combinations of precision or prevalence lead to in terms of sample size
+```{r "SRS categorical 1", echo=TRUE}
+# Let us assume that we are designing a survey with a 1 stage SRS sampling to estimate a vaccine coverage in our population.
+# For now let us start with something simple: assume we want our survey to have a precision of 5% and based on administrative estimates we are reasonaby confident that the vaccine coverage should not be below 80%.
+p <- 0.8
+delta <- 0.05
+p*(1-p)*qnorm(0.975)^2/(delta^2)
+
+# Then we would need to select 246 individuals in our survey if our assumptions are reasonable.
+
+# Let us quickly show how to do to do it with the package samplingbook.
+sample.size.prop(
+	e=0.05, # Here is the precision delta
+	P=0.8, # Here is the expected vaccine coverage
+	level=0.95) # A risk alpha of 5%
+```
+
+As previously, let us check a little more broadly how the sample size would vary with various combinations of assumptions.
+
+```{r "SRS categorical 2", echo=TRUE, fig.align="center", fig.height=4, fig.width=9}
+# Let us see what the different combinations of precision or vaccine coverage lead to in terms of sample size.
 ssize <- expand.grid(
 			p=seq(0.5, 0.95, by=0.05),
 			delta=seq(0.01, 0.1, by=0.01)) %>%
@@ -249,17 +304,44 @@ grid.arrange(
 	widths=c(4, 3))
 ```
 
-As for continuous data, precision has a strong impact on the sample size, but so does the proportion you assume in the target population.
+As for continuous data, precision has a strong impact on the sample size, but so does the proportion you assume in the target population. If you have very little information about the prevalence of what you try to measure: assming 0.5 is the most conservative option. However it will substantially increase your sample size.
+
+#### Performing SRS
+
+Let us randomly select 250 students from the list of students loaded at the beginning of the packages to estimate the vaccination coverage of all the students.
+
+```{r "Basic SRS", echo=TRUE, fig.align='center'}
+# Let us use the data loaded at the beginning of the chapter
+# Have a quick look at this data.frame: it includes every vaccination status
+str(student_list)
+
+# In real life you will not know the vaccination status of all the students: it could be the reason you are doing the survey, but here we control everything. This will allow us to compare our estimate using our sample to the truth.
+
+set.seed(1) # We just define a seed to be able to choose the same
+# Let us randomly select 250 students
+selected_rows <- sample(1:nrow(student_list), 250)
+selected_students <- student_list[selected_rows,]
+
+# Vaccination coverage in our student population (the "true" vaccination coverage)
+mean(student_list$vacci_status)
+
+# Vaccination coverage based on our randomly selected students (the estimate of the vaccination coverage)
+mean(selected_students$vacci_status)
+
+# The estimate of the vaccination coverage based on the sample is pretty close to the one in the population
+
+datatable(selected_students, rownames=FALSE)
+```
 
 ### Systematic sampling
 
-Systematic sampling is functionally equivalent to SRS: every individual in the sampling frame has the same selection probability. Sample size calculation is then commonly done assuming SRS.
+Systematic sampling is functionally equivalent to SRS: every individual in the sampling frame has the same selection probability. **Sample size calculation is then commonly done assuming SRS.**
 
-There is a risk of adding a bias depending on the presence of patterns in the way the sampling frame is organized with this strategy though.
+A potential issue to be aware of with systematic sampling though: there is a risk of adding a bias depending on the presence of patterns in the way the sampling frame is organized.
 
 ```{r "systematic and bias 1", echo=TRUE}
 # Let us go back to our sampling frame created to illustrate SRS
-# If your remember well boys had more chance to be vaccinated
+# If your remember well boys had more a higher chance to be vaccinated
 # Now imagine that for administrative reasons the list of students is ordered by alternating boys and girls
 student_list <- student_list %>% # We are just reordering the list to alternate boys and girls
 					arrange(sex) %>%
@@ -274,8 +356,10 @@ interval <- nrow(student_list)/250
 # Now the random beginning
 set.seed(1)
 beginning <- sample(1:interval, 1)
+# And now the sequence of selected rows
+selected_rows <- seq(beginning, nrow(student_list), by=interval)
 
-selected_students <- student_list[seq(beginning, nrow(student_list), by=interval),]
+selected_students <- student_list[selected_rows,]
 
 # Vaccination coverage in our student population (the "true" vaccination coverage)
 mean(student_list$vacci_status)
@@ -284,13 +368,13 @@ mean(student_list$vacci_status)
 mean(selected_students$vacci_status)
 ```
 
-You can see in this example that we are substantially overestimating the vaccination coverage based on our sample. It is because of the way the sampling frame (the list of students) is ordered and also because our sampling interval happens to be even. The conjunction of the two lead us to oversample or undersample boys if our sampling interval is even if our first selected student is a boy or a girl.
+You can see in this example that we are substantially overestimating the vaccination coverage. It is because of the way the sampling frame (the list of students) is ordered and also because our sampling interval happens to be even. The conjunction of the two leads us to oversample or undersample boys if our sampling interval is even and if our first selected student is a boy or a girl respectively.
 
-This toy example is just a cartoonish illustration. In practice it can be very difficult to detect such issues before it is too late. The simple solution to this is to randmoly shuffle your sampling frame before making the systematic selection.
+This toy example is just a cartoonish illustration. In practice it can be very difficult to detect such issues before it is too late. The simple solution to this is to randomly shuffle your sampling frame before making the systematic selection.
 
 ```{r "systematic and bias 2", echo=TRUE}
 # Let us reshuffle our ordered list of students
-set.seed(2)
+set.seed(2) # We define the seed to be able to reproduce exactly the way it was reshuffled 
 student_list <- student_list[sample(1:nrow(student_list), nrow(student_list), replace=FALSE),]
 
 datatable(student_list %>% select(-prob), rownames=FALSE)
@@ -299,8 +383,10 @@ datatable(student_list %>% select(-prob), rownames=FALSE)
 interval <- nrow(student_list)/250
 # Now the random beginning
 beginning <- sample(1:interval, 1)
+# And now the sequence of selected rows
+selected_rows <- seq(beginning, nrow(student_list), by=interval)
 
-selected_students <- student_list[seq(beginning, nrow(student_list), by=interval),]
+selected_students <- student_list[selected_rows,]
 
 # Vaccination coverage in our student population (the "true" vaccination coverage)
 mean(student_list$vacci_status)
@@ -309,19 +395,23 @@ mean(student_list$vacci_status)
 mean(selected_students$vacci_status)
 ```
 
-### Other sampling methods and more complex designs
- 
-As soon as you associate various sampling methods by using a multistage sampling design, calculating the sample size will require some information based on the litterature (idealy) or some additional assumptions.
+After randomly reshuffling the sampling frame, our estimates using SRS and systematic sampling are now much closer.
 
-Adding several stages very often means that you use other methods (maybe in association) than SRS/systematic sampling. Cluster sampling typically will lead to sampling participants that are to some extent correlated to the participants of the same cluster. Analysing a sample as is assumes that their characteristics are independent. When cluster sampling has been used at any stage, this assumption does not hold: it then underestimates the variance of your primary variable of interest. This means that you need to inflate the sample size to compensate for this. By how much you need to inflate your sample size? This is the difficult part. **The constant by which you should multiply your sample size assuming SRS is called the "design effect" ($deff$).**
+### Other sampling methods and more complex designs
+
+Let us consider again the simple example used with SRS: building a sampling frame listing all the students in a school is easy. Building such a sampling frame including the students of all the schools of all the cities in an area is way less convenient than maybe selecting some cities, then seleting some schools in those cities, and then randomly selecting students in those schools (3 stage surveys with cluster sampling at the first and second stages with SRS at the third stage). Even if the second solution leads to a higher sample size (see below why), it is way easier to plan, to get the necessary data, and eventually to realize.
+
+As soon as you associate various sampling methods by using a multistage sampling design, calculating the sample size will require some additional information based on the litterature (ideally) or some additional assumptions.
+
+Adding several stages very often means that you use other methods (maybe in association) than SRS/systematic sampling. Cluster sampling typically will lead to sampling participants that are to some extent similar to the participants of the same cluster. Analysing a sample as is assumes that the characteristics of all the participants are independent. When cluster sampling has been used at any stage, this assumption does not hold, because it underestimates the variance of your primary variable of interest. This means that you need to inflate the sample size to compensate for this. By how much do you need to inflate your sample size? This is the difficult part. **The constant by which you should multiply your sample size assuming SRS is called the "design effect" ($deff$).**
 
 $$
 deff=\frac{V_{design}}{V_{SRS}}
 $$
 
-$V_{SRS}$ is the variance in a sample using SRS.
+$V_{SRS}$ is the variance in a sample selected using SRS only.
 
-$V_{design}$ is the variance in a sample drawn using our alternative design.
+$V_{design}$ is the variance in a sample selected with our alternative design.
 
 $deff$ is usually above 1 with multistage sampling, but the closer it is to 1 the closer the sample size is to the one you would get only with a 1 stage SRS.
 
@@ -333,6 +423,24 @@ $$
 
 An important point though: what you find in the litterature is relevant only if you defined your design and sampling units in a similar way, eg: if your clusters are villages but some article used households it is not useful. Besides, the settings should be reasonably similar as well.
 
+Now, let us illustrate the calculation of the sample size for a survey uing a common 2 stage strategy (1st stage with cluster sampling with PPS, and 2nd stage with SRS). The goal would be to estimate the vaccine coverage of students in all the schools in an area with several cities. we would then first select schools (our clusters here) and then select students in them.
+
+1st step: calculate the sample size assuming SRS. Here, let us keep the assumptions used previously: vaccine coverage no lower than 80% and a precision of 5%.
+
+2nd step: we have several comparable surveys in similar settings in the litterature reporting design effects around 3.5.
+
+```{r "deff sample size 1", echo=TRUE}
+p <- 0.8
+delta <- 0.05
+n_srs <- p*(1-p)*qnorm(0.975)^2/(delta^2)
+
+# Sample size with our design
+deff <- 3.5
+deff*n_srs
+
+# Now our sample size increased to 861 students.
+```
+
 #### Cluster sampling
 
 Cluster sampling is very common sampling strategy. It can be used as a 1 stage sampling scheme, but it is more frequently associated to other sampling methods such as SRS/systematic sampling in multistage sampling schemes.
@@ -343,27 +451,42 @@ A common 2 stage sampling scheme uses cluster sampling at the first stage, with 
 
 - The selected participants have an equal selection probability. This means that the sample does not need to be weighted during the analysis.
 
-There are more combinations with more than 2 stages that could lead you to a self-weighted sample. However, keep in mind that oversampling some groups might be desirable too and weighting your data is not excindingly complex either (see the chapter on the analysis).
+There are more combinations with more than 2 stages that could lead you to a self-weighted sample, and they all let you analyze your data without sampling. The added stages are justified as long as they provide some advantages in terms of logistics for example. Remember, choosing a particular sampling scheme is ofen a matter of trade-off.
 
-```{r "self weighting demonstration", echo=TRUE}
+Keep also in mind that oversampling some groups might be desirable too depending on your objectives, and weighting your data is not exceedingly complex either (see the chapter on the analysis).
+
+```{r "self weighting demonstration", echo=TRUE, fig.align='center', fig.width=4, fig.height=8}
 # Let us generate a list of villages with their sample sizes
 villages <- data.frame(
 			name=LETTERS[1:20],
 			pop=as.integer(100*rlnorm(20, meanlog=3, sdlog=1.5)))
 
-# I do not define a seed on purpose here. You can rerun the code several times with different situations but always ending with a self-weighted sample.
+# A quick look at population size across the villages
+ggplot(
+	data=villages,
+	aes(x=name, y=pop)) +
+	geom_bar(stat='identity') +
+	xlab("Villages") +
+	ylab("Population size") +
+	coord_flip() +
+	theme_bw()
 
-# Now let us select 10 clusters  by PPS (1 cluster could be 5 households chosen randomly, or any other way you want to define it that makes sense with your context)
+# We do not define a seed on purpose here. You can rerun the code several times with different situations but you always end up with a self-weighted sample.
+
+# Let us select 10 clusters by PPS (1 cluster could be 5 households chosen randomly, or any other way you want to define it that makes sense with your context).
 villages$p1 <- villages$pop/sum(villages$pop) # Probability that a cluster is selected in the villages
 clusters <- sample(villages$name, 10, replace=TRUE, prob=villages$p1)
+# More than 1 cluster could be selected in a village if its population size is big enough
+# The number of clusters selected by village
+table(clusters)
 
-# In each household we randomly select 1 person using SRS
+# In each cluster we randomly select 5 person using SRS
 sample <- data.frame(cluster=clusters) %>%
 			left_join(.,
 				villages,
 				by=c("cluster"="name")) %>%
 			mutate(
-				p2=1/pop, # The probability of an individual to be sampled once a cluster was selected in their village
+				p2=5/pop, # The probability of an individual to be sampled once a cluster was selected in their village
 				p=p1*p2) # The overall selection probability is the product of p1 and p2
 
 datatable(sample, rownames=FALSE)
@@ -406,7 +529,7 @@ This highlights two things:
 
 - The smaller the number of individuals selected from the same cluster the lower the $deff$. For a constant sample size, smaller cluster size means more clusters. **If we have reasonable data/experience to pick a value for the $deff$ without information on $\delta$ it is safer to select a greater number of clusters of small sizes than the opposite.** You would be more likely to end up with a lower $deff$ than compared to your assumption than the opposite. Like a lot of things regarding sampling, it also comes down to the trade-offs you can do with logistical, financial, and time constraints you have to collect data.
 
-- For a given cluster size, the more heterogenous it is (the lower the value of $\delta$) the more precise the estimates will be because it leads to a lower $deff$.
+- For a given cluster size, the more heterogenous the clusters are (the lower the value of $\delta$) the more precise the estimates will be because it leads to a lower $deff$.
 
 Another way to look at it: SRS can be viewed as an extreme case of cluster sampling with clusters of size 1 (leading to $deff=1$).
 
@@ -440,24 +563,254 @@ $$
 
 $N$ is the total sample size including all the $S$ strata.
 
-$n_s$ is the sample size for the strata $s$. It could be the same for every strata if the assumption used are conservative enough and you get the required miminum precision you want. So, if you use a 1 to 1 ratio with 2 strata, you multiply your sample size by 2. It is very powerful to control some confounding biases but can increase you total sample size really fast.
+$n_s$ is the sample size for the strata $s$. It could be the same for every strata if the assumption used are conservative enough and you get the required miminum precision you want. So, if you use a 1 to 1 ratio with 2 strata, you multiply your sample size by 2. It is very powerful to control some confounding biases but can increase your total sample size really fast.
+
+### Non-response
+
+Now you are capable to calculate the sample size you need given your sampling scheme, and some prior knowledge/assumptions. Another thing to account for is non-response on your primary variable of interest.
+
+Whatever your sampling strategy is, it is unlikely that 100% of the participants you selected will answer to all your questions. Some topics are associated to social stigma and the participants might not want to talk about it. Some areas in research are just harder to get information on (eg: collecting information on sexually transmitted diseases could be tricky depending on the target population). Or your questionnaire might simply be a bit long. If you did not account for non-response, you might end up with people participating but not answering specific questions, effectively reducing your sample size.
+
+As long as you inflate you sample size based on the expected non-response rate this will not be an issue. As previously, you need some information based on litterature and/or experience based on similar surveys or in similar settings.
+
+$n_{final}=\frac{n}{\rho}$
+
+$n$ is the sample size you calculated for your chosen sampling strategy.
+$\rho$ is the expected response rate. As you would expect, the lower the response rate the more you need to inflate you sample size.
+
+If we come back to our simple 1 stage SRS survey to select students in a school and assume that for some reason 10% of the students/their guardians will not provide the information on their vaccination then let us adjust our ssample size (originally 245).
+
+```{r "non-response", echo=TRUE}
+n_srs <- 245
+rho <- 0.9
+# Final sample size accounting for non-response
+n_srs/rho
+# Then we would need to select 273 students
+```
 
 ## Number of stages
 
-The number of stages is the number of phases involved in the sample selection. If you randomly select individuals from a register: there is only one stage. There is no limit to the number of stages. However, adding a stage tends to increase the sample size, so it should simplify the logistical complexity in return to be worth it and/or allow you to answer some questions, eg: stratifying the sampling to be able to provide reasonable estimate in urban vs rural areas.
+The number of stages is the number of phases involved in the sample selection. If you randomly select individuals from a register: there is only one stage. There is no limit to the number of stages. However, adding a stage tends to increase the sample size, so it should simplify the logistical complexity in return to be worth it and/or allow you to answer some questions, eg: stratifying the sampling to be able to provide reasonable estimates in urban vs rural areas.
 
-The difficult aspect is that choosing the sampling scheme will depend on the situation and the available logistics: there is no simple way to decide the number of stages. The positive aspect is that it means there is a LOT of freedom in defining the number of stages.
+The difficulty is that choosing the sampling scheme will depend on the situation and the available logistics: there is no simple way to decide the number of stages. The positive aspect is that it means there is a LOT of freedom in defining the number of stages.
 
-Choosing the number of stages goes hand in hand with choosing how you will sample at each stage. Sometimes the setting or the questions you want to answer will naturally orient your choices. But, even though I keep repeating it, the logistical, financial, and time constraints should also be taken into account.
+Choosing the number of stages goes hand in hand with choosing how you will sample at each stage. Sometimes the setting or the questions you want to answer will naturally guide your choices. But, even though I keep repeating it, the logistical, financial, and time constraints should also be taken into account.
 
 ### Identifying sampling units
 
-## Drawing a sample using "sampling frame(s)"
+"Sampling unit" is just a generic term to designate what you are sampling. If you have more than one stage, then we talk about primary, secondary, tertiary (and so on) sampling units depending on the stage you are refering to.
 
-Obtaining the information to build a sampling frame can be time consuming in resource limited settings. Demographic informations at the necessary scale can often be gathered from recent census surveys from the local statistics institute, other population based surveys such as [DHS](https://dhsprogram.com/) or [MICS](https://mics.unicef.org/), or even the EPI. Ensuring the data you use to build your sampling frame are up-tp-date and at the necessary geographical scale can be challenging, and can require some trade-offs.
+Then in a classic 2 stage survey with cluster sampling with PPS at the 1st stage and SRS at the 2nd stage, the primary sampling units could be groups of households (defining your clusters), and the secondary sampling units would be individuals. Most of the time, the sampling units as the final stage are individuals.
 
-Sampling frames do not need to be a simple list (paper or otherwise). Other recent data could be really powerful to create a sampling frame in a setting where there are a lot of IDPs, or a natural disaster has substantially modified population distribution, or simply because you cannot find traditional data sources reliable enough. GIS sampling has been used more frequently in recent years to draw samples in complex settings. Although it can look more complex, in many ways it is often a straigthforward application of SRS but using satelite images, or a map, or another GIS product as a sampling frame.
+Whatever your sampling strategy is, you will select sample units from sampling frames at every stage. In this chapter, we have provided mock data or generated data to use as sampling frames. However, you will need to gather the necessary data in real life, and this can be as challenging as the survey itself sometimes.
 
-```{r "spatial sampling", echo=TRUE}
+## "Traditional" sampling frames
 
+Sampling frames are created by using information from external sources most of the time.
+
+Obtaining the information to build a sampling frame can be time consuming in resource limited settings. Demographic informations at the necessary scale can often be gathered from recent census surveys from the local statistics institute, other population based surveys such as [DHS](https://dhsprogram.com/) or [MICS](https://mics.unicef.org/), or even the Expanded Program of Immunization. Ensuring the data you use to build your sampling frame are up-to-date and at the necessary geographical scale can be challenging, and can require some trade-offs (again).
+
+We refer to these potential sources as "traditional" in opposition to more recent sources such as satellite imagery.
+
+## Alternative sampling frames: satellite images
+
+Sampling frames do not need to be a simple list (paper or otherwise). Other recent types of data could be really powerful to create a sampling frame in a setting where population displacement occured, or a natural disaster has substantially modified population distribution, or simply because you cannot find "traditional" data sources that are reliable enough. GIS sampling has been used more frequently in recent years to draw samples in complex settings. Although it can appear more complex, in many ways it is often a straigthforward application of SRS but using satellite images, or a map, or another GIS product as a sampling frame. Rather than sampling clusters in villages from a list and then sampling individuals, you might also sample households directly from satellite images that cover those villages. Rather than using a list of villages you have a "list" of roofs on the satellite images and you randomly choose them through random points. The main difference is that the list is not a table in this case, but the principle remains the same.
+
+
+```{r "spatial sampling", echo=TRUE, fig.width=8, fig.height=6, fig.align="center"}
+# Download the county subdivisions of Hawaii (county of Hawaii).
+hawaii <- county_subdivisions(state="Hawaii", county="Hawaii")
+
+# Let us download data on buildings in Hawaii using OSM.
+box <- st_bbox(hawaii) # We extract the bounding box of our area.
+sampling_area <- opq(c(box)) %>%
+			osmdata::add_osm_feature(key = "building") %>% # "building" here designates everything OSM categorizes in the building feature (accomodation or other), so doing it properly would require to add tags to select which features you are interested in.
+			osmdata::osmdata_sf()
+# We end up with several layers of data. Have a quick look.
+sampling_area
+# We will use the points here: every point is a "building".
+
+set.seed(1)
+sampled_points <- sampling_area$osm_points %>%
+					sample_n(150) # We randomly choose 150 points/buildings
+
+sampled_points_df <- as(sampled_points, "Spatial") %>% # We turn our points into a SpatialPointsDataFrame and then a data.frame to use it outside of a map. Here this is what you see in the interactive table below.
+						as.data.frame() %>%
+						select(
+							Longitude=coords.x1,
+							Latitude=coords.x2) %>%
+						mutate(ID=paste0("ID-", 1:n())) # Just creating an ID for every point. It matches the on on the leaflet map below.
+
+# Like when you use GIS softwares, you might use different data formats in R. The most common ones for GIS are sp and sf. The point here is not to dive in the details, simply be aware of this necessity. More details are provided in the GIS chapter.
+
+ggplot() +
+	geom_sf(
+		data=hawaii,
+		fill="lightgrey",
+		alpha=0.5) +
+	geom_sf( # The blue points are all the "buildings" pulled from OSM data.
+		data=sampling_area$osm_polygons,
+		alpha=0.8,
+		color="blue") +
+	geom_sf( # The bigger red points are the ones we randomly sampled.
+		data=sampled_points,
+		alpha=0.8,
+		color="red") +
+	coord_sf(
+		datum = sf::st_crs(32605)) + # To project the map to UTM (see more in the GIS chapter) to have the axes in meters.
+	theme_bw()
 ```
+
+<center>
+
+```{r "selected points GIS", echo=FALSE}
+datatable(sampled_points_df, rownames=FALSE)
+```
+
+</center>
+
+In this example, there already are data available for the area we want to sample from (the urban clusters). It is not necessary the case, especially if it is a remote area. It means that you might need to create those boundaries yourself potentially on other GIS softwares first. It can be done on freely available softwares such as [GoogleEath](https://www.google.com/intl/fr/earth/versions/#earth-pro) or [QGIS](https://qgis.org/en/site/forusers/download.html).
+
+Let us illustrate this procedure using R.
+1. We will use the package [mapedit](https://cran.r-project.org/web/packages/mapedit/index.html) to define a polygon in the same area (Hawaii).
+
+```{r "polygon drawing ", echo=TRUE, fig.width=12, fig.height=6, fig.align="center"}
+# Let us create a leaflet object centered on the same area. Leaflet allows you to interact with the map, zoom in, zoom out, and so on.
+
+leaflet_area <- leaflet() %>% 
+					addTiles() %>%
+					setView( # Here we center the leaflet map on the center of the area of out sampled points coming from OSM. This is just to be centered in the right place.
+						lng = mean(sampled_points_df$Longitude),
+						lat = mean(sampled_points_df$Latitude),
+						zoom = 12 ) %>% 
+					addProviderTiles("Esri.WorldImagery")
+
+# The next line will automatically open the leaflet created just above and will also let you "draw" on it using mapedit.
+# Zoom in on an area and draw a polygon around it.
+# When you are done, click on "Finish".
+# Then click on "Done" on the bottom right.
+
+# Have a quick look at their webpage if you need additional help: https://r-spatial.org/r/2017/06/09/mapedit_0-2-0.html
+
+polygon <- editMap(leaflet_area)
+# Your polygon is now saved in the object "polygon", more specifically in the slot "finished" of the object polygon.
+```
+
+2. Now let us randomly draw  100 points in your polygon.
+
+```{r "point drawing ", echo=TRUE, fig.width=12, fig.height=6, fig.align="center"}
+# Let us just keep the polygon that your created. It is stored in the slot "finished".
+polygon <- polygon$finished
+
+# Now we draw the points.
+random_points <- st_sample(polygon, 100)
+```
+
+3. Have quick look at the points you just drew.
+
+```{r "quick and dirty look ", echo=TRUE, fig.width=12, fig.height=6, fig.align="center"}
+# You can explore quickly your sampled points.
+# Take some time to zoom in a bit and check several points.
+leaflet() %>% 
+	addTiles() %>%
+	addProviderTiles("Esri.WorldImagery") %>%
+	addPolygons(
+		data=polygon,
+		color="red",
+		fillOpacity=0) %>%
+	addCircleMarkers(data=random_points)
+```
+
+Unless you drew a small polygon VERY neatly around blocks of houses, it is likely that some points did not fall on roofs. The proportion will increase as the area will get more remote and as the polygon gets simpler, to the point that a majority of the points can fall outside of roofs. One necessary additional step here would be to "clean" the random points to only keep the ones on a roof. This will require you to draw more points again (probably more than once) to reach your target number of households (with some additional points to compensate for refusal) as you will need to draw points to replace the ones you removed...and then clean those too and so on.
+
+4. You can remove points also using mapedit.
+
+```{r "quick and dirty look ", echo=TRUE, fig.width=12, fig.height=6, fig.align="center"}
+
+# Draw small polygons around the points not on a roof.
+points_to_clean <- leaflet() %>% 
+					addTiles() %>%
+					addProviderTiles("Esri.WorldImagery") %>%
+					addCircleMarkers(data=random_points) %>%
+					editMap()
+
+# Now we identify only the points outside the polygons you just drew
+on_roof <- sapply(
+				st_intersects(random_points, points_to_clean$finished),
+				function(x){length(x)==0})
+# Now we only keep those
+cleaned_points <- random_points[on_roof,]
+# Keep in mind that it might be faster to select the points on roofs sometimes.
+
+# Have a quick look with in blue the random points before cleaning and in red what remains after your cleaning
+leaflet() %>% 
+	addTiles() %>%
+	addProviderTiles("Esri.WorldImagery") %>%
+	addCircleMarkers(
+		data=random_points,
+		color="red") %>%
+	addCircleMarkers(
+		data=cleaned_points,
+		color="blue") # Only the deleted points will appear red
+```
+
+Our current approach to check and "clean" the points is convenient, but it will become cumbersome and time consuming pretty fast for large areas and large sample sizes. The repetition of cleaning and resampling can be tedious. It could require the use of other GIS softwares ([QGIS](https://www.qgis.org/en/site/) or [GeoDa](https://geodacenter.github.io/)) to be a little faster and/or to streamline every step as much as possible.
+
+SOverall, sampling GPS points can be very powerful in areas where very little information is available to make a more "traditional" sampling frame or simply because you know the available information is unreliable. In areas with large population displacements, it can be easier to find **up-to-date satellite imageries** of the area to draw boundaries and sample households than waiting the demographic data to catch-up with the current situation. However, there are some limitations you should also be aware of:
+* Sampling households by drawing points in a polygon makes the **selection probability proportional to the size of the roof**. We implicitly assume that all the households in the area are roughly of comparable sizes. This assumption can be reasonable or obviously wrong depending on the setting and the size of the area. Maybe larger households are much larger than the other ones and are also associated with higher incomes (with all the potential confounding biases associated with it), so you should gather some information to ensure that you are not adding an unecessary bias.
+* Selecting households by drawing points means that a house has as much chance to be selected as a skyscraper with a roof of the same size. People living in the skyscraper would then have a lower selection probability than people in the house if you randomly choose a fixed number of them. So, either you collect data on the number of people/family living in the selected house/skyscraper to weigh the data accordingly and correct for this unequal selection probability, or you just avoid using this sampling strategy if there is a strong heterogeneity in the number of floors in the area.
+* Because the points your draw are randomly selected you might have by chance either very few points on roofs or sometimes more than one on the same roof. You need to decide on a rule that you apply consistently during your "cleaning" phase for those two situations:
+	* For more than 1 point on the same roof you could choose 1 randomly and discard the others.
+	* To minimize the number of points discarded because they are not exactly on a roof, it is not uncommon to use a buffer around the points (20 meters for example could be reasonable). If a roof is within this buffer, then you consider that house as selected. But there is drawback: the bigger the buffer the more isolated households are likely to be selected. Besides, when adding a buffer, more than 1 household might fall in it and you then need to decide on a rule to pick one (the closest to the point for example). Adding a buffer is common. So, deciding on its size is a matter of trade-off (again).
+
+Typically, this sampling strategy is very convenient in rural/remote areas because it minimizes the potential issues associated to it and maximizes its advantages over using traditional sampling frameworks. And it often becomes a logical solution after disasters with population displacements. Although it requires some extra GIS skills, it is worth getting some familiarity with it.
+
+This strategy also has logistical advantages: you have the coordinates of all the households you want to select. You just need to put them in GPS devices and dispatch your teams in an organized fashion. You can also **SHOW** them where they should go using softwares such as [Google Earth](https://www.google.com/intl/fr/earth/versions/#earth-pro). So the practical management of data collection is often simpler. You will need to juggle between different data formats if you want to export those points in GPS devices or smartphones/tablets using a GIS application. Two of the common formats you should be aware of include gpx (commonly used by some GPS devices and some apps such as [maps.me](https://maps.me/)) and kml (commonly used in other apps such as [OsmAnd](https://osmand.net/) or softwares like [Google Earth](https://www.google.com/intl/fr/earth/versions/)).
+
+```{r "editing kml ang gpx", echo=TRUE, message=FALSE, warning=FALSE, eval=FALSE}
+# Here is how you could save your sampled points into kml points.
+sampled_points %>%
+	mutate(Name=paste0("ID-", 1:n())) %>% # Here we define the variable 'Name' that will be used to label the points.
+	st_write(.,
+		dsn="sampled_points.kml",
+		driver = "kml",
+		delete_dsn = TRUE)
+# This will save the kml in your current working directory. Just adjust the path as needed.
+
+# Here is how you could save your sampled points into gpx.
+sampled_points %>%
+	mutate(name=paste0("ID-", 1:n())) %>% # Here we define the variable 'name' that will be used to label the points.
+	select(name) %>%
+	st_write(.,
+		dsn="sampled_points.gpx",
+		driver = "GPX",
+		delete_dsn = TRUE)
+# This will save the gpx in your current working directory. Just adjust the path as needed.
+
+# You could then transfer the kml/gpx in the devices you want to use to reach the sampled points and collect the data for your survey or also show where they are to your teams on your computer.
+```
+
+# References
+
+Bartlett JE, Kotrlik JW, Higgins CC. Organizational Research: Determining Appropriate Sample Size in Survey Research. :8.
+Charan J, Biswas T. How to Calculate Sample Size for Different Study Designs in Medical Research? Indian Journal of Psychological Medicine. 2013 Jun;35(2):121.
+
+Chromy JR. Modeling Cluster Design Effects When Cluster Sizes Vary. 2014;6.
+
+Escamilla V, Emch M, Dandalo L, Miller WC, Martinson F, Hoffman I. Sampling at community level by using satellite imagery and geographical analysis. Bulletin of the World Health Organization. 2014 Sep 1;92(9):690–4.
+
+Henry G. Practical Sampling [Internet]. 2455 Teller Road, Thousand Oaks California 91320 United States of America: SAGE Publications, Inc.; 1990 [cited 2022 Jan 24]. Available from: http://methods.sagepub.com/book/practical-sampling
+
+Kalton G. Introduction to survey sampling. Second edition. Thousand Oaks, California: SAGE Publications, Inc; 2021. 165 p. (Quantitative applications in the social sciences).
+
+Kish L. Weighting in Deft. The Survey Statistician. The Newsletter of the International Association of Survey Statisticians, June. 1987;
+
+Miller AC, Rohloff P, Blake A, Dhaenens E, Shaw L, Tuiz E, et al. Feasibility of satellite image and GIS sampling for population representative surveys: a case study from rural Guatemala. Int J Health Geogr. 2020 Dec 5;19(1):56. 
+
+Peat J. Health Science Research. In London: SAGE Publications, Ltd; 2022. Available from: https://methods.sagepub.com/book/health-science-research
+
+Yarahmadi F. Multistage Sampling Technique and Estimating Sample Size for a Descriptive Study on Viewers’ Perception of TV Commercials [Internet]. 1 Oliver’s Yard, 55 City Road, London EC1Y 1SP United Kingdom: SAGE Publications Ltd; 2020 [cited 2022 Jan 30]. Available from: https://methods.sagepub.com/case/multistage-technique-estimating-sample-size-viewers-tv-commercials
+
+Design Effects (deff). In: Encyclopedia of Survey Research Methods [Internet]. 2455 Teller Road, Thousand Oaks California 91320 United States of America: Sage Publications, Inc.; 2008 [cited 2022 Jan 25]. Available from: http://methods.sagepub.com/reference/encyclopedia-of-survey-research-methods/n133.xml
+
+Systematic Sampling. In: Encyclopedia of Survey Research Methods [Internet]. 2455 Teller Road, Thousand Oaks California 91320 United States of America: Sage Publications, Inc.; 2008 [cited 2022 Jan 30]. Available from: http://methods.sagepub.com/reference/encyclopedia-of-survey-research-methods/n569.xml
