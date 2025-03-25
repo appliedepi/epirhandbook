@@ -1,0 +1,114 @@
+---
+title: "Outbreak dashboard (Shiny)"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+runtime: shiny
+---
+
+```{r global, echo=FALSE}
+pacman::p_load(rio, here, tidyverse, flexdashboard,       # load packages
+               flextable, incidence2, epicontacts, DT, janitor)
+
+linelist <- import(here("data", "case_linelists", "linelist_cleaned.rds")) # import data
+```
+
+## Sidebar {.sidebar}  
+
+Select a hospital to display:  
+
+```{r}
+hospital_choices <- rev(unique(linelist$hospital))   # create vector of hospital values to choose from
+
+# Create drop-down menu of hospitals. Selection saved as 'hospital_choice'
+selectInput("hospital_choice", label = "Display Epicurve of cases admitted to:",
+            choices = hospital_choices, selected = hospital_choices[[1]])
+```
+
+## Column 1 {data-width=500}
+### Summary and action items 
+
+This report is for the Incident Command team of the fictional outbreak of Ebola cases. **As of `r format(max(linelist$date_hospitalisation, na.rm=T), "%d %B")` there have been `r nrow(linelist)` cases reported as hospitalized.**  
+
+* Several previously-unaffected areas to the West are now reporting cases  
+* Internal reviews suggest that better communication is needed between district and provincial level data management teams  
+* Safe and dignified burial teams are reporting difficulties  
+
+### Review data
+#### Cases by hospital
+```{r}
+linelist %>%
+  count(hospital) %>%
+  adorn_totals() %>%
+  rename("Hospital" = hospital,
+         "Cases" = n) %>% 
+  knitr::kable()
+```
+
+
+## Column 2 {data-width=500}  
+
+### Epidemic curve by age
+
+```{r}
+renderPlot({
+  
+  # Create incidence object, with dynamic filter
+  age_outbreak <- incidence(
+    linelist %>% filter(hospital == input$hospital_choice),
+    date_index = date_onset, interval = "week", groups = age_cat)
+  
+  # plot incidence object as epicurve, with dynamic title
+  plot(age_outbreak, fill = age_cat, col_pal = muted,
+       title = str_glue("Cases admitted to {input$hospital_choice}"))
+       })
+```
+
+### Transmission chain (select cases)  
+
+
+```{r}
+# load package
+pacman::p_load(epicontacts)
+
+## generate contacts
+contacts <- linelist %>%
+  transmute(
+    infector = infector,
+    case_id = case_id,
+    location = sample(c("Community", "Nosocomial"), n(), TRUE),
+    duration = sample.int(10, n(), TRUE)
+  ) %>%
+  drop_na(infector)
+
+## generate epicontacts object
+epic <- make_epicontacts(
+  linelist = linelist,
+  contacts = contacts,
+  id = "case_id",
+  from = "infector",
+  to = "case_id",
+  directed = TRUE
+)
+
+## subset epicontacts object
+sub <- epic %>%
+  subset(
+    node_attribute = list(date_onset = c(as.Date(c("2014-06-30", "2014-06-01"))))
+  ) %>%
+ thin("contacts")
+
+# temporal plot
+plot(
+  sub,
+  x_axis = "date_onset",
+  node_color = "outcome",
+  col_pal = c(Death = "firebrick", Recover = "green"),
+  arrow_size = 0.5,
+  node_size = 13,
+  label = FALSE,
+  height = 700,
+  width = 700
+)
+```
