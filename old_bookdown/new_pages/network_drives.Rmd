@@ -1,0 +1,177 @@
+
+# R on network drives { }  
+
+ 
+
+
+<!-- ======================================================= -->
+## Overview {  }
+
+Using R on network or "company" shared drives can present additional challenges. This page contains approaches, common errors, and suggestions on troubleshooting gained from our experience working through these issues. These include tips for the particularly delicate situations involving R Markdown.  
+
+
+**Using R on Network Drives: Overarching principles**  
+
+1) You must get administrator access for your computer. Setup RStudio specifically to run as administrator.  
+2) Save packages to a library on a lettered drive (e.g. "C:") when possible. Use a package library whose path begins with "\\\" as little as possible.  
+3) the **rmarkdown** package must **not** be in a "\\\" package library, as then it can't connect to TinyTex or Pandoc.  
+
+
+
+
+## RStudio as administrator  
+
+When you click the RStudio icon to open RStudio, do so with a right-click. Depending on your machine, you may see an option to "Run as Administrator". Otherwise, you may see an option to select Properties (then there should appear a window with the option "Compatibility", and you can select a checkbox "Run as Administrator").  
+
+
+
+
+## Useful commands 
+
+Below are some useful commands when trying to troubleshoot issues using R on network drives.  
+
+You can return the path(s) to package libraries that R is using. They will be listed in the order that R is using to install/load/search for packages. Thus, if you want R to use a different default library, you can switch the order of these paths (see below).  
+
+```{r, eval=F}
+# Find libraries
+.libPaths()                   # Your library paths, listed in order that R installs/searches. 
+                              # Note: all libraries will be listed, but to install to some (e.g. C:) you 
+                              # may need to be running RStudio as an administrator (it won't appear in the 
+                              # install packages library drop-down menu) 
+```
+
+You may want to switch the order of the package libraries used by R. For example if R is picking up a library location that begins with "\\\" and one that begins with a letter e.g. "D:". You can adjust the order of `.libPaths()` with the following code.  
+
+````{r, eval=F}
+# Switch order of libraries
+# this can effect the priority of R finding a package. E.g. you may want your C: library to be listed first
+myPaths <- .libPaths() # get the paths
+myPaths <- c(myPaths[2], myPaths[1]) # switch them
+.libPaths(myPaths) # reassign them
+```
+
+If you are having difficulties with R Markdown connecting to Pandoc, begin with this code to find out where RStudio thinks your Pandoc installation is.  
+
+```{r, eval=F}
+# Find Pandoc
+Sys.getenv("RSTUDIO_PANDOC")  # Find where RStudio thinks your Pandoc installation is
+```
+
+If you want to see which library a package is loading from, try the below code:  
+
+```{r, eval=F}
+# Find a package
+# gives first location of package (note order of your libraries)
+find.package("rmarkdown", lib.loc = NULL, quiet = FALSE, verbose = getOption("verbose")) 
+```
+
+
+
+<!-- ======================================================= -->
+## Troubleshooting common errors {  }
+
+
+**"Failed to compile...tex in rmarkdown"**  
+
+* Check the installation of TinyTex, or install TinyTex to C: location. See the [R basics] page on how to install TinyTex.  
+
+```{r, eval=F}
+# check/install tinytex, to C: location
+tinytex::install_tinytex()
+tinytex:::is_tinytex() # should return TRUE (note three colons)
+```
+
+
+**Internet routines cannot be loaded**  
+
+For example, `Error in tools::startDynamicHelp() : internet routines cannot be loaded`  
+
+* Try selecting 32-bit version from RStudio via Tools/Global Options.  
+  * note: if 32-bit version does not appear in menu, make sure you are not using RStudio v1.2.  
+* Alternatively, try uninstalling R and re-installing with different bit version (32 instead of 64)
+
+
+**C: library does not appear as an option when I try to install packages manually**
+
+* Run RStudio as an administrator, then this option will appear.  
+* To set-up RStudio to always run as administrator (advantageous when using an Rproject where you don't click RStudio icon to open)... right-click the Rstudio icon 
+
+The image below shows how you can manually select the library to install a package to. This window appears when you open the Packages RStudio pane and click "Install".  
+
+```{r, warning=F, message=F, echo=F}
+knitr::include_graphics(here::here("images", "network_install.png"))
+```
+
+**Pandoc 1 error**  
+
+If you are getting "pandoc error 1" when knitting R Markdowns scripts on network drives:  
+
+* Of multiple library locations, have the one with a lettered drive listed first (see codes above)  
+* The above solution worked when knitting on local drive but while on a networked internet connection  
+* See more tips here: https://ciser.cornell.edu/rmarkdown-knit-to-html-word-pdf/  
+
+**Pandoc Error 83**  
+
+The error will look something like this: `can't find file...rmarkdown...lua...`. This means that it was unable to find this file.  
+
+See https://stackoverflow.com/questions/58830927/rmarkdown-unable-to-locate-lua-filter-when-knitting-to-word  
+
+Possibilities:  
+
+1) Rmarkdown package is not installed  
+2) Rmarkdown package is not findable  
+3) An admin rights issue.  
+
+It is possible that R is not able to find the **rmarkdown** package file, so check which library the **rmarkdown** package lives (see code above). If the package is installed to a library that in inaccessible (e.g. starts with "\\\") consider manually moving it to C: or other named drive library. Be aware that the **rmarkdown** package has to be able to connect to TinyTex installation, so can not live in a library on a network drive.
+
+
+**Pandoc Error 61**  
+
+For example: `Error: pandoc document conversion failed with error 61`  or `Could not fetch...`  
+
+* Try running RStudio as administrator (right click icon, select run as admin, see above instructions)  
+* Also see if the specific package that was unable to be reached can be moved to C: library.
+
+**LaTex error (see below)**
+
+An error like: `! Package pdftex.def Error: File 'cict_qm2_2020-06-29_files/figure-latex/unnamed-chunk-5-1.png' not found: using draft setting.` or `Error: LaTeX failed to compile file_name.tex.`  
+
+* See https://yihui.org/tinytex/r/#debugging for debugging tips.  
+* See file_name.log for more info.
+
+
+**Pandoc Error 127**  
+
+This could be a RAM (space) issue. Re-start your R session and try again. 
+
+
+**Mapping network drives**
+
+Mapping a network drive can be risky. Consult with your IT department before attempting this.  
+
+A tip borrowed from this [forum discussion](https://stackoverflow.com/questions/48161177/r-markdown-openbinaryfile-does-not-exist-no-such-file-or-directory/55616529?noredirect=1#comment97966859_55616529): 
+
+How does one open a file "through a mapped network drive"?  
+
+* First, you'll need to know the network location you're trying to access.  
+* Next, in the Windows file manager, you will need to right click on "This PC" on the right hand pane, and select "Map a network drive".  
+* Go through the dialogue to define the network location from earlier as a lettered drive.  
+* Now you have two ways to get to the file you're opening. Using the drive-letter path should work.  
+
+
+**Error in install.packages()**  
+
+If you get an error that includes mention of a "lock" directory, for example: `Error in install.packages : ERROR: failed to lock directory...`
+
+Look in your package library and you will see a folder whose name begins with "00LOCK". Try the following tips:  
+
+* Manually delete the "00LOCK" folder directory from your package library. Try installing the package again.  
+* You can also try the command `pacman::p_unlock()` (you can also put this command in the Rprofile so it runs every time project opens.). Then try installing the package again. It may take several tries.  
+* Try running RStudio in Administrator mode, and try installing the packages one-by-one.  
+* If all else fails, install the package to another library or folder (e.g. Temp) and then manually copy the package's folder over to the desired library.  
+
+
+
+
+
+
