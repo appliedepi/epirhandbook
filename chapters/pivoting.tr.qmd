@@ -1,0 +1,532 @@
+---
+aliases:
+  - /new_pages/pivoting.tr.html
+---
+
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+# Verilerin pivotlanması {}
+
+```{r, warning=F, message=F, out.height = c('50%'), fig.align="center", fig.show='hold', echo=F}
+knitr::include_graphics(here::here("images", "pivoting", "Pivoting_500x500.png"))
+
+#knitr::include_graphics(here::here("images", "pivoting", "pivot_longer_new.png"))
+#knitr::include_graphics(here::here("images", "pivoting", "pivot_bar.png"))
+#knitr::include_graphics(here::here("images", "pivoting", "pivot_wider_new.png"))
+```
+
+
+
+Verileri yönetirken, *pivotlama* aşağıdaki iki süreçten birini tarif eder:
+
+1. Daha kapsamlı bir tablonun verilerini özetleyen istatistik tabloları olan *pivot tabloların* oluşturulması 
+2. Bir tablonun **uzun** formattan **geniş** formata dönüştürülmesi veya tam tersi. 
+
+**Bu sayfada, ikinci tanıma odaklanacağız.** İlk tanım, veri analizinde çok önemli bir adımdır ancak [Verileri gruplandırma](grouping.tr.qmd) ve [Tanımlayıcı tablolar](tables_descriptive.tr.qmd) sayfalarında ele alınmıştır.
+
+Bu sayfada veri biçimleri tartışılmaktadır. Her değişkenin kendi sütununa, her gözlemin kendi satırına ve her değerin kendi hücresine sahip olduğu “düzenli-tidy veri” felsefesi akılda tutulmalıdır. Bu konu hakkında daha fazla bilgiyi [Veri Bilimi için R çevrimiçi](https://r4ds.had.co.nz/tidy-data.html) bölümünde bulabilirsiniz.
+
+
+
+
+## Hazırlık  
+
+### Paketlerin yüklenmesi {.unnumbered}  
+
+Bu kod bloğu, analizler için gerekli olan paketlerin yüklenmesini gösterir. Bu el kitabında, gereken durumlarda paketi kuran *ve* kullanım için yükleyen **pacman**'ın `p_load()` fonksiyonunun kullanımı vurgulanmıştır. Ayrıca, R tabanından `library()` ile kurulu paketleri yükleyebilirsiniz. R paketleri hakkında daha fazla bilgi için [R temelleri](basics.tr.qmd) sayfasına bakın.
+
+```{r}
+pacman::p_load(
+  rio,          # Dosyanın içe aktarımı
+  here,         # Dosyanın konumu
+  kableExtra,   # Build and manipulate complex tables
+  tidyverse)    # veri yönetimi + ggplot2 grafik paketi
+```
+
+
+
+### Verinin içeri aktarımı {.unnumbered}
+
+
+### Sıtma hastalığı için sayım verisi {-}  
+
+Bu sayfada, kuruluş ve yaş grubuna göre günlük sıtma vakalarını içeren kurgusal bir veri setini inceleyeceğiz. Adımları takip etmek isterseniz, <a href='https://github.com/appliedepi/epirhandbook_eng/raw/master/data/malaria_facility_count_data.rds' class='download-button'>veri setini indirmek için buraya tıklayın (.rds dosyası formatında)</a>. Verileri **rio** paketinden `import()` fonksiyonuyla içe aktarın (.xlsx, .csv, .rds gibi birçok dosya türünü işler - ayrıntılar için [İçe Aktarma ve Dışa Aktarma](importing.tr.qmd) sayfasına bakın).
+
+```{r, echo=F}
+count_data <- rio::import(here::here("data", "malaria_facility_count_data.rds")) %>% 
+  as_tibble()
+```
+
+```{r, eval=F}
+# Verinin içeri aktarımı
+count_data <- import("malaria_facility_count_data.rds")
+```
+
+İlk 50 satır aşağıda gösterilmiştir.
+
+```{r, message=FALSE, echo=F}
+# satır listesini tablo olarak göster
+DT::datatable(head(count_data, 50), rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+
+### Satır listesi verisi {-}  
+
+Bu sayfanın sonraki bölümünde, simüle edilmiş bir Ebola salgını vakalarını içeren veri setini de kullanacağız. Devam etmek istiyorsanız, <a href='https://github.com/appliedepi/epirhandbook_eng/raw/master/data/case_linelists/linelist_cleaned.rds' class='download-button'>“temiz” satır listesini (.rds dosyası olarak) indirmek için tıklayın.</a> Verilerinizi **rio** paketinden `import()` işleviyle içe aktarın (.xlsx, .rds, .csv gibi birçok dosya türünü kabul eder - ayrıntılar için İçe Aktarma ve Dışa Aktarma sayfasına bakın).
+
+```{r, echo=F}
+# satır listesini R'a aktar
+linelist <- rio::import(here::here("data", "case_linelists", "linelist_cleaned.rds"))
+```
+
+
+```{r, eval=F}
+# Verinin içeri aktarımı
+linelist <- import("linelist_cleaned.xlsx")
+```
+
+
+
+
+
+
+
+<!-- ======================================================= -->
+## Genişten uzuna {}
+
+```{r, warning=F, message=F, echo=F}
+knitr::include_graphics(here::here("images", "pivoting", "pivot_longer_new.png"))
+```
+
+
+<!-- ======================================================= -->
+### “Geniş” format {.unnumbered}
+
+Veriler genellikle "geniş" bir biçimde girilir ve saklanır - burada bir gözlemin (kişinin) özellikleri veya yanıtları tek bir satırda depolanır. Bu sunum için faydalı olsa da, bazı analiz türleri için ideal değildir.  
+
+Örnek olarak yukarıdaki Hazırlık bölümünde içe aktarılan `count_data` veri setini ele alalım. Her satırın bir “tesis-gününü” temsil ettiğini görebilirsiniz. Gerçek vaka sayıları (en sağdaki sütunlar), belirli bir tesis günündeki farklı yaş grubuna ait bilgilerin ayrı sütunlar halinde ancak tek bir satırda saklanacağı şekilde “geniş” bir formatta bulunur.
+
+```{r, echo=F}
+DT::datatable(count_data, rownames = FALSE, options = list(pageLength = 5, scrollX=T) )
+```
+
+Bu veri tabanındaki ScriptEach gözlemi, belirli bir tarihteki 65 tesisten birindeki sıtma sayımlarını gösterir; bu sayı, `count_data$data_date %>% min()` ile `count_data$data_date %>% max()` arasında değişir. Bu tesisler bir `Province (il)` (North) ve dört `District (ilçe)`de (Spring, Bolo, Dingo ve Barnard) bulunmaktadır. Veri seti, genel sıtma sayılarının yanı sıra üç yaş grubunun her birinde - <4 yaş, 5-14 yaş ve 15 yaş ve üzeri - yaşa özel sayıları da içermektedir.
+
+Bunun gibi "geniş" veriler "düzenli veri" standartlarına uymaz, çünkü sütun başlıkları aslında "değişkenleri" temsil etmez - bunlar hipotetik bir "yaş grubu" *değişkenini* temsil eder.
+
+Bu format, bilgileri bir tabloda sunmak veya vaka raporu formlarına veri girmek (örn. Excel'de) için faydalı olabilir. Ancak, analiz aşamasında, bu veriler tipik olarak "düzenli veri" standartlarıyla daha uyumlu "daha uzun" bir formata dönüştürülmelidir. Özellikle R paketi **ggplot2**, veriler "uzun" formatta olduğunda en iyi sonuçları verir.  
+
+
+*Toplam* sıtma sayılarının zamana göre görselleştirilmesinde, mevcut formattaki verilerle herhangi bir zorluk yaşanmaz:
+
+```{r, warning=F, message=F}
+ggplot(count_data) +
+  geom_col(aes(x = data_date, y = malaria_tot), width = 1)
+```
+
+Ancak, her yaş grubunun bu toplam sayıya göreli katkılarını göstermek istersek ne olur? Bu durumda, ilgilenilen değişkenin (yaş grubu), veri kümesinde `{ggplot2}`'nin "haritalama estetiği" `aes()` argümanına aktarılabilecek tek bir sütunda bulunması gerekir.
+
+
+<!-- ======================================================= -->
+### `pivot_longer()` {.unnumbered}
+
+**tidyr** fonksiyonu `pivot_longer()`, verileri "daha uzun" formata getirir. **tidyr**, R paketlerinin **tidyverse** kümesinin bir parçasıdır.
+
+Bu fonksiyon, dönüştürülecek bir dizi sütunu kabul eder (`cols =` argümanı ile belirtilir). Bu nedenle, bir veri tabanının yalnızca bir kısmıyla çalışabilir. Bu fonksiyonla yalnızca vaka sayısı sütunlarını döndürmek istediğimizden, kullandığımız veritabanı için yararlıdı  
+
+Bu süreçte, biri kategorileri (eski sütun adları) ve diğeri de karşılık gelen değerleri (ör. vaka sayıları) içeren iki "yeni" sütun elde edeceksiniz. Bu yeni sütunlar için varsayılan adları kabul edebilir veya kendi adlarınızı sırasıyla `names_to =` ve `values_to =`  argümanlarıyla belirtebilirsiniz. 
+
+`Pivot_longer()`'ı çalışırken görelim… 
+
+
+### Standard pivoting {.unnumbered}  
+
+"Geniş" verileri "uzun" bir biçime dönüştürmek için **tidyr**'in `pivot_longer()` fonksiyonunu kullanmak istiyoruz. Spesifik olarak, sıtma sayılarına ilişkin verileri içeren dört sayısal sütunu iki yeni sütuna dönüştürmek istiyoruz. İki yeni sütundan biri *yaş gruplarını* ve diğeri yaş gruplarına karşılık gelen *değerleri* içerecektir.
+
+```{r, eval=F}
+df_long <- count_data %>% 
+  pivot_longer(
+    cols = c(`malaria_rdt_0-4`, `malaria_rdt_5-14`, `malaria_rdt_15`, `malaria_tot`)
+  )
+
+df_long
+```
+
+Yeni oluşturulan veri çerçevesinin (`df_long`) daha fazla satırı olduğuna dikkat edin (12.152'ye karşı 3.038); böylece veri çerçevesi daha *uzun* bir şekle sahip olur. Aslında, eski versiyonuna göre tam olarak dört kat daha uzundur, çünkü orijinal veri kümesindeki her satır şimdi `df_long`'da dört satırı temsil etmektedir (her bir sıtma sayımı gözlemi yaş grubu için bir tane (<4y, 5-14y, 15y+ ve toplam)).
+
+Daha önce dört sütunda (`malaria_` ön ekiyle başlayanlar) depolanan veriler şimdi iki sütunda depolandığından, daha uzun olmanın yanı sıra, yeni veri kümesi daha az sütuna (8'e karşı 10) sahiptir.
+
+Bu dört sütunun adlarının tümü `malaria_` önekiyle başladığından, aynı sonucu elde etmek için kullanışlı "tidyselect" `start_with()` işlevini kullanabilirdik (bu yardımcı işlevlerin daha fazlası için [Verileri temizleme ve temel işlevler] sayfasına bakın).
+
+
+```{r}
+# tidyselect yardımcı işleviyle sütun sağlayın
+count_data %>% 
+  pivot_longer(
+    cols = starts_with("malaria_")
+  )
+```
+
+ya da pozisyona göre:
+
+```{r, eval=F}
+# pozisyona göre sütun sağlamak
+count_data %>% 
+  pivot_longer(
+    cols = 6:9
+  )
+```
+
+veya adlandırılmış aralığa göre:
+
+```{r, eval=F}
+# ardışık sütun aralıkları sağlama
+count_data %>% 
+  pivot_longer(
+    cols = `malaria_rdt_0-4`:malaria_tot
+  )
+```
+
+Bu iki yeni sütuna varsayılan `ad` ve `değerler` verilir, ancak istediğimiz adları verebilmek için bu varsayılan adları geçersiz kılabiliriz; `names_to` ve `values_to` argümanlarını kullanarak yeni sütunlarda hangi bilgilerin depolandığını hatırlayabiliriz. `Age_group` adlarını ve sayılarını kullanalım:
+
+```{r}
+df_long <- 
+  count_data %>% 
+  pivot_longer(
+    cols = starts_with("malaria_"),
+    names_to = "age_group",
+    values_to = "counts"
+  )
+
+df_long
+```
+
+Şimdi bu yeni veri kümesini `{ggplot2}`'ye aktarabiliriz ve yeni sütunlardaki `count` y eksenine ve yeni `age_group` sütununu `fill =` argümanına (sütun iç kısmının rengi) atayabiliriz. Bu komut, çubuk grafikte yaş grubuna göre sıtma sayılarını gösterir:
+
+```{r, warning=F, message=F}
+ggplot(data = df_long) +
+  geom_col(
+    mapping = aes(x = data_date, y = counts, fill = age_group),
+    width = 1
+  )
+```
+
+Bu yeni grafiği inceleyin ve daha önce oluşturduğumuz grafikle karşılaştırın – *Sizce yanlış giden ne?*
+
+Sürveyans verilerini incelerken yaygın bir sorunla karşılaştık: Grafikteki her çubuğun boyu olması gerekenin iki katıdır, çünkü grafiğe `malaria_tot` sütunundaki toplam sayıları da dahil ettik.
+
+Bu sorunu birkaç şekilde halledebiliriz. `ggplot()`'a aktarmadan önce bu toplamları veri kümesinden filtreleyebiliriz:
+
+```{r, warning=F, message=F}
+df_long %>% 
+  filter(age_group != "malaria_tot") %>% 
+  ggplot() +
+  geom_col(
+    aes(x = data_date, y = counts, fill = age_group),
+    width = 1
+  )
+```
+
+Alternatif olarak, `pivot_longer()`'ı çalıştırdığımızda bu değişkeni hariç tutabilirdik, böylece sorun oluşturan bu değişkeni ayrı bir değişken olarak veri kümesinde tutabilirdik. Değerlerin yeni satırları doldurmak için nasıl "genişlediğini" inceleyin.
+
+```{r, warning=F, message=F}
+count_data %>% 
+  pivot_longer(
+    cols = `malaria_rdt_0-4`:malaria_rdt_15,   # does not include the totals column
+    names_to = "age_group",
+    values_to = "counts"
+  )
+```
+
+
+### Birden çok sınıfa ait verinin pivotlanması {.unnumbered}
+
+Yukarıdaki örnek, daha uzun şekilde pivotlamak istediğiniz tüm sütunların aynı sınıfta olduğu durumlarda (karakter, sayısal, mantıksal…) iyi çalışır.
+
+Bununla birlikte, bir saha epidemiyoloğu olarak, bu konuda uzman olmayanlar tarafından hazırlanan ve standart dışı verilerle çalışacağınız birçok durum olacaktır - Hadley Wickham'ın **Düzenli Veri** ilkeleri üzerine [ufuk açıcı makalesinde](https://vita.had.co.nz/papers/tidy-data.pdf) Tolstoy'a atıfta bulunarak belirttiği gibi "Düzenli veri kümelerinin hepsi birbirine benzer, ancak her dağınık veri kümesi kendi tarzında dağınıktır, aynı aileler gibi."
+
+Karşılaşacağınız özellikle yaygın bir sorun, farklı veri sınıfları içeren sütunları döndürme ihtiyacı olacaktır. Bu pivot işlemi, farklı veri türlerinin tek bir sütunda depolanmasına neden olur ve bu durum istenmeyen bir sonuçtur. Bunun yarattığı karışıklığı ortadan kaldırmak için çeşitli yaklaşımlar vardır. Ancak bu duruma düşmemek için `pivot_longer()` kullanımında uygulanabilecek önemli bir adım vardır.
+
+A, B ve C öğelerinin her biri için farklı zamanlarda bir dizi gözlemin olduğu bir durumu ele alın. Bu öğeler örneğin farklı bireyler (örneğin 21 gün boyunca her gün bir Ebola vakasının temaslıları) veya hala çalışır durumda olduklarından emin olmak için yılda bir kez izlenen sağlık ocakları olabilir. Temaslı kişilerini izlemini ele alalım. Verilerin aşağıdaki gibi kaydedildiğini düşünelim:
+
+
+```{r, message=FALSE, echo=F}
+
+df <- 
+  tibble::tribble(
+     ~id,   ~obs1_date, ~obs1_status,   ~obs2_date, ~obs2_status,   ~obs3_date, ~obs3_status,
+     "A", "2021-04-23",    "Healthy", "2021-04-24",    "Healthy", "2021-04-25",     "Unwell",
+     "B", "2021-04-23",    "Healthy", "2021-04-24",    "Healthy", "2021-04-25",    "Healthy",
+     "C", "2021-04-23",    "Missing", "2021-04-24",    "Healthy", "2021-04-25",    "Healthy"
+     ) 
+
+DT::datatable(df, rownames = FALSE)
+
+```
+
+Verinin durumu başlangıçta karmaşıktır. Her satır, bir öğe hakkında veri içerir, ancak zaman serilerinde zamandaki ilerleme ile sütunlarda sağa doğru ilerleme izlenmektedir. Ayrıca, sütun sınıfları sırayla tarih ve karakter değerleri almaktadır.  
+
+Bu araştırmacının karşılaştığı kötü bir örnek, 4 yıl boyunca *her gün* 8 yeni gözlem sütununun eklendiği kolera sürveyans verilerini içeriyordu. Bu verilerin depolandığı Excel dosyasını açmak, dizüstü bilgisayarda 10 dakikan fazla zaman almıştır.
+
+Bu verilerle çalışmak için, veri çerçevesini uzun biçime dönüştürmemiz, ancak her öğeye ait tüm gözlemler için `date` ve `character` (durum) sütunu arasındaki ayrımı korumamız gerekir. Bunu yapmazsak, tek bir sütunda değişken türleri karışık şekilde bulunur (Veri yönetimi ve düzenli veriler söz konusu olduğunda gerçekten istenmeyen bir durumdur):
+
+```{r}
+df %>% 
+  pivot_longer(
+    cols = -id,
+    names_to = c("observation")
+  )
+
+```
+
+Yukarıda, pivot komutu, *tarihleri* ve *karakterleri* tek bir değer sütununda birleştirdi. Bu durumda R, tüm sütunu sınıf karakterine dönüştür ve tarih özellikleri kaybolur.  
+
+Bu durumu önlemek için orijinal sütun adlarının sintaks yapısından yararlanabiliriz. Gözlem numarası, alt çizgi ve ardından “durum” veya “tarih” bilgisi içeren ortak bir adlandırma şeklini kullanmak faydalıdır. Pivot sonrası bu iki veri türünü ayrı sütunlarda tutmak için bu sintakstan yararlanabiliriz.
+
+Bunu şu şekilde yapıyoruz:
+
+* İkinci öğe (`".value"`) olmak üzere, `names_to =` argümanına bir karakter vektörü yazmalısınız. Bu özel terim, pivot sütunlarının adlarındaki bir karaktere göre nasıl bölüneceğini belirtir. 
+* Ayrıca, `name_sep =` argümanına “splitting-ayırma” karakterini de yazmalısınız. Bu durumda, ayırma karakteri alt çizgidir ( "_”)
+
+Bu nedenle, yeni sütunların adlandırılması ve bölünmesi, mevcut değişken adlarındaki alt çizgiye göre gerçekleşir. 
+
+```{r}
+
+df_long <- 
+  df %>% 
+  pivot_longer(
+    cols = -id,
+    names_to = c("observation", ".value"),
+    names_sep = "_"
+  )
+
+df_long
+
+```
+
+__Son dokunuşlar__:
+
+Tarih sütununun şu anda *character* sınıfında olduğuna dikkat edin. [Tarihlerle çalışma] sayfasında açıklanan `mutate()` ve `as_date()` fonksiyonlarını kullanarak sınıfı kolayca uygun tarih sınıfına dönüştürebiliriz.
+
+Ayrıca, "obs" ön ekini silerek `observation` sütununu `sayısal` bir biçime dönüştürmek isteyebiliriz. Bunu **stringr** paketinden `str_remove_all()` ile yapabiliriz ([Karakterler ve dizeler] sayfasına bakın).
+
+```{r}
+
+df_long <- 
+  df_long %>% 
+  mutate(
+    date = date %>% lubridate::as_date(),
+    observation = 
+      observation %>% 
+      str_remove_all("obs") %>% 
+      as.numeric()
+  )
+
+df_long
+
+```
+
+Ve şimdi bu formattaki verilerle çalışmaya başlayabiliriz, örn. açıklayıcı bir ısı döşemesi çizerek: 
+
+```{r}
+ggplot(data = df_long, mapping = aes(x = date, y = id, fill = status)) +
+  geom_tile(colour = "black") +
+  scale_fill_manual(
+    values = 
+      c("Healthy" = "lightgreen", 
+        "Unwell" = "red", 
+        "Missing" = "orange")
+  )
+
+```
+
+
+
+
+
+<!-- ======================================================= -->
+## Uzundan genişe {}
+
+```{r, warning=F, message=F, echo=F}
+knitr::include_graphics(here::here("images", "pivoting", "pivot_wider_new.png"))
+```
+
+Bazı durumlarda, bir veri tabanını daha geniş bir formata dönüştürmek isteyebiliriz. Bunun için `pivot_wider()` fonksiyonunu kullanabiliriz.
+
+Analiz sonuçlarını okuyucu için daha anlaşılır bir formata dönüştürmek istediğimiz zamandır (örneğin, [Sunum için bir tablo][Tables for presentation]), bu fonksiyonu. Genellikle bu işlem, bir gözlem için değerlerin birden çok satıra yayıldığı bir veri kümesinin, bu değerlerin tek bir satırda depolandığı bir formata dönüştürülmesini içerir.
+
+### Veri {.unnumbered}
+
+Sayfanın bu bölümü için, vaka başına bir satır içeren satır listesini kullanacağız ([Hazırlık](#pivot_prep) bölümüne bakın).
+
+İlk 50 satır: 
+
+```{r, message=FALSE, echo=F}
+# satır listesini tablo olarak göster
+DT::datatable(head(linelist, 50), rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+Farklı yaş gruplarındaki bireylerin sayısını cinsiyete göre bilmek istediğimizi varsayalım:
+
+```{r}
+df_wide <- 
+  linelist %>% 
+  count(age_cat, gender)
+
+df_wide
+```
+
+Bu bize, **ggplot2**'de görselleştirme için harika, ancak tabloda sunum için ideal olmayan uzun bir veri tabanı sağlar:
+
+```{r}
+ggplot(df_wide) +
+  geom_col(aes(x = age_cat, y = n, fill = gender))
+```
+
+### Daha geniş olarak pivotlama {.unnumbered}  
+
+Bu nedenle, verileri raporlara tablo olarak dahil etmek amaçlı olarak daha uygun biçime dönüştürmek için `pivot_wider()`'ı kullanabiliriz.
+
+name_from argümanı, yeni sütun adlarının oluşturulacağı *names* sütunu belirtirken; `values_from` argümanı, hücreleri doldurmak için gereken değerlerin alınacağı sütunu belirtir. `id_cols =` argümanı isteğe bağlıdır, ancak döndürülmemesi gereken satırları içeren sütun adları vektörünü içerir ..  
+
+```{r}
+table_wide <- 
+  df_wide %>% 
+  pivot_wider(
+    id_cols = age_cat,
+    names_from = gender,
+    values_from = n
+  )
+
+table_wide
+```
+
+Bu tablo daha okuyucu dostudur ve bu nedenle raporlarımıza dahil edilmesi daha uygundur. **Flextable** ve **knitr** dahil olmak üzere çeşitli paketlerle güzel bir tablolar oluşturulabilir. Bu süreç [Sunum için tablolar] sayfasında daha detaylı olarak anlatılmıştır.  
+
+```{r}
+table_wide %>% 
+  janitor::adorn_totals(c("row", "col")) %>% # adds row and column totals
+  knitr::kable() %>% 
+  kableExtra::row_spec(row = 10, bold = TRUE) %>% 
+  kableExtra::column_spec(column = 5, bold = TRUE) 
+```
+
+---
+
+
+<!-- ======================================================= -->
+## Doldurma 
+
+Bazı durumlarda pivot işlemi sonrası ve daha yaygın olarak bir birleştirme sonrası, bazı hücrelerde doldurmak istediğimiz boşluklar kalır.  
+
+<!-- ======================================================= -->
+### Veri {.unnumbered}
+
+Örneğin, ölçüm numarası, tesisin adı ve o andaki vaka sayısı için gözlemleri olan iki veri tabanını inceleyelim. Ancak, ikinci veri kümesinde ek olarak `Year` değişkeni vardır.
+
+```{r}
+df1 <- 
+  tibble::tribble(
+       ~Measurement, ~Facility, ~Cases,
+                  1,  "Hosp 1",     66,
+                  2,  "Hosp 1",     26,
+                  3,  "Hosp 1",      8,
+                  1,  "Hosp 2",     71,
+                  2,  "Hosp 2",     62,
+                  3,  "Hosp 2",     70,
+                  1,  "Hosp 3",     47,
+                  2,  "Hosp 3",     70,
+                  3,  "Hosp 3",     38,
+       )
+
+df1 
+
+df2 <- 
+  tibble::tribble(
+    ~Year, ~Measurement, ~Facility, ~Cases,
+     2000,            1,  "Hosp 4",     82,
+     2001,            2,  "Hosp 4",     87,
+     2002,            3,  "Hosp 4",     46
+  )
+
+df2
+```
+
+İki veri kümesini birleştirmek için bir `bind_rows()` işlemi gerçekleştirdiğimizde, `Year` değişkeni, ön bilgi bulunmayan satırlar için (yani ilk veri kümesinde) `NA` ile doldurulur:
+
+
+```{r}
+df_combined <- 
+  bind_rows(df1, df2) %>% 
+  arrange(Measurement, Facility)
+
+df_combined
+
+```
+
+<!-- ======================================================= -->
+### `fill()` {.unnumbered}
+
+Bu durumda, özellikle zaman içindeki eğilimleri keşfetmek istiyorsak, yıl dahil etmek için yararlı bir değişkendir. Bu nedenle, doldurulacak sütunu ve *doldurma* yönünü (bu durumda **yukarı**) belirterek boş hücreleri doldurmak için `fill()` komutunu kullanırız:
+
+```{r}
+df_combined %>% 
+  fill(Year, .direction = "up")
+```
+
+Alternatif olarak, verileri aşağı yönde dolduracak şekilde yeniden düzenleyebiliriz:
+
+```{r}
+df_combined <- 
+  df_combined %>% 
+  arrange(Measurement, desc(Facility))
+
+df_combined
+
+df_combined <- 
+  df_combined %>% 
+  fill(Year, .direction = "down")
+
+df_combined
+```
+
+Artık görselleştirmek için kullanışlı bir veri setimiz var:
+
+```{r}
+ggplot(df_combined) +
+  aes(Year, Cases, fill = Facility) +
+  geom_col()
+```
+
+Ancak bu form tablo halinde sunmak için daha az kullanışlıdır, bu yüzden uzun, düzensiz veri çerçevesini daha geniş, düzenli bir veri çerçevesine dönüştürme alıştırması yapalım:
+
+```{r}
+df_combined %>% 
+  pivot_wider(
+    id_cols = c(Measurement, Facility),
+    names_from = "Year",
+    values_from = "Cases"
+  ) %>% 
+  arrange(Facility) %>% 
+  janitor::adorn_totals(c("row", "col")) %>% 
+  knitr::kable() %>% 
+  kableExtra::row_spec(row = 5, bold = TRUE) %>% 
+  kableExtra::column_spec(column = 5, bold = TRUE) 
+```
+
+Not:  Bu durumda, ek değişken olan “ölçüm” tablonun oluşturulmasına engel olacağından, yalnızca `Facility`, `Year` ve `Cases` değişkenleri dahil edilmelidir:
+
+```{r}
+df_combined %>% 
+  pivot_wider(
+    names_from = "Year",
+    values_from = "Cases"
+  ) %>% 
+  knitr::kable()
+```
+
+## Kaynaklar  
+
+Yararlı bir [eğitim](https://datacarpentry.org/r-socialsci/03-dplyr-tidyr/index.html)
+

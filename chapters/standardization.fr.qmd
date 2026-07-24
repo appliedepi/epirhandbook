@@ -1,0 +1,493 @@
+---
+aliases:
+  - /new_pages/standardization.fr.html
+---
+
+# Taux standardisés {#standardisation}  
+
+Cette page vous montre deux façons de normaliser un résultat, tel que les hospitalisations ou la mortalité, en fonction de caractéristiques telles que l'âge et le sexe. 
+
+* Utilisation du paquet **dsr**
+* Utilisation du paquet **PHEindicatormethods**.  
+
+Nous commençons par démontrer de manière extensive les processus de préparation/nettoyage/jonction des données, car cela est courant lorsqu'on combine des données de population provenant de plusieurs pays, des données de population standard, des décès, etc.  
+
+## Vue d'ensemble  
+
+Il existe deux manières principales de normaliser : la normalisation directe et la normalisation indirecte.
+Supposons que nous voulions normaliser le taux de mortalité par âge et par sexe pour le pays A et le pays B, et comparer les taux normalisés entre ces pays.
+
+* Pour une standardisation directe, vous devrez connaître le nombre de personnes à risque et le nombre de décès pour chaque strate d'âge et de sexe, pour le pays A et le pays B. Une strate dans notre exemple pourrait être les femmes âgées de 15 à 44 ans.  
+* Pour une standardisation indirecte, il suffit de connaître le nombre total de décès et la structure d'âge et de sexe de chaque pays. Cette option est donc envisageable si les taux de mortalité ou les chiffres de population par âge et par sexe ne sont pas disponibles. La standardisation indirecte est en outre préférable en cas de petits effectifs par strate, car les estimations en standardisation directe seraient influencées par une variation d'échantillonnage importante. 
+
+<!-- ======================================================= -->
+## Préparation { }
+
+Pour montrer comment se fait la standardisation, nous allons utiliser des comptages fictifs de population et de décès du pays A et du pays B, par âge (en catégories de 5 ans) et par sexe (femme, homme). Pour que les ensembles de données soient prêts à être utilisés, nous allons effectuer les étapes de préparation suivantes :  
+
+1. Charger les paquets  
+2. Charger les jeux de données  
+3. Joignez les données de population et de décès des deux pays.
+4. Pivoter plus longtemps pour qu'il y ait une ligne par strate âge-sexe.
+5. Nettoyez la population de référence (population standard mondiale) et joignez-la aux données du pays.  
+
+Dans votre scénario, vos données peuvent se présenter sous un format différent. Peut-être vos données sont-elles présentées par province, ville ou autre zone d'attraction. Vous avez peut-être une ligne pour chaque décès et des informations sur l'âge et le sexe pour chacun (ou une proportion importante) de ces décès. Dans ce cas, consultez les pages sur le [Travailler sur des données groupées](#grouping_data), [Pivoter les données](#pivoting_data), and [Tableaux descriptifs](#descriptive_tables) pour créer un ensemble de données avec des comptes d'événements et de population par strate âge-sexe.  
+
+Nous avons également besoin d'une population de référence, la population standard. Pour les besoins de cet exercice, nous utiliserons la `world_standard_population_by_sex` (population standard mondiale par sexe). La population standard mondiale est basée sur les populations de 46 pays et a été développée en 1960. Il existe de nombreuses populations "standard" - à titre d'exemple, le site web de [NHS Scotland](https://www.opendata.nhs.scot/dataset/standard-populations) est assez informatif sur la population standard européenne, la population standard mondiale et la population standard écossaise. 
+
+<!-- ======================================================= -->
+### Chargement des paquets {.unnumbered}
+
+Ce chunk de code montre le chargement des paquets nécessaires aux analyses. Dans ce manuel, nous mettons l'accent sur `p_load()` de **pacman**, qui installe le paquet si nécessaire *et* le charge pour l'utiliser. Vous pouvez également charger les paquets installés avec `library()` de **base** R. Voir la page sur [bases de R](#rbasics) pour plus d'informations sur les paquets R.  
+
+```{r}
+pacman::p_load(
+     rio, # importer/exporter des données
+     here, # localisation des fichiers
+     stringr, # nettoyage des caractères et des chaînes de caractères
+     frailtypack, # nécessaire pour dsr, pour les modèles de frailty
+     dsr, # standardiser les taux
+     PHEindicatormethods, # alternative pour la standardisation des taux
+     tidyverse) # gestion et visualisation des données
+```
+
+
+<span style="color : orange ;">**ATTENTION:_** Si vous avez une version plus récente de R, le paquet **dsr** ne peut pas être téléchargé directement avec CRAN. Cependant, il est toujours disponible de l'archive CRAN. Vous pouvez installer et utiliser celui-ci. </span>
+
+Pour les utilisateurs non-Mac :  
+
+```{r, eval=F} 
+packageurl <- "https://cran.r-project.org/src/contrib/Archive/dsr/dsr_0.2.2.tar.gz"
+install.packages(packageurl, repos=NULL, type="source")
+```
+
+```{r, eval=FALSE}
+# Autre solution qui peut fonctionner
+require(devtools)
+devtools::install_version("dsr", version="0.2.2", repos="http:/cran.us.r.project.org")
+```
+
+Pour les utilisateurs de Mac :  
+
+```{r, eval=FALSE}
+require(devtools)
+devtools::install_version("dsr", version="0.2.2", repos="https://mac.R-project.org")
+```
+
+
+
+
+### Charger les données de la population {.unnumbered}  
+
+Voir la page [Télécharger le manuel et les données](#download_book_data) pour savoir comment télécharger tous les exemples de données du manuel. Vous pouvez importer les données de la page de normalisation directement dans R depuis notre dépôt Github en exécutant les commandes `import()` suivantes :  
+
+```{r, eval=F}
+# importer les données démographiques du pays A directement depuis Github
+A_demo <- import("https://github.com/epirhandbook/Epi_R_handbook/raw/master/data/standardization/country_demographics.csv")
+
+# importer les décès pour le pays A directement depuis Github
+A_deaths <- import("https://github.com/epirhandbook/Epi_R_handbook/raw/master/data/standardization/deaths_countryA.csv")
+
+# Importez les données démographiques pour le pays B directement depuis Github.
+B_demo <- import("https://github.com/epirhandbook/Epi_R_handbook/raw/master/data/standardization/country_demographics_2.csv")
+
+# importer les décès pour le pays B directement depuis Github.
+B_deaths <- import("https://github.com/epirhandbook/Epi_R_handbook/raw/master/data/standardization/deaths_countryB.csv")
+
+# Importez les données démographiques pour le pays B directement depuis Github.
+standard_pop_data <- import("https://github.com/epirhandbook/Epi_R_handbook/raw/master/data/standardization/world_standard_population_by_sex.csv")
+
+```
+
+
+Tout d'abord, nous chargeons les données démographiques (comptage des hommes et des femmes par catégorie d'âge de 5 ans) pour les deux pays que nous allons comparer, le "pays A" et le "pays B".  
+
+```{r, echo=F}
+# Pays A
+A_demo <- rio::import(here::here("data", "standardization", "country_demographics.csv")) %>% 
+     mutate(Country = "A") %>% 
+     select(Country, everything()) %>% # re-arrangement
+     mutate(age_cat5 = str_replace_all(age_cat5, "\\+", "")) # supprimer les symboles +
+```
+
+```{r, eval=F}
+# Pays A
+A_demo <- import("country_demographics.csv")
+```
+
+```{r message=FALSE, echo=F}
+DT::datatable(A_demo, rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+
+```{r, echo=F}
+# Pays B
+B_demo <- rio::import(here::here("data", "standardization", "country_demographics_2.csv")) %>% 
+     mutate(Country = "B") %>% 
+     select(Country, everything()) # réarrangement
+```
+
+```{r, eval=F}
+# Pays B
+B_demo <- import("country_demographics_2.csv")
+```
+
+```{r message=FALSE, echo=F}
+DT::datatable(B_demo, rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+
+
+### Chargement du nombre de morts {.unnumbered}  
+
+De manière pratique, nous disposons également du nombre de décès survenus pendant la période qui nous intéresse, par âge et par sexe. Les chiffres de chaque pays sont dans un fichier séparé, comme indiqué ci-dessous.   
+
+```{r, echo=F}
+A_males <- c(224, 257, 251, 245, 334, 245, 154, 189, 334, 342, 565, 432, 543, 432, 245, 543, 234, 354) # pour les hommes du pays A
+B_males <- c(34, 37, 51, 145, 434, 120, 100, 143, 307, 354, 463, 639, 706, 232, 275, 543, 234, 274) # pour les hommes du pays B
+A_females <- c(194, 254, 232, 214, 316, 224, 163, 167, 354, 354, 463, 574, 493, 295, 175, 380, 177, 392) # pour les femmes du pays A
+B_females <- c(54, 24, 32, 154, 276, 254, 123, 164, 254, 354, 453, 654, 435, 354, 165, 432, 287, 395) # pour les femmes du pays B
+
+age_cat5 <- c("0-4", "5-9", "10-14", "15-19", "20-24", "25-29", "30-34", "35-39", "40-44",
+                                                                                "45-49", "50-54", "55-59",
+                                                                                "60-64", "65-69", "70-74",
+                                                                                "75-79", "80-84", "85")
+A_deaths <- data.frame(Country = "A", AgeCat = age_cat5, Male = A_males, Female = A_females)
+B_deaths <- data.frame(Country = "B", AgeCat = age_cat5, Male = B_males, Female = B_females)
+```
+
+Décès dans le pays A
+```{r message=FALSE, echo=F}
+DT::datatable(A_deaths, rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+Décès dans le pays B
+
+```{r message=FALSE, echo=F}
+DT::datatable(B_deaths, rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+
+```{r, echo=F}
+rio::export(A_deaths, here::here("data", "standardization", "deaths_countryA.csv"))
+rio::export(B_deaths, here::here("data", "standardization", "deaths_countryB.csv"))
+```
+
+
+
+### Nettoyer les populations et les décès {.unnumbered}  
+
+
+Nous devons joindre et transformer ces données de la manière suivante :  
+
+* Combiner les populations des pays en un seul ensemble de données et faire un pivot "long" pour que chaque strate âge-sexe soit une ligne.  
+* Combiner le nombre de décès par pays dans un ensemble de données et faire pivoter "long" pour que chaque strate âge-sexe soit une ligne.  
+* Joindre les décès aux populations  
+
+Tout d'abord, nous combinons les ensembles de données sur les populations des pays, nous effectuons un pivot plus long et un nettoyage mineur. Voir la page [Pivoter les données](#pivoting_data) pour plus de détails.  
+
+```{r}
+pop_countries <- A_demo %>% # Commencez avec l'ensemble de données du pays A
+     bind_rows(B_demo) %>% # lier les lignes, car les colonnes portent le même nom
+     pivot_longer( # pivot plus long
+          cols = c(m, f), # colonnes à combiner en une seule
+          names_to = "Sex", # nom de la nouvelle colonne contenant la catégorie ("m" ou "f") 
+          values_to = "Population") %>% # nom de la nouvelle colonne contenant les valeurs numériques pivotées
+     mutate(Sex = recode(Sex, # re-code les valeurs pour plus de clarté
+          "m" = "Male",
+          "f" = "Female"))
+```
+
+Les données de population combinées ressemblent maintenant à ceci (cliquez pour voir les pays A et B) :  
+
+```{r message=FALSE, echo=F}
+DT::datatable(pop_countries, rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+Et maintenant, nous effectuons des opérations similaires sur les deux ensembles de données de décès.
+
+```{r}
+deaths_countries <- A_deaths %>% # Commencez avec l'ensemble de données des décès du pays A
+     bind_rows(B_deaths) %>% # lier les lignes avec l'ensemble de données B, parce que les colonnes sont nommées de manière identique
+     pivot_longer( # pivot plus long
+          cols = c(Male, Female), # colonne à transformer en une seule
+          names_to = "Sex", # nom de la nouvelle colonne contenant la catégorie ("m" ou "f") 
+          values_to = "Deaths") %>% # nom pour la nouvelle colonne contenant les valeurs numériques pivotées
+     rename(age_cat5 = AgeCat) # renomme pour plus de clarté
+```
+
+Les données de décès ressemblent maintenant à ceci, et contiennent les données des deux pays : 
+
+```{r message=FALSE, echo=F}
+DT::datatable(deaths_countries, rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+
+Nous joignons maintenant les données de décès et de population sur la base des colonnes communes `Country`, `age_cat5`, et `Sex`. Cela ajoute la colonne `Deaths`.  
+
+```{r}
+country_data <- pop_countries %>% 
+     left_join(deaths_countries, by = c("Country", "age_cat5", "Sex"))
+```
+
+Nous pouvons maintenant classer `Country`, `age_cat5`, et `Sex` comme facteurs et définir l'ordre des niveaux en utilisant la fonction `fct_relevel()` du paquet **forcats**, comme décrit dans la page sur [Facteurs](#factors). Notez que le classement des niveaux des facteurs ne change pas visiblement les données, mais la commande `arrange()` les trie par Pays, catégorie d'âge et sexe.  
+
+```{r, warning=F, message=F}
+country_data <- country_data %>% 
+  mutate(
+    Country = fct_relevel(Country, "A", "B"),
+      
+    Sex = fct_relevel(Sex, "Male", "Female"),
+        
+    age_cat5 = fct_relevel(
+      age_cat5,
+      "0-4", "5-9", "10-14", "15-19",
+      "20-24", "25-29",  "30-34", "35-39",
+      "40-44", "45-49", "50-54", "55-59",
+      "60-64", "65-69", "70-74",
+      "75-79", "80-84", "85")) %>% 
+          
+  arrange(Country, age_cat5, Sex)
+
+```
+
+```{r message=FALSE, echo=F}
+DT::datatable(country_data, rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+<span style="color : orange ;">**__ATTENTION:_** Si vous avez peu de décès par strate, envisagez d'utiliser des catégories de 10, ou 15 ans, au lieu de catégories de 5 ans pour l'âge.</span>
+
+
+
+
+### Chargement de la population de référence {.unnumbered}  
+
+Enfin, pour la standardisation directe, nous importons la population de référence (la "population standard" mondiale par sexe).
+
+```{r, echo=F}
+# Population de référence
+standard_pop_data <- rio::import(here::here("data", "standardization", "world_standard_population_by_sex.csv")) %>% 
+     rename(age_cat5 = AgeGroup)
+```
+
+```{r, eval=F}
+# Population de référence
+standard_pop_data <- import("world_standard_population_by_sex.csv")
+```
+
+```{r message=FALSE, echo=F}
+DT::datatable(standard_pop_data, rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+
+
+<!-- ======================================================= -->
+### Nettoyer la population de référence {.unnumbered}
+
+Les valeurs des catégories d'âge dans les cadres de données `country_data` et `standard_pop_data` devront être alignées.  
+
+Actuellement, les valeurs de la colonne `age_cat5` du cadre de données `standard_pop_data` contiennent le mot "years" et "plus", alors que celles du cadre de données `country_data` ne le font pas. Nous devrons faire correspondre les valeurs des catégories d'âge. Nous utilisons `str_replace_all()` du paquet **stringr**, comme décrit dans la page [Caractères et chaînes de caractères](#character_strings), pour remplacer ces motifs par des `""` sans espace.  
+
+De plus, le paquet **dsr** s'attend à ce que dans la population standard, la colonne contenant les comptes soit appelée `"pop"`. Nous renommons donc cette colonne en conséquence.  
+
+```{r}
+# Suppression d'une chaîne spécifique des valeurs de la colonne
+standard_pop_clean <- standard_pop_data %>%
+     mutate(
+          age_cat5 = str_replace_all(age_cat5, "years", ""), # supprime "year" (année)
+          age_cat5 = str_replace_all(age_cat5, "plus", ""), # supprimez "plus".
+          age_cat5 = str_replace_all(age_cat5, " ", "")) %>% # supprime l'espace " ".
+     
+     rename(pop = WorldStandardPopulation) # change le nom de la colonne en "pop", car cela est attendu par le paquet dsr
+```
+
+<span style="color : orange ;">**_CAUTION:_** Si vous essayez d'utiliser `str_replace_all()` pour supprimer un *symbole plus*, cela ne fonctionnera pas car c'est un symbole spécial. "Échappez" au spécial en mettant deux barres obliques inverses devant, comme dans `str_replace_call(column, "\\+", "")`. </span>
+
+### Créer un jeu de données avec une population standard {#standard_all}  
+
+Enfin, le package **PHEindicatormethods**, détaillé [ci-dessous](#standard_phe), attend les populations standards jointes aux événements et aux comptages de population du pays. Nous allons donc créer un jeu de données `all_data` à cet effet.  
+
+```{r}
+all_data <- left_join(country_data, standard_pop_clean, by=c("age_cat5", "Sex"))
+```
+
+Cet ensemble de données complet ressemble à ceci :  
+
+```{r message=FALSE, echo=F}
+DT::datatable(all_data, rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+
+
+<!-- ======================================================= -->
+## **dsr** package { }
+ 
+Nous démontrons ci-dessous le calcul et la comparaison de taux directement standardisés à l'aide du package **dsr**. Le package **dsr** vous permet de calculer et de comparer des taux directement standardisés (pas de taux indirectement standardisés !).
+  
+Dans la section Préparation des données, nous avons créé des jeux de données distincts pour le nombre de pays et la population standard :  
+
+1) l'objet `country_data`, qui est un tableau de population avec le nombre de population et le nombre de décès par strate par pays  
+2) l'objet `standard_pop_clean`, contenant le nombre de personnes par strate pour notre population de référence, la population standard mondiale.  
+
+Nous utiliserons ces ensembles de données distincts pour l'approche **dsr**.  
+
+
+<!-- ======================================================= -->
+### Taux standardisés {.unnumbered}
+
+Ci-dessous, nous calculons les taux par pays directement standardisés pour l'âge et le sexe. Nous utilisons la fonction `dsr()`. 
+
+A noter - `dsr()` s'attend à un cadre de données pour les populations des pays et le nombre d'événements (décès), **et un autre cadre de données avec la population de référence**. Il s'attend également à ce que dans cette base de données de la population de référence, le nom de la colonne unité-temps soit "pop" (nous nous en sommes assurés dans la section Préparation des données).  
+
+Il y a de nombreux arguments, comme annoté dans le code ci-dessous. Notamment, `event = ` est fixé à la colonne `Deaths`, et le `fu = ` ("follow-up") est fixé à la colonne `Population`. Nous définissons les sous-groupes de comparaison comme la colonne `Country` et nous standardisons sur la base de `age_cat5` et `Sex`. Ces deux dernières colonnes n'ont pas d'argument nommé particulier. Voir `?dsr` pour plus de détails. 
+
+```{r, warning=F, message=F}
+# Calculez les taux par pays directement standardisés pour l'âge et le sexe
+mortality_rate <- dsr::dsr(
+     data = country_data, # spécifier l'objet contenant le nombre de décès par strate
+     event = Deaths, # colonne contenant le nombre de décès par strate 
+     fu = Population, # colonne contenant le nombre de population par strate
+     subgroup = Country, # unités que nous souhaitons comparer
+     age_cat5, # autres colonnes - les taux seront standardisés par celles-ci
+     Sex,
+     refdata = standard_pop_clean, # cadre de données de la population de référence, avec une colonne appelée "pop".
+     method = "gamma", # méthode pour calculer l'IC à 95%.
+     sig = 0,95, # niveau de signification
+     mp = 100000, # nous voulons les taux pour 100.000 habitants
+     decimals = 2) # nombre de décimales)
+
+
+# Imprimez la sortie sous la forme d'un joli tableau HTML
+knitr::kable(mortality_rate) # Afficher le taux de mortalité avant et après la standardisation directe
+```
+
+Ci-dessus, nous voyons que même si le pays A avait un taux de mortalité brut plus faible que le pays B, il a un taux standardisé plus élevé après standardisation directe par âge et par sexe.
+
+
+
+
+<!-- ======================================================= -->
+### Ratios de taux standardisés {.unnumbered}
+
+```{r,warning=F, message=F}
+# Calculer le RR
+mortality_rr <- dsr::dsrr(
+     data = country_data, # spécifier l'objet contenant le nombre de décès par strate
+     event = Deaths, # colonne contenant le nombre de décès par strate 
+     fu = Population, # colonne contenant le nombre de population par strate
+     subgroup = Country, # unités que nous souhaitons comparer
+     age_cat5,
+     Sex, # caractéristiques sur lesquelles nous aimerions nous standardiser 
+     refdata = standard_pop_clean, # population de référence, avec des chiffres dans la colonne appelée pop
+     refgroup = "B", # référence pour la comparaison
+     estimate = "ratio", # type d'estimation
+     sig = 0.95, # niveau de signification
+     mp = 100000, # nous voulons des taux pour 100.000 habitants
+     decimals = 2) # nombre de décimales
+
+# Imprimer le tableau
+knitr::kable(mortality_rr) 
+```
+
+Le taux de mortalité standardisé est 1,22 fois plus élevé dans le pays A que dans le pays B (IC 95 % 1.17-1.27).
+
+<!-- ======================================================= -->
+### Différence de taux standardisé {.unnumbered}
+
+```{r, warning=F, message=F}
+# Calculer RD
+mortality_rd <- dsr::dsrr(
+     data = country_data, # spécifier l'objet contenant le nombre de décès par strate
+     event = Deaths, # colonne contenant le nombre de décès par strate 
+     fu = Population, # colonne contenant le nombre de population par strate
+     subgroup = Country, # unités que nous souhaitons comparer
+     age_cat5, # caractéristiques sur lesquelles nous voulons nous standardiser
+     Sex,                        
+     refdata = standard_pop_clean, # population de référence, avec des chiffres dans la colonne appelée pop
+     refgroup = "B", # référence pour la comparaison
+     estimate = "difference", # type d'estimation
+     sig = 0.95, # niveau de signification
+     mp = 100000, # nous voulons des taux pour 100.000 habitants
+     decimals = 2) # nombre de décimales
+
+# Imprimer le tableau
+knitr::kable(mortality_rd) 
+```
+
+Le pays A a 4.24 décès supplémentaires pour 100.000 habitants (IC 95% 3.24-5.24) par rapport au pays A.
+
+
+
+
+
+
+
+<!-- ======================================================= -->
+## **PHEindicatormethods** package {#standard_phe}
+
+Une autre façon de calculer les taux standardisés est avec le paquet **PHEindicatormethods**. Ce package vous permet de calculer les taux standardisés directement et indirectement. Nous allons montrer les deux.  
+
+Cette section utilisera le cadre de données `all_data` créé à la fin de la section Préparation. Ce cadre de données inclut les populations des pays, les événements de décès, et la population de référence standard mondiale. Vous pouvez le visualiser [ici](#standard_all).  
+
+
+
+<!-- ======================================================= -->
+### Taux directement standardisés {.unnumbered}
+
+Ci-dessous, nous regroupons d'abord les données par Pays, puis nous les passons à la fonction `phe_dsr()` pour obtenir les taux directement standardisés par pays.
+
+A noter - la population de référence (standard) peut être fournie comme une **colonne dans le cadre de données spécifique au pays** ou comme un **vecteur séparé**. Si elle est fournie dans le cadre de données spécifique au pays, vous devez définir `stdpoptype = "field"`. Si elle est fournie sous forme de vecteur, définissez `stdpoptype = "vector"`. Dans ce dernier cas, vous devez vous assurer que l'ordre des rangées par strate est similaire dans le cadre de données spécifique au pays et dans la population de référence, car les enregistrements seront appariés par position. Dans notre exemple ci-dessous, nous avons fourni la population de référence sous forme de colonne dans le cadre de données spécifique au pays.
+
+Consultez l'aide de `?phe_dsr` ou les liens dans la section Références pour plus d'informations.  
+
+```{r}
+# Calculez les taux par pays directement normalisés pour l'âge et le sexe.
+mortality_ds_rate_phe <- all_data %>%
+     group_by(Country) %>%
+     PHEindicatormethods::phe_dsr(
+          x = Deaths, # colonne avec le nombre d'événements observés
+          n = Population, # colonne avec les pops non standard pour chaque strate
+          stdpop = pop, # populations standard pour chaque strate
+          stdpoptype = "field")       # soit "vector" pour un vecteur autonome, soit "field" pour signifier que les populations std sont dans les données.  
+
+# Imprimer le tableau
+knitr::kable(mortality_ds_rate_phe)
+```
+
+<!-- ======================================================= -->
+### Taux standardisés indirectement {#standard_indirect .unnumbered}
+
+Pour la standardisation indirecte, vous avez besoin d'une population de référence avec le nombre de décès et le nombre de population par strate. Dans cet exemple, nous allons calculer les taux pour le pays A *en utilisant le pays B comme population de référence*, car la population de référence `standard_pop_clean` n'inclut pas le nombre de décès par strate. 
+
+Ci-dessous, nous créons d'abord la population de référence du pays B. Ensuite, nous passons les données de mortalité et de population pour le pays A, nous les combinons avec la population de référence, et nous les passons à la fonction `phe_isr()`, pour obtenir des taux indirectement standardisés. Bien sûr, vous pouvez aussi faire l'inverse.
+
+A noter - dans notre exemple ci-dessous, la population de référence est fournie comme un cadre de données séparé. Dans ce cas, nous nous assurons que les vecteurs `x = `, `n = `, `x_ref = ` et `n_ref = ` sont tous ordonnés par les mêmes valeurs de catégorie de standardisation (strate) que celles de notre cadre de données spécifique au pays, puisque les enregistrements seront appariés par position.
+
+Consultez l'aide de `?phe_isr` (maintenant `calculate_ISRate` depuis dec 2022) ou les liens dans la section Références pour plus d'informations.  
+
+```{r}
+# Créez la population de référence
+refpopCountryB <- country_data %>% 
+  filter(Country == "B") 
+
+# Calculer les taux pour le pays A indirectement standardisés par âge et sexe
+mortality_is_rate_phe_A <- country_data %>%
+     filter(Country == "A") %>%
+     PHEindicatormethods::calculate_ISRate( #avant c'etait phe_isr()
+          x = Deaths, # colonne avec le nombre d'événements observés
+          n = Population, # colonne avec les pops non standard pour chaque strate
+          x_ref = refpopCountryB$Deaths, # nombre de décès de référence pour chaque strate
+          n_ref = refpopCountryB$Population) # population de référence pour chaque strate
+
+# Imprimez le tableau
+knitr::kable(mortality_is_rate_phe_A)
+```
+
+<!-- ======================================================= -->
+## Ressources { }
+
+Si vous souhaitez voir un autre exemple reproductible utilisant **dsr**, veuillez consulter [cette vignette]( https://mran.microsoft.com/snapshot/2020-02-12/web/packages/dsr/vignettes/dsr.html).  
+
+Pour un autre exemple utilisant **PHEindicatormethods**, veuillez vous rendre sur [ce site Web](https://mran.microsoft.com/snapshot/2018-10-22/web/packages/PHEindicatormethods/vignettes/IntroductiontoPHEindicatormethods.html)  
+
+Voir les **PHEindicatormethods** [fichier pdf de référence](https://cran.r-project.org/web/packages/PHEindicatormethods/PHEindicatormethods.pdf)  

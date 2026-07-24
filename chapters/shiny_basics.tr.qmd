@@ -1,0 +1,1428 @@
+---
+aliases:
+  - /new_pages/shiny_basics.tr.html
+---
+
+# Shiny ile Gösterge Panelleri { }  
+
+Gösterge paneli, genellikle analizlerden elde edilen sonuçları başkalarıyla paylaşmanın iyi bir yoludur. Kaliteli bir gösterge paneli üretmek, nispeten ileri düzeyde R dili bilgisi gerektirir, ancak inanılmaz özelleştirme seçenekleri sunar. 
+
+<!-- One of the largest drawbacks of `R` is its usability for people who are new to or have no experience with programming languages. While these skills are very valuable, most people will find that this represents a barrier to sharing analyses, especially in multidisciplinary environments. It requires some work to maintain an `R` installation, and not everyone will be comfortable running shared code, even if it's well documented and easy to read. This is *especially* true when users have to change parameters of code!  -->
+
+<!-- R based dashboards are also advantageous in that they centralise how code is run - when the same code is run on different machines, often people will have to deal with differing file paths, different R versions, and different package installations. For this reason, dashboards are a great way to share code with others in a user friendly way! -->
+
+Shiny ile gösterge tablolarını öğrenen birinin, veri dönüştürme ve görselleştirme konusunda iyi bilgiye sahip olması ve kod hatalarını ayıklama ve kod işlevleri konularında bilgili olması önerilir. Gösterge panelleriyle çalışmak, başladığınızda sezgisel değildir ve bazen anlaşılması zordur, ancak öğrenmesi harika bir beceridir ve pratikle çok daha kolay hale gelir!
+
+Bu sayfa, shiny ve uzantıları olan panellerin nasıl oluşturulacağına dair kısa bir genel bakış sağlayacaktır. Panelleri daha hızlı, daha kolay, ancak daha az özelleştirilebilir hale getirmenin alternatif bir yöntemi için, flextable [R Markdown ile gösterge panelleri] sayfasına bakabilirsiniz. 
+
+
+
+
+## Hazırlık  
+
+
+### Paketleri yükleme {.unnumbered}  
+
+Bu el kitabında, gerekirse paketi kuran ve kullanım için yükleyen pacman'ın p_load() fonkisyonunu vurguluyoruz. Ayrıca, temel R'dan library() ile kurulu paketleri yükleyebilirsiniz. R paketleri hakkında daha fazla bilgi için R temelleri sayfasına bakın.
+
+**shiny** R paketini kurarak başlıyoruz: 
+
+```{r, eval = FALSE}
+pacman::p_load("shiny")
+```
+
+
+### Verileri içe aktarma {.unnumbered}  
+
+
+Bu sayfayı takip etmek isterseniz, [el kitabının ve verilerin indirilmesi](#data_shiny) bölümüne bakabilirsiniz. Güncel Shiny uygulamasını oluşturan R komut dosyalarını ve veri dosyalarını indirmek için bağlantılar burada mevcuttur.Uygulamayı bu dosyaları kullanarak yeniden oluşturmaya çalışırsanız, lütfen kurs için  oluşturulan R projesi klasör yapısının (örneğin, "veri" ve "işlevler" için klasörler) farkında olun.
+
+
+<!-- ======================================================= -->
+## Shiny uygulamasının yapısı  {  }
+
+### Temel dosya yapıları  {.unnumbered}  
+
+Shiny’yi anlamak için önce uygulamanın dosya yapısının nasıl çalıştığını anlamamız gerekir! Başlamadan önce yepyeni bir dizin oluşturmalıyız. Bu aslında _Rstudio'da_ _yeni projeden_ _Shiny Web Application_ seçilerek daha kolay hale getirilebilir. Bu, sizin için shiny uygulamasının temel yapısını oluşturacaktır.
+
+Bu projeyi açarken, zaten _app.R_ adında bir .R dosyası olduğunu fark edeceksiniz. İki temel dosya yapısından birine sahip olmamız önemlidir:
+
+1. _app.R_ adında bir dosya veya
+2. Biri _ui.R_ ve diğeri _server.R_ olarak adlandırılan iki dosya
+
+Bu sayfada, _app.R_ adında bir dosyaya sahip olduğunuz ilk yaklaşımı kullanacağız. İşte örnek bir komut dosyası: 
+ 
+
+```{r, eval = FALSE}
+#  app.R örneği
+
+library(shiny)
+
+ui <- fluidPage(
+
+    # Uygulama başlığı
+    titlePanel("My app"),
+
+    # Kaydırıcı giriş araçlı kenar çubuğu
+    sidebarLayout(
+        sidebarPanel(
+            sliderInput("input_1")
+        ),
+
+        # Grafiği göster   
+        mainPanel(
+           plotOutput("my_plot")
+        )
+    )
+)
+
+# Bir histogram çizmek için gereken sunucu mantığını tanımlayın
+server <- function(input, output) {
+     
+     plot_1 <- reactive({
+          plot_func(param = input_1)
+     })
+     
+    output$my_plot <- renderPlot({
+       plot_1()
+    })
+}
+
+
+# Uygulamayı çalıştırın
+shinyApp(ui = ui, server = server)
+
+
+```
+
+
+Bu dosyayı açarsanız, biri kullanıcı arayüzü ve diğeri sunucu olarak adlandırılan iki nesnenin tanımlandığını fark edeceksiniz. Bu nesneler shiny uygulamasında tanımlanmalıdır ve uygulamanın kendi yapısının merkezinde yer alırlar! Aslında, yukarıda açıklanan iki dosya yapısı arasındaki tek fark, yapı 1'de hem kullanıcı arayüzünün hem de sunucunun tek bir dosyada tanımlanması, yapı 2'de ise ayrı dosyalarda tanımlanmalarıdır. Not: Ayrıca, uygulamamızda source() fonksiyonunu uygulayabileceğimiz başka .R dosyalarına da sahip olabiliriz (Daha büyük bir uygulamamız varsa bu şekilde yapmalıyız).
+
+
+
+### Sunucu ve kullanıcı arayüzü (ui) {.unnumbered}
+
+Daha sonra sunucu ve 'ui' nesnelerinin gerçekte ne yaptığını anlamamız gerekiyor. Basitçe söylemek gerekirse, bunlar, kullanıcı shiny uygulamasıyla etkileşime girdiğinde birbirleriyle etkileşime giren iki nesnedir.
+
+Shiny bir uygulamasının UI öğesi, temel düzeyde bir HTML arayüzü oluşturan R kodudur. Bu, bir uygulamanın kullanıcı arayüzünde görüntülenen her şey anlamına gelir. Bu genellikle şunları içerir:
+
+• "Widget'lar" - kullanıcı tarafından etkileşime geçilebilecek açılır menüler, onay kutuları, kaydırıcılar vb.
+• Grafikler, tablolar, vb - R koduyla oluşturulan çıktılar
+• Bir uygulamanın gezinme yönleri - sekmeler, bölmeler, vb.
+• Genel metin, köprüler vb.
+• HTML ve CSS öğeleri (daha sonra ele alınacaktır)
+
+
+UI hakkında anlaşılması gereken en önemli şey, kullanıcıdan girdi alması ve sunucudan kaynaklanan çıktıları göstermesidir. Kullanıcı arabiriminde herhangi bir zamanda çalışan aktif kod yoktur - kullanıcı arabiriminde görülen tüm değişiklikler (az ya da çok) sunucudan geçirilir. Bu yüzden grafiklerimizi, dosya indirmelerimizi vb. sunucuda gerçekleştirmeliyiz.
+
+Shiny uygulamasının sunucusu, uygulama başlatıldığında tüm kodun çalıştırıldığı yerdir. Sunucunun çalışma şekli biraz kafa karıştırıcı. Sunucu işlevi, kullanıcı arayüzüyle etkileşen kullanıcıya etkin bir şekilde tepki verir ve yanıt olarak kod parçalarını çalıştırır. Sunucuda bir şeyler değişirse, bunlar değişikliklerin görülebileceği kullanıcı arayüzüne geri iletilecektir. Daha da önemlisi, sunucudaki kod ardışık olmayan bir şekilde yürütülecektir (veya bu şekilde düşünmek en iyisidir). Temel olarak, kullanıcı arayüzünden veri girişi sunucudaki bir kod parçasını etkilediğinde, otomatik olarak çalışır ve bu çıktı üretilir ve görüntülenir.
+
+Bunların hepsi muhtemelen şimdilik çok soyut geliyor, bu yüzden bunun gerçekte nasıl çalıştığına dair net bir fikir edinmek için bazı örnekler üzerinden anlatacağız.
+
+
+
+### Bir uygulama oluşturmadan önce  {.unnumbered}
+
+Bir uygulama oluşturmaya başlamadan önce, ne oluşturmak istediğinizi bilmek son derece yararlıdır. Kullanıcı arayüzünüz kodla yazılacağından, ne inşa ettiğinizi görselleştiremezsiniz önemlidir. Bu nedenle, neler yapabileceğiniz hakkında bir fikir edinmek için önceden shiny uygulama örneklerine bakmak son derece yararlıdır - bu uygulamaların arkasındaki kaynak koduna bakabilirseniz daha da iyi olur! Bunun için bazı harika kaynaklar şunlardır:
+
+* [Rstudio uygulama galerisi](https://shiny.rstudio.com/gallery/)  
+
+Neyin mümkün olduğuna dair bir fikir edindikten sonra, sizinkinin nasıl görünmesini istediğinizi haritalamak da yararlıdır - bunu kağıt üzerinde veya herhangi bir çizim yazılımında (PowerPoint, MS paint, vb.) yapabilirsiniz. İlk uygulamanız için basit bir başlangıç yapmanız faydalı olacaktır! Ayrıca internette bulduğunuz güzel bir uygulamanın kodunu işiniz için şablon olarak kullanmaktan çekinmeyin- sıfırdan uygulama oluşturmaktan çok daha kolaydır!
+
+
+
+## Kullanıcı Arayüzü (IU) Oluşturmak
+
+Uygulamamızı oluştururken, ne yaptığımızı görebilmemiz ve herhangi bir sunucu hatası nedeniyle uygulamanın başarısız olma riskini almamamız için önce kullanıcı arayüzü üzerinde çalışmak daha kolaydır. Daha önce de belirtildiği gibi, kullanıcı arayüzü üzerinde çalışırken bir şablon kullanmak genellikle iyidir. Temel shiny paketinde bulunan ve shiny ile kullanılabilecek bir dizi standart şablon vardır, ancak shinydashboard gibi bir dizi paket uzantısının da bulunduğunu belirtmekte fayda var. Başlangıç için temel shiny’den bir örnek kullanacağız.
+
+Shiny kullanıcı arayüzü genellikle aşağıdaki sırayla bir dizi iç içe fonksiyon olarak tanımlanır.
+
+1. Genel düzeni tanımlayan bir fonkisyon (en temel olanı fluidPage()'dir, ancak daha fazlası mevcuttur)
+2. Şablon içindeki paneller, örneğin:
+• bir kenar çubuğu (sidebarPanel())
+• bir "ana" panel (mainPanel())
+• bir sekme (tabPanel())
+• genel bir "sütun" (sütun())
+3. Widget'lar ve çıktılar - bunlar sunucuya girdiler (widget'lar) veya sunucudan çıktılar (çıkışlar) verebilir
+• Widget'lar genellikle xxxInput() olarak biçimlendirilir, ör. selectInput()
+• Çıktılar genellikle xxxOutput() olarak biçimlendirilir, ör. plotÇıkış()
+
+
+Bu yapıların soyut bir şekilde kolayca anlaşılmayacağını bir kez daha belirtmekte fayda var, bu yüzden bir örneğe bakmak en iyisi! Bölgeye göre sıtmayla savaş dispanseri sayım verilerini görselleştiren basit bir uygulama yapmayı düşünelim. Bu verinin birçok farklı parametresi vardır, bu nedenle son kullanıcının verileri uygun gördükleri şekilde yaş grubuna/bölgeye göre tabaklamak için bazı filtreler uygulayabilmesi harika olur! Başlangıç için çok basit bir shiny şablonu kullanabiliriz: Bir kenar çubuğu şablonu. Bu şablon, widget'ların soldaki bir kenar çubuğuna yerleştirildiği ve grafiğin sağ tarafa yerleştirildiği bir şablondur.
+
+Uygulamamızı planlayalım - verileri görselleştirmek istediğimiz bölgeyi seçmemize izin veren bir seçiciyle ve ilgilendiğimiz yaş grubunu görselleştirmemize izin veren bir seçiciyle başlayabiliriz. Bu filtreleri bir salgın eğrisi (epicurve) çizmek için kullanacağız. Bunun için: 
+
+1. İstediğimiz bölgeyi ve ilgilendiğimiz yaş grubunu seçmemizi sağlayan iki açılır menü.
+2. Ortaya çıkan salgın eğrimizi gösterebileceğimiz bir alan.
+
+
+Bu şöyle görünebilir:
+
+```{r, eval = FALSE}
+
+library(shiny)
+
+ui <- fluidPage(
+
+  titlePanel("Malaria facility visualisation app"),
+
+  sidebarLayout(
+
+    sidebarPanel(
+         # selector for district
+         selectInput(
+              inputId = "select_district",
+              label = "Select district",
+              choices = c(
+                   "All",
+                   "Spring",
+                   "Bolo",
+                   "Dingo",
+                   "Barnard"
+              ),
+              selected = "All",
+              multiple = TRUE
+         ),
+         # selector for age group
+         selectInput(
+              inputId = "select_agegroup",
+              label = "Select age group",
+              choices = c(
+                   "All ages" = "malaria_tot",
+                   "0-4 yrs" = "malaria_rdt_0-4",
+                   "5-14 yrs" = "malaria_rdt_5-14",
+                   "15+ yrs" = "malaria_rdt_15"
+              ), 
+              selected = "All",
+              multiple = FALSE
+         )
+
+    ),
+
+    mainPanel(
+      # epicurve goes here
+      plotOutput("malaria_epicurve")
+    )
+    
+  )
+)
+
+
+```
+
+
+app.R yukarıdaki UI koduyla çalıştırıldığında (app.R'nin sunucu kısmında aktif kod olmadan) düzen şöyle görünür - Bir sunucu yoksa hiçbir çizim oluşturulmayacağını unutmayın, ancak girişlerimiz düzgün çalışmaktadır!
+
+```{r, out.width = c('100%'), out.height = c('100%'), echo=F}
+knitr::include_graphics(here::here("images", "shiny", "simple_UI_view.png"))
+```
+
+Bu örnek, widget'ların nasıl çalıştığını tartışmak için iyi bir fırsattır - her widget'ın bir inputId, bir etiket ve widget türüne özgü bir dizi başka seçeneği kabul ettiğini unutmayın. Bu inputId son derece önemlidir - bunlar, kullanıcı arabiriminden sunucuya bilgi aktarmak için kullanılan kimliklerdir. Bu nedenle benzersiz olmaları gerekir. Daha büyük uygulamalar söz konusu olduğunda, inputIDlere mantıklı ve etkileşime girdikleri yapılara özgü bir ad vermek için çaba göstermelisiniz. 
+
+Bu widget'ların her birinin ne yaptığıyla ilgili tüm ayrıntılar için belgeleri dikkatlice okumalısınız. Widget'lar, widget türüne bağlı olarak belirli veri türlerini sunucuya iletir ve bunun tam olarak anlaşılması gerekir. Örneğin, selectInput() sunucuya bir karakter tipi iletir:
+
+• Buradaki ilk widget için Spring'i seçersek, "Spring" karakter nesnesini sunucuya iletecektir.
+• Açılır menüden iki öğe seçersek, bunlar bir karakter vektörü olarak gelirler (örn. c("Spring", "Bolo")).
+
+Diğer widget'lar, sunucuya farklı nesne türleri iletecektir! Örneğin:
+• numericInput(), sunucuya sayısal türde bir nesne iletir
+• checkboxInput(), sunucuya mantık nesnesi iletir (DOĞRU veya YANLIŞ)
+
+
+Burada yaş verileri için kullandığımız adlandırılmış vektörü de belirtmekte fayda var. Birçok pencere öğesi için, seçenekler olarak adlandırılmış bir vektörün kullanılması, vektörün adlarının seçenekler olarak görüntülenmesini sağlar, ancak sadece seçilen değeri vektörden sunucuya iletir. Yani burada birisi açılır menüden “15+” öğesini seçebilir ve kullanıcı arayüzü sunucuya "malaria_rdt_15" iletir - bu, ilgilendiğimiz sütunun adıdır!
+
+Uygulamanızla birçok eylem yapmak için kullanabileceğiniz çok sayıda widget vardır. Widget'lar ayrıca uygulamanıza dosya yüklemenize ve çıktıları indirmenize olanak tanır. Ayrıca, temel shiny’den daha fazla widget'a erişmenizi sağlayan mükemmel shiny uzantılar da vardır - shinyWidgets paketi buna harika bir örnektir. Bazı örneklere bakmak için aşağıdaki bağlantılara bakabilirsiniz:
+
+- [temel shiny widget galerisi](https://shiny.rstudio.com/gallery/widget-gallery.html)
+- [shinyWidgets galerisi](https://github.com/dreamRs/shinyWidgets)
+
+
+
+## Verinin uygulamamıza yüklenmesi  
+
+Uygulama geliştirmemizdeki bir sonraki adım, sunucuyu çalışır duruma getirmektir. Ancak bunu yapmak için uygulamamıza bazı veriler aktarmamız ve yapacağımız tüm hesaplamaları bulmamız gerekiyor. Shiny uygulamasının hatalarını ayıklamak kolay değildir, çünkü hataların nereden geldiği genellikle net değildir, bu nedenle sunucunun kendisini yapmaya başlamadan önce tüm veri işleme ve görselleştirme kodumuzu çalışır duruma getirmek idealdir.
+
+Kullanıcı girdisine göre değişen salgın eğrileri gösteren bir uygulama yapmak istediğimize göre, bunu normal bir R betiğinde çalıştırmak için hangi koda ihtiyacımız olacağını düşünmeliyiz. Şunlara ihtiyacımız olacak:
+1. Paketlerimizi yükleyin
+2. Verilerimizi yükleyin
+3. Verilerimizi dönüştürün
+4. Kullanıcı girdilerine dayalı olarak verilerimizi görselleştirmek için bir fonksiyon geliştirin
+
+
+Bu liste oldukça basittir ve yapılması çok zor olmamalıdır. Artık bu sürecin hangi bölümlerinin yalnızca bir kez yapılması gerektiğini ve hangi bölümlerin kullanıcı girdilerine yanıt olarak çalıştırılması gerektiğini düşünmek önemlidir. Bunun nedeni, shiny uygulamalarının genellikle kullanımdan önce yalnızca bir kez çalıştırılan bazı kodları çalıştırmasıdır. Kodumuzun çoğu bu bölüme taşınabilirse, uygulamamızın performansına yardımcı olacaktır. Bu örnek için, sadece verilerimizi/paketlerimizi yüklememiz ve temel dönüşümleri bir kez yapmamız gerekiyor, böylece kodu sunucunun dışına yerleştirebiliriz. Bu, sunucuda ihtiyacımız olan tek kodun verilerimizi görselleştirecek kod olduğu anlamına gelir. Önce tüm bu bileşenleri bir komut dosyasında geliştirelim. Ancak verilerimizi bir fonksiyon ile görselleştirdiğimiz için, fonksiyonun kodunu sunucunun dışına da koyabiliriz, böylece uygulama çalıştığında fonksiyonumuz ortamda olur!
+
+Önce verilerimizi yükleyelim. Yeni bir proje ile çalıştığımız ve temizlemek istediğimiz için data adında yeni bir dizin oluşturabilir ve sıtma verilerimizi oraya ekleyebiliriz. Aşağıdaki kodu, uygulamamızın yapısını temizlediğimizde sileceğimiz bir test komut dosyasında çalıştırabiliriz.
+
+
+```{r, echo = TRUE}
+pacman::p_load("tidyverse", "lubridate")
+
+# veriyi oku
+malaria_data <- rio::import(here::here("data", "malaria_facility_count_data.rds")) %>% 
+  as_tibble()
+
+print(malaria_data)
+
+
+```
+
+
+Tidy (düzenli) veri standartları kullanırsak bu verilerle çalışmak daha kolay olacaktır, bu nedenle yaş grubunun bir sütun olduğu ve vakaların başka bir sütun olduğu uzun bir veri formatına da pivotlamalıyız. Verilerin pivotlanması sayfasında öğrendiklerimizi kullanarak bunu kolayca yapabiliriz. 
+
+
+```{r, echo = TRUE}
+
+malaria_data <- malaria_data %>%
+  select(-newid) %>%
+  pivot_longer(cols = starts_with("malaria_"), names_to = "age_group", values_to = "cases_reported")
+
+print(malaria_data)
+
+```
+
+Bu şeklide verilerimizi hazırlamayı bitirdik! Bu iş paketi, "R komut dosyasını test etme" için geliştirilecek şeyler listemizdeki 1, 2 ve 3 numaralı maddeleri kapsar. Son ve en zor görev, kullanıcı tanımlı parametrelere dayalı bir salgın eğrisi üretmek için bir fonksiyon oluşturmak olacaktır. Daha önce de belirtildiği gibi, shiny öğrenen herkesin, çalışma prensiplerini anlamak için önce fonksiyonel programlama (fonkisyonların yazılması) bölümünü incelemesi şiddetle tavsiye edilir!
+
+Fonksiyonumuzu tanımlarken, hangi parametreleri dahil etmek istediğimizi planlamak zor olabilir. Shiny ile fonksiyonel programlama için, ilgili her parametrenin genellikle kendisiyle ilişkilendirilmiş bir widget'ı olacaktır, bu nedenle bunu planlamak genellikle oldukça kolaydır! Örneğin mevcut uygulamamızda, bölgeye göre filtreleme yapabilmek ve bunun için bir widget'ımız olmasını istiyoruz, bunun için bir bölge parametresini ekleyebiliriz. Tesise göre filtrelemek için herhangi bir uygulama işlevimiz şimdilik olmadığı için bu nedenle bunu bir parametre olarak eklememize gerek yoktur. Üç parametreli bir fonksiyon yazarak başlayalım:
+
+1. Çekirdek veri seti
+2. Seçim bölgesi
+3. Tercih edilen yaş grubu
+
+
+```{r}
+
+plot_epicurve <- function(data, district = "All", agegroup = "malaria_tot") {
+  
+  if (!("All" %in% district)) {
+    data <- data %>%
+      filter(District %in% district)
+    
+    plot_title_district <- stringr::str_glue("{paste0(district, collapse = ', ')} districts")
+    
+  } else {
+    
+    plot_title_district <- "all districts"
+    
+  }
+  
+  # kalan veri yoksa, NULL getir
+  if (nrow(data) == 0) {
+    
+    return(NULL)
+  }
+  
+  data <- data %>%
+    filter(age_group == agegroup)
+  
+  
+  # kalan veri yoksa, NULL getir
+  if (nrow(data) == 0) {
+    
+    return(NULL)
+  }
+  
+  if (agegroup == "malaria_tot") {
+      agegroup_title <- "All ages"
+  } else {
+    agegroup_title <- stringr::str_glue("{str_remove(agegroup, 'malaria_rdt')} years")
+  }
+  
+  
+  ggplot(data, aes(x = data_date, y = cases_reported)) +
+    geom_col(width = 1, fill = "darkred") +
+    theme_minimal() +
+    labs(
+      x = "date",
+      y = "number of cases",
+      title = stringr::str_glue("Malaria cases - {plot_title_district}"),
+      subtitle = agegroup_title
+    )
+  
+  
+  
+}
+
+```
+
+
+Nasıl çalıştığı nispeten basit olduğu için bu fonksiyon hakkında çok fazla ayrıntıya girmeyeceğiz. Bununla birlikte, not edilmesi gereken bir nota, hata vereceği zamanlarda NULL elde ederek hataları ayıklamamızdır. Bunun nedeni, shiny’de sunucu bir çizim nesnesi yerine bir NULL nesnesi ürettiğinde, kullanıcı arayüzünde hiçbir şey gösterilmeyecek olmasıdır! Bu önemlidir, aksi takdirde hatalar genellikle uygulamanızın çalışmayı durdurmasına neden olur.
+
+Dikkat edilmesi gereken bir diğer nokta da, bölge girdisini değerlendirirken %in% operatörünün kullanılmasıdır. Yukarıda bahsedildiği gibi bu operatör birden çok değere sahip bir karakter vektörü olarak kullanılabilir ,bu nedenle %in% operatörünü kullanmak, == operatöründen daha esnektir.
+
+Fonksiyonumuzu test edelim!
+
+
+```{r, echo = TRUE, warning = FALSE}
+
+plot_epicurve(malaria_data, district = "Bolo", agegroup = "malaria_rdt_0-4")
+
+```
+
+Fonksiyonumuz çalışırken, tüm bunların shiny uygulamamıza nasıl sığacağını anlamamız gerekiyor. Başlangıç kodu kavramından daha önce bahsetmiştik, ancak şimdi bunu uygulamamızın yapısına nasıl dahil edebileceğimize bakalım. Bunu yapabilmemizin iki yolu var!
+
+1. Bu kodu _app.R_ dosyanıza komut dosyasının başına (kullanıcı arayüzünün üstüne) koyun veya
+2. Uygulamanızın _global.R_ adlı dizininde yeni bir dosya oluşturun ve başlangıç kodunu bu dosyaya yerleştirin.
+
+Bu noktada, dosya yapınızı basit bir şekilde ayırmanıza izin verdiği için, özellikle daha büyük uygulamalarda, ikinci seçenekteki dosya yapısını kullanmanın genellikle daha kolay olduğunu belirtmekte fayda var. Şimdi bu global.R betiğini tamamen geliştirelim. Böyle görünebilir:
+
+
+
+```{r, eval = F}
+# global.R betiği
+
+pacman::p_load("tidyverse", "lubridate", "shiny")
+
+# veriyi oku
+malaria_data <- rio::import(here::here("data", "malaria_facility_count_data.rds")) %>% 
+  as_tibble()
+
+# veriyi temizle ve uzun pivotla
+malaria_data <- malaria_data %>%
+  select(-newid) %>%
+  pivot_longer(cols = starts_with("malaria_"), names_to = "age_group", values_to = "cases_reported")
+
+
+# grafik fonksiyonunu tanımla
+plot_epicurve <- function(data, district = "All", agegroup = "malaria_tot") {
+  
+  # grafik başlığı oluştur
+  if (!("All" %in% district)) {            
+    data <- data %>%
+      filter(District %in% district)
+    
+    plot_title_district <- stringr::str_glue("{paste0(district, collapse = ', ')} districts")
+    
+  } else {
+    
+    plot_title_district <- "all districts"
+    
+  }
+  
+  # kalan veri yoksa, NULL sonucunu getir  
+  if (nrow(data) == 0) {
+    
+    return(NULL)
+  }
+  
+  # yaş grubuna filtrele
+  data <- data %>%
+    filter(age_group == agegroup)
+  
+  
+  # kalan veri yoksa, NULL sonucunu getir  
+  if (nrow(data) == 0) {
+    
+    return(NULL)
+  }
+  
+  if (agegroup == "malaria_tot") {
+      agegroup_title <- "All ages"
+  } else {
+    agegroup_title <- stringr::str_glue("{str_remove(agegroup, 'malaria_rdt')} years")
+  }
+  
+  
+  ggplot(data, aes(x = data_date, y = cases_reported)) +
+    geom_col(width = 1, fill = "darkred") +
+    theme_minimal() +
+    labs(
+      x = "date",
+      y = "number of cases",
+      title = stringr::str_glue("Malaria cases - {plot_title_district}"),
+      subtitle = agegroup_title
+    )
+  
+  
+  
+}
+
+
+
+```
+
+
+Bright'ın harika bir özelliği, app.R, server.R, ui.R ve global.R adlı dosyaların ne için olduğunu anlamasıdır, bu nedenle herhangi bir kod aracılığıyla bunları birbirine bağlamaya gerek yoktur. Bu yüzden sadece global.R'deki bu kodu dizinde bulundurmak uygulamamızı başlatmadan önce çalışması için yeterlidir!
+
+Ayrıca, çizim işlevini kendi dosyasına taşımamızın uygulamamızın organizasyonunu iyileştireceğini de unutmamalıyız – bu eylem özellikle uygulamalar büyüdükçe yararlı olacaktır. Bunu yapmak için funcs adında başka bir dizin oluşturabilir ve bu işlevi plot_epicurve.R adlı bir dosyaya yerleştirebiliriz. Daha sonra bu işlevi global.R'de aşağıdaki komutla okuyabiliriz:
+
+
+```{r, eval = F}
+
+source(here("funcs", "plot_epicurve.R"), local = TRUE)
+
+```
+
+Uygulama bir sunucuda yayınlandığında kaynak bulmayı etkileyeceğinden, shiny uygulamalarında her zaman local argümanını 'local= TRUE' belirtmeniz gerektiğini unutmayın. 
+
+## Bir uygulama sunucusu geliştirme
+
+Artık kodumuzun çoğunu yazdığımıza göre, sadece sunucumuzu geliştirmemiz gerekiyor. Bu, uygulamamızın son parçasıdır ve muhtemelen anlaşılması en zor olanıdır. Sunucu büyük bir R işlevidir, ancak onu bir dizi daha küçük işlev veya uygulamanın gerçekleştirebileceği görevler olarak düşünmek yararlıdır. Bu işlevlerin doğrusal bir sırada yürütülmediğini anlamak önemlidir. Onlara verilen bir emir vardır ancak shiny’de başlangıç seviyesinde bu süreci tam olarak anlamak gerekli değildir. Çok temel düzeyde, bu görevler veya işlevler, geliştirici farklı davranacak şekilde ayarlamadıkça, sadece kullanıcı girdilerinde kendilerini etkileyen bir değişiklik olduğunda etkinleşir. Yine, bunların hepsi oldukça soyut kavramlardır. Ama önce üç temel shiny nesne türünü inceleyelim.
+
+1. Reaktif kaynaklar - bu, kullanıcı girdileri için başka bir terimdir. Shiny sunucusu, programladığımız widget'lar aracılığıyla UI'den (kullanıcı arayüzünden) gelen çıktılara erişebilir. Değerleri her değiştirildiğinde, bu bilgi sunucuya iletilir.
+
+2. Reaktif iletkenler - bunlar yalnızca shiny sunucusunun içinde bulunan nesnelerdir. Bunlara aslında basit uygulamalar için ihtiyacımız yoktur, yalnızca sunucu içinde görülebilen ve diğer işlemlerde kullanılabilen nesneler üretirler. Genellikle reaktif kaynaklara bağlıdırlar.
+
+3. Son noktalar - bunlar sunucudan kullanıcı arayüzüne iletilen çıktılardır. Örneğimizde, ürettiğimiz salgın eğrisi bu olacaktır.
+
+Bunu akılda tutarak, sunucumuzu adım adım oluşturalım. Burada sadece referans olması için UI kodumuzu tekrar göstereceğiz: 
+
+
+```{r, eval = FALSE}
+
+ui <- fluidPage(
+
+  titlePanel("Malaria facility visualisation app"),
+
+  sidebarLayout(
+
+    sidebarPanel(
+         # bölge için seçici
+         selectInput(
+              inputId = "select_district",
+              label = "Select district",
+              choices = c(
+                   "All",
+                   "Spring",
+                   "Bolo",
+                   "Dingo",
+                   "Barnard"
+              ),
+              selected = "All",
+              multiple = TRUE
+         ),
+         # yaş grubu için seçici
+         selectInput(
+              inputId = "select_agegroup",
+              label = "Select age group",
+              choices = c(
+                   "All ages" = "malaria_tot",
+                   "0-4 yrs" = "malaria_rdt_0-4",
+                   "5-14 yrs" = "malaria_rdt_5-14",
+                   "15+ yrs" = "malaria_rdt_15"
+              ), 
+              selected = "All",
+              multiple = FALSE
+         )
+
+    ),
+
+    mainPanel(
+      # salgın eğrisi burada bulunur
+      plotOutput("malaria_epicurve")
+    )
+    
+  )
+)
+
+
+```
+
+Bu kod kullanıcı arayüzünden elimize:
+• İki giriş ulaşır: 
+• Bölge seçicisi(bir select_district giriş kimliğiyle)
+• Yaş grubu seçicisi (inputId'si select_agegroup olan)
+
+• Bir çıktı:
+• Salgın eğrisi (sıtma_epicurve çıkış kimliği ile)
+
+Daha önce de belirtildiği gibi, girdi ve çıktılarımıza atadığımız bu benzersiz isimler çok önemlidir. Benzersiz olmalıdırlar ve kullanıcı arayüzü ile sunucu arasında bilgi iletmek için kullanılırlar. Sunucumuzda girdilerimize 'input$inputID' ve output sintaksı aracılığıyla erişiyoruz ve 'output$output_name' sintaksı aracılığıyla kullanıcı arayüzüne iletiyoruz. Şimdi bir örneğe bakalım, çünkü bunu başka türlü anlaşılması güçtür. 
+
+
+```{r, eval = FALSE}
+
+server <- function(input, output, session) {
+  
+  output$malaria_epicurve <- renderPlot(
+    plot_epicurve(malaria_data, district = input$select_district, agegroup = input$select_agegroup)
+  )
+  
+}
+
+
+```
+
+Bunun gibi basit bir uygulamanın sunucusu aslında oldukça basittir! Sunucunun üç parametreli bir fonksiyon olduğunu fark edeceksiniz - giriş, çıkış ve oturum - bunu anlamak bu basamakta o kadar önemli değildir , ancak bu kuruluma bağlı kalmak önemlidir! Sunucumuzda sadece bir görevimiz mevcuttur – bu da daha önce oluşturduğumuz fonksiyonumuza ve sunucudan gelen girdilere dayalı bir grafik oluşturmaktır. Giriş ve çıkış nesnelerinin adlarının, kullanıcı arabirimindekilere tam olarak nasıl karşılık geldiğine dikkat edin.
+
+Sunucunun kullanıcı girdilerine nasıl tepki verdiğinin temellerini anlamak için, girdiler değiştiğinde çıktının (altta yatan paket aracılığıyla) da değişeceğin ve her değişimle bir grafik oluşturmak için bu fonksiyonu yeniden çalıştıracağını unutmamalısınız. Burada renderPlot() fonksiyonunu da kullandığımızı unutmayın – bu fonksiyon, nesneleri bir kullanıcı arabirimi çıktısına ileten sınıfa özgü fonkisyonlar ailesindendir. Benzer şekilde davranan birkaç fonksiyon vardır, ancak kullanılan fonksiyonun kullanıcı arayüzüne ilettiğiniz nesnenin sınıfıyla eşleştiğinden emin olmanız gerekir! Örneğin:
+
+
+- `renderText()` - kullanıcı arayüzüne metin gönderir
+- `renderDataTable` - kullanıcı arayüzüne etkileşimli bir tablo gönderir.
+
+Bunların da kullanıcı arayüzünde kullanılan çıktı işleviyle eşleşmesi gerektiğini unutmayın - bu nedenle renderPlot(), plotOutput() ile eşleştirilir ve renderText(), textOutput() ile eşleştirilir.
+
+Sonunda çalışan bir uygulama yaptık! Bunu Rstudio'da komut dosyası penceresinin sağ üst kısmındaki Uygulamayı Çalıştır düğmesine basarak çalıştırabiliriz. Uygulamanızı, diğer kullanıcılar için uygulamanın nasıl görüneceğini daha doğru bir şekilde yansıtacak olan varsayılan tarayıcınızda (Rstudio yerine) çalıştırmayı seçebileceğinizi unutmayın.
+
+
+```{r, out.width = c('100%'), out.height = c('100%'), echo=F}
+knitr::include_graphics(here::here("images", "shiny", "app_simple_view.gif"))
+```
+
+
+Uygulamanın R konsolunda "dinlediğini" fark  etmek eğlencelidir! Reaktivite hakkında konuşun!
+
+```{r, echo=F}
+knitr::include_graphics(here::here("images", "shiny", "listening.png"))
+```
+
+
+<!-- TO DO: *ADD SOMETHING ON DOWNLOADING A ZIP FILE OF THE APP?*  -->
+
+
+
+## Daha fazla işlevsellik eklemek
+
+Bu noktada nihayet çalışan bir uygulamamız var, ancak işlevsellik düzeyi düşüktür. Ayrıca, shine paketiyle yapabileceklerin henüz çok az kısımını gördük, bu yüzden öğrenecek daha çok şey var! Bazı ekstra özellikler ekleyerek mevcut uygulamamızı oluşturmaya devam edelim. Eklemenin uygun olacağı  bazı seçenekler şunlar olabilir:
+
+1. Açıklayıcı metinler
+2. Grafikler için bir indirme düğmesi - bu, kullanıcının uygulamada oluşturdukları görüntünün yüksek kaliteli bir sürümünü elde etmesini sağlar
+3. Belirli tesisler için bir seçici
+4. Başka bir gösterge paneli sayfası - bu, verilerimizin bir tablosunu gösterebilir.
+
+Bu şekilde eklenebilecek çok şey vardır, bu şekilde bir sürü farklı shiny özelliği hakkında bilgi edinebiliriz. Shiny hakkında öğrenilecek çok şey var (çok gelişmiş olabilir, ancak umarız ki kullanıcılar shiny’yi nasıl kullanacakları konusunda daha iyi bir fikre sahip olduklarında, harici öğrenme kaynaklarını kullanarak da daha rahat olabilirler).
+
+
+
+
+### Statik metin eklemek {.unnumbered}  
+
+Önce shiny uygulamamıza statik metin eklemeyi tartışalım. İşin temellerini bildikten sonra, uygulamamıza metin eklemek son derece kolaydır. Shiny uygulamasında statik metin değişmediğinden (Değişmesini isterseniz, sunucudaki metin oluşturma fonkisyonlarını kullanabilirsiniz!), shiny’nin tüm statik metinleri genellikle uygulamanın kullanıcı arayüzüne eklenir. Bunu çok ayrıntılı olarak ele almayacağız, ancak R'ı HTML ve css ile arayüz olarak kullanarak; kullanıcı arayüzünüze (ve hatta özelleştirilmiş olanlara) bir dizi farklı öğe ekleyebilirsiniz.
+
+HTML ve css, kullanıcı arayüzü tasarımında açıkça yer alan dillerdir. Bunları çok iyi anlamamıza gerek yok, ancak HTML, UI'de nesneler oluşturur (metin kutusu veya tablo gibi) ve css genellikle bu nesnelerin stilini ve estetiğini değiştirmek için kullanılır. Shiny'nin çok sayıda HTML etiketine erişimi vardır – bunların arasında başlıklar, metin paragrafları, satır sonları, tablolar vb. gibi belirli bir şekilde davranan nesneler için bulunur. Bu örneklerden bazılarını şu şekilde kullanabiliriz:
+
+
+- `h1()` - bu, ekteki metni otomatik olarak büyütecek ve yazı tipi yüzü, rengi vb. ile ilgili varsayılanları değiştirecek bir başlık etiketidir (uygulamanızın ana temasına bağlı olarak). h2() ile h6()'ya kadar daha küçük ve daha küçük alt başlıklara da erişebilirsiniz. Kullanım şuna benzer:
+  * `h1("my header - section 1")`
+
+- `p()` - bu, içine alınmış metni bir metin gövdesindeki metne benzer hale getiren bir paragraf etiketidir. Bu metin otomatik olarak sarılır ve nispeten küçük bir boyutta olur (örneğin alt bilgiler daha küçük olabilir.) Bunu bir word belgesinin metin gövdesi olarak düşünün. Kullanım şuna benzer:
+
+  * `p("Bu, uygulamamın işlevini açıkladığım daha büyük bir metindir")`
+  
+- `tags$b()` ve `tags$i()` - bunlar kalın etiketler tags$b() ve italik etiketler tags$i() oluşturmak için kullanılır.
+
+- `tags$ul()`, `tags$ol()` ve `tags$li()` - bunlar, listelerin oluşturulmasında kullanılan etiketlerdir. Bunların tümü aşağıdaki sintaks içinde kullanılır ve kullanıcının sıralı bir liste (tags$ol(); yani numaralandırılmış) veya sırasız liste (tags$ul(), yani madde işareti noktaları) oluşturmasına izin verir. Tags$li(), kullanılan liste türünden bağımsız olarak listedeki öğeleri belirtmek için kullanılır. Örneğin.:
+
+
+```{r, eval = F}
+
+tags$ol(
+  
+  tags$li("Item 1"),
+  
+  tags$li("Item 2"),
+  
+  tags$li("Item 3")
+  
+)
+
+```
+
+- `br()` ve `hr()` - bu etiketler sırasıyla satır sonu ve yatay satır (satır sonu ile) oluşturur. Uygulamanızı ve metninizi bölümlerini ayırmak için bunları kullanın! Bu etiketlere herhangi bir öğe iletmeye gerek yoktur (parantezler boş kalabilir).
+
+
+- `div()` - bu etiket her şeyi içerebilen ve herhangi bir adla adlandırılabilen genel bir etikettir. Kullanıcı arayüzü tasarımında ilerlediğinizde, bunları kullanıcı arayüzünüzü bölümlere ayırmak, belirli bölümlere belirli stiller vermek ve sunucu ile kullanıcı arabirimi öğeleri arasında etkileşimler oluşturmak için kullanabilirsiniz. Bunlara ayrıntılı olarak girmeyeceğiz, ancak bu etiketin farkında olmak önemlidir!
+
+Bu nesnelerin her birine, `tags$...` aracılığıyla veya bazıları için de yalnızca fonksiyon aracılığıyla erişilebileceğini unutmayın. Bunlar eş anlamlıdır, ancak daha açık olmayı ve yanlışlıkla fonksiyonların üzerine yazmamayı tercih ederseniz, `tags$...` stili etiketleri kullanmak yardımcı olabilir. Bu aynı zamanda mevcut etiketlerin kapsamlı bir listesi değildir. Tüm etiketlerin tam listesi [burada](https://shiny.rstudio.com/articles/tag-glossary.html) shiny olarak mevcuttur ve daha da fazlası HTML'yi doğrudan kullanıcı arayüzünüze ekleyerek kullanılabilir!
+
+
+Kendinize güveniyorsanız, herhangi birindeki stil argümanı ile HTML etiketlerinize herhangi bir **css stil öğesi** de ekleyebilirsiniz. Bunun nasıl çalıştığına ayrıntılı olarak girmeyeceğiz, ancak bir kullanıcı arayüzündeki estetik değişiklikleri test etmek için, chrome’da (tarayıcıda çalıştırdığınız shiny uygulamanızın) HTML denetçi modunu kullanmak ve nesnelerin stilini kendiniz düzenleyebilirsiniz!
+
+Uygulamamıza biraz metin ekleyelim
+
+
+```{r, eval = F}
+
+ui <- fluidPage(
+
+  titlePanel("Malaria facility visualisation app"),
+
+  sidebarLayout(
+
+    sidebarPanel(
+         h4("Options"),
+         # selector for district
+         selectInput(
+              inputId = "select_district",
+              label = "Select district",
+              choices = c(
+                   "All",
+                   "Spring",
+                   "Bolo",
+                   "Dingo",
+                   "Barnard"
+              ),
+              selected = "All",
+              multiple = TRUE
+         ),
+         # selector for age group
+         selectInput(
+              inputId = "select_agegroup",
+              label = "Select age group",
+              choices = c(
+                   "All ages" = "malaria_tot",
+                   "0-4 yrs" = "malaria_rdt_0-4",
+                   "5-14 yrs" = "malaria_rdt_5-14",
+                   "15+ yrs" = "malaria_rdt_15"
+              ), 
+              selected = "All",
+              multiple = FALSE
+         ),
+    ),
+
+    mainPanel(
+      # salgın eğrisi burada bulunur
+      plotOutput("malaria_epicurve"),
+      br(),
+      hr(),
+      p("Welcome to the malaria facility visualisation app! To use this app, manipulate the widgets on the side to change the epidemic curve according to your preferences! To download a high quality image of the plot you've created, you can also download it with the download button. To see the raw data, use the raw data tab for an interactive form of the table. The data dictionary is as follows:"),
+    tags$ul(
+      tags$li(tags$b("location_name"), " - the facility that the data were collected at"),
+      tags$li(tags$b("data_date"), " - the date the data were collected at"),
+      tags$li(tags$b("submitted_daate"), " - the date the data were submitted at"),
+      tags$li(tags$b("Province"), " - the province the data were collected at (all 'North' for this dataset)"),
+      tags$li(tags$b("District"), " - the district the data were collected at"),
+      tags$li(tags$b("age_group"), " - the age group the data were collected for (0-5, 5-14, 15+, and all ages)"),
+      tags$li(tags$b("cases_reported"), " - the number of cases reported for the facility/age group on the given date")
+    )
+    
+  )
+)
+)
+
+
+
+```
+
+```{r, echo=F}
+knitr::include_graphics(here::here("images", "shiny", "app_text_view.png"))
+```
+
+
+### Bir link (köprü) eklemek {.unnumbered}
+
+Bir web sitesine link eklemek için, bağlantıyla birlikte tags$a() kullanın ve metni aşağıda gösterildiği gibi görüntüleyin. Bağımsız bir paragrafa için metni p() içine koyun. Bir cümlenin sadece birkaç kelimesini linke bağlamak için, cümleyi parçalara ayırın ve köprülü kısım için tag$a() kullanın. Bağlantının yeni bir tarayıcı penceresinde açılmasını sağlamak için argüman olarak target = "_blank" ekleyin.
+
+```{r, eval=F}
+tags$a(href = "www.epiRhandbook.com", "Visit our website!")
+```
+
+
+
+### İndirme düğmesi eklemek {.unnumbered}
+
+Üç özellikten ikincisine geçelim. İndirme düğmesini uygulamaya eklemek oldukça yaygındır ve yapılması oldukça kolaydır. Kullanıcı arayüzümüze başka bir widget eklememiz gerekiyor ve bunun için sunucumuza başka bir çıktı eklememiz gerekiyor. Bu örnekte reaktif iletkenleri de tanıtabiliriz!
+
+Önce kullanıcı arabirimimizi güncelleyelim - bu kolay çünkü shiny, downloadButton() adlı bir widget ile birlikte gelir - ona bir inputId ve bir etiket verelim.
+
+
+```{r, eval = FALSE}
+
+ui <- fluidPage(
+
+  titlePanel("Malaria facility visualisation app"),
+
+  sidebarLayout(
+
+    sidebarPanel(
+         # selector for district
+         selectInput(
+              inputId = "select_district",
+              label = "Select district",
+              choices = c(
+                   "All",
+                   "Spring",
+                   "Bolo",
+                   "Dingo",
+                   "Barnard"
+              ),
+              selected = "All",
+              multiple = FALSE
+         ),
+         # yaş grubu için seçici
+         selectInput(
+              inputId = "select_agegroup",
+              label = "Select age group",
+              choices = c(
+                   "All ages" = "malaria_tot",
+                   "0-4 yrs" = "malaria_rdt_0-4",
+                   "5-14 yrs" = "malaria_rdt_5-14",
+                   "15+ yrs" = "malaria_rdt_15"
+              ), 
+              selected = "All",
+              multiple = FALSE
+         ),
+         # dikey hat
+         hr(),
+         downloadButton(
+           outputId = "download_epicurve",
+           label = "Download plot"
+         )
+
+    ),
+
+    mainPanel(
+      # salgon eğrisi buradadır
+      plotOutput("malaria_epicurve"),
+      br(),
+      hr(),
+      p("Welcome to the malaria facility visualisation app! To use this app, manipulate the widgets on the side to change the epidemic curve according to your preferences! To download a high quality image of the plot you've created, you can also download it with the download button. To see the raw data, use the raw data tab for an interactive form of the table. The data dictionary is as follows:"),
+      tags$ul(
+        tags$li(tags$b("location_name"), " - the facility that the data were collected at"),
+        tags$li(tags$b("data_date"), " - the date the data were collected at"),
+        tags$li(tags$b("submitted_daate"), " - the date the data were submitted at"),
+        tags$li(tags$b("Province"), " - the province the data were collected at (all 'North' for this dataset)"),
+        tags$li(tags$b("District"), " - the district the data were collected at"),
+        tags$li(tags$b("age_group"), " - the age group the data were collected for (0-5, 5-14, 15+, and all ages)"),
+        tags$li(tags$b("cases_reported"), " - the number of cases reported for the facility/age group on the given date")
+      )
+      
+    )
+    
+  )
+)
+
+
+```
+ 
+Burada ek olarak bir hr() etiketi eklediğimizi unutmayın - bu, kontrol widgetlarımızı indirme widgetlarımızdan ayıran yatay bir çizgi ekler. Bu, daha önce tartıştığımız HTML etiketlerinden bir diğeridir.
+
+Artık kullanıcı arayüzümüz hazır olduğuna göre, sunucu bileşenini eklememiz gerekiyor. İndirmeler, downloadHandler() fonksiyonuyla sunucuda yapılır. Grafiğimize benzer şekilde, indirme düğmesiyle aynı inputId'ye sahip bir çıktıya eklememiz gerekiyor. Bu fonkisyonun iki argümanı vardır - dosya adı ve içerik - bunların ikisi de işlevdir. Tahmin edebileceğiniz gibi, dosya adı indirilen dosyanın adını belirtmek için, içerik ise neyin indirileceğini belirtmek için kullanılır. İçerik, verileri yerel olarak kaydetmek için kullanacağınız bir fonkisyon içerir - bu nedenle, bir csv dosyası indiriyorsanız rio::export() fonksiyonunu kullanabilirsiniz. Bir grafik indirdiğimiz için ggplot2::ggsave() kullanacağız. Bunu nasıl programlayacağımıza bakalım (henüz sunucuya eklemeyeceğiz). 
+
+```{r, eval = FALSE}
+
+server <- function(input, output, session) {
+  
+  output$malaria_epicurve <- renderPlot(
+    plot_epicurve(malaria_data, district = input$select_district, agegroup = input$select_agegroup)
+  )
+  
+  output$download_epicurve <- downloadHandler(
+    filename = function() {
+      stringr::str_glue("malaria_epicurve_{input$select_district}.png")
+    },
+    
+    content = function(file) {
+      ggsave(file, 
+             plot_epicurve(malaria_data, district = input$select_district, agegroup = input$select_agegroup),
+             width = 8, height = 5, dpi = 300)
+    }
+    
+  )
+  
+}
+
+
+```
+
+
+İçerik fonksiyonunun her zaman çıktı dosyası adının belirtildiği bir dosya argümanına ihtiyacı olduğunu unutmayın. Burada kodu tekrarladığımızı da fark edebilirsiniz - bu sunucuda bir kez indirme için ve bir kez de uygulamada görüntülenen grafik için olmak üzere plot_epicurve() fonksiyonumuzu iki kez kullanıyoruz. Bu, performansı büyük ölçüde etkilemeyecek olsa da,  , kullanıcı bölge ve yaş grubunu belirten widgetları değiştirdiğinde ve grafiği indirmek istediğinde grafiği oluşturacak kodun çalıştırılması gerektiği anlamına gelir. Daha büyük uygulamalarda, bunun gibi optimal olmayan kararlar işleri daha da yavaşlatacaktır, bu nedenle uygulamamızı bu anlamda nasıl daha verimli hale getireceğimizi öğrenmek gerekir. Daha mantıklı olan, bölgeler/yaş grupları değiştiğinde epicurve kodunu çalıştırmanın bir yolu olması ve bunun renderPlot() ve downloadHandler() fonksiyonları tarafından kullanılmasına izin verilmesidir. Burada reaktif iletkenler devreye girer!
+ 
+Reaktif iletkenler, shiny sunucusunda reaktif bir şekilde oluşturulan, ancak çıktısı alınmayan nesnelerdir - yalnızca sunucunun diğer bölümleri tarafından kullanılabilirler. Birkaç farklı türde reaktif iletken vardır, ancak temel ikisini inceleyeceğiz.
+
+1.reactive() - bu en temel reaktif iletkendir - içinde kullanılan herhangi bir girdi değiştiğinde tepki verir (bu durumda bölge/yaş grubu widget'larımız)
+
+2. eventReactive()- bu rektif iletken, kullanıcının hangi girişlerin tekrar çalışmasına neden olduğunu belirleyebilmesi dışında, reaktif() ile aynı şekilde çalışır. Bu, reaktif iletkeninizin işlenmesi uzun zaman alıyorsa yararlıdır, ancak reaktif iletken daha sonra açıklanacaktır.
+
+İki örneğe bakalım:
+
+
+```{r, eval = FALSE}
+
+malaria_plot_r <- reactive({
+  
+  plot_epicurve(malaria_data, district = input$select_district, agegroup = input$select_agegroup)
+  
+})
+
+
+# sadece bölge seçici değiştiğinde çalışır!
+malaria_plot_er <- eventReactive(input$select_district, {
+  
+  plot_epicurve(malaria_data, district = input$select_district, agegroup = input$select_agegroup)
+  
+})
+
+
+
+```
+
+eventReactive() kurulumunu kullandığımızda, bu kod parçasının çalışmasına hangi girdilerin neden olduğunu belirleyebiliriz - bu şu anda bizim için pek kullanışlı değil, bu yüzden şimdilik bırakabiliriz. c() ile birden çok giriş ekleyebileceğinizi unutmayın.
+
+Bunu sunucu kodumuza nasıl entegre edebileceğimize bakalım:
+
+
+```{r, eval = FALSE}
+
+server <- function(input, output, session) {
+  
+  malaria_plot <- reactive({
+    plot_epicurve(malaria_data, district = input$select_district, agegroup = input$select_agegroup)
+  })
+  
+  
+  
+  output$malaria_epicurve <- renderPlot(
+    malaria_plot()
+  )
+  
+  output$download_epicurve <- downloadHandler(
+    
+    filename = function() {
+      stringr::str_glue("malaria_epicurve_{input$select_district}.png")
+    },
+    
+    content = function(file) {
+      ggsave(file, 
+             malaria_plot(),
+             width = 8, height = 5, dpi = 300)
+    }
+    
+  )
+  
+}
+
+
+```
+
+Hem indirme hem de grafik oluşturma işlevlerimizde tanımladığımız reaktif iletkenimizin çıktısını çağırdığımızı görebilirsiniz. Reaktiflerin çıktılarını fonksiyon gibi kullanmanız gerekir - bu nedenle sonlarına boş parantezler eklemelisiniz (yani, malaria_plot() doğrudur ve malaria_plot değil). Artık bu çözümü de eklediğimize göre, salgın eğrisi fonksiyonunu çalıştıran tüm kodlarımız tek bir yerde olduğundan uygulamamız daha düzenli (tidy), ve hızlıdır, değiştirilmesi de daha kolay.
+
+
+```{r, echo=F}
+knitr::include_graphics(here::here("images", "shiny", "download_button_view.png"))
+```
+
+
+### Tesis seçici eklemek {.unnumbered}  
+
+Bir sonraki özelliğimize geçelim - belirli tesisler için bir seçici. Fonksiyonumuza kodumuzdan bir argüman olarak iletebileceğimiz başka bir parametre uygulayacağız. İlk önce bunu yapmaya odaklanalım. – Yeni parametre diğer parametrelerle aynı ilkelere göre çalışır. Fonksiyonumuzu güncelleyip test edelim.
+
+
+```{r, echo = TRUE}
+
+plot_epicurve <- function(data, district = "All", agegroup = "malaria_tot", facility = "All") {
+  
+  if (!("All" %in% district)) {
+    data <- data %>%
+      filter(District %in% district)
+    
+    plot_title_district <- stringr::str_glue("{paste0(district, collapse = ', ')} districts")
+    
+  } else {
+    
+    plot_title_district <- "all districts"
+    
+  }
+  
+  # kalan veri yoksa, NULL getir
+  if (nrow(data) == 0) {
+    
+    return(NULL)
+  }
+  
+  data <- data %>%
+    filter(age_group == agegroup)
+  
+  
+  # kalan veri yoksa, NULL getir
+  if (nrow(data) == 0) {
+    
+    return(NULL)
+  }
+  
+  if (agegroup == "malaria_tot") {
+      agegroup_title <- "All ages"
+  } else {
+    agegroup_title <- stringr::str_glue("{str_remove(agegroup, 'malaria_rdt')} years")
+  }
+  
+    if (!("All" %in% facility)) {
+    data <- data %>%
+      filter(location_name == facility)
+    
+    plot_title_facility <- facility
+    
+  } else {
+    
+    plot_title_facility <- "all facilities"
+    
+  }
+  
+  # kalan veri yoksa, NULL getir
+  if (nrow(data) == 0) {
+    
+    return(NULL)
+  }
+
+  
+  
+  ggplot(data, aes(x = data_date, y = cases_reported)) +
+    geom_col(width = 1, fill = "darkred") +
+    theme_minimal() +
+    labs(
+      x = "date",
+      y = "number of cases",
+      title = stringr::str_glue("Malaria cases - {plot_title_district}; {plot_title_facility}"),
+      subtitle = agegroup_title
+    )
+  
+  
+  
+}
+```
+
+Haydi deneyelim:  
+
+```{r, warning=F, message=F}
+
+plot_epicurve(malaria_data, district = "Spring", agegroup = "malaria_rdt_0-4", facility = "Facility 1")
+
+```
+
+
+Verilerimizdeki tüm tesisler için hangi tesislerin hangi bölgelere karşılık geldiği çok net değildir - ve son kullanıcı da bu bilgiye erişemeyecektir. Bu, uygulamayı kullanmayı oldukça zor hale getirebilir. Bu nedenle, kullanıcı bölgeyi değiştirdikçe UI'deki tesis seçeneklerini dinamik olarak değiştirmeliyiz - biri diğerini filtrelemelidir! Seçeneklerde kullandığımız çok fazla değişken olduğundan, global.R dosyamızdaki kullanıcı arayüzü için bazı ayarlarımızı verilerimizden oluşturmak isteyebiliriz. Örneğin, verilerimizi okuduktan sonra bu kod parçasını global.R'ye ekleyebiliriz:
+
+
+
+```{r, , message =  FALSE}
+
+all_districts <- c("All", unique(malaria_data$District))
+
+# bölgeye göre konum adlarının veri çerçevesi
+facility_list <- malaria_data %>%
+  group_by(location_name, District) %>%
+  summarise() %>% 
+  ungroup()
+
+```
+
+Bölgelere bakalım 
+
+```{r}
+all_districts
+```
+
+
+```{r}
+facility_list
+```
+
+
+Bu yeni değişkenler, hem sunucu hem de kullanıcı arabirimi tarafından global olarak görünür olduklarından, herhangi bir sorun olmadan kullanıcı arabirimine geçirebiliriz! Arayüzümüzü güncelleyelim:
+
+```{r, eval = FALSE}
+
+
+ui <- fluidPage(
+
+  titlePanel("Malaria facility visualisation app"),
+
+  sidebarLayout(
+
+    sidebarPanel(
+         # bölge için seçici
+         selectInput(
+              inputId = "select_district",
+              label = "Select district",
+              choices = all_districts,
+              selected = "All",
+              multiple = FALSE
+         ),
+         # yaş grubu için seçici
+         selectInput(
+              inputId = "select_agegroup",
+              label = "Select age group",
+              choices = c(
+                   "All ages" = "malaria_tot",
+                   "0-4 yrs" = "malaria_rdt_0-4",
+                   "5-14 yrs" = "malaria_rdt_5-14",
+                   "15+ yrs" = "malaria_rdt_15"
+              ), 
+              selected = "All",
+              multiple = FALSE
+         ),
+         # kurum için seçici
+         selectInput(
+           inputId = "select_facility",
+           label = "Select Facility",
+           choices = c("All", facility_list$location_name),
+           selected = "All"
+         ),
+         
+         # dikey çizgi
+         hr(),
+         downloadButton(
+           outputId = "download_epicurve",
+           label = "Download plot"
+         )
+
+    ),
+
+    mainPanel(
+      # salgın eğrisi buradadır
+      plotOutput("malaria_epicurve"),
+      br(),
+      hr(),
+      p("Welcome to the malaria facility visualisation app! To use this app, manipulate the widgets on the side to change the epidemic curve according to your preferences! To download a high quality image of the plot you've created, you can also download it with the download button. To see the raw data, use the raw data tab for an interactive form of the table. The data dictionary is as follows:"),
+      tags$ul(
+        tags$li(tags$b("location_name"), " - the facility that the data were collected at"),
+        tags$li(tags$b("data_date"), " - the date the data were collected at"),
+        tags$li(tags$b("submitted_daate"), " - the date the data were submitted at"),
+        tags$li(tags$b("Province"), " - the province the data were collected at (all 'North' for this dataset)"),
+        tags$li(tags$b("District"), " - the district the data were collected at"),
+        tags$li(tags$b("age_group"), " - the age group the data were collected for (0-5, 5-14, 15+, and all ages)"),
+        tags$li(tags$b("cases_reported"), " - the number of cases reported for the facility/age group on the given date")
+      )
+      
+    )
+    
+  )
+)
+
+
+```
+
+
+Artık seçimlerimiz için değişkenleri kullanıcı arayüzünde kodlamak yerine nasıl ilettiğimize dikkat edin! Bu, kodumuzu da daha kompakt hale getirebilir! Son olarak, sunucuyu güncellememiz gerekecek. Yeni girdimizi dahil etmek için fonksiyonumuzu güncellemek kolay olacaktır (sadece yeni parametremize bir argüman olarak iletmemiz gerekiyor), ancak kullanıcı seçilen bölgeyi değiştirdiğinde kullanıcı arayüzünün dinamik olarak güncellenmesini istediğimizi hatırlamalıyız. Uygulama çalışırken widget'ların parametrelerini ve davranışını değiştirebileceğimizi burada anlamak önemlidir, ancak bunun sunucuda yapılması gerekir. Bunun nasıl yapılacağını öğrenmek için sunucuya çıktı almanın yeni bir yolunu anlamamız gerekiyor. 
+
+Bunu gerçekleştiren fonksiyonlar, gözlemci fonksiyonlar olarak bilinir ve davranışları reaktif fonksiyonlara benzer. Yine de önemli bir farkları var:
+• Reaktif fonksiyonlar, çıktıları doğrudan etkilemez ve sunucudaki diğer konumlarda görülebilen nesneler üretir. 
+• Gözlemci fonksiyonlar, sunucu çıktılarını etkileyebilir, ancak bunu diğer fonksiyonların fonksiyonlar yan etkileri yoluyla yapar. (Başka şeyler de yapabilirler, ancak pratikte bu onların ana işlevidir)
+
+Reaktif fonksiyonlara benzer şekilde, gözlemci fonksiyonların iki çeşidi vardır ve bunlar reaktif fonksiyonlarla aynı mantıkla sınıflandırılırlar: 
+
+1. observe() - bu fonksiyon,  kullanılan herhangi bir girdi değiştiğinde çalışır
+2. observeEvent() - bu fonksiyon, kullanıcı tarafından belirlenen bir girdi değiştiğinde çalışır
+
+Ayrıca, widget'ları güncelleyen shiny fonksiyonlarını da anlamamız gerekir. Bunların çalıştırılması oldukça basittir - önce sunucu fonkisyonundan oturum nesnesini alırlar (bunun şimdilik anlaşılması gerekmez), ardından değiştirilecek fonksiyonun inputId'sini alırlar. Ardından, selectInput() tarafından seçilmiş olan tüm parametrelerin yeni sürümleri iletilir - bunlar widget’ta otomatik olarak güncellenecektir.
+
+Bunu sunucumuzda nasıl kullanabileceğimize dair izole bir örneğe bakalım. Kullanıcı bölgeyi değiştirdiğinde, tesis gruplarımızı bölgeye göre filtrelemek ve seçenekleri yalnızca o bölgede mevcut olanları) yansıtacak (ve tüm tesisler için bir seçenek oluşturacak şekilde güncellemek istiyoruz. 
+ 
+
+
+```{r, eval = FALSE}
+
+observe({
+  
+  if (input$select_district == "All") {
+    new_choices <- facility_list$location_name
+  } else {
+    new_choices <- facility_list %>%
+      filter(District == input$select_district) %>%
+      pull(location_name)
+  }
+  
+  new_choices <- c("All", new_choices)
+  
+  updateSelectInput(session, inputId = "select_facility",
+                    choices = new_choices)
+  
+})
+
+
+```
+
+Ve bu kadar! Bunu sunucumuza ekleyebiliriz ve bu davranış şimdi işe yarayacaktır. Yeni sunucumuz şöyle görünmelidir:
+
+```{r, eval = FALSE}
+server <- function(input, output, session) {
+  
+  malaria_plot <- reactive({
+    plot_epicurve(malaria_data, district = input$select_district, agegroup = input$select_agegroup, facility = input$select_facility)
+  })
+  
+  
+  
+  observe({
+    
+    if (input$select_district == "All") {
+      new_choices <- facility_list$location_name
+    } else {
+      new_choices <- facility_list %>%
+        filter(District == input$select_district) %>%
+        pull(location_name)
+    }
+    
+    new_choices <- c("All", new_choices)
+    
+    updateSelectInput(session, inputId = "select_facility",
+                      choices = new_choices)
+    
+  })
+  
+  
+  output$malaria_epicurve <- renderPlot(
+    malaria_plot()
+  )
+  
+  output$download_epicurve <- downloadHandler(
+    
+    filename = function() {
+      stringr::str_glue("malaria_epicurve_{input$select_district}.png")
+    },
+    
+    content = function(file) {
+      ggsave(file, 
+             malaria_plot(),
+             width = 8, height = 5, dpi = 300)
+    }
+    
+  )
+  
+  
+  
+}
+
+```
+
+
+```{r, out.width=c('100%', '100%'), echo=F, fig.show='hold', fig.width = 12, fig.height = 9, message=F, warning=F}
+knitr::include_graphics(here::here("images", "shiny", "app_menu_view.gif"))
+```
+
+
+
+
+
+
+
+### Tabloya yeni bir sekme eklemek  {.unnumbered}
+
+Şimdi uygulamamıza eklemek istediğimiz son bileşene geçeceğiz. Kullanıcı arayüzünü iki sekmeye ayırmak isteyeceğiz, bunlardan biri, kullanıcının salgın eğrisini oluşturdukları verileri görebileceği etkileşimli bir tabloya sahip olacak. Bunu yapmak için, sekmelerle ilgili shiny ile birlikte gelen paket dahili kullanıcı arabirimi öğelerini kullanabiliriz. Temel düzeyde, ana panelimizin çoğunu bu genel yapıya dahil edebiliriz:
+
+```{r, eval = FALSE}
+
+
+# ... kullanıcı arayüzünden geri kalan
+
+mainPanel(
+  
+  tabsetPanel(
+    type = "tabs",
+    tabPanel(
+      "Epidemic Curves",
+      ...
+    ),
+    tabPanel(
+      "Data",
+      ...
+    )
+  )
+)
+
+
+```
+
+Bunu kullanıcı arayüzümüze uygulayalım. Ayrıca burada DT paketini kullanmak isteyeceğiz - bu, önceden var olan verilerden etkileşimli tablolar oluşturmak için harika bir pakettir. Bu örnekte DT::datatableOutput() fonksiyonunun kullanıldığını görebiliriz.
+
+```{r, echo = FALSE}
+library(DT)
+```
+
+```{r, eval = FALSE}
+ui <- fluidPage(
+     
+     titlePanel("Malaria facility visualisation app"),
+     
+     sidebarLayout(
+          
+          sidebarPanel(
+               # bölge için seçici
+               selectInput(
+                    inputId = "select_district",
+                    label = "Select district",
+                    choices = all_districts,
+                    selected = "All",
+                    multiple = FALSE
+               ),
+               # yaş grubu için seçici
+               selectInput(
+                    inputId = "select_agegroup",
+                    label = "Select age group",
+                    choices = c(
+                         "All ages" = "malaria_tot",
+                         "0-4 yrs" = "malaria_rdt_0-4",
+                         "5-14 yrs" = "malaria_rdt_5-14",
+                         "15+ yrs" = "malaria_rdt_15"
+                    ), 
+                    selected = "All",
+                    multiple = FALSE
+               ),
+               # kurum için seçici
+               selectInput(
+                    inputId = "select_facility",
+                    label = "Select Facility",
+                    choices = c("All", facility_list$location_name),
+                    selected = "All"
+               ),
+               
+               # dikey çizgi
+               hr(),
+               downloadButton(
+                    outputId = "download_epicurve",
+                    label = "Download plot"
+               )
+               
+          ),
+          
+          mainPanel(
+               tabsetPanel(
+                    type = "tabs",
+                    tabPanel(
+                         "Epidemic Curves",
+                         plotOutput("malaria_epicurve")
+                    ),
+                    tabPanel(
+                         "Data",
+                         DT::dataTableOutput("raw_data")
+                    )
+               ),
+               br(),
+               hr(),
+               p("Welcome to the malaria facility visualisation app! To use this app, manipulate the widgets on the side to change the epidemic curve according to your preferences! To download a high quality image of the plot you've created, you can also download it with the download button. To see the raw data, use the raw data tab for an interactive form of the table. The data dictionary is as follows:"),
+               tags$ul(
+                    tags$li(tags$b("location_name"), " - the facility that the data were collected at"),
+                    tags$li(tags$b("data_date"), " - the date the data were collected at"),
+                    tags$li(tags$b("submitted_daate"), " - the date the data were submitted at"),
+                    tags$li(tags$b("Province"), " - the province the data were collected at (all 'North' for this dataset)"),
+                    tags$li(tags$b("District"), " - the district the data were collected at"),
+                    tags$li(tags$b("age_group"), " - the age group the data were collected for (0-5, 5-14, 15+, and all ages)"),
+                    tags$li(tags$b("cases_reported"), " - the number of cases reported for the facility/age group on the given date")
+               )
+               
+               
+          )
+     )
+)
+
+
+```
+
+Artık uygulamamız sekmeler halinde düzenlenmiştir! Sunucuda da gerekli düzenlemeleri yapalım. Veri setimizi oluşturmadan önce değiştirmemiz gerekmediğinden, sadece malaria_data veri setini DT::renderDT() aracılığıyla kullanıcı arayüzüne dönüştürüyoruz! 
+
+
+```{r, eval = FALSE}
+server <- function(input, output, session) {
+  
+  malaria_plot <- reactive({
+    plot_epicurve(malaria_data, district = input$select_district, agegroup = input$select_agegroup, facility = input$select_facility)
+  })
+  
+  
+  
+  observe({
+    
+    if (input$select_district == "All") {
+      new_choices <- facility_list$location_name
+    } else {
+      new_choices <- facility_list %>%
+        filter(District == input$select_district) %>%
+        pull(location_name)
+    }
+    
+    new_choices <- c("All", new_choices)
+    
+    updateSelectInput(session, inputId = "select_facility",
+                      choices = new_choices)
+    
+  })
+  
+  
+  output$malaria_epicurve <- renderPlot(
+    malaria_plot()
+  )
+  
+  output$download_epicurve <- downloadHandler(
+    
+    filename = function() {
+      stringr::str_glue("malaria_epicurve_{input$select_district}.png")
+    },
+    
+    content = function(file) {
+      ggsave(file, 
+             malaria_plot(),
+             width = 8, height = 5, dpi = 300)
+    }
+    
+  )
+  
+  
+  output$raw_data <- DT::renderDT(
+    malaria_data
+  )
+  
+  
+}
+
+
+```
+
+
+```{r, out.width=c('100%', '100%'), fig.show='hold', echo = F, fig.width = 12, fig.height = 9, message=F, warning=F}
+knitr::include_graphics(here::here("images", "shiny", "app_table_view.gif"))
+```
+
+
+## Shiny Uygulamalarının Paylaşılması 
+
+Artık uygulamanızı geliştirdiğinize göre, muhtemelen başkalarıyla paylaşmak istersiniz - bu, ne de olsa shiny’nin esas avantajıdır! Paylaşımı doğrudan kodu paylaşarak yapabiliriz veya bir sunucuda yayınlayabiliriz. Kodu paylaşırsak, başkaları ne yaptığınızı görebilir ve üzerine inşa edebilir, ancak bu, shiny’nin esas avantajlarından birini ortadan kaldıracaktır - son kullanıcıların bir R yükleme zorunluluğunu ortadan kaldırabilir. Bu nedenle, uygulamanızı R kullanmayan kullanıcılarla paylaşıyorsanız, sunucuda yayınlanan bir uygulamayı paylaşmak çok daha kolaydır.
+
+Kodu paylaşmayı tercih ederseniz, uygulamanın bir .zip dosyası oluşturabilir veya daha iyisi uygulamanızı github'da yayınlayabilir ve ortak çalışanlar ekleyebilirsiniz. Daha fazla bilgi için burada github ile ilgili bölüme başvurabilirsiniz.
+
+Ancak, uygulamayı çevrimiçi yayınlıyorsak, biraz daha çalışmamız gerekiyor. Sonuç olarak, başkalarının hızlı ve kolay bir şekilde erişebilmesi için uygulamanıza bir web URL'si aracılığıyla erişilebilmesini istiyoruz. Ne yazık ki, uygulamanızı bir sunucuda yayınlamak için, bir sunucuya erişiminiz olması gerekir! Bu söz konusu olduğunda bir dizi barındırma seçeneği vardır:
+
+• brightapps.io: Bu seçenekte shiny uygulamalarını yayınlamak için yapılandırma iş yükü düşüktür ve kısmen ücretsizdir, (ancak sınırlı lisanslara sahiptir) bu nedenle, shiny uygulamaları yayınlamak için en kolay yerdir.
+• RStudio Connect: Bu seçenek, shiny uygulamalarını yayınlamak dahil birçok işlemi gerçekleştirebilen bir R sunucusunun güçlü bir sürümüdür. Bununla birlikte, kullanımı daha zordur ve ilk kez kullananlar için daha az tavsiye edilir.
+
+Bu metnin amaçları doğrultusunda, ilk kez kullananlar için daha kolay olduğu için brightapps.io'yu kullanacağız. Başlamak için buradan ücretsiz bir hesap oluşturabilirsiniz - gerekirse sunucu lisansları için farklı fiyat seçenekleri de vardır. Ne kadar çok kullanıcıya sahip olmayı planlıyorsunuz, fiyat planınız o kadar pahalı olabilir, bu yüzden bunu göz önünde bulundurun. Küçük bir grup kişinin kullanması için bir uygulama oluşturmak istiyorsanız, ücretsiz bir lisans tamamen uygun olabilir, ancak halka açık bir uygulama daha fazla lisansa ihtiyaç duyabilir.
+
+Öncelikle uygulamamızın bir sunucuda yayınlanmaya uygun olduğundan emin olmalıyız. Uygulamanızda, R oturumunuzu yeniden başlatmalı ve herhangi bir ekstra kod çalıştırmadan çalıştığından emin olmalısınız. Bu önemlidir, çünkü paket yükleme gerektiren bir uygulama veya uygulama kodunuzda tanımlanmayan veri olması durumunda sunucuda çalışmayacaktır. Ayrıca, uygulamanızda herhangi bir açık dosya yoluna sahip olamayacağınızı unutmayın - bunlar sunucu ayarında geçersiz olacaktır - buradaki paketi kullanmak bu sorunu çok iyi çözer. Son olarak, kuruluşunuzun sunucuları gibi kullanıcı kimlik doğrulaması gerektiren bir kaynaktan veri okuyorsanız, bu genellikle bir sunucuda çalışmaz. Shiny sunucusunu beyaz listeye nasıl ekleyeceğinizi öğrenmek için bilgi işlem departmanınızla bağlantı kurmanız gerekecek.
+
+Hesabınızı aldıktan sonra, Hesaplar altındaki belirteçler (tokens) sayfasına gidebilirsiniz. Burada yeni bir belirteç eklemek isteyeceksiniz – bu belirteç, uygulamanızı dağıtmak için kullanılacaktır.
+Buradan, hesabınızın url'sinin uygulamanızın adını yansıtacağını unutmamalısınız - bu nedenle uygulamanızın adı my_app ise, url xxx.io/my_app/ olarak eklenecektir. Uygulamanızın adını akıllıca seçin! Artık hazır olduğunuza göre, dağıt'a (deploy) tıklayın - başarılı olursa, bu uygulamanızı seçtiğiniz web url'sinde çalıştıracaktır!
+
+*belgelerde uygulama yapma konusunda ek bir şey var mı?*
+
+## İleri okuma
+
+Şimdiye kadar, shiny’nin birçok yönünü ele aldık ancak tüm bilgiler göz önünde bulundurulursa shiny’yi ancak yüzeyel olarak gözden geçirdik. Bu kılavuz bir giriş niteliğinde olsa da, shiny’yi tam olarak anlamak için öğrenilecek daha çok şey var. Uygulamalar oluşturmaya başlamalı ve giderek daha fazla işlevsellik eklemelisiniz. 
+
+## Önerilen shiny uzantıları
+
+Aşağıdakiler, shiny’den çok daha fazlasını elde etmenize yardımcı olabilecek yüksek kalitede shiny uzantıların bir seçimini temsil etmektedir. Bu uzantılar belirli bir sırada değildir: 
+
+• brightWidgets - bu paket size uygulamanızda kullanabileceğiniz çok daha fazla widget sunar. Bu pakette mevcut widgetların bir seçimini görmek için shinyWidgets::shinyWidgetsGallery()'yi çalıştırın. [buradaki](https://github.com/dreamRs/shinyWidgets) örneklere bakabilirsiniz. 
+
+
+• shinyjs – bu uzantı, kullanıcıya bir dizi javascript aracılığıyla shiny’ye büyük ölçüde genişletme yeteneği veren mükemmel bir pakettir. Bu paketin uygulamaları çok basitten son derece gelişmişe kadar değişir, ancak ilk önce kullanıcı arabirimini öğeleri gizleme/gösterme veya düğmeleri etkinleştirme/devre dışı bırakma gibi basit yollarla değiştirmek için kullanmak isteyebilirsiniz. Daha fazlasını buradan öğrenin:
+
+
+• shinydashboard - bu paket, shiny’de kullanılabilecek mevcut kullanıcı arayüzünü büyük ölçüde genişletir ve özellikle kullanıcının çeşitli karmaşık düzenlerle karmaşık bir panel oluşturmasına izin verir. Burada daha fazlasını görün:
+
+
+• shinydashboardPlus - shinydashboard çerçevesinden daha da fazla özellik elde edin! Burada daha fazlasını görün:
+
+• shinythemes - çok çeşitli önceden ayarlanmış şablonlarla shiny uygulamanız için varsayılan css temasını değiştirin! Burada daha fazlasını görün:
+
+Shiny uyumlu etkileşimli çıktılar oluşturmak için kullanılabilecek bir dizi paket de vardır.
+• DT, temel shiny’ye yarı entegredir, ancak etkileşimli tablolar oluşturmak için harika bir dizi fonksiyon sağlar.
+• plotly, kullanıcının uygulamada değiştirebileceği etkileşimli grafikler oluşturmaya yönelik bir pakettir. Ayrıca plotly::ggplotly() yoluyla grafiğinizi etkileşimli sürümlere dönüştürebilirsiniz! Alternatif olarak, dygraphs ve highcharter da mükemmeldir. 
+
+- **shinyWidgets** - this package gives you many many more widgets that can be used in your app. Run `shinyWidgets::shinyWidgetsGallery()` to see a selection of available widgets with this package. See examples   
+
+- **shinyjs** - bu uzantı, kullanıcıya bir dizi javascript aracılığıyla shiny’ye büyük ölçüde genişletme yeteneği veren mükemmel bir pakettir. Bu paketin uygulamaları çok basitten son derece gelişmişe kadar değişir, ancak ilk önce kullanıcı arabirimini öğeleri gizleme/gösterme veya düğmeleri etkinleştirme/devre dışı bırakma gibi basit yollarla değiştirmek için kullanmak isteyebilirsiniz. Daha fazlasını [buradan](https://deanattali.com/shinyjs/basic) öğrenin.
+
+- **shinydashboard** - bu paket, shiny’de kullanılabilecek mevcut kullanıcı arayüzünü büyük ölçüde genişletir ve özellikle kullanıcının çeşitli karmaşık düzenlerle karmaşık bir panel oluşturmasına izin verir. [Burada](https://rstudio.github.io/shinydashboard/) daha fazlasını görün
+
+- **shinydashboardPlus** - shinydashboard çerçevesinden daha da fazla özellik elde edin! [Burada](https://rinterface.github.io/shinydashboardPlus/articles/shinydashboardPlus.html) daha fazlasını görün.
+
+- **shinythemes** - çok çeşitli önceden ayarlanmış şablonlarla shiny uygulamanız için varsayılan css temasını değiştirin! [Burada](https://rstudio.github.io/shinythemes/) daha fazlasını görün.
+
+
+
+Shiny uyumlu etkileşimli çıktılar oluşturmak için kullanılabilecek bir dizi paket de vardır.
+• **DT**, temel shiny’ye yarı entegredir, ancak etkileşimli tablolar oluşturmak için harika bir dizi fonksiyon sağlar.
+• **plotly**, kullanıcının uygulamada değiştirebileceği etkileşimli grafikler oluşturmaya yönelik bir pakettir. Ayrıca plotly::ggplotly() yoluyla grafiğinizi etkileşimli sürümlere dönüştürebilirsiniz! Alternatif olarak, **dygraphs** ve **highcharter** da mükemmeldir. 
+
+
+
+

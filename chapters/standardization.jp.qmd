@@ -1,0 +1,495 @@
+---
+aliases:
+  - /new_pages/standardization.jp.html
+---
+
+# 標準化率 {#standardization}  
+
+この章では、年齢や性別などの背景によって入院や死亡などのアウトカムを標準化する2つの方法について説明します。
+
+* **dsr** パッケージの利用
+* **PHEindicatormethods** パッケージの利用
+
+まず、データの準備・クリーニング・結合の手順を詳しく説明します。この手順は、複数の国の人口データ、標準化人口データ、死亡数などを結合するときによく行われます。
+
+## 概要  
+
+標準化には直接法と間接法という2つの主要な方法があります。
+例えば、A国とB国の年齢と性別で調整した標準化死亡率を求め、それらの標準化死亡率を比較したいとします。
+
+* 直接法では、各A国とB国のそれぞれの年齢と性別層における、リスクに曝された人数と死亡数が分かっている必要があります。層の一例としては「女性で 15 - 44 歳」などになります。
+* 間接法では、各国の総死亡数と年齢・性別構成だけが分かっていればよいです。つまり、年齢ごとおよび性別ごとの死亡率や人口データが利用できない場合であっても、間接法を用いることができます。各層の人数が少なく、直接法の各層の推定値がかなりサンプリング変動による影響を受けると考えられる場合、間接法がより望ましいです。
+
+<!-- ======================================================= -->
+## 準備 {  }
+
+標準化がどのように行われるのかを説明するため、国 A と B から得られた年齢（5歳刻みの分類）と性別（女性、男性）ごとの架空の人口と死亡数のデータを用います。データセットを解析できる形にするため、以下の工程で準備を行っていきます。
+
+1. パッケージの読み込み
+2. データの読み込み
+3. 二国の人口データと死亡データの結合
+4. 年齢性別層ごとに一列になっているデータを縦長に変換
+5. 参照集団（世界標準人口）データをクリーニングし、二国のデータと結合 
+
+実際の状況では、あなたのデータはフォーマットが異なっていることもあります。県、市、または別の管轄区域で分けられているかもしれません。あるいは、一行が各死亡になっていて、それぞれの死亡者毎（または死亡者の大部分）で年齢と性別の情報が得られているかもしれません。この場合は、各年齢性別層の死亡数と人口のデータセットを作成するために、[データのグループ化](#grouping)、[Pivoting data](#pivoting)、[記述表](#tables-descriptive)の章を確認してください。
+
+参照集団、標準人口のデータも必要です。この練習問題では `world_standard_population_by_sex` を使用します。世界標準人口は46ヶ国の人口に基づいており、1960年に作成されました。また、「標準」人口は沢山あります。例を挙げると、[NHS Scotland](https://www.opendata.nhs.scot/dataset/standard-populations) のウェブサイトはヨーロッパ標準人口、世界標準人口、スコットランド標準人口に関して非常に有益な情報源です。 
+
+<!-- ======================================================= -->
+### パッケージの読み込み {.unnumbered}
+
+以下のコードを実行すると、分析に必要なパッケージが読み込まれます。このハンドブックでは、パッケージを読み込むために、pacman パッケージの p_load() を主に使用しています。p_load() は、必要に応じてパッケージをインストールし、現在の R セッションで使用するためにパッケージを読み込む関数です。また、すでにインストールされたパッケージは、R の基本パッケージである base （以下、base R）の library() を使用して読み込むこともできます。R のパッケージに関する詳細は [R basics](#basics) の章をご覧ください。
+
+```{r}
+pacman::p_load(
+     rio,                 # データのインポート・エクスポート
+     here,                # ファイルの場所を特定
+     stringr,             # 文字と文字列のクリーニング
+     frailtypack,         # dsr で必要：フレイルティモデルのため
+     dsr,                 # 標準化率
+     PHEindicatormethods, # 標準化のための代替のパッケージ
+     tidyverse)           # データマネジメントと視覚化
+```
+
+
+<span style="color: orange;">**_注意：_**新しいバージョンの R を使用している場合、**dsr** パッケージは CRAN から直接ダウンロードできません。ただし、まだ CRAN のアーカイブから利用可能で、インストールして利用することができます。</span>
+
+非Macユーザは以下を実行してください。 
+
+```{r, eval=F} 
+packageurl <- "https://cran.r-project.org/src/contrib/Archive/dsr/dsr_0.2.2.tar.gz"
+install.packages(packageurl, repos = NULL, type = "source")
+```
+
+```{r, eval=FALSE}
+# 別の方法でも実行できます
+require(devtools)
+devtools::install_version("dsr", version = "0.2.2", repos = "http:/cran.us.r.project.org")
+```
+
+Macユーザは以下を実行してください。
+
+```{r, eval=FALSE}
+require(devtools)
+devtools::install_version("dsr", version = "0.2.2", repos = "https://mac.R-project.org")
+```
+
+### 人口データの読み込み {.unnumbered}  
+
+このハンドブックの全事例データのダウンロード方法については [Download handbook and data](#data-used) の章を確認してください。以下の `import()` コマンドを実行すると、標準化の章のデータを我々の Github リポジトリから直接 R に読み込むことができます。 
+
+```{r, eval=F}
+# Github から直接国 A の人口データをインポート
+A_demo <- import("https://github.com/appliedepi/epiRhandbook_eng/raw/master/data/standardization/country_demographics.csv")
+
+# Github から直接国 A の死亡データをインポート
+A_deaths <- import("https://github.com/appliedepi/epiRhandbook_eng/raw/master/data/standardization/deaths_countryA.csv")
+
+# Github から直接国 B の人口データをインポート
+B_demo <- import("https://github.com/appliedepi/epiRhandbook_eng/raw/master/data/standardization/country_demographics_2.csv")
+
+# Github から直接国 B の死亡データをインポート
+B_deaths <- import("https://github.com/appliedepi/epiRhandbook_eng/raw/master/data/standardization/deaths_countryB.csv")
+
+# Github から直接標準人口のデータをインポート
+standard_pop_data <- import("https://github.com/appliedepi/epiRhandbook_eng/raw/master/data/standardization/world_standard_population_by_sex.csv")
+
+```
+
+
+最初に、二ヶ国の人口データ（5歳毎に分類した男性と女性の人数）を読み込み、「国 A」と「国 B」の比較を行っていきます。
+
+```{r, echo=F}
+# 国 A
+require(tidyverse)
+require(dplyr)
+A_demo <- rio::import(here::here("data", "standardization", "country_demographics.csv")) %>% 
+     mutate(Country = "A") %>% 
+     dplyr::select(Country, everything()) %>%                # 列順の変更
+     mutate(age_cat5 = str_replace_all(age_cat5, "\\+", "")) # 記号"(+)"を削除
+```
+
+```{r, eval=F}
+# 国 A
+A_demo <- import("country_demographics.csv")
+```
+
+```{r message=FALSE, echo=F}
+DT::datatable(A_demo, rownames = FALSE, options = list(pageLength = 5, scrollX = T), class = 'white-space: nowrap' )
+```
+
+
+```{r, echo=F}
+# 国 B
+require(tidyverse)
+B_demo <- rio::import(here::here("data", "standardization", "country_demographics_2.csv")) %>% 
+     mutate(Country = "B") %>% 
+     dplyr::select(Country, everything()) # 列順の変更
+```
+
+```{r, eval=F}
+# 国 B
+B_demo <- import("country_demographics_2.csv")
+```
+
+```{r message=FALSE, echo=F}
+DT::datatable(B_demo, rownames = FALSE, options = list(pageLength = 5, scrollX = T), class = 'white-space: nowrap' )
+```
+
+
+
+
+
+### 死亡数の読み込み {.unnumbered}  
+
+興味のある期間中の年齢・性別毎の死亡数のデータもあります。以下の通り、各国の死亡数は別々のファイルに入っています。   
+
+```{r, echo=F}
+A_males <- c(224, 257, 251, 245, 334, 245, 154, 189, 334, 342, 565, 432, 543, 432, 245, 543, 234, 354)   # 国 A の男性
+B_males <- c(34, 37, 51, 145, 434, 120, 100, 143, 307, 354, 463, 639, 706, 232, 275, 543, 234, 274)      # 国 B の男性
+A_females <- c(194, 254, 232, 214, 316, 224, 163, 167, 354, 354, 463, 574, 493, 295, 175, 380, 177, 392) # 国 A の女性
+B_females <- c(54, 24, 32, 154, 276, 254, 123, 164, 254, 354, 453, 654, 435, 354, 165, 432, 287, 395)    # 国 B の女性
+
+age_cat5 <- c("0-4", "5-9", "10-14", "15-19", "20-24", "25-29",  "30-34", "35-39", "40-44",
+              "45-49", "50-54", "55-59",
+              "60-64", "65-69", "70-74",
+              "75-79", "80-84", "85")
+A_deaths <- data.frame(Country = "A", AgeCat = age_cat5, Male = A_males, Female = A_females)
+B_deaths <- data.frame(Country = "B", AgeCat = age_cat5, Male = B_males, Female = B_females)
+```
+
+国 A の死亡数
+```{r message=FALSE, echo=F}
+DT::datatable(A_deaths, rownames = FALSE, options = list(pageLength = 5, scrollX = T), class = 'white-space: nowrap' )
+```
+
+国 B の死亡数
+
+```{r message=FALSE, echo=F}
+DT::datatable(B_deaths, rownames = FALSE, options = list(pageLength = 5, scrollX = T), class = 'white-space: nowrap' )
+```
+
+
+```{r, echo=F}
+rio::export(A_deaths, here::here("data", "standardization", "deaths_countryA.csv"))
+rio::export(B_deaths, here::here("data", "standardization", "deaths_countryB.csv"))
+```
+
+
+
+### 人口・死亡数のクリーニング {.unnumbered}  
+
+
+これらのデータは以下の方法で結合し変換する必要があります。  
+
+* 二ヶ国の人口を一つのデータセットに結合し、各年齢性別層が一行になるように「縦長」に変形
+* 二ヶ国の死亡数を一つのデータセットに結合し、各年齢性別層が一行になるように「縦長」に変形
+* 死亡データを人口データに結合
+
+最初に、二ヶ国の人口データを結合し、縦長変換して、軽微なクリーニングを行います。詳細については [Pivoting data](#pivoting) の章を確認してください。 
+
+```{r}
+pop_countries <- A_demo %>%               # 国 A のデータセットから開始
+     bind_rows(B_demo) %>%                # 各列名が一致しているため、国 B のデータを列方向に結合
+     pivot_longer(                        # 縦長に変換
+          cols = c(m, f),                 # これらの列を1つに結合
+          names_to = "Sex",               # カテゴリ（"m"または"f"）の情報を含む新しい列の名前
+          values_to = "Population") %>%   # 数値の情報を含む新しい列の名前
+     mutate(Sex = recode(Sex,             # 明確にするために各値を再コード化
+                         "m" = "Male",
+                         "f" = "Female"))
+```
+
+結合した人口データは、次のようになりました（クリックすることで国 A と B の両方を確認できます）。
+
+
+```{r message=FALSE, echo=F}
+DT::datatable(pop_countries, rownames = FALSE, options = list(pageLength = 5, scrollX = T), class = 'white-space: nowrap' )
+```
+
+次に、死亡数のデータセットについても同様の処理を行います。
+
+```{r}
+deaths_countries <- A_deaths %>%     # 国 A の死亡数のデータセットから開始
+     bind_rows(B_deaths) %>%         # 各列名が一致しているため、国 B のデータを列方向に結合
+     pivot_longer(                   # 縦長に変換
+          cols = c(Male, Female),    # これらの列を1つに結合
+          names_to = "Sex",          # カテゴリ（"m"または"f"）の情報を含む新しい列の名前
+          values_to = "Deaths") %>%  # 数値の情報を含む新しい列の名前
+     rename(age_cat5 = AgeCat)       # 明確にするために名前を再変更
+```
+
+死亡数のデータは次のようになり、両国のデータが含まれています。
+
+```{r message=FALSE, echo=F}
+DT::datatable(deaths_countries, rownames = FALSE, options = list(pageLength = 5, scrollX = T), class = 'white-space: nowrap' )
+```
+
+
+次に、共通の列 `Country`, `age_cat5`, `Sex` に基づいて死亡数と人口データを結合します。これにより、列 `Deaths` が追加されます。
+
+```{r}
+country_data <- pop_countries %>% 
+     left_join(deaths_countries, by = c("Country", "age_cat5", "Sex"))
+```
+
+さらに、変数 `Sex`, `age_cat5`, `Country` を因子型変数として分類し、水準の順序を **forcats** パッケージの `fct_relevel()` を用いて設定できます。なお、因子の水準を分類してもデータに目に見える変化はありません。ただし、`arrange()` コマンドを実行すると、データは国、年齢カテゴリ、性別でソートされます。  
+
+```{r, warning=F, message=F}
+country_data <- country_data %>% 
+     mutate(
+          Country = fct_relevel(Country, "A", "B"),
+          
+          Sex = fct_relevel(Sex, "Male", "Female"),
+          
+          age_cat5 = fct_relevel(
+               age_cat5,
+               "0-4", "5-9", "10-14", "15-19",
+               "20-24", "25-29",  "30-34", "35-39",
+               "40-44", "45-49", "50-54", "55-59",
+               "60-64", "65-69", "70-74",
+               "75-79", "80-84", "85")) %>% 
+     
+     arrange(Country, age_cat5, Sex)
+```
+
+```{r message=FALSE, echo=F}
+DT::datatable(country_data, rownames = FALSE, options = list(pageLength = 5, scrollX = T), class = 'white-space: nowrap' )
+```
+
+<span style="color: orange;">**_注意：_**各層の死亡数が少ない場合、年齢について10年または15年区切りのカテゴリの使用を検討してみてください</span>
+
+
+
+
+### 参照集団データの読み込み {.unnumbered}
+
+最後に、直接標準化のために、参照集団（性別毎の世界「標準人口」）のデータを読み込みます。
+
+```{r, echo=F}
+# 参照集団
+standard_pop_data <- rio::import(here::here("data", "standardization", "world_standard_population_by_sex.csv")) %>% 
+     rename(age_cat5 = AgeGroup)
+```
+
+```{r, eval=F}
+# 参照集団
+standard_pop_data <- import("world_standard_population_by_sex.csv")
+```
+
+```{r message=FALSE, echo=F}
+DT::datatable(standard_pop_data, rownames = FALSE, options = list(pageLength = 5, scrollX = T), class = 'white-space: nowrap' )
+```
+
+
+
+<!-- ======================================================= -->
+### 参照集団データのクリーニング {.unnumbered}
+
+データフレーム `country_data` と `standard_pop_data` について、年齢カテゴリの値を揃える必要があります。 
+
+現段階では、`standard_pop_data` における `age_cat5` の列の値には "years" や "plus" といった単語が含まれていますが、`country_data` の方はそうなっていません。そのため、年齢カテゴリの値を揃えなくてはいけません。ここでは、[Characters and strings](#characters-strings) の章で解説した **stringr** パッケージの `str_replace_all()` を使用し、これらのパターンをスペースがない形（`""`）に置換します。
+
+また、**dsr** パッケージでは、標準人口について人数が含まれる列の名前が `"pop"` となっている事を想定しています。それにしたがって列名を変更しておきます。
+
+```{r}
+# 列の各値から、特定の文字列を削除
+standard_pop_clean <- standard_pop_data %>%
+     mutate(
+          age_cat5 = str_replace_all(age_cat5, "years", ""),  # "year" を削除
+          age_cat5 = str_replace_all(age_cat5, "plus", ""),   # "plus" を削除
+          age_cat5 = str_replace_all(age_cat5, " ", "")) %>%  # " " （スペース）を削除
+     
+     rename(pop = WorldStandardPopulation)                    # dsr パッケージのために、列名を "pop" に変更
+```
+
+<span style="color: orange;">**_注意：_** `str_replace_all()` を使用してプラス<u>記号</u>を削除しようとしても、プラス記号が特別な記号なためうまくいきません。特別な記号の前にバックスラッシュを2つ入れて「エスケープ」する必要があります。例：`str_replace_call(column, "\\+", "")`。</span>
+
+### 参照集団のデータセット作成 {#standard_all .unnumbered}  
+
+最後に、[以下](#standard_phe)で詳細を説明する **PHEindicatormethods** パッケージでは、標準人口と各国のイベント数と人口データが一つにまとまっている事を想定しています。これにしたがって、`all_data` という名前のデータセットを作成します。
+
+```{r}
+all_data <- left_join(country_data, standard_pop_clean, by = c("age_cat5", "Sex"))
+```
+
+完成したデータセットは以下のようになります。
+
+```{r message=FALSE, echo=F}
+DT::datatable(all_data, rownames = FALSE, options = list(pageLength = 5, scrollX = T), class = 'white-space: nowrap' )
+```
+
+
+
+<!-- ======================================================= -->
+## **dsr** パッケージ {  }
+
+以下では、**dsr** パッケージを用いて直接標準化率の計算と比較を行います。**dsr** パッケージでは、直接標準化率の計算と比較を行うことができますが、間接標準化率は計算できません。
+
+データの準備の節では、各国と標準人口について別々のデータセットを作成しました。
+
+1) `country_data` オブジェクトは、国ごとの各層における人口と死亡数の人口統計表です
+2) `standard_pop_clean` オブジェクトは、ここで用いる参照集団である世界標準人口の各層における人口が含まれています
+
+**dsr** パッケージのために、これらの分かれているデータセットを使用します。
+
+
+<!-- ======================================================= -->
+### 標準化率（Standardized rates） {.unnumbered}
+
+以下では、年齢と性別による各国の直接標準化率を計算します。計算には `dsr()` を使用します。
+
+注意点：`dsr()` は国の人口とイベント数（死亡数）のデータフレーム<u>と**別の**参照集団のデータフレーム</u>に分かれている事を想定しています。また、この参照集団データセットの単位時間あたりの人口の列の名前が "pop" になっている事（これについては、データの準備の節でも確認しました）も想定しています。
+
+以下のコードに注釈を入れたように、この関数には沢山の引数があります。注目すべきところは、`event = ` は列 `Deaths` に設定され、`fu = ` ("follow-up") は列 `Population` に設定されていることです。また、比較したいサブグループは列 `Country` と設定し、`age_cat5` と `Sex` に基づいて標準化を行っています。この最後の2列には特に引数名が割り当てられていません。詳細は `?dsr` を確認してください。
+
+```{r, warning=F, message=F}
+# 年齢と性別による各国の直接標準化率の計算
+mortality_rate <- dsr::dsr(
+     data = country_data,          # 各層の死亡数が含まれている方のデータの指定
+     event = Deaths,               # 各層の死亡数が含まれる列
+     fu = Population,              # 各層の人口が含まれる列
+     subgroup = Country,           # 比較の単位
+     age_cat5,                     # 他の列：これらにより率を標準化
+     Sex,
+     refdata = standard_pop_clean, # 人数の列 pop が含まれる参照集団データ
+     method = "gamma",             # 95%信頼区間の計算方法
+     sig = 0.95,                   # 有意水準
+     mp = 100000,                  # 100,000人あたりの率を計算したい
+     decimals = 2)                 # 小数点以下の桁数
+
+# 見た目がきれいなHTML形式の表で結果表示
+knitr::kable(mortality_rate)       # 標準化前と標準化後の死亡率を表示
+```
+
+上のように、国 A の粗死亡率は国 B よりも低いですが、年齢と性別による直接標準化を行った後の標準化率は国 A の方が高いことがわかります。
+
+
+
+
+<!-- ======================================================= -->
+### 標準化率比（Standardized rate tratios） {.unnumbered}
+
+```{r,warning=F, message=F}
+# 標準化率比（RR）の計算
+mortality_rr <- dsr::dsrr(
+     data = country_data,          # 各層の死亡数が含まれている方のデータの指定
+     event = Deaths,               # 各層の死亡数が含まれる列
+     fu = Population,              # 各層の人口が含まれる列
+     subgroup = Country,           # 比較の単位
+     age_cat5,                     # 標準化したい特性変数
+     Sex,                          
+     refdata = standard_pop_clean, # 人数の列 pop が含まれる参照集団データ
+     refgroup = "B",               # 比較の参照水準
+     estimate = "ratio",           # 推定値の種類
+     sig = 0.95,                   # 有意水準
+     mp = 100000,                  # 100,000人あたりの率を計算したい
+     decimals = 2)                 # 小数点以下の桁数
+
+# 結果の表示
+knitr::kable(mortality_rr) 
+```
+
+標準化率は国 B よりも国 A の方が 1.22 倍（ 95 ％信頼区間は 1.17 倍 - 1.27 倍）高いです。
+
+<!-- ======================================================= -->
+### 標準化率差（Standardized rate difference） {.unnumbered}
+
+```{r, warning=F, message=F}
+# 標準化率差（RD）の計算
+mortality_rd <- dsr::dsrr(
+     data = country_data,          # 各層の死亡数が含まれている方のデータの指定
+     event = Deaths,               # 各層の死亡数が含まれる列
+     fu = Population,              # 各層の人口が含まれる列
+     subgroup = Country,           # 比較の単位
+     age_cat5,                     # 標準化したい特性変数
+     Sex,                        
+     refdata = standard_pop_clean, # 人数の列 pop が含まれる参照集団データ
+     refgroup = "B",               # 比較の参照水準
+     estimate = "difference",      # 推定値の種類
+     sig = 0.95,                   # 有意水準
+     mp = 100000,                  # 100,000人あたりの率を計算したい
+     decimals = 2)                 # 小数点以下の桁数
+
+# 結果の表示
+knitr::kable(mortality_rd)
+```
+
+国 A は国 B と比較して、100,000 人あたり 4.24 人（ 95 ％信頼区間は 3.24 人-5.24 人）死亡が多いです。
+
+
+
+
+
+
+<!-- ======================================================= -->
+## **PHEindicatormethods** パッケージ {#standard_phe}
+
+**PHEindicatormethods** パッケージを使用すると、別のやり方で標準化率を計算できます。このパッケージでは、直接標準化も間接標準化も行うことができます。以下では、両方の例を示します。
+
+この節では、データの準備の節の最後で作成したデータフレーム `all_data` を使用します。このデータフレームは各国の人口と死亡数、および世界標準人口が含まれています。このデータフレームについては[こちら](#standard_all)から確認できます。
+
+
+
+<!-- ======================================================= -->
+### 直接標準化率 {.unnumbered}
+
+以下では、最初にデータを国ごとにグループ化し、各国の直接標準化率を求めるためにそれを `phe_dsr()` に代入します。
+
+注意点：参照集団のデータは**国毎のデータフレーム内の列**または**別のベクトル型オブジェクト**として指定できます。国毎のデータフレーム内の列として与える場合、`stdpoptype = "field"` を指定する必要があります。ベクトルとして与える場合、`stdpoptype = "vector"` を指定する必要があります。後者の場合、レコードが位置でマッチングされるため、各層による行の順序が国毎のデータフレームと参照集団で同じになっていることを確認する必要があります。以下の例では、参照集団は国毎のデータフレーム内の列として与えています。
+
+詳しくは、ヘルプ `?phr_dsr` またはその他の資料の節のリンクを確認してください。
+
+```{r}
+# 各国の年齢と性別による直接標準化率の計算
+mortality_ds_rate_phe <- all_data %>%
+     group_by(Country) %>%
+     PHEindicatormethods::phe_dsr(
+          x = Deaths,                 # 観測イベント数の列
+          n = Population,             # 各層の非標準人口の列
+          stdpop = pop,               # 各層の標準人口
+          stdpoptype = "field")       # ベクトルで与える場合は "vector"、データフレーム内の列の場合は "field"
+
+# 結果の表示
+knitr::kable(mortality_ds_rate_phe)
+```
+
+<!-- ======================================================= -->
+### 間接標準化率 {#standard_indirect .unnumbered}
+
+間接標準化のためには、参照集団の各層の死亡数と人口のデータが必要です。この例では、参照集団の `standard_pop_clean` に各層の死亡数が含まれていないので、<u>国 B を参照集団として用いて</u>国 A の間接標準化率を計算します。
+
+以下では、最初に国 B から参照集団のデータを作成します。次に、間接標準化率を求めるため、国 A の死亡数と人口データと参照集団のデータを `calculate_ISRate()` に代入します。もちろん、国 A と B を逆にすることも可能です。
+
+注意点：この例では、参照集団は別のデータフレームとして与えています。この場合、レコードが位置によってマッチングされるため、`x = `, `n = `, `x_ref = `, `n_ref = ` のベクトルがすべて国毎のデータフレームの標準化カテゴリ（層）の値と同じ順序になっていることを確認する必要があります。
+
+詳しくは、ヘルプ `?phr_isr` またはその他の資料の節のリンクを確認してください。
+
+```{r}
+# 参照集団データを作成
+refpopCountryB <- country_data %>% 
+     filter(Country == "B") 
+
+# 国 A の年齢と性別による間接標準化率の計算
+mortality_is_rate_phe_A <- country_data %>%
+     filter(Country == "A") %>%
+     PHEindicatormethods::calculate_ISRate(
+          x = Deaths,                        # 観測イベント数の列
+          n = Population,                    # 各層の非標準人口の列
+          x_ref = refpopCountryB$Deaths,     # 各層の参照死亡数
+          n_ref = refpopCountryB$Population) # 各層の参照人口
+
+# 結果の表示
+knitr::kable(mortality_is_rate_phe_A)
+```
+
+<!-- ======================================================= -->
+## 参考資料 {  }
+
+**dsr** を用いた他の再現可能なコードを参照したい場合は、[このvignette]( https://mran.microsoft.com/snapshot/2020-02-12/web/packages/dsr/vignettes/dsr.html) を確認してください。
+
+**PHEindicatormethods** を用いた別の例については、[このウェブサイト](https://mran.microsoft.com/snapshot/2018-10-22/web/packages/PHEindicatormethods/vignettes/IntroductiontoPHEindicatormethods.html)を見てください。
+
+また、**PHEindicatormethods** の[参照マニュアルの pdf](https://cran.r-project.org/web/packages/PHEindicatormethods/PHEindicatormethods.pdf) も確認してください。
+
+

@@ -1,0 +1,481 @@
+---
+aliases:
+  - /new_pages/flexdashboard.es.html
+---
+
+# Dashboards con R Markdown {#dashboards-with-r-markdown}
+
+```{r out.width = "100%", fig.align = "center", echo=F}
+knitr::include_graphics(here::here("images", "flexdashboard_output.png"))
+```
+
+
+Esta página cubrirá el uso básico del paquete **flexdashboard**. Este paquete permite formatear fácilmente la salida de R Markdown como un dashboard (panel de control o cuadro de mandos) y páginas. El contenido del panel puede ser texto, figuras/tablas estáticas o gráficos interactivos.
+
+Ventajas de **flexdashboard**:
+
+* Requiere una codificación mínima de R no estándar - con muy poca práctica puedes crear rápidamente un panel de control
+* El Dashboard puede enviarse por correo electrónico a los compañeros como un archivo HTML autónomo, sin necesidad de servidor
+* Puedes combinar **flexdashboard** con **shiny**, **ggplotly** y otros *"widgets html"* para añadir interactividad
+
+Desventajas de **flexdashboard**:
+
+* Menos personalización en comparación con el uso de **Shiny** para crear un panel de control
+
+En la sección de Recursos se pueden encontrar tutoriales muy completos sobre el uso de **flexdashboard** que sirvieron de base a esta página. A continuación describimos las características principales y damos un ejemplo de construcción de un dashboard para explorar un brote, utilizando los datos de `linelist`.
+
+
+## Preparación {#preparation-35}
+
+### Cargar paquetes {.unnumbered}  
+
+En este manual destacamos `p_load()` de **pacman**, que instala el paquete si es necesario *y* lo carga para su uso. También puedes cargar los paquetes instalados con `library()` de R **base**. Consulta la página [Fundamentos de R](#r-basics) para obtener más información sobre los paquetes de R.
+
+```{r}
+pacman::p_load(
+  rio,             # importación/exportación de datos     
+  here,            # localizar archivos
+  tidyverse,       # gestión y visualización de datos
+  flexdashboard,   # versiones dashboard de informes R Markdown
+  shiny,           # figuras interactivas
+  plotly           # figuras interactivas
+
+)
+```
+
+### Importar datos {.unnumbered}  
+
+Importamos los datos de casos de una epidemia de ébola simulada. Si quieres seguir el proceso, [clica para descargar linelist "limpio"](https://github.com/epirhandbook/Epi_R_handbook/raw/master/data/case_linelists/linelist_cleaned.rds) (como archivo .rds). Importa los datos con la función import() del paquete **rio** (maneja muchos tipos de archivos como .xlsx, .csv, .rds - mira la página de [importación y exportación](#import-and-export) para más detalles).
+
+```{r, echo=F}
+# importar linelist a R
+linelist <- rio::import(here::here("data", "case_linelists", "linelist_cleaned.rds"))
+```
+
+```{r, eval=F}
+# importa linelist
+linelist <- import("linelist_cleaned.rds")
+```
+
+A continuación se muestran las primeras 50 filas del listado.
+
+```{r, message=FALSE, echo=F}
+# muestra los datos de linelist como una tabla
+DT::datatable(head(linelist, 50), rownames = FALSE, filter="top", options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+
+## Crear un nuevo R Markdown  {#create-new-r-markdown}
+
+Una vez instalado el paquete, crea un nuevo archivo R Markdown clicando en *File > New file > R Markdown.*
+
+```{r out.width = "100%", fig.align = "center", echo=F}
+knitr::include_graphics(here::here("images", "flexdashboard_new1.png"))
+```
+
+
+En la ventana que se abre, selecciona "From Template" y selecciona la plantilla "Flex Dashboard". A continuación, pedirá que nombres el documento. En el ejemplo de esta página, nombraremos nuestro R Markdown como "outbreak_dashboard.Rmd".
+  
+
+```{r out.width = "100%", out.height="75%", fig.align = "center", echo=F}
+knitr::include_graphics(here::here("images", "flexdashboard_new2.png"))
+```
+
+
+
+
+## El script  {#the-script}
+
+El script es un script de R Markdown, y por lo tanto tiene los mismos componentes y organización que se describen en la página sobre [Informes con R Markdown](#reports-with-r-markdown). Volvemos a revisar brevemente estos y destacamos las diferencias con otros formatos de salida de R Markdown.
+
+### YAML {.unnumbered} 
+
+En la parte superior del script está la cabecera "YAML". Esta debe comenzar con tres guiones `---` y debe cerrarse con tres guiones `---`. Los parámetros YAML vienen en pares `key:value`. La **sangría y la colocación de los dos puntos en YAML es importante** - los pares `key:value` están separados por dos puntos (¡no por signos de igualdad!).
+
+El YAML debe comenzar con los metadatos del documento. El orden de estos parámetros YAML primarios (sin sangría) no importa. Por ejemplo:
+
+```{r, eval=F}
+title: "My document"
+author: "Me"
+date: "`r Sys.Date()`"
+```
+
+Puedes utilizar código R en los valores YAML poniéndolo como código en línea (precedido por `r` entre comillas) pero también entre comillas (véase más arriba para la fecha).
+
+Un parámetro YAML necesario es `output: `, que especifica el tipo de archivo que se producirá (por ejemplo, `html_document`, `pdf_document`, `word_document`, o `powerpoint_presentation`). En el caso de **flexdashboard** el valor de este parámetro es un poco confuso - debe establecerse como `output:flexdashboard::flex_dashboard`. Ten en cuenta los dos puntos simples y dobles, y el guión bajo. Este parámetro de salida YAML suele ir seguido de *dos puntos adicionales* y de subparámetros con sangría (ver parámetros `orientation: ` y `vertical_layout: ` más abajo). 
+
+```{r, eval=F}
+title: "My dashboard"
+author: "Me"
+date: "`r Sys.Date()`"
+output:
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: scroll
+```
+
+Como se muestra arriba, se utilizan sangrías (2 espacios) para los subparámetros. En este caso, no olvides poner dos puntos adicionales después del primario, como `key:value: `.
+
+Si procede, los valores lógicos deben indicarse en YAML en minúsculas (`true`, `false`, `null`). Si los dos puntos forman parte del valor (por ejemplo, en el título), escribe el valor entre comillas. Revisa los ejemplos en las secciones siguientes.
+
+
+### Trozos de código {.unnumbered}  
+
+Un script de R Markdown puede contener múltiples "trozos" de código (Chunk) - estas son áreas del script donde se puede escribir código R de varias líneas y funcionan como mini scripts R.
+
+Los trozos de código se crean con tres signos de acento grave (```) y corchetes con una "r" minúscula dentro. El fragmento se cierra con otros tres acentos graves (acento atrás). Puedes crear un nuevo fragmento escribiéndolo tú mismo, utilizando el atajo de teclado "Ctrl + Alt + i" (o Cmd + Shift + r en Mac), o clicando en el icono verde 'insertar un nuevo fragmento de código' en la parte superior de tu editor de scripts. A continuación se ofrecen muchos ejemplos. 
+
+
+### Texto narrativo {.unnumbered}  
+
+Fuera de un "trozo" de código R, puedes escribir texto narrativo. Como se describe en la página sobre [Informes con R Markdown](#reports-with-r-markdown), puedes poner el texto en cursiva rodeándolo con un asterisco (*), o en negrita rodeándolo con dos asteriscos (**). Recuerda que las viñetas y los esquemas de numeración son sensibles a las nuevas líneas, a la sangría y a terminar una línea con dos espacios.
+
+También puedes insertar código R en línea en el texto, como se describe en la página [Informes con R Markdown](#reports-with-r-markdown), rodeando el código con puntos suspensivos y comenzando el comando con "r": `` ` 1+1` `` (véase el ejemplo con la fecha anterior).
+
+
+
+### Encabezados {.unnumbered}  
+
+Los diferentes niveles de encabezamiento se establecen con diferentes números de símbolos hash, como se describe en la página [Informes con R Markdown](#reports-with-r-markdown).
+
+En **flexdashboard**, un encabezado primario (#) crea una "página" del dashboard. Los encabezados de segundo nivel (##) crean una columna o una fila dependiendo de su parámetro `orientation:` (ver detalles más abajo). Los encabezados de tercer nivel (###) crean paneles para gráficos, diagramas, tablas, texto, etc. 
+
+```md
+# Título de primer nivel (página)
+
+## Título de segundo nivel (fila o columna)
+
+### Título de tercer nivel (panel para gráfico, diagrama, etc.)
+```
+
+
+
+
+
+## Atributos de la sección  {#section-attributes}
+
+Al igual que en un R Markdown normal, puedes especificar los atributos que se aplicarán a las partes del cuadro de mando incluyendo las opciones `key=value` después de un encabezado, entre llaves `{ }`. Por ejemplo, en un típico informe HTML R Markdown podrías organizar los sub-encabezados en pestañas con `## My heading {.tabset}`.
+
+Ten en cuenta que estos atributos se escriben después de un *título* en una parte de texto del script. Son diferentes a las opciones de **knitr** insertadas dentro en la parte superior de los trozos de código R, como `out.height = `.
+
+Los atributos de sección específicos de **flexdashboard** incluyen:
+
+* `{data-orientation=}` Establece la orientación de las filas `rows` o de las columnas `columns`.{orientación de los datos=} . Si tu dashboard tiene varias páginas, añade este atributo a cada una de ellas para indicar la orientación (se explica con más detalle en [la sección de diseño](#layout)).
+* `{data-width=}` y `{data-height=}` establecen el tamaño relativo de los gráficos, columnas y filas dispuestos en la misma dimensión (horizontal o vertical). Los tamaños absolutos se ajustan para llenar mejor el espacio en cualquier dispositivo de visualización gracias al motor [flexbox](https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Flexible_Box_Layout/Using_CSS_flexible_boxes).
+     * La altura de las figuras también depende de si se establece el parámetro YAML `vertical_layout: fill` or `vertical_layout: scroll`. Si se establece en scroll, la altura de la figura reflejará la opción tradicional `fig.height = ` en el fragmento de código de R.
+     * Consulta la documentación completa sobre el tamaño en el [sitio web de flexdashboard](https://rmarkdown.rstudio.com/flexdashboard/articles/using.html#sizing)
+* `{.hidden}` Utiliza esto para excluir una página específica de la barra de navegación
+* `{data-navbar=}` Utilízalo en un encabezado a nivel de página para anidarlo dentro de un menú desplegable de la barra de navegación. Indica el nombre (entre comillas) del menú desplegable. Véase el ejemplo siguiente.
+
+
+## Diseño {#layout}  
+
+Ajusta el diseño de tu panel de control de las siguientes maneras:
+
+* Añadir páginas, columnas/filas y gráficos con encabezados R Markdown (por ejemplo, #, ## o ###)  
+* Ajustar la orientación de los parámetros YAML: `orientation:` a `rows` o `columns`  
+* Especificar si el diseño llena el navegador o permite el desplazamiento  
+* Añadir pestañas a un título de sección concreto
+
+
+### Páginas {.unnumbered}  
+
+Los encabezados de primer nivel (#) en el R Markdown representarán las "páginas" del cuadro de mando. Por defecto, las páginas aparecerán en una barra de navegación a lo largo de la parte superior del dashboard. 
+
+```{r, out.height = c('100%'), out.width = c('100%'), echo=F}
+knitr::include_graphics(here::here("images", "flexdashboard_pages_top_script.png"))
+```
+
+
+```{r, out.width=c('100%', '100%'), echo=F, fig.show='hold', fig.width = 12, fig.height = 9, message=F, warning=F}
+knitr::include_graphics(here::here("images", "flexdashboard_pages_top_view.png"))
+```
+
+
+
+Puedes agrupar las páginas en un "menú" dentro de la barra de navegación superior añadiendo el atributo `{data-navmenu=}` al título de la página. Ten cuidado: no incluyas espacios alrededor del signo de igualdad, de lo contrario no funcionará. 
+
+```{r, out.width=c('100%', '100%'), echo=F, fig.show='hold', fig.width = 12, fig.height = 9, message=F, warning=F}
+knitr::include_graphics(here::here("images", "flexdashboard_navmenu_script.png"))
+```
+
+
+Esto es lo que produce el script: 
+
+
+```{r, out.width=c('100%', '100%'), echo=F, fig.show='hold', fig.width = 12, fig.height = 9, message=F, warning=F}
+knitr::include_graphics(here::here("images", "flexdashboard_navmenu_view.png"))
+```
+
+También puedes convertir una página o una columna en una "barra lateral" en el lado izquierdo del panel de control añadiendo el atributo `{.sidebar}`. Puede contener texto (visible desde cualquier página) o, si has integrado una interactividad **Shiny,** puede ser útil para contener controles de entrada del usuario, como deslizadores o menús desplegables. 
+
+```{r, out.width = c('100%'), out.height = c('100%'), echo=F}
+knitr::include_graphics(here::here("images", "flexdashboard_sidebar_script.png"))
+```
+
+Esto es lo que produce el script: 
+
+```{r, out.width=c('100%', '100%'), echo=F, fig.show='hold', fig.width = 12, fig.height = 9, message=F, warning=F}
+knitr::include_graphics(here::here("images", "flexdashboard_sidebar_view.png"))
+```
+
+
+
+
+### Orientación {.unnumbered} 
+
+Añade el parámetro `orientation: ` yaml para indicar cómo deben interpretarse los encabezados de segundo nivel (##) de R Markdown - como `orientation: columns` o `orientation: rows`.
+
+Los encabezados de segundo nivel (##) se interpretarán como nuevas columnas o filas en función de este ajuste de orientación.
+
+Si estableces `orientation: columns`, las cabeceras de segundo nivel crearán nuevas columnas en el dashboard. El siguiente dashboard tiene una página, que contiene dos columnas, con un total de tres paneles. Puedes ajustar el ancho relativo de las columnas con `{data-width=}` como se muestra a continuación.  
+
+```{r, out.width = c('100%'), out.height = c('100%'), echo=F}
+knitr::include_graphics(here::here("images", "flexdashboard_columns_script.png"))
+```
+
+Esto es lo que produce el script:
+
+```{r, out.width=c('100%', '100%'), echo=F, fig.show='hold', fig.width = 12, fig.height = 9, message=F, warning=F}
+knitr::include_graphics(here::here("images", "flexdashboard_columns_view.png"))
+```
+
+Si estableces `orientation: rows`, los encabezados de segundo nivel crearán nuevas filas en lugar de columnas. A continuación se muestra el mismo script que el anterior, pero con `orientation: rows` para que los encabezados de segundo nivel produzcan filas en lugar de columnas. Puedes ajustar la *altura* relativa de las filas con `{data-height=}` como se muestra a continuación. 
+
+```{r, out.width = c('100%'), out.height = c('100%'), echo=F}
+knitr::include_graphics(here::here("images", "flexdashboard_rows_script.png"))
+```
+
+Esto es lo que produce el script:
+
+```{r, out.width=c('100%', '100%'), echo=F, fig.show='hold', fig.width = 12, fig.height = 9, message=F, warning=F}
+knitr::include_graphics(here::here("images", "flexdashboard_rows_view.png"))
+```
+
+Si tu dashboard tiene varias páginas, puedes designar la orientación para cada página específica añadiendo el atributo `{data-orientation=}` a la cabecera de cada página (especifica `rows` o `columns` sin comillas).
+
+### Pestañas {.unnumbered}
+
+Puedes dividir el contenido en pestañas con el atributo `{.tabset}`, como en otras salidas HTML R Markdown.
+
+Simplemente añade este atributo después del título deseado. Los subtítulos bajo ese encabezado se mostrarán como pestañas. Por ejemplo, en el script de ejemplo que aparece a continuación, la columna 2 de la derecha (##) se modifica para que la curva epidémica y los paneles de la tabla (###) se muestren en pestañas.
+
+Puedes hacer lo mismo con las filas si su orientación es de filas.
+
+```{r, out.width = c('100%'), out.height = c('100%'), echo=F}
+knitr::include_graphics(here::here("images", "flexdashboard_tabs_script.png"))
+```
+
+Esto es lo que produce el script: 
+
+```{r, out.width=c('100%', '100%'), echo=F, fig.show='hold', fig.width = 12, fig.height = 9, message=F, warning=F}
+knitr::include_graphics(here::here("images", "flexdashboard_tabs_view.png"))
+```
+
+
+## Añadir contenido {#adding-content} 
+
+Comencemos a construir un panel de control. Nuestro sencillo panel de control tendrá 1 página, 2 columnas y 4 paneles. Construiremos los paneles pieza por pieza para la demostración.
+
+Puedes incluir fácilmente salidas estándar de R, como texto, ggplots y tablas (véase la página [Tablas para presentaciones](#tables-for-presentation)). Simplemente codifícalos dentro de un fragmento de código R como lo harías con cualquier otro script de R Markdown.
+
+Nota: puedes descargar el script Rmd terminado y el resultado del Dashboard en HTML - ver la página [descargando el manual y los datos](#download-handbook-and-data). 
+
+
+### Texto {.unnumbered}  
+
+Puedes escribir el texto de Markdown e incluir el código *en línea* como para cualquier otra salida de R Markdown. Consulta la página [Informes con R Markdown](#reports-with-r-markdown) para obtener más detalles.
+
+En este dashboard incluimos un panel de texto resumido que incluye un texto dinámico que muestra la última fecha de hospitalización y el número de casos notificados en el brote.
+
+### Tablas {.unnumbered} 
+
+Puedes incluir trozos de código R que impriman salidas como tablas. Pero la salida se verá mejor y responderá al tamaño de la ventana si utilizas la función `kable()` de **knitr** para mostrar las tablas. Las funciones de **flextable** pueden producir tablas acortadas / cortadas.
+
+Por ejemplo, a continuación alimentamos `linelist()` a través de un comando `count()` para producir una tabla resumen de casos por hospital. Finalmente, la tabla se enlaza a `knitr::kable()` y el resultado tiene una barra de desplazamiento a la derecha. Puedes leer más sobre la personalización de la tabla con `kable()` y **kableExtra** [aquí](https://cran.r-project.org/web/packages/kableExtra/vignettes/awesome_table_in_html.html).
+
+```{r, out.width = c('100%'), out.height = c('100%'), echo=F}
+knitr::include_graphics(here::here("images", "flexdashboard_tables_script.png"))
+```
+
+Esto es lo que produce el script:
+
+```{r, out.width=c('100%', '100%'), echo=F, fig.show='hold', fig.width = 12, fig.height = 9, message=F, warning=F}
+knitr::include_graphics(here::here("images", "flexdashboard_tables_view.png"))
+```
+
+
+Si deseas mostrar una tabla dinámica que permita al usuario filtrar, ordenar y/o clicar a través de las "páginas" del dataframe, utiliza el paquete **DT** y su función `datatable()`, como en el código siguiente.
+
+En el código de ejemplo que sigue, se imprime `linelist` del dataframe. Se puede establecer `rownames = FALSE` para conservar el espacio horizontal, y `filter = "top"` para tener filtros en la parte superior de cada columna. Se puede proporcionar una lista de otras especificaciones a `options = `. A continuación, establecemos `pageLength = ` para que aparezcan 5 filas y `scrollX = ` para que el usuario pueda utilizar una barra de desplazamiento en la parte inferior para desplazarse horizontalmente. El argumento `class = 'white-space: nowrap'` asegura que cada fila sea sólo una línea (no varias líneas). Puedes consultar otros argumentos y valores posibles [aquí](https://rstudio.github.io/DT/?_ga=2.2810736.1321860763.1619286819-369061888.1601594705) o introduciendo `?datatable`
+
+```{r, eval=F}
+DT::datatable(linelist, 
+              rownames = FALSE, 
+              options = list(pageLength = 5, scrollX = TRUE), 
+              class = 'white-space: nowrap' )
+```
+
+### Gráficos {.unnumbered}  
+
+Puedes imprimir gráficos en un panel de control como lo harías en un script de R. En nuestro ejemplo, utilizamos el paquete **incidence2** para crear una "epicurva" por grupo de edad con dos simples comandos (véase la página de [curvas epidémicas](#epidemic-curves)). Sin embargo, podrías utilizar `ggplot()` e imprimir un gráfico de la misma manera.
+
+```{r, out.width = c('100%'), out.height = c('100%'), echo=F}
+knitr::include_graphics(here::here("images", "flexdashboard_plots_script.png"))
+```
+
+Esto es lo que produce el script:
+
+```{r, out.width=c('100%', '100%'), echo=F, fig.show='hold', fig.width = 12, fig.height = 9, message=F, warning=F}
+knitr::include_graphics(here::here("images", "flexdashboard_plots_view.png"))
+```
+
+
+### Gráficos interactivos {.unnumbered} 
+
+También puedes pasar un ggplot estándar u otro objeto de gráfico a `ggplotly()` del paquete **plotly** (véase la página de [gráficos interactivos](#plot-with-ggplotly)). Esto hará que el gráfico sea interactivo, permitirá al lector hacer un "zoom", y mostrará sobre el dashboard el valor de cada punto de datos (en este escenario el número de casos por semana y el grupo de edad en la curva).
+
+```{r, eval=F}
+age_outbreak <- incidence(linelist, date_onset, "week", groups = age_cat)
+plot(age_outbreak, fill = age_cat, col_pal = muted, title = "") %>% 
+  plotly::ggplotly()
+```
+
+Esto es lo que parece en el dashboard (gif). Esta funcionalidad interactiva seguirá funcionando incluso si envías por correo electrónico el Dashboard como un archivo estático (no en línea en un servidor).
+
+```{r, out.width = c('100%'), out.height = c('100%'), echo=F}
+knitr::include_graphics(here::here("images", "flexdashboard_ggplotly.gif"))
+```
+
+### Widgets HTML {.unnumbered}
+
+Los [widgets HTML para R](http://www.htmlwidgets.org/) son un tipo especial de paquetes R que aumentan la interactividad utilizando bibliotecas JavaScript. Se pueden incrustar en salidas R Markdown (como un flexdashboard) y en dashboards de Shiny.
+
+Algunos ejemplos comunes de estos widgets son:
+
+* Plotly (utilizado en la página de este manual y en la página de [Plots interativos](#interactive-plots))
+* visNetwork (utilizado en la página de [cadenas de transmisión](#transmission-chains) de este manual)
+* Leaflet (utilizado en la página [conceptos básicos de los SIG](#gis-basics) de este manual)
+* dygraphs (útil para mostrar interactivamente los datos de las series temporales)
+* DT (`datatable()`) (utilizado para mostrar tablas dinámicas con filtro, ordenación, etc.)
+
+A continuación mostramos la adición de una cadena de transmisión de epidemias que utiliza visNetwork al dashboard. El guión muestra sólo el nuevo código añadido a la sección "Columna 2" del script R Markdown. Puedes encontrar el código en la página de cadenas de transmisión de este manual. 
+
+```{r, out.width = c('100%'), out.height = c('100%'), echo=F}
+knitr::include_graphics(here::here("images", "flexdashboard_chain_script.png"))
+```
+
+Esto es lo que produce el script: 
+
+```{r, out.width=c('100%', '100%'), echo=F, fig.show='hold', fig.width = 12, fig.height = 9, message=F, warning=F}
+knitr::include_graphics(here::here("images", "flexdashboard_chain.gif"))
+```
+
+
+
+## Organización del código  {#code-organization}
+
+Puedes elegir tener todo el código dentro del script de R Markdown **flexdashboard**. Alternativamente, para tener un script de dashboard más limpio y conciso, puedes elegir llamar al código/figuras que están alojadas o creadas en scripts R externos. Esto se describe con mayor detalle en la página [Informes con R Markdown](#reports-with-r-markdown).
+
+
+## Shiny  {#shiny-1}
+
+La integración del paquete R **shiny** puede hacer que tus Dashboards sean aún más reactivos a la entrada del usuario. Por ejemplo, puedes hacer que el usuario selecciona una jurisdicción, o un rango de fechas, y hacer que los paneles reaccionen a su elección (por ejemplo, filtrar los datos mostrados). Para incrustar la reactividad de **shiny** en el **flexdashboard**, sólo tienes que hacer unos pocos cambios en tu script de R Markdown en el **flexdashboard**.
+
+También se puede utilizar **shiny** para producir aplicaciones/dashboards *sin* flexdashboard. La página del manual sobre [Dashboards con Shiny](#dashboards-with-shiny) ofrece una visión general de este enfoque, incluyendo consejos sobre la sintaxis de **Shiny**, la estructura de los archivos de la aplicación y las opciones para compartir/publicar (incluyendo opciones de servidor gratuito). Esta sintaxis y los consejos generales se traducen también en el contexto de **flexdashboard**.
+
+La incrustación de **shiny** en **el flexdashboard supone**, sin embargo, un cambio fundamental en tu flexdashboard. Ya no producirá una salida HTML que puedas enviar por correo electrónico y que cualquiera puede abrir y ver. En su lugar, será una "aplicación". El botón "Knit" en la parte superior del script será reemplazado por un icono "Run document", que abrirá una instancia del dashboard interactivo localmente en tu ordenador.
+
+Para compartir tu panel de control, ahora será necesario que:
+
+* Enviar el script Rmd al espectador, ellos lo abren en R en su ordenador, y ejecutan la aplicación, o
+
+* La aplicación/dashboard se aloja en un servidor accesible para el espectador
+
+Por lo tanto, la integración de **shiny** tiene ventajas, pero también complicaciones. Si la facilidad de compartir por correo electrónico es una prioridad y no necesitas las capacidades reactivas de shiny, considera la reducida interactividad que ofrece ggplotly() como se ha demostrado anteriormente.
+
+A continuación damos un ejemplo muy sencillo utilizando el mismo "outbreak_dashboard.Rmd" que el anterior. Una amplia documentación sobre la integración de Shiny en **flexdashboard** está disponible en línea [aquí](https://rmarkdown.rstudio.com/flexdashboard/shiny.html).
+
+
+
+### Ajustes {.unnumbered}  
+
+Habilitar **shiny** en un **flexdashboard** añadiendo el parámetro `YAML runtime: ` shiny en el mismo nivel de sangría que `output: `, como se indica a continuación:
+
+```md
+---
+title: "Dashboard del brote (demo Shiny)"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+runtime: shiny
+---
+
+```
+
+También es conveniente habilitar una "barra lateral" para albergar los widgets de entrada de Shiny que recogerán la información del usuario. Como se explicó anteriormente, crea una columna e indica la opción `{.sidebar}` para crear una barra lateral en el lado izquierdo. Dentro de esta columna se pueden añadir trozos de texto R que contengan los comandos `input` de **shiny**.
+
+Si tu aplicación/panel está alojado en un servidor y puede tener varios usuarios simultáneos, nombra el primer trozo de código R como `global`. Incluye los comandos para importar/cargar tus datos en este chunk. Este chunk con nombre especial es tratado de manera diferente, y los datos importados dentro de él sólo se importan una vez (no continuamente) y están disponibles para todos los usuarios. Esto mejora la velocidad de arranque de la aplicación.
+
+### Ejemplo trabajado {.unnumbered}  
+
+Aquí adaptamos el script flexdashboard "outbreak_dashboard.Rmd" para incluir **shiny**. Añadiremos la capacidad de que el usuario seleccione un hospital de un menú desplegable, y que la curva epidémica refleje sólo los casos de ese hospital, con un título de gráfico dinámico. Hacemos lo siguiente:
+
+* Añadir `runtime: shiny` al YAML
+* Renombrar el chunk de configuración como `global`
+* Crear una barra lateral que contenga:
+  * Código para crear un vector de nombres únicos de hospitales
+  * Un comando `selectInput()` (menú desplegable **Shiny**) con la elección de los nombres de los hospitales. La selección se guarda como `hospital_choice`, a la que se puede hacer referencia en código posterior como `input$hospital_choice`
+* El código de la curva epidémica (columna 2) está envuelto dentro de `renderPlot({ })`, incluyendo:
+  * Un filtro en los datos que restringe la columna hospital al valor actual de `input$hospital_choice`
+  * Un título de gráfico dinámico que incorpora `input$hospital_choice`
+
+Ten en cuenta que cualquier código que haga referencia a un valor de `input$` debe estar dentro de una función `render({})` (para ser reactiva).
+
+Aquí está la parte superior del script, incluyendo el YAML, el chunk global y la barra lateral:
+
+```{r, out.width = c('100%'), out.height = c('100%'), echo=F}
+knitr::include_graphics(here::here("images", "flexdashboard_shiny_script1.png"))
+```
+  
+Aquí está la Columna 2, con el gráfico de la epicurva reactiva:
+
+```{r, out.width = c('100%'), out.height = c('100%'), echo=F}
+knitr::include_graphics(here::here("images", "flexdashboard_shiny_script2.png"))
+```
+
+Y aquí está el Dashboard:  
+
+```{r, out.width = c('100%'), out.height = c('100%'), echo=F}
+knitr::include_graphics(here::here("images", "flexdashboard_shiny_view.gif"))
+```
+
+
+
+
+### Otros ejemplos {.unnumbered} 
+
+Para leer un ejemplo relacionado con la salud de un Shiny-flexdashboard que utiliza la interactividad de **Shiny** y el widget de mapeo **leaflet**, consulta este capítulo del libro en línea [Geospatial Health Data: Modeling and Visualization with R-INLA and Shiny](https://www.paulamoraga.com/book-geospatial/sec-dashboardswithshiny.html). 
+
+
+
+
+## Compartir {#sharing}  
+
+Los Dashboards que no contengan elementos Shiny producirán un archivo HTML (.html), que puede enviarse por correo electrónico (si el tamaño lo permite). Esto es útil, ya que puedes enviar el informe del "dashboard" y no tener que configurar un servidor para alojarlo como un sitio web.
+
+Si has incrustado **shiny**, no podrás enviar una salida por correo electrónico, pero puedes enviar el propio script a un usuario de R, o alojar el Dashboard en un servidor como se ha explicado anteriormente. 
+
+
+## Recursos {#resources-35} 
+
+A continuación se pueden encontrar excelentes tutoriales que informaron esta página. Si los revisas, lo más probable es que en una hora puedas tener tu propio Dashboard.
+
+https://bookdown.org/yihui/rmarkdown/dashboards.html
+
+https://rmarkdown.rstudio.com/flexdashboard/
+
+https://pkgs.rstudio.com/flexdashboard/articles/using.html
+
+https://pkgs.rstudio.com/flexdashboard/articles/examples.html

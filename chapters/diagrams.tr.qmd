@@ -1,0 +1,736 @@
+---
+aliases:
+  - /new_pages/diagrams.tr.html
+---
+
+# Diyagramlar ve çizelgeler { }  
+
+
+```{r out.width = c('50%'), fig.show='hold', echo=F}
+knitr::include_graphics(here::here("images", "flow_chart.png"))
+knitr::include_graphics(here::here("images", "sankey_diagram.png"))
+```
+
+
+Bu sayfa, aşağıdaki başlıkları kapsamaktadır:  
+
+* **DiagrammeR* ve DOT dilini kullanan akış şemaları
+* Alluvial/Sankey diyagramları  
+* Etkinlik zaman çizelgeleri
+
+<!-- * DAGs (Directed Acyclic Graphs)   -->
+<!-- * GANTT charts   -->
+
+
+<!-- ======================================================= -->
+## Hazırlık { }
+
+### Paketleri yükleme {.unnumbered}  
+
+Bu kod parçası, analizler için gerekli olan paketlerin yüklenmesini gösterir. Bu el kitabında, gerekirse paketi kuran ve kullanım için yükleyen **pacman** paketinin `p_load()` işlevini vurguluyoruz. Ayrıca, R tabanından `library()` ile kurulu paketleri yükleyebilirsiniz. R paketleri hakkında daha fazla bilgi için R temelleri sayfasına bakabilirsiniz.
+
+```{r}
+pacman::p_load(
+  DiagrammeR,     # akış diyagramları için
+  networkD3,      # Alluvial/Sankey diyagramları için
+  tidyverse)      # veri yönetimi ve görselleştirme
+```
+
+### Verileri içe aktarma {.unnumbered}  
+
+Bu sayfadaki içeriğin çoğu bir veri seti gerektirmez. Ancak, Sankey diyagramı bölümünde, simüle edilmiş bir Ebola salgınından vaka satır listesini kullanacağız. Bu bölümü takip etmek isterseniz, <a href='https://github.com/appliedepi/epirhandbook_eng/raw/master/data/case_linelists/linelist_cleaned.rds' class='download-button'>"temiz satır listesini" indirmek (.rds dosyası olarak) için tıklayabilirsiniz.</a> **rio** paketinden `import()` fonksiyonuyla verileri içe aktarabilirsiniz (.xlsx, .csv, .rds gibi birçok dosya türünü işler - ayrıntılar için [İçe ve Dışa Aktarma] sayfasına bakınız).  
+
+```{r, echo=F}
+# satır listesini R'a aktar
+linelist <- rio::import(here::here("data", "case_linelists", "linelist_cleaned.rds"))
+```
+
+```{r, eval=F}
+# satır listesini içe aktar
+linelist <- import("linelist_cleaned.rds")
+```
+
+Çizgi listesinin ilk 50 satırı aşağıda gösterilmiştir.
+
+```{r, message=FALSE, echo=F}
+# satır listesini tablo olarak göster
+DT::datatable(head(linelist, 50), rownames = FALSE, filter="top", options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+
+<!-- ======================================================= -->
+## Akış diyagramları { }
+
+Grafikler/akış şemaları oluşturmak için R paketi olan **DiagrammeR** kullanılabilir. Akış şemaları ister statik olabilirler veya isterse bir veri kümesindeki değişikliklere göre kısıtlı bir şekilde dinamik olarak ayarlanabilirler.
+
+**Araçlar**  
+
+`grViz()` fonksiyonu bir “Graphviz” diyagramı oluşturmak için kullanılır. Bu fonksiyon, diyagramı oluşturmak için talimatlar içeren bir karakter dizisi girişini kabul eder. Bu dizi içinde, talimatlar [DOT](https://graphviz.org/doc/info/lang.html) adı verilen farklı bir dilde yazılmıştır - temel bilgileri öğrenmek oldukça kolaydır.
+
+**Temel yapı**  
+
+1) `grViz("` talimatlarını açın 
+2) Grafiğin yönlülüğünü ve adını belirtin ve parantezleri açın, örn. `digraph my_flow_chart {`
+3) Grafik ifadesi (düzen, sıralama yönü)
+4) Düğüm ifadeleri (düğüm oluşturma)
+5) Kenar ifadeleri (düğümler arasında bağlantılar verir) 
+6) Talimatları kapatın `}")`  
+
+### Basit örnekler {.unnumbered} 
+
+Aşağıda iki basit örnek verilmiştir
+
+Çok minimal bir örnek:  
+
+```{r out.width='50%'}
+# Minimal bir grafik
+DiagrammeR::grViz("digraph {
+  
+graph[layout = dot, rankdir = LR]
+
+a
+b
+c
+
+a -> b -> c
+}")
+```
+
+Biraz daha uygulamalı halk sağlığı bağlamına sahip bir örnek: 
+
+```{r out.width='50%'}
+grViz("                           # Tüm talimatlar büyük bir karakter dizisi içindedir
+digraph surveillance_diagram {    # digraph', 'yönlü grafik' anlamına gelir, ardından grafik adı
+  
+  # grafik ifadesi
+  #################
+  graph [layout = dot,
+         rankdir = TB,
+         overlap = true,
+         fontsize = 10]
+  
+  # düğümler
+  #######
+  node [shape = circle,           # shape = circle
+       fixedsize = true
+       width = 1.3]               # width of circles
+  
+  Primary                         # names of nodes
+  Secondary
+  Tertiary
+
+  # kenarlar
+  #######
+  Primary   -> Secondary [label = ' case transfer']
+  Secondary -> Tertiary [label = ' case transfer']
+}
+")
+```
+
+### Sözdizimi  {.unnumbered}
+
+**Temel sözdizimi**  
+
+Düğüm adları veya kenar ifadeleri boşluk, noktalı virgül veya yeni satırlarla ayrılabilir.  
+
+**Sıra yönü**  
+
+Grafik ifadesi içindeki `rankdir` argümanı ayarlanarak bir çizim soldan sağa hareket edecek şekilde yeniden yönlendirilebilir. Varsayılan değer TB'dir (yukarıdan aşağıya), ancak LR (soldan sağa), RL (sağdan sola) veya BT (aşağıdan yukarıya) olabilir.
+
+**Düğüm adları**  
+
+Düğüm adları, yukarıdaki basit örnekte olduğu gibi tek kelime olabilir. Çok kelimeli adları veya özel karakterleri (örneğin parantezler, tireler) kullanmak için düğüm adını tek tırnak  (’ ’) içine koyun. Kısa bir düğüm adına sahip olmak ve aşağıda köşeli parantez  [ ] içinde gösterildiği gibi bir *etiket* atamak daha kolay olabilir. Düğümün adında yeni bir satır olmasını istiyorsanız, bunu bir etiket aracılığıyla yapmalısınız - aşağıda gösterildiği gibi düğüm etiketinde tek tırnak içinde `\n` kullanmalısınız.
+
+**Alt gruplar**  
+Kenar ifadeleri içinde, küme parantezleri ({ }) ile kenarın her iki tarafında alt gruplar oluşturulabilir. Kenar daha sonra parantez içindeki tüm düğümlere uygulanır - bu bir kısa gösterimdir.
+
+
+**Düzenler**  
+
+* dot (`rankdir` argümanını TB, LR, RL, BT seçeneklerinden biri olarak belirleyin)
+* neato  
+* twopi  
+* circo  
+
+
+**Düğümler - düzenlenebilir nitelikler**  
+
+* `label` (metin, çok kelimeli ise tek tırnak içinde)  
+* `fillcolor` (birçok olası renk)  
+* `fontcolor`  
+* `alpha` (şeffaflık 0-1)  
+* `shape` (elips, oval, elmas, yumurta, düz metin, nokta, kare, üçgen)  
+* `style`  
+* `sides`  
+* `peripheries`  
+* `fixedsize` (h x w)  
+* `height`  
+* `width`  
+* `distortion`  
+* `penwidth` (şekil kenarlığının genişliği)  
+* `x` (sola/sağa yer değiştirme)  
+* `y` (yukarı/aşağı yer değiştirme)  
+* `fontname`  
+* `fontsize`  
+* `icon`  
+
+
+**Kenarlar - düzenlenebilir nitelikler**  
+
+* `arrowsize`  
+* `arrowhead` (normal, kutu, karga, eğri, elmas, nokta, inv, yok, tee, vee)  
+* `arrowtail`  
+* `dir` (yön, )  
+* `style` (kesik çizgili, ...)  
+* `color`  
+* `alpha`  
+* `headport` (ok başının önündeki metin)  
+* `tailport` (ok kuyruğunun arkasındaki metin)  
+* `fontname`  
+* `fontsize`  
+* `fontcolor`  
+* `penwidth` (ok genişliği)  
+* `minlen` (minimum uzunluk)
+
+**Renk adları**: onaltılık değerler veya 'X11' renk adları, X11 ayrıntıları için [buraya bakabilirsiniz.](http://rich-iannone.github.io/DiagrammeR/graphviz_and_mermaid.html) 
+
+
+### Karmaşık örnekler  {.unnumbered}
+
+Aşağıdaki örnek, gsurveillance_diagram genişleterek karmaşık düğüm adları, gruplandırılmış kenarlar, renkler ve stil ekler
+
+
+```
+DiagrammeR::grViz("               # Tüm talimatlar büyük bir karakter dizisi
+digraph surveillance_diagram {    # digraph', 'yönlü grafik' anlamına gelir, ardından grafik adı
+  
+  # grafik ifadesi
+  #################
+  graph [layout = dot,
+         rankdir = TB,            # yukarıdan aşağıya düzen
+         fontsize = 10]
+  
+
+  # düğümler (daireler)
+  #################
+  node [shape = circle,           # shape = daire
+       fixedsize = true
+       width = 1.3]                      
+  
+  Primary   [label = 'Primary\nFacility'] 
+  Secondary [label = 'Secondary\nFacility'] 
+  Tertiary  [label = 'Tertiary\nFacility'] 
+  SC        [label = 'Surveillance\nCoordination',
+             fontcolor = darkgreen] 
+  
+  # kenarlar
+  #######
+  Primary   -> Secondary [label = ' case transfer',
+                          fontcolor = red,
+                          color = red]
+  Secondary -> Tertiary [label = ' case transfer',
+                          fontcolor = red,
+                          color = red]
+  
+  # gruplanmış kenar
+  {Primary Secondary Tertiary} -> SC [label = 'case reporting',
+                                      fontcolor = darkgreen,
+                                      color = darkgreen,
+                                      style = dashed]
+}
+")
+```
+
+
+```{r out.width='50%', echo=F}
+DiagrammeR::grViz("               # Tüm talimatlar büyük bir karakter dizisi
+digraph surveillance_diagram {    # digraph', 'yönlü grafik' anlamına gelir, ardından grafik adı
+  
+  # grafik ifadesi
+  #################
+  graph [layout = dot,
+         rankdir = TB,            # yukarıdan aşağıya düzen
+         fontsize = 10]
+  
+
+  # düğümler (daireler)
+  #################
+  node [shape = circle,           # shape = daire
+       fixedsize = true
+       width = 1.3]                      
+  
+  Primary   [label = 'Primary\nFacility'] 
+  Secondary [label = 'Secondary\nFacility'] 
+  Tertiary  [label = 'Tertiary\nFacility'] 
+  SC        [label = 'Surveillance\nCoordination',
+             fontcolor = darkgreen] 
+  
+  # kenarlar
+  #######
+  Primary   -> Secondary [label = ' case transfer',
+                          fontcolor = red,
+                          color = red]
+  Secondary -> Tertiary [label = ' case transfer',
+                          fontcolor = red,
+                          color = red]
+  
+  # gruplanmış kenar
+  {Primary Secondary Tertiary} -> SC [label = 'case reporting',
+                                      fontcolor = darkgreen,
+                                      color = darkgreen,
+                                      style = dashed]
+}
+")
+```
+
+**Alt grafik kümeleri**  
+
+Düğümleri kutulu kümeler halinde gruplamak için, onları aynı adlandırılmış alt grafik (`subgraph name {}`) içine koyun. Her bir alt grafiğin bir sınırlayıcı kutu içinde tanımlanmasını sağlamak için, aşağıdaki 4 kutu ile gösterildiği gibi alt grafiğin adına "küme" ile başlayın.
+
+```
+DiagrammeR::grViz("             # Tüm talimatlar büyük bir karakter dizisi içindedir
+digraph surveillance_diagram {  # 'digraph', 'yönlü grafik' anlamına gelir, ardından grafik adı
+  
+  # grafik ifadesi
+  #################
+  graph [layout = dot,
+         rankdir = TB,            
+         overlap = true,
+         fontsize = 10]
+  
+
+  # düğümler (daireler)
+  #################
+  node [shape = circle,                  # shape = daire
+       fixedsize = true
+       width = 1.3]                      # dairelerin genişliği
+  
+  subgraph cluster_passive {
+    Primary   [label = 'Primary\nFacility'] 
+    Secondary [label = 'Secondary\nFacility'] 
+    Tertiary  [label = 'Tertiary\nFacility'] 
+    SC        [label = 'Surveillance\nCoordination',
+               fontcolor = darkgreen] 
+  }
+  
+  # düğümler (kutular)
+  ###############
+  node [shape = box,                     # düğüm şekli
+        fontname = Helvetica]            # düğümdeki metin yazı tipi
+  
+  subgraph cluster_active {
+    Active [label = 'Active\nSurveillance'] 
+    HCF_active [label = 'HCF\nActive Search']
+  }
+  
+  subgraph cluster_EBD {
+    EBS [label = 'Event-Based\nSurveillance (EBS)'] 
+    'Social Media'
+    Radio
+  }
+  
+  subgraph cluster_CBS {
+    CBS [label = 'Community-Based\nSurveillance (CBS)']
+    RECOs
+  }
+
+  
+  # kenarlar
+  #######
+  {Primary Secondary Tertiary} -> SC [label = 'case reporting']
+
+  Primary   -> Secondary [label = 'case transfer',
+                          fontcolor = red]
+  Secondary -> Tertiary [label = 'case transfer',
+                          fontcolor = red]
+  
+  HCF_active -> Active
+  
+  {'Social Media' Radio} -> EBS
+  
+  RECOs -> CBS
+}
+")
+
+```
+
+
+```{r out.width='120%', echo=F}
+DiagrammeR::grViz("             # Tüm talimatlar büyük bir karakter dizisi içindedir
+digraph surveillance_diagram {  # 'digraph', 'yönlü grafik' anlamına gelir, ardından grafik adı
+  
+  # grafik ifadesi
+  #################
+  graph [layout = dot,
+         rankdir = TB,            
+         overlap = true,
+         fontsize = 10]
+  
+
+  # düğümler (daireler)
+  #################
+  node [shape = circle,                  # shape = daire
+       fixedsize = true
+       width = 1.3]                      # dairelerin genişliği
+  
+  subgraph cluster_passive {
+    Primary   [label = 'Primary\nFacility'] 
+    Secondary [label = 'Secondary\nFacility'] 
+    Tertiary  [label = 'Tertiary\nFacility'] 
+    SC        [label = 'Surveillance\nCoordination',
+               fontcolor = darkgreen] 
+  }
+  
+  # düğümler (kutular)
+  ###############
+  node [shape = box,                     # düğüm şekli
+        fontname = Helvetica]            # düğümdeki metin yazı tipi
+  
+  subgraph cluster_active {
+    Active [label = 'Active\nSurveillance'] 
+    HCF_active [label = 'HCF\nActive Search']
+  }
+  
+  subgraph cluster_EBD {
+    EBS [label = 'Event-Based\nSurveillance (EBS)'] 
+    'Social Media'
+    Radio
+  }
+  
+  subgraph cluster_CBS {
+    CBS [label = 'Community-Based\nSurveillance (CBS)']
+    RECOs
+  }
+
+  
+  # kenarlar
+  #######
+  {Primary Secondary Tertiary} -> SC [label = 'case reporting']
+
+  Primary   -> Secondary [label = 'case transfer',
+                          fontcolor = red]
+  Secondary -> Tertiary [label = 'case transfer',
+                          fontcolor = red]
+  
+  HCF_active -> Active
+  
+  {'Social Media' Radio} -> EBS
+  
+  RECOs -> CBS
+}
+")
+
+```
+
+
+**Düğüm şekilleri**  
+
+[Linkteki rehberden](http://rich-iannone.github.io/DiagrammeR/) alınan aşağıdaki örnek, uygulanan düğüm şekillerini ve seri kenar bağlantıları için bir kısayol gösterir.
+
+```{r out.width='75%'}
+DiagrammeR::grViz("digraph {
+
+graph [layout = dot, rankdir = LR]
+
+# düğümlerin global stillerini tanımlar. İstersek bunları kutuda geçersiz kılabiliriz
+node [shape = rectangle, style = filled, fillcolor = Linen]
+
+data1 [label = 'Dataset 1', shape = folder, fillcolor = Beige]
+data2 [label = 'Dataset 2', shape = folder, fillcolor = Beige]
+process [label =  'Process \n Data']
+statistical [label = 'Statistical \n Analysis']
+results [label= 'Results']
+
+# düğüm kimlikleri ile kenar tanımları
+{data1 data2}  -> process -> statistical -> results
+}")
+```
+
+
+### Çıktılar  {.unnumbered}
+
+Çıktılar nasıl işlenir ve kaydedilir: 
+
+* Çıktılar, varsayılan olarak Dosyalar, Grafikler, Paketler ve Yardım'ın yanında sağ altta RStudio'nun Görüntüleyici bölmesinde görünecektir.  
+* Dışa aktarmak için Görüntüleyiciden “Görüntü olarak kaydet” veya “Panoya kopyala” yapabilirsiniz. Grafik belirtilen boyuta ayarlanacaktır.
+
+
+### Parametreli şekiller {.unnumbered} 
+
+Size önerebileceğimiz güzel bir rehberden bir alıntı ile başlamak istiyoruz: https://mikeyharper.uk/flowcharts-in-r-using-diagrammer/
+
+"Parametreli şekiller: Rakamları R içinde tasarlamanın büyük bir yararı, R değerlerini doğrudan akış şemalarımıza okuyarak rakamları doğrudan analizimizle bağlayabilmemizdir. Örneğin, bir işlemin her aşamasından sonra değerleri kaldıran bir filtreleme işlemi oluşturduğunuzu varsayalım, işleminizin her aşamasından sonra veri kümesinde kalan değerlerin sayısını gösteren bir şekle sahip olabilirsiniz. Bunu yapmak için, @@X sembolünü doğrudan şeklin içinde kullanabilir, ardından grafiğin alt bilgisinde [X]: kullanarak buna başvurabilirsiniz, burada X benzersiz bir sayısal dizindir."
+
+Parametrelendirme ilgilendiğiniz bir şeyse, bu rehberi incelemenizi öneririz.
+
+
+<!-- And below is some example code from this tutorial. -->
+
+<!-- ```{r, eval=F} -->
+<!-- # Define some sample data -->
+<!-- data <- list(a=1000, b=800, c=600, d=400) -->
+
+
+<!-- DiagrammeR::grViz(" -->
+<!-- digraph graph2 { -->
+
+<!-- graph [layout = dot] -->
+
+<!-- # node definitions with substituted label text -->
+<!-- node [shape = rectangle, width = 4, fillcolor = Biege] -->
+<!-- a [label = '@@1'] -->
+<!-- b [label = '@@2'] -->
+<!-- c [label = '@@3'] -->
+<!-- d [label = '@@4'] -->
+
+<!-- a -> b -> c -> d -->
+
+<!-- } -->
+
+<!-- [1]:  paste0('Raw Data (n = ', data$a, ')') -->
+<!-- [2]: paste0('Remove Errors (n = ', data$b, ')') -->
+<!-- [3]: paste0('Identify Potential Customers (n = ', data$c, ')') -->
+<!-- [4]: paste0('Select Top Priorities (n = ', data$d, ')') -->
+<!-- ") -->
+
+<!-- ``` -->
+
+
+
+<!-- ### CONSORT diagram  {.unnumbered} -->
+
+<!-- THIS SECTION IS UNDER CONSTRUCTION   -->
+
+<!-- https://scriptsandstatistics.wordpress.com/2017/12/22/how-to-draw-a-consort-flow-diagram-using-r-and-graphviz/ -->
+
+<!-- Note above is out of date via DiagrammeR -->
+
+
+<!-- ======================================================= -->
+## Alluvial/Sankey Diyagramları { }
+
+### Paketleri yükleme {.unnumbered}  
+
+Bu kod parçası, analizler için gerekli olan paketlerin yüklenmesini gösterir. Bu el kitabında, gerekirse paketi kuran ve kullanım için yükleyen **pacman** paketinin `p_load()` işlevini vurguluyoruz. Ayrıca, R tabanından `library()` ile kurulu paketleri yükleyebilirsiniz. R paketleri hakkında daha fazla bilgi için R temelleri sayfasına bakabilirsiniz.
+
+Diyagramı oluşturmak için **networkD3** paketini ve ayrıca veri hazırlama adımları için **tidyverse**'i yüklüyoruz.
+
+```{r}
+pacman::p_load(
+  networkD3,
+  tidyverse)
+```
+
+### Veri kümesinden grafik yapma {.unnumbered} 
+
+Bağlantıları bir veri kümesinde çizme. Aşağıda bu paketi vaka satırı listesinde kullanmayı gösteriyoruz. [Çevrimiçi bir eğitime ulaşmak için bu linke tıklayabilirsiniz.](https://www.r-graph-gallery.com/321-introduction-to-interactive-sankey-diagram-2.html).    
+
+Her benzersiz yaş kategorisi ve hastane kombinasyonu için vaka sayılarını alarak başlıyoruz. Anlaşılır olması için yaş kategorisine ait eksik değerleri kaldırdık. Ayrıca `hospital` ve `age_cat` sütunlarını sırasıyla `source` ve `target` olarak yeniden etiketliyoruz. Bunlar alluvial diyagramının iki yüzü olacaktır.
+
+```{r}
+# hastane ve yaş kategorisine göre sayımlar
+links <- linelist %>% 
+  drop_na(age_cat) %>% 
+  select(hospital, age_cat) %>%
+  count(hospital, age_cat) %>% 
+  rename(source = hospital,
+         target = age_cat)
+```
+
+Veri kümesi şimdi şöyle görünmektedir: 
+
+```{r message=FALSE, echo=F}
+DT::datatable(links, rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap')
+```
+
+Şimdi `sütun adı` altında tüm diyagram düğümlerinin bir veri çerçevesini oluşturuyoruz. Bu, `hospital` ve `age_cat`'e ait bütün değerlerden oluşmaktadır. Birleştirmeden önce hepsinin karakter sınıfı olduğundan emin olmalı ve kimlik sütunlarını etiketler yerine sayı olacak şekilde ayarlamalıyız:
+
+```{r}
+# Benzersiz düğüm adları
+nodes <- data.frame(
+  name=c(as.character(links$source), as.character(links$target)) %>% 
+    unique()
+  )
+
+nodes  # yazdır
+```
+
+Yukarıda oluşturduğumuz link veri çerçevesini `count()` ile düzenliyoruz. Düğümler arasındaki bağlantıları gerçekten yansıtacak/oluşturacak iki sayısal sütun `IDsource` ve `IDtarget` ekliyoruz. Bu sütunlar, kaynak ve hedef düğümlerin satır numaralarını (konumunu) tutacaktır. 1 çıkarılır, böylece bu konum numaraları 0'dan başlar (1 değil).
+
+```{r}
+# isimlerle değil sayılarla eşleştirir
+links$IDsource <- match(links$source, nodes$name)-1 
+links$IDtarget <- match(links$target, nodes$name)-1
+```
+
+Bağlantı veri kümesi şimdi şöyle görünür: 
+
+```{r message=FALSE, echo=F}
+DT::datatable(links, rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap')
+```
+
+Şimdi Sankey diyagramını `sankeyNetwork()` ile çizebiliriz. Konsolda `?sankeyNetwork` komutunu çalıştırarak her bir bağımsız değişkeni hakkında daha fazla bilgi edinebilirsiniz. `iterations = 0` olarak ayarlamadığınız sürece düğümlerinizin sırasının beklendiği gibi olmayabileceğini unutmayın.
+
+```{r}
+
+# grafik
+######
+p <- sankeyNetwork(
+  Links = links,
+  Nodes = nodes,
+  Source = "IDsource",
+  Target = "IDtarget",
+  Value = "n",
+  NodeID = "name",
+  units = "TWh",
+  fontSize = 12,
+  nodeWidth = 30,
+  iterations = 0)        # düğüm sırasının verilerdeki gibi olduğundan emin olun
+p
+```
+
+Burada hasta çıktısının da dahil edildiği bir örnek verilmiştir. Veri hazırlama adımında, yaş ile hastane arasındaki ve hastane ile sonuç arasındaki vaka sayılarını ayrı ayrı hesaplamamız gerektiğine ve ardından tüm bu sayıları `bind_rows()` ile birbirine bağlamamız gerektiğine dikkat etmelisiniz.
+
+```{r}
+# hastane ve yaş kategorisine göre sayımlar
+age_hosp_links <- linelist %>% 
+  drop_na(age_cat) %>% 
+  select(hospital, age_cat) %>%
+  count(hospital, age_cat) %>% 
+  rename(source = age_cat,          # yeniden adlandır
+         target = hospital)
+
+hosp_out_links <- linelist %>% 
+    drop_na(age_cat) %>% 
+    select(hospital, outcome) %>% 
+    count(hospital, outcome) %>% 
+    rename(source = hospital,       # yeniden adlandır
+           target = outcome)
+
+# bağlantıları birleştir
+links <- bind_rows(age_hosp_links, hosp_out_links)
+
+# Benzersiz düğüm adları
+nodes <- data.frame(
+  name=c(as.character(links$source), as.character(links$target)) %>% 
+    unique()
+  )
+
+# Kimlik numaraları oluştur
+links$IDsource <- match(links$source, nodes$name)-1 
+links$IDtarget <- match(links$target, nodes$name)-1
+
+# grafik
+######
+p <- sankeyNetwork(Links = links,
+                   Nodes = nodes,
+                   Source = "IDsource",
+                   Target = "IDtarget",
+                   Value = "n",
+                   NodeID = "name",
+                   units = "TWh",
+                   fontSize = 12,
+                   nodeWidth = 30,
+                   iterations = 0)
+p
+
+```
+
+
+https://www.displayr.com/sankey-diagrams-r/
+
+
+
+<!-- ======================================================= -->
+## Etkinlik zaman çizelgeleri { }
+
+Belirli olayları gösteren bir zaman çizelgesi oluşturmak için `vistime` paketini kullanabilirsiniz.
+
+[Linkteki bu gösterimi inceleyebilirsiniz](https://cran.r-project.org/web/packages/vistime/vignettes/vistime-vignette.html#ex.-2-project-planning)
+
+```{r}
+# paketi yükle
+pacman::p_load(vistime,  # zaman çizelgesini hazırla
+               plotly    # etkileşimli görselleştirme için
+               )
+```
+
+```{r, echo=F}
+# referans: https://cran.r-project.org/web/packages/vistime/vignettes/vistime-vignette.html#ex.-2-project-planning
+
+data <- read.csv(text="event, group, start, end, color
+                       Event 1, Group A,2020-01-22,2020-01-22, #90caf9
+                       Event 1, Group B,2020-01-23,2020-01-23, #90caf9
+                       Event 1, Group C,2020-01-23,2020-01-23, #1565c0
+                       Event 1, Group D,2020-01-25,2020-01-25, #f44336
+                       Event 1, Group E,2020-01-25,2020-01-25, #90caf9
+                       Event 1, Group F,2020-01-26,2020-01-26, #8d6e63
+                       Event 1, Group G,2020-01-27,2020-01-27, #1565c0
+                       Event 1, Group H,2020-01-27,2020-01-27, #90caf9
+                       Event 1, Group I,2020-01-27,2020-01-27,#90a4ae
+                       Event 2, Group A,2020-01-28,2020-01-28,#fc8d62
+                       Event 2, Group C,2020-01-28,2020-01-28, #6a3d9a
+                       Event 2, Group J,2020-01-28,2020-01-28, #90caf9
+                       Event 2, Group J,2020-01-28,2020-01-28, #fc8d62
+                       Event 2, Group J,2020-01-28,2020-01-28, #1565c0
+")
+```
+
+İşte kodladığımız olaylar veri seti:
+
+```{r message=FALSE, echo=F}
+DT::datatable(data, rownames = FALSE, filter="top", options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap')
+```
+
+
+
+```{r}
+p <- vistime(data)    # vistime'ı uygula
+
+library(plotly)
+
+# 1. adım: bir listeye dönüştür
+pp <- plotly_build(p)
+
+# 2. adım: İşaretleyici boyutu
+for(i in 1:length(pp$x$data)){
+  if(pp$x$data[[i]]$mode == "markers") pp$x$data[[i]]$marker$size <- 10
+}
+
+# 3. adım: metin boyutu
+for(i in 1:length(pp$x$data)){
+  if(pp$x$data[[i]]$mode == "text") pp$x$data[[i]]$textfont$size <- 10
+}
+
+
+# 4. adım: metin konumu
+for(i in 1:length(pp$x$data)){
+  if(pp$x$data[[i]]$mode == "text") pp$x$data[[i]]$textposition <- "right"
+}
+
+#yazdır
+pp
+
+```
+
+
+<!-- ======================================================= -->
+## DAG'ler { }
+
+Yukarıda açıklandığı gibi **DiagammeR** paketini ve DOT dilini kullanarak manuel olarak bir DAG oluşturabilirsiniz.
+
+Alternatif olarak, **ggdag** ve **dagitty** gibi paketler de var.
+
+[DAG'lere giriş ggdag gösterimi](https://cran.r-project.org/web/packages/ggdag/vignettes/intro-to-dags.html)   
+
+[R'deki dag’lere nedensellik](https://www.r-bloggers.com/2019/08/causal-inference-with-dags-in-r/#:~:text=In%20a%20DAG%20all%20the,for%20drawing%20and%20analyzing%20DAGs.)  
+
+
+<!-- ======================================================= -->
+## Kaynaklar { }
+
+[DOT diliyle ilgili yukarıdakilerin çoğu bu sitedeki öğreticiden uyarlanmıştır.](https://mikeyharper.uk/flowcharts-in-r-using-diagrammer/)  
+
+[DiagammeR hakkında daha ayrıntılı bir eğitim daha ](http://rich-iannone.github.io/DiagrammeR/)
+
+[Sankey diagramları hakkında bu sayfa](https://www.displayr.com/sankey-diagrams-r/)  

@@ -1,0 +1,273 @@
+---
+aliases:
+  - /new_pages/directories.jp.html
+---
+
+# ディレクトリの操作 {#directories}  
+
+この章では、ディレクトリ(フォルダー)の作成、操作、保存、インポートに関する一般的なシナリオを説明します。
+
+
+## 準備
+
+### **fs** パッケージ {.unnumbered}  
+
+**fs** パッケージは、R の **base** パッケージ（以下 base R）関数のいくつかを改良し、ディレクトリの操作を簡単にし **tidyverse** パッケージの一部です。以下のセクションでは、しばしば **fs** パッケージからの関数を使用します。
+
+```{r}
+pacman::p_load(
+  fs,             # ファイル、ディレクトリの操作
+  rio,            # インポート・エクスポート
+  here,           # 相対ファイルパス
+  tidyverse)      # データの管理と可視化
+```
+
+
+### ディレクトリをデンドログラムツリーで表示する {.unnumbered}  
+
+**fs** パッケージの `dir_tree()` 関数を使用します。  
+
+`path =` にフォルダのファイルパスを指定し、1つの階層のみを表示するか(`recurse = FALSE` オプション)、全てのサブディレクトリの全てのファイルを表示するか(`recurse = TRUE` オプション)を指定します。 以下では、`here()` を R プロジェクトの略称として使用し、そのサブフォルダの "data" を指定しています。"data" には、この R ハンドブックで使用するすべてのデータが格納されています。 "data" とそのサブフォルダ内のすべてのファイルを表示するように設定します。("cache", "epidemic models", "population", "shp", "weather" など).
+
+
+```{r}
+fs::dir_tree(path = here("data"), recurse = TRUE)
+```
+
+
+## ディレクトリ内のファイルを一覧表示する  
+
+ディレクトリ内のファイル名だけをリストアップするには、**base** R の `dir()` を使用します。 例えば、下記のコマンドは R プロジェクトの "data" フォルダの "population" サブフォルダ内のファイル名をリストアップしています。相対的なファイルパスは `here()` を使ってえられます (詳しくは [データのインポート・エクスポート](#importing) 章を参照してください)。
+
+```{r}
+# ファイル名
+dir(here("data", "gis", "population"))
+```
+
+ディレクトリのファイルのフルパスをリストアップするには、**fs** パッケージの `dir_ls()` を使用できます。 **base** R を使う場合は `list.files()` です。
+
+```{r}
+# ファイルパス
+dir_ls(here("data", "gis", "population"))
+```
+
+ディレクトリ内の各ファイルに関するすべてのメタデータ情報(パス、更新日など)を得るには、 **fs** パッケージの `dir_info()` を使用します。
+
+これは、ファイルの最終更新時刻を抽出したい場合、例えば、最新バージョンのファイルをインポートしたい場合などに特に有効です。この例については、[データのインポート・エクスポート](#importing) の章を参照してください。
+
+```{r, eval=F}
+# ファイル情報
+dir_info(here("data", "gis", "population"))
+```
+
+以下は、関数から返されたデータフレームです。すべての列を見るには右にスクロールしてください。
+
+```{r, echo=F}
+DT::datatable(dir_info(here("data", "gis", "population")), rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+## ファイルの情報  
+
+特定のファイルに関するメタデータ情報を抽出するには，**fs** パッケージの `file_info()` (または **base** R の `file.info()`) を使用します。
+
+```{r, eval=F}
+file_info(here("data", "case_linelists", "linelist_cleaned.rds"))
+```
+
+```{r, echo=F}
+DT::datatable(file_info(here("data", "case_linelists", "linelist_cleaned.rds")), rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+ここでは、`$` を使って結果のインデックスを指定し、`modification_time` の値のみを返すようにしています。
+
+```{r}
+file_info(here("data", "case_linelists", "linelist_cleaned.rds"))$modification_time
+```
+
+
+
+
+## 存在するか確認する  
+
+### R オブジェクト {.unnumbered}  
+
+R オブジェクトが R <u>の中に</u>存在するかどうかを調べるには、**base** R の `exists()` を使用します(オブジェクト名を引用符で囲み渡してください)。
+
+```{r}
+exists("linelist")
+```
+
+**base** R パッケージの中には、"data" のような一般的なオブジェクト名を裏で使用しているものがあり、そういったオブジェクトは `inherit = FALSE` が指定されない限り、TRUE として表示されることに注意してください。これが、データセットに "data" という名前をつけない理由の 1 つです。
+
+```{r}
+exists("data")
+exists("data", inherit = FALSE)
+```
+
+関数を書く場合、引数として渡した値が存在するかどうかを調べるには `exists()` ではなく、 **base** R の `missing()` を使うべきです。
+
+
+
+### ディレクトリ {.unnumbered}  
+
+ディレクトリが存在するかどうかを調べるには，**fs** パッケージの `is_dir()` にファイルパス(とファイル名)を与えてください．右にスクロールすると `TRUE` が表示されていることがわかります。
+
+```{r}
+is_dir(here("data"))
+```
+
+代替としては、**base** R の `file.exists()` があります。
+
+
+### ファイル {.unnumbered}  
+
+特定のファイルが存在するかどうかを調べるには、**fs** パッケージの `is_file()` を使用します。下記の関数の結果を右にスクロールすると `TRUE` が表示されることがわかります。
+
+```{r}
+is_file(here("data", "case_linelists", "linelist_cleaned.rds"))
+```
+
+**base** R での代替は `file.exists()` です。
+
+
+
+## 作成
+
+### ディレクトリ {.unnumbered}  
+
+新しいディレクトリ(フォルダ)を作成するには、**fs** パッケージの `dir_create()` を使用します。すでにディレクトリが存在する場合は、上書きされず、エラーも返されません。
+
+```{r, eval=F}
+dir_create(here("data", "test"))
+```
+
+代替として、**base** R の `dir.create()` があります。これはディレクトリがすでに存在する場合はエラーを表示します。一方、`dir_create()` はエラーを返しません。
+
+### ファイル {.unnumbered}  
+
+空のファイルは **fs** パッケージの `file_create()` で作成できます。ファイルがすでに存在する場合は、上書きされたり変更されたりすることはありません。
+
+```{r, eval=F}
+file_create(here("data", "test.rds"))
+```
+
+**base** R での代替手段は `file.create()` です。しかし、ファイルがすでに存在する場合、この代替手段はファイルを削除します。`file_create()` を使用すれば、ファイルは変更されずに残ります。
+
+
+### 存在しない場合にのみ作成する {.unnumbered}  
+
+作成中
+
+
+## 削除
+
+### R オブジェクト {.unnumbered}  
+
+R オブジェクトを削除するには、**base** R の `rm()` を使用します。
+
+### ディレクトリ {.unnumbered}  
+
+**fs** パッケージの `dir_delete()` を使用します。
+
+
+### ファイル {.unnumbered}  
+
+**fs** パッケージの `file_delete()` でファイルを削除できます。
+
+
+
+## 他のファイルを実行する
+
+### `source()` {.unnumbered}  
+
+ある R スクリプトを別の R スクリプト中から実行する場合、**base** R の `source()` コマンドを使用できます。
+
+```{r, eval=F}
+source(here("scripts", "cleaning_scripts", "clean_testing_data.R"))
+```
+
+以下は、上記の R スクリプトを表示し、スクリプトの右上にある "Source" ボタンをクリックすることと同じです。これはスクリプトを実行しますが、特に意図しない限り出力なく実行されます(R コンソールへの出力はありません)。[Interactive console] の章で、`source()` を使って R コンソールでユーザーと対話する例を参照してください。
+
+```{r, fig.align = "center", out.height = '300%', echo=F}
+knitr::include_graphics(here::here("images", "source_button.png"))
+```
+
+
+### `render()` {.unnumbered}  
+
+`render()` は `source()` のバリエーションで、R markdown のスクリプトで最もよく使用されます。R markdown ファイルを `input = ` に指定し、`output_format = ` (典型的には "html_document"、"pdf_document"、"word_document"、"" のいずれか) を指定します。
+
+詳しくは [R Markdown で作るレポート](#rmarkdown) をご覧ください。また `render()` のドキュメントを[こちらから](https://rmarkdown.rstudio.com/docs/reference/render.html)、もしくは `?render` と入力して参照してください。
+
+
+
+### ディレクトリ内のファイルを実行する {.unnumbered}
+
+<u>for ループ</u> を作成し、それを使って `dir()` で識別されるディレクトリ内のすべてのファイルを `source()` できます。
+
+```{r, eval=F}
+for(script in dir(here("scripts"), pattern = ".R$")) {   # R プロジェクトの "scripts" フォルダにある各スクリプト名(拡張子 .R)に対して
+  source(here("scripts", script))                        # scripts フォルダに存在する、同じ名前のファイルをソースとする
+}
+```
+
+特定のスクリプトだけを実行したい場合は、次のように名前で識別できます。
+
+```{r, eval=F}
+
+scripts_to_run <- c(
+     "epicurves.R",
+     "demographic_tables.R",
+     "survival_curves.R"
+)
+
+for(script in scripts_to_run) {
+  source(here("scripts", script))
+}
+
+```
+
+
+
+こちらは **fs** パッケージの関数と **base** R 関数の[比較](https://cran.r-project.org/web/packages/fs/vignettes/function-comparisons.html)です。
+
+### ディレクトリ内のファイルをインポートする {.unnumbered}
+
+個別のファイルのインポートとエクスポートについては、[データのインポート・エクスポート](#importing) の章をご覧ください。
+
+また、ファイル名に含まれる日付をもとに、<u>または</u>ファイルのメタデータを見て、自動的に最新のファイルをインポートする方法についても [データのインポート・エクスポート](#importing) の章を参照してください。
+
+**purrr** パッケージによるデモの例については、[ループと反復処理・リストの操作](#iteration) の章を参照してください:
+
+* データフレームを分割し、複数の CSV ファイルとして保存する
+* データフレームを分割し、1つの Excel ワークブック内で各パーツを別のシートとして保存する
+* 複数の CSV ファイルを取り込み、1 つのデータフレームにまとめる
+* 複数のシートを持つ Excel ワークブックをインポートして、1 つのデータフレームにまとめる
+
+
+
+
+## **base** R  
+
+以下の `list.files()` と `dir()` 関数をご覧ください。これらは指定したディレクトリ内のファイルをリストアップするという同じ操作を行います。 `ignore.case =` や検索する特定のパターンを指定できます。
+
+```{r, eval=F}
+list.files(path = here("data"))
+
+list.files(path = here("data"), pattern = ".csv")
+# dir(path = here("data"), pattern = ".csv")
+
+list.files(path = here("data"), pattern = "evd", ignore.case = TRUE)
+
+```
+
+現在「開いている」ファイルは、「~$hospital_linelists.xlsx」のように、先頭にチルダを付けてフォルダ内に表示されます。
+
+
+<!-- ======================================================= -->
+## 参考資料 {  }
+
+https://cran.r-project.org/web/packages/fs/vignettes/function-comparisons.html
+
+
+

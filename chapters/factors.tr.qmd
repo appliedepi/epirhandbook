@@ -1,0 +1,522 @@
+---
+aliases:
+  - /new_pages/factors.tr.html
+---
+
+# Faktörler {}
+
+
+```{r, out.width=c('100%'), echo=F, message=F}
+knitr::include_graphics(here::here("images", "Factors_1500x500.png"))
+```
+
+R'da *faktörler*, sabit, kabul edilebilir değerler kümesiyle sıralı kategorilere izin veren bir veri sınıfıdır.
+
+Tipik olarak, değerleri ("*levels*"), grafik ve tablolarda alfabetik olmayan bir şekilde görüntülenebilmeleri için özel bir sıralamaya tabi tutmak isterseniz bir sütunu karakter veya sayısal sınıftan bir faktöre dönüştürmeniz gerekir. Faktörlerin diğer bir yaygın kullanımı, verilerin geçici olarak yok olması nedeniyle oluşabilecek dalgalanmamaları engellemek için grafik açıklamalarını standart hale getirmektir.
+
+Bu sayfa, **forcats** ("**for** ve **kat**egorik değişkenler" için kısa bir ad) paketi ve bazı R tabanındaki fonkisyonların kullanımını göstermektedir. Epidemiyolojik haftalarla ilgili özel faktör vakaları için **lubridat** ve **aweek** kullanımına da değiniyoruz.
+
+**forcats** fonksiyonlarının tam listesi çevrimiçi olarak [burada](https://forcats.tidyverse.org/reference/index.html) bulunabilir. Aşağıda en yaygın olanlardan bazılarını gösteriyoruz.
+
+
+<!-- ======================================================= -->
+## Hazırlık  
+
+### Paketlerin yüklenmesi {.unnumbered}  
+
+Aşağıdaki kod parçası, analizler için gereken paketlerin yüklenmesini göstermektedir. Bu el kitabında, gerekirse paketi kuran *ve* kullanım için yükleyen **pacman**'dan `p_load()` vurgulamaktayız. R tabanından `library()` ile kurulu paketleri de yükleyebilirsiniz. R paketleri hakkında daha fazla bilgi için [R temelleri](basics.tr.qmd) sayfasına bakın.
+
+```{r}
+pacman::p_load(
+  rio,           # içe/dışa aktar
+  here,          # dosya yolu
+  lubridate,     # tarihlerle çalışma
+  forcats,       # faktörler
+  aweek,         # otomatik faktör seviyeleri ile epiweeks oluştur
+  janitor,       # tablolar
+  tidyverse      # data yönetim ve görselleştirmesi
+  )
+```
+
+
+
+### Veriyi içe aktarma {.unnumbered}  
+
+Simüle edilmiş bir Ebola salgınına ait vakaların veri setini içe aktarıyoruz. Takip etmek isterseniz, <a href='https://github.com/appliedepi/epirhandbook_eng/raw/master/data/case_linelists/linelist_cleaned.rds' class='download-button'>"temiz satır listesi" dosyasını indirmek için tıklayın.</a> (.rds dosyası olarak). Verilerinizi **rio** paketinden `import()` işleviyle içe aktarın (.xlsx, .rds, .csv gibi birçok dosya türünü kabul eder - ayrıntılar için [İçe ve dışa aktarma](importing.tr.qmd) sayfasına bakın).
+
+```{r, echo=F}
+# satır listesini R'a aktar
+linelist <- rio::import(here::here("data", "case_linelists", "linelist_cleaned.rds"))
+```
+
+
+```{r, eval=F}
+# veri setini indir
+linelist <- import("linelist_cleaned.rds")
+```
+
+
+### Yeni kategorik değişken {#fct_newcat .unnumbered}  
+
+Bu sayfada gösterim için ortak bir senaryo kullanacağız - yeni bir kategorik değişkenin oluşturulması.
+
+Sayısal bir sütunu sınıf faktörüne dönüştürürseniz, bunun üzerinde sayısal istatistikleri hesaplayamayacağınızı unutmayın.
+
+#### Sütun oluşturma {.unnumbered}  
+
+Biz, mevcut `days_onset_hosp` sütununu (semptom başlangıcından hastaneye kabule kadar geçen gün) kullanarak her satırı birkaç kategoriden birine sınıflandırıp yeni bir `delay_cat` sütunu oluşturuyoruz. Bunu, her satıra sırayla mantıksal ölçütleri (sağ taraf) uygulayan ve yeni `delay_cat` sütununa karşılık gelen sol taraf değerini döndüren, **dplyr** paktenin fonksiyonu `case_when()` ile yapıyoruz. [Temizleme verileri ve temel işlevler](cleaning.tr.qmd) bölümünde `case_when()` hakkında daha fazla bilgi edinebilirsiniz.
+
+
+```{r}
+linelist <- linelist %>% 
+  mutate(delay_cat = case_when(
+    # criteria                                   # eğer doğruysa yeni değer
+    days_onset_hosp < 2                        ~ "<2 days",
+    days_onset_hosp >= 2 & days_onset_hosp < 5 ~ "2-5 days",
+    days_onset_hosp >= 5                       ~ ">5 days",
+    is.na(days_onset_hosp)                     ~ NA_character_,
+    TRUE                                       ~ "Check me"))  
+```
+
+
+#### Varsayılan değer sırası {.unnumbered}  
+
+`case_when()` ile oluşturulduğu gibi, yeni `delay_cat` sütunu, karakter sınıfının kategorik bir sütunudur - *henüz bir faktör değildir*. Bu nedenle, bir sıklık tablosunda, benzersiz değerlerin varsayılan bir alfa-numerik düzende sıralandığını görüyoruz - bu, sezgisel olarak pek mantıklı olmayan bir sıradır:
+
+```{r}
+table(linelist$delay_cat, useNA = "always")
+```
+
+Benzer şekilde, bir çubuk grafiği yaparsak, değerler de x ekseninde bu sırayla görünür (R'deki en yaygın görselleştirme paketi olan **ggplot2** hakkında daha fazla bilgi için [ggplot temelleri] sayfasına bakın).
+
+```{r, warning=F, message=F}
+ggplot(data = linelist)+
+  geom_bar(mapping = aes(x = delay_cat))
+```
+
+
+
+## Faktöre dönüştürme  
+
+Bir karakteri veya sayısal sütunu *faktör* sınıfına dönüştürmek için, **forcats** paketindeki herhangi bir fonksiyonu kullanabilirsiniz (birçoğu [aşağıda](#fct_adjust) ayrıntılı olarak verilmiştir). Bu fonksiyonlarla veriler sınıf faktörüne dönüşecek ve daha sonra seviyelerin belirli şekilde sıralanmasını gerçekleşecek veya buna izin verilecek - örneğin `fct_relevel()` kullanmak seviye sırasını manuel olarak belirlemenizi sağlar. `as_factor()` fonksiyonu, başka bir özellik eklemeden sınıfı basitçe dönüştürür.
+
+R tabanı fonksiyonu olan `factor()`, bir sütunu faktöre dönüştürür ve karakter vektöründeki `levels =` argümanına göre seviyelerin sırasını manuel olarak düzenlemenizi sağlar.
+
+Aşağıda, `delay_cat` sütununu sınıf karakterinden sınıf faktörüne dönüştürmek için `mutate()` ve `fct_relevel()` kullanıyoruz. `delay_cat` sütunu, yukarıdaki [Hazırlık](#fct_newcat) bölümünde oluşturulmuştur.
+
+```{r}
+linelist <- linelist %>%
+  mutate(delay_cat = fct_relevel(delay_cat))
+```
+
+*The unique "values" in this column are now considered "levels" of the factor.*  The levels have an *order*, which can be printed with the **base** R function `levels()`, or alternatively viewed in a count table via `table()` from **base** R or `tabyl()` from **janitor**. By default, the order of the levels will be alpha-numeric, as before. Note that `NA` is not a factor level.  
+
+```{r}
+levels(linelist$delay_cat)
+```
+
+`fct_relevel()` fonksiyonu, seviye sırasını manuel olarak belirlemenize izin veren ek bir özelliğe sahiptir. Düzey değerlerini, aşağıda gösterildiği gibi virgülle ayırarak sırayla, tırnak içinde yazmanız yeterlidir. Yazımın değerlerle tam olarak eşleşmesi gerektiğini unutmayın. Verilerde mevcut olmayan düzeyler oluşturmak istiyorsanız, bunun yerine [`fct_expand()` kullanın](#fct_add)).
+
+```{r}
+linelist <- linelist %>%
+  mutate(delay_cat = fct_relevel(delay_cat, "<2 days", "2-5 days", ">5 days"))
+```
+
+Artık seviyelerin bir önceki komutta belirtildiği gibi mantıklı bir sırayla sıralandığını görebiliriz.
+
+```{r}
+levels(linelist$delay_cat)
+```
+
+Şimdi tablodaki sırası da daha sezgisel bir anlam ifade ediyor. 
+
+```{r, warning=F, message=F}
+ggplot(data = linelist)+
+  geom_bar(mapping = aes(x = delay_cat))
+```
+
+
+## Seviye ekleme ve çıkarma  
+
+### Ekleme {#fct_add .unnumbered}
+
+Bir faktöre seviye eklemeniz gerekiyorsa, bunu `fct_expand()` ile yapabilirsiniz. Sütun adını ve ardından yeni seviyeleri (virgülle ayırarak) yazmanız yeterlidir. Değerleri tablolaştırarak yeni seviyeleri ve sıfır sayılarını görebiliriz. R tabanından `table()`ı veya **janitor**'dan `tabyl()` kullanabilirsiniz:
+
+```{r}
+linelist %>% 
+  mutate(delay_cat = fct_expand(delay_cat, "Not admitted to hospital", "Transfer to other jurisdiction")) %>% 
+  tabyl(delay_cat)   # print table
+```
+
+Not: Eksik değerleri (`NA`) seviyelere kolayca eklemek için özel bir **forcats** fonksiyonu mevcuttur. Aşağıdaki [Eksik değerler](#fct_missing) ile ilgili bölüme bakın.
+
+### Çıkarma {.unnumbered}  
+
+`fct_drop()`ı kullanırsanız, sıfır sayımlı "kullanılmayan" seviyeler, seviyeler grubundan çıkarılacaktır. Yukarıda eklediğimiz seviyeler ("Hastaneye kabul edilmedi") bir seviye olarak mevcuttur, ancak hiçbir satır aslında bu değere sahip değildir. Böylece, faktör sütunumuza `fct_drop()` uygulanarak çıkarılır:
+
+```{r}
+linelist %>% 
+  mutate(delay_cat = fct_drop(delay_cat)) %>% 
+  tabyl(delay_cat)
+```
+
+
+
+
+## Seviye sırasını düzenleme {#fct_adjust} 
+
+**forcats** paketi, faktör düzeylerinin sırasını kolayca ayarlamak için kullanışlı fonksiyonlar da sunar (bir sütun sınıf faktörü olarak tanımlandıktan sonra):
+
+Bu fonksiyonlar, iki bağlamda faktör sütununa uygulanabilir: 
+
+1) Her zamanki gibi veri çerçevesindeki sütuna uygulanır, böylece değişen veriler daha sonra da kullanılabilir 
+2) *Bir grafik içine* uygulanabilir, böylece değişiklik sadece grafik içinde kalır 
+
+
+
+### Elle düzenleme {.unnumbered} 
+
+Bu fonksiyon, faktör seviyelerini manuel olarak sıralamak için kullanılır. Faktör olmayan bir sütunda kullanılırsa, sütun önce sınıf faktörüne dönüştürülür.
+
+Parantez içinde önce faktör sütun adını girin, ardından aşağıdakilerden birini sağlayın:  
+
+* Tüm seviyeleri istenen sırada (karakter vektörü `c()` olarak) veya 
+* Bir seviye ve `after =` argümanı kullanılarak düzeltilmiş sıralama  
+
+Burada, (zaten Faktör sınıfı olan) `delay_cat` sütununu yeniden tanımlamaya ve istenen tüm düzey sırasını belirtmeye bir örnek verilmiştir.
+
+```{r}
+# seviye sırasını yeniden düzenle
+linelist <- linelist %>% 
+  mutate(delay_cat = fct_relevel(delay_cat, c("<2 days", "2-5 days", ">5 days")))
+```
+
+Sadece bir seviyeyi taşımak istiyorsanız, bunu tek başına `fct_relevel()` olarak belirtebilir ve `after =` argümanına hangi sırada olması gerektiğini belirtmek için sayı verebilirsiniz. Örneğin, aşağıdaki komut "<2 gün" ifadesini ikinci konuma kaydırır:
+
+```{r, eval=F}
+# seviye sırasını yeniden düzenle
+linelist %>% 
+  mutate(delay_cat = fct_relevel(delay_cat, "<2 days", after = 1)) %>% 
+  tabyl(delay_cat)
+```
+
+
+
+
+### Grafik içinde {.unnumbered}  
+
+**forcats** komutları, veri çerçevesinde veya yalnızca bir grafik içinde seviye sırasını ayarlamak için kullanılabilir. Sütun adını *grafik içinde* `ggplot()`un "sarma" komutunu kullanarak, tersine çevirebilir veya yeniden seviyelendirebilirsiniz. Değişim yalnızca bu grafik için geçerli olacaktır. 
+
+Aşağıda, `ggplot()` ile iki grafik oluşturulmuştur ([ggplot temelleri] sayfasına bakın). İlkinde, `delay_cat` sütunu, "satır listesi" verisinde olduğu gibi varsayılan düzey sırası ile grafiğin x eksenine eşlenir. İkinci örnekte `fct_relevel()` içine sarılmış ve grafikteki sırası değiştirilmiştir.
+
+```{r, echo =F}
+linelist <- linelist %>% 
+  mutate(delay_cat = fct_relevel(delay_cat, c("2-5 days", "<2 days", ">5 days")))
+
+```
+
+
+
+```{r, warning=F, message=F, out.width = c('50%', '50%'), fig.show='hold'}
+# Alfa-numerik varsayılan sıra - ggplot'ta düzenleme yapılmadı
+ggplot(data = linelist)+
+    geom_bar(mapping = aes(x = delay_cat))
+
+# ggplot içinde faktör seviyesi düzenlendi
+ggplot(data = linelist)+
+  geom_bar(mapping = aes(x = fct_relevel(delay_cat, c("<2 days", "2-5 days", ">5 days"))))
+```
+
+Varsayılan x ekseni başlığının oldukça karmaşık olduğuna dikkat edin - bu başlığı **ggplot2** `labs()` argümanı ile değiştirebilirsiniz.  
+
+
+
+
+### Tersine döndürme {.unnumbered}  
+
+Seviye sırasını tersine çevirmek işlemi oldukça yaygındır. Faktörü `fct_rev()` ile sarmanız yeterlidir.
+
+Gerçek faktör seviyelerini değil de *yalnızca* bir grafiğin açıklamasını tersine çevirmek istiyorsanız, bunu `guides()` ile yapabileceğinizi unutmayın (bkz. [ggplot ipuçları]). 
+
+
+
+
+### Sıklığa göre {.unnumbered}  
+
+Değerleri verilerde görünme sıklığına göre sıralamak için `fct_infreq()` kullanın. Eksik değerler (`NA`), açık bir düzeye dönüştürülmediği sürece otomatik olarak sona eklenir (bkz. [bu bölüm](#fct_missing)). `fct_rev()` ile bir daha sarmalayarak sırayı tersine çevirebilirsiniz. 
+
+Bu fonksiyon, aşağıda gösterildiği gibi bir `ggplot()` içinde kullanılabilir.
+
+```{r, out.width = c('50%', '50%', '50%'), fig.show='hold', warning=F, message=F}
+# sıklığa göre sırala
+ggplot(data = linelist, aes(x = fct_infreq(delay_cat)))+
+  geom_bar()+
+  labs(x = "Delay onset to admission (days)",
+       title = "Ordered by frequency")
+
+# sıralamayı tersine çevir
+ggplot(data = linelist, aes(x = fct_rev(fct_infreq(delay_cat))))+
+  geom_bar()+
+  labs(x = "Delay onset to admission (days)",
+       title = "Reverse of order by frequency")
+```
+
+
+### Karşılaşmaya göre {.unnumbered}  
+
+Seviye sırasını, ilk satırdan başlayarak verilerdeki karşılaşma sırasına uyacak şekilde ayarlamak için `fct_inorder()` fonksiyonunu kullanın. Bu komut, veri çerçevesindeki verileri `arrange()` fonksiyonu ile düzenledikten sonra faktör sırasını tekrardan ayarlamak için faydalı olacaktır. 
+
+
+### Başka bir sütunun özet istatistiğine göre {.unnumbered}  
+
+Bir sütunun seviyelerini *başka bir sütunun özet istatistiğine* göre sıralamak için `fct_reorder()`yı kullanabilirsiniz. Görsel olarak, bu, çubukların/noktaların grafik boyunca istikrarlı bir şekilde yükseldiği veya alçaldığı hoş grafiklerle sonuçlanabilir.
+
+Aşağıdaki örneklerde, x ekseni `delay_cat` ve y ekseni `ct_blood` (döngü eşiği) sayısal sütunudur. Kutu grafikleri, `delay_cat` grubuna göre CT değeri dağılımını gösterir. Kutu grafiklerini grup medyan CT değerine göre artan sırada sıralamak istiyoruz.
+
+Aşağıdaki ilk örnekte, varsayılan sıra olarak alfa-numerik sırası kullanılır. Kutu çizim yüksekliklerinin karışık olduğunu ve belirli bir sırada olmadığını görebilirsiniz. İkinci örnekte ise, `delay_cat` sütunu (x eksenine eşlenmiştir) `fct_reorder()` içine sarılmıştır, `ct_blood` sütunu ikinci ve `medyan` üçüncü argüman olarak verilmiştir. (`maks`, `ortalama`, `min` vb. de kullanabilirsiniz). Böylece, `delay_cat` seviyelerinin sırası artan medyan CT değerlerini yansıtacaktır. Bu, ikinci grafikte gösterilmektedir - kutu çizimleri yükselecek şekilde yeniden düzenlenmiştir. Açık bir düzeye dönüştürülmediği sürece, "NA"nın (eksik) sonunda nasıl görüldüğüne dikkat edin.
+
+```{r, fig.show='hold', message=FALSE, warning=FALSE, out.width=c('50%', '50%')}
+# kutu grafiği orjinal faktör seviyelerine göre sıralanmıştır
+ggplot(data = linelist)+
+  geom_boxplot(
+    aes(x = delay_cat,
+        y = ct_blood, 
+        fill = delay_cat))+
+  labs(x = "Delay onset to admission (days)",
+       title = "Ordered by original alpha-numeric levels")+
+  theme_classic()+
+  theme(legend.position = "none")
+
+
+# kutu grafiği medyan CT düzeylerine göre sıralanmıştır
+ggplot(data = linelist)+
+  geom_boxplot(
+    aes(x = fct_reorder(delay_cat, ct_blood, "median"),
+        y = ct_blood,
+        fill = delay_cat))+
+  labs(x = "Delay onset to admission (days)",
+       title = "Ordered by median CT value in group")+
+  theme_classic()+
+  theme(legend.position = "none")
+```
+
+Yukarıdaki örnekte, `ggplot()` komutundan önce gerekli hiçbir adım olmadığına dikkat edin - gruplama ve hesaplamaların tümü dahili olarak ggplot komutunda yapılır.
+
+### "Son" değere göre {.unnumbered}  
+
+Gruplandırılmış çizgi grafiklerinde `fct_reorder2()`, düzeylerin (ve dolayısıyla *başlığın*) grafik "sonu" çizgilerin dikey sıralamasıyla hizalandırırr. Teknik olarak konuşursak, "en büyük x değerleriyle ilişkili y değerlerine göre sıralanır."
+
+Örneğin, zaman içinde hastaneye göre vaka sayılarını gösteren satırlarınız varsa, `aes()` içindeki `color =` argümanına `fct_reorder2()` komutunu uygulayabilirsiniz. Öyle ki açıklamada görünen hastanelerin dikey sırası grafik sonundaki satır sırasıyla hizalanır. [Çevrimiçi belgelerde](https://forcats.tidyverse.org/reference/fct_reorder.html) daha fazlasını okuyuabilirsiniz.
+
+```{r, warning=F, message=F}
+epidemic_data <- linelist %>%         # satır listesiyle başla   
+    filter(date_onset < as.Date("2014-09-21")) %>%    # görsel netlik için son tarih
+    count(                                            # haftalık ve hastaneye göre vaka sayılarını al
+      epiweek = lubridate::floor_date(date_onset, "week"),  
+      hospital                                            
+    ) 
+  
+ggplot(data = epidemic_data)+                       # grafiği başlat
+  geom_line(                                        # çizgileri hazırla
+    aes(
+      x = epiweek,                                  # x-axis epiweek
+      y = n,                                        # boyu haftalık vaka sayısıdır
+      color = fct_reorder2(hospital, epiweek, n)))+ # veriyi, grafik sonu yüksekliği ve hastaneye göre gruplandırılıp renklendir
+  labs(title = "Factor levels (and legend display) by line height at end of plot",
+       color = "Hospital")                          # başlığı değiştir
+```
+
+
+
+
+## Eksik değerler {#fct_missing}  
+
+Faktör sütununuzda `NA` değerleri varsa, bunları `fct_explicit_na()` ile kolayca "Eksik" gibi adlandırılmış bir düzeye dönüştürebilirsiniz. `NA` değerleri, sıralamanın sonunda varsayılan olarak "(Eksik)" değerine dönüştürülür. Seviye adını `na_level =` argümanıyla ayarlayabilirsiniz.
+
+Aşağıda, bu işlem `delay_cat` sütununda 'NA'ları "Missing delay"e dönüştürür. Bu, `tabyl()` ile bir tabloya yazdırılır.
+
+```{r}
+linelist %>% 
+  mutate(delay_cat = fct_explicit_na(delay_cat, na_level = "Missing delay")) %>% 
+  tabyl(delay_cat)
+```
+
+
+
+
+
+## Seviyeleri birleştirme  
+
+
+### Elle düzenleme {.unnumbered}  
+
+Seviye göstergelerini `fct_recode()` ile manuel olarak ayarlayabilirsiniz. Bu, **dplyr** fonksiyonu `recode()` gibidir (bkz. [Temizleme verileri ve temel işlevler]), farklı olarak yeni faktör seviyelerinin oluşturulmasına izin verir. Bir faktörde basit `recode()`komutunu kullanırsanız, önceden izin verilen seviyeler ayarlanmadıkça yeni kodlanmış değerler reddedilecektir.
+
+Bu araç, yeniden kodlanmış değeri birden çok seviyeye atayarak seviyeleri "birleştirmek" için de kullanılabilir. Sadece bilgileri kaybetmemeye dikkat edin! Bu birleştirme adımlarını yeni bir sütunda yapmayı düşünün (mevcut sütunun üzerine yazmayın).
+
+`fct_recode()`, `recode()`dan farklı bir sözdizimine sahiptir. `recode()`, `ESKİ = YENİ`yi kullanırken, `fct_recode()`, `YENİ = ESKİ`yi kullanır.   
+
+Geçerli `delay_cat` seviyeleri şunlardır:
+
+```{r, echo=F}
+linelist <- linelist %>% 
+  mutate(delay_cat = fct_relevel(delay_cat, "<2 days", after = 0))
+```
+
+
+```{r}
+levels(linelist$delay_cat)
+```
+
+Yeni düzeyler, `fct_recode(column, "new" = "old", "new" = "old", "new" = "old")` sözdizimi kullanılarak oluşturulur ve yazdırılır: 
+
+```{r}
+linelist %>% 
+  mutate(delay_cat = fct_recode(
+    delay_cat,
+    "Less than 2 days" = "<2 days",
+    "2 to 5 days"      = "2-5 days",
+    "More than 5 days" = ">5 days")) %>% 
+  tabyl(delay_cat)
+```
+
+Burada seviyeler `fct_recode()` ile manuel olarak birleştirilirler. "5 günden az" yeni bir düzeyin oluşturulmasında herhangi bir hata olmadığını unutmayın.
+
+```{r, warning=F, message=F}
+linelist %>% 
+  mutate(delay_cat = fct_recode(
+    delay_cat,
+    "Less than 5 days" = "<2 days",
+    "Less than 5 days" = "2-5 days",
+    "More than 5 days" = ">5 days")) %>% 
+  tabyl(delay_cat)
+```
+
+
+### "Diğerine" indirgeme {.unnumbered}  
+
+Faktör seviyelerini bir "Diğer" seviyeye manuel olarak atamak için `fct_other()` komutunu kullanabilirsiniz. Aşağıda, "Port Hospital" ve "Central Hospital" dışındaki "hospital" sütunundaki tüm seviyeler "Other Hospital" olarak birleştirilmiştir. `keep =` veya `drop =` için bir vektör sağlayabilirsiniz. "Diğer" düzeyinin görünümünü `other_level = ` ile değiştirebilirsiniz. 
+
+```{r}
+linelist %>%    
+  mutate(hospital = fct_other(                      # adjust levels
+    hospital,
+    keep = c("Port Hospital", "Central Hospital"),  # keep these separate
+    other_level = "Other Hospital")) %>%            # All others as "Other Hospital"
+  tabyl(hospital)                                   # print table
+
+```
+
+
+### Frekansa göre indirgeme {.unnumbered}
+
+`fct_lump()` kullanarak az görülen faktör düzeylerini otomatik olarak birleştirebilirsiniz. 
+
+Birçok düşük frekans düzeyini bir "Diğer" grubuna "toplamak" için aşağıdakilerden birini yapın:
+
+* Tutmak istediğiniz grup sayısını `n =` olarak ayarlayın. En çok görülen n seviyeleri tutulacak ve diğerlerinin tamamı "Diğer" olarak birleştirilecektir.
+* "prop =" değerini, üzerinde tutmak istediğiniz seviyeler için eşik frekans oranı olarak ayarlayın. Diğer tüm değerler "Diğer" olarak birleşecektir.  
+
+"Diğer" düzeyinin görünümünü `other_level = ` ile değiştirebilirsiniz. Aşağıda, en sık rastlanan iki hastane dışındaki tüm hastaneler "Other Hospital" olarak birleştirilmiştir.
+
+```{r, warning=F, message=F}
+linelist %>%    
+  mutate(hospital = fct_lump(                      # seviyeleri düzenle
+    hospital,
+    n = 2,                                          # ilk 2 seviyeyi tut
+    other_level = "Other Hospital")) %>%            # geri kalanını "Other Hospital" olarak tanımla
+  tabyl(hospital)                                   # tabloyu yazdır
+
+```
+
+
+## Tüm seviyeleri gösterme
+
+Faktörleri kullanmanın bir diğer faydası da, bir veri kümesinde gerçekte hangi değerlerin mevcut olduğuna bakılmaksızın, grafik açıklamalarının ve tabloların görünümünü standart hale getirmesidir.
+
+Çok sayıda analiz hazırlıyorsanız (örneğin, birden fazla analiz için), gösterge ve tabloların, değişen seviyelerde veri kompozisyonu ile bile aynı görünmesini isteyebilirsiniz.
+
+### Grafiklerde {.unnumbered}  
+
+Bir `ggplot()` grafiğinde, ilgili `scale_xxxx()` fonksiyonuna "drop = FALSE" argümanını eklemeniz yeterlidir. Verilerde bulunup bulunmadıklarına bakılmaksızın tüm faktör seviyeleri görüntülenecektir. Faktör sütun seviyeleriniz `fill =` kullanılarak görüntüleniyorsa, o zaman `scale_fill_discrete()` içine aşağıda gösterildiği gibi `drop = FALSE` değerini eklersiniz. Seviyeleriniz `x =` (x eksenine göre) `color =` veya `size =` ile görüntüleniyorsa, bunu `scale_color_discrete()` veya `scale_size_discrete()` argümanlarıyla sağlayabilirsiniz. 
+
+Aşağıdaki örnek, hastaneye göre yaş kategorisine ait çubuk grafiğidir. `scale_fill_discrete(drop = FALSE)` eklenmesi, verilerde mevcut olmasa bile tüm yaş gruplarının açıklamada görünmesini sağlar.
+
+```{r}
+ggplot(data = linelist)+
+  geom_bar(mapping = aes(x = hospital, fill = age_cat)) +
+  scale_fill_discrete(drop = FALSE)+                        # boş olsa bile tüm verileri açıklamada göster
+  labs(
+    title = "All age groups will appear in legend, even if not present in data")
+```
+
+### Tablolarda {.unnumbered}  
+
+Hem R tabanında `table()` hem de **janitor**'dan `tabyl()` tüm faktör seviyelerini (kullanılmayan seviyeler bile) gösterecektir. 
+
+Bir tablo oluşturmak için **dplyr**'den `count()` veya `summarise()` kullanırsanız, kullanılmamış olanlar da dahil tüm faktör düzeylerini dahil etmek için '.drop = FALSE' bağımsız değişkenini ekleyin. 
+
+[Açıklayıcı tablolar] sayfasında, [scale_discrete belgelerinde](https://ggplot2.tidyverse.org/reference/scale_discrete.html) veya [count() belgelerinde](https://dplyr. tidyverse.org/reference/count.html). [Bulaşıcı takibi] sayfasında başka bir örnek görebilirsiniz.
+
+
+## Epiweeks  
+
+Lütfen [Gruplama verileri] sayfasında epidemiyolojik haftaların nasıl oluşturulacağına ilişkin kapsamlı tartışmaya bakın.
+
+Epidemiyolojik haftaların nasıl oluşturulacağı ve biçimlendirileceğiyle ilgili ipuçları için lütfen [Tarihlerle çalışma] sayfasına da bakın.
+
+
+### Grafiklerde epiweeks {.unnumbered}  
+
+Amacınız bir grafikte görüntülenecek epiweeks oluşturmaksa, bunu [Gruplama verileri] sayfasında açıklandığı gibi **lubridate**'nin `floor_date()` ile yapabilirsiniz. Döndürülen değerler YYYY-AA-GG biçiminde Date sınıfında olacaktır. Bu sütunu bir grafik içinde kullanırsanız, tarihler doğal olarak sıralanır; seviyeler veya sınıf Faktörüne dönüştürme konusunda endişelenmenize gerek yoktur. Aşağıdaki başlangıç tarihlerine ait `ggplot()` histogramına bakın.
+
+Bu yaklaşımda, `scale_x_date()` ile bir eksen üzerindeki tarihlerin *görüntülenmesini* ayarlayabilirsiniz. Daha fazla bilgi için [Salgın eğrileri] ile ilgili sayfaya bakın. `scale_x_date()` öğesinin 'date_labels = ' bağımsız değişkenine bir "strptime" görüntüleme biçimi belirleyebilirsiniz. Bu biçimler "%" yer tutucularını kullanır. Yer tutucular [Tarihlerle çalışma] sayfasında ele alınmıştır. 4 basamaklı bir yılı temsil etmek için "%Y" ve hafta numarasını temsil etmek için "%W" veya "%U" kullanın (sırasıyla Pazartesi veya Pazar haftaları).
+
+```{r, warning=F, message=F}
+linelist %>% 
+  mutate(epiweek_date = floor_date(date_onset, "week")) %>%  # hafta sütununu oluştur
+  ggplot()+                                                  # ggplotu başlat
+  geom_histogram(mapping = aes(x = epiweek_date))+           # başlangıç tarihinin histogramı
+  scale_x_date(date_labels = "%Y-W%W")                       # tarihlerin gösterimini YYYY-WWw olacak şekilde ayarla
+```
+
+
+### Verilerde epiweeks {.unnumbered}  
+
+Verileri faktöre çevirmedeki amacınız grafik yapmak *değilse*, bunu iki yoldan yapabilirsiniz:  
+
+1) *Görüntüleme üzerindeki hassas kontrol* için, **lubridate** epiweek sütununu (YYYY-AA-GG) istenen formatına (YYYY-WWw) ve ardından bunu sınıf Faktörüne dönüştürün .
+
+İlk olarak, tarih gösterimini YYYY-AA-GG'den YYYY-Www gösterimine dönüştürmek için R tabanından `format()` komutunu kullanın (bkz. [Tarihlerle çalışma] sayfası). Bu süreçte veriler sınıftan karaktere dönüşmüş olacaktır. Ardından, `factor()` ile karakterden tekrar sınıf Factor'a dönüştürün. 
+
+
+```{r}
+linelist <- linelist %>% 
+  mutate(epiweek_date = floor_date(date_onset, "week"),       # epiweeks oluştur (YYYY-AA-GG)
+         epiweek_formatted = format(epiweek_date, "%Y-W%W"),  # (YYYY-HHh) formatına dönüştür
+         epiweek_formatted = factor(epiweek_formatted))       # faktöre dönüştür
+
+# seviyeleri göster
+levels(linelist$epiweek_formatted)
+```
+
+<span style="color: red;">**_TEHLİKE:_** Haftaları yılların önüne koyarsanız ("Www-YYYY") ("%W-%Y"), varsayılan alfa-numerik sıralaması yanlış olacaktır (ör. 01-2015, 35-2014'ten önce olacaktır). Uzun ve sancılı bir süreçle, sırayı manuel olarak ayarlamanız gerekebilir.</span>  
+
+2) *Hızlı varsayılan görüntüleme* için **aweek** paketini ve `date2week()` fonksiyonunu kullanın. `week_start =` ile haftanın ilk gününü ayarlayabilirsiniz. `factor = TRUE` olarak ayarlarsanız, çıktı sütunu sıralı bir faktör olacaktır. Ek olarak, faktör, o hafta hiç vaka olmasa bile, aralıktaki *tüm* haftalar için seviyeleri içermektedir.  
+
+```{r, eval=F}
+df <- linelist %>% 
+  mutate(epiweek = date2week(date_onset, week_start = "Monday", factor = TRUE))
+
+levels(df$epiweek)
+```
+
+**aweek** hakkında daha fazla bilgi için [Tarihlerle çalışma] sayfasına bakın. Ayrıca `week2date()` ters fonksiyonu da bu paket içinde mevcuttur.
+
+
+
+<!-- ======================================================= -->
+## Kaynaklar {} 
+
+[faktörler ile ilgili Veri Bilimi sayfası için R](https://r4ds.had.co.nz/factors.html)  
+[aweek paketi skeci](https://cran.r-project.org/web/packages/aweek/vignettes/introduction.html)

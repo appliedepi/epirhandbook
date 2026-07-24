@@ -1,0 +1,1452 @@
+---
+aliases:
+  - /new_pages/time_series.jp.html
+---
+
+# 時系列分析とアウトブレイクの検出{#time-series}
+
+<!-- ======================================================= -->
+## 概観{  }
+
+このタブでは、時系列分析のためのいくつかのパッケージの使用方法を示します。主に [**tidyverts**](https://tidyverts.org/) ファミリーのパッケージを使用していますが、感染症疫学に適したモデルをフィットさせるために、RECON [**trending**](https://github.com/reconhub/trending) パッケージも使用しています。
+
+以下の例では、ドイツのカンピロバクターに関する**surveillance**パッケージのデータセットを使用していることに注意してください（詳細はハンドブックの[ハンドブックとデータのダウンロード](#data-used)を参照してください）。しかし、同じコードを複数の国や他の層を持つデータセットで実行したい場合は、[r4epis github repo](https://github.com/R4EPI/epitsa) にコードテンプレートの例がありますので、そちらを参照してください。
+
+扱うトピックは以下の通りです。 
+
+1.  時系列データ  
+2.  記述統計  
+3.  回帰式のあてはめ  
+4.  2つの時系列の関係  
+5.  アウトブレイクの検出  
+6.  遮断された時系列  
+
+
+<!-- ======================================================= -->
+## 準備{ }
+
+### パッケージ {.unnumbered}
+
+以下のコードを実行すると、分析に必要なパッケージが読み込まれます。このハンドブックでは、パッケージを読み込むために、**pacman** パッケージの `p_load()` を主に使用しています。`p_load()` は、必要に応じてパッケージをインストールし、現在の R セッションで使用するためにパッケージを読み込む関数です。また、すでにインストールされたパッケージは、R の基本パッケージである **base** （以下、**base** R）の `library()` を使用して読み込むこともできます。R のパッケージに関する詳細は [R の基礎](#basics) の章をご覧ください。
+
+```{r load_packages}
+pacman::p_load(rio,          # ファイルのインポート
+               here,         # ファイルのロケーター
+               tidyverse,    # データマネジメント + ggplot2の描画
+               tsibble,      # 時系列データセットの操作
+               slider,       # 移動平均の計算のため
+               imputeTS,     # 欠損値のフィルタリングのため
+               feasts,       # 時系列分解と自己相関のため
+               forecast,     # sinとcosの項をデータに当てはめる（注：feastsの後に読み込む必要がある）
+               trending,     # モデルの当てはめと査定
+               tmaptools,    # 地名から地理座標（lon/lat）を取得する関数
+               ecmwfr,       # copernicus sateliate CDS APIとのインタラクションのため
+               stars,        # .nc（天候データ）ファイルの読み込みのため
+               units,        # 測定ユニット（天候データ）の定義のため
+               yardstick,    # 適切なモデルを探すため
+               surveillance  # 異常検知のため
+               )
+``` 
+
+### データのロード {.unnumbered}
+
+本ハンドブックで使用しているすべてのデータは、[ハンドブックとデータのダウンロード](#data-used)の章の手順でダウンロードできます。 
+
+ここでは、2001年から2011年にドイツで報告されたカンピロバクター症例の週次カウントをデータセットとして例示しています。<a href='https://github.com/appliedepi/epiRhandbook_eng/raw/master/data/time_series/campylobacter_germany.xlsx' class='download-button'>
+ここをクリックすると、<span>このデータファイル（.xlsx）</span> </a> をダウンロードすることができます。
+
+このデータセットは、[**surveillance**](https://cran.r-project.org/web/packages/surveillance/) パッケージで利用できるデータセットの縮小版です。
+(詳細は surbeillance package パッケージを読み込み、 `?campyDE` を参照してください)
+
+これらのデータを **rio** （.xlsx, .csv, .rds など多くのファイルタイプを扱うことができます）パッケージの `import()` を使ってインポートします。
+
+```{r read_data_hide, echo=F}
+# Rにcountsをインポート
+counts <- rio::import(here::here("data", "time_series", "campylobacter_germany.xlsx"))
+```
+
+```{r read_data_show, eval=F}
+# Rにcountsをインポート
+counts <- rio::import("campylobacter_germany.xlsx")
+```
+
+最初の10行のカウントが以下に表示されます。
+
+```{r inspect_data, message=FALSE, echo=F}
+# countsをテーブルとして表示
+DT::datatable(head(counts, 10), rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+### データをきれいにする{.unnumbered}
+
+以下のコードで、日付カラムが適切なフォーマットであることを確認します。このタブでは **tsibble** パッケージを使用し、 `yearweek()` が暦週変数を作成するために使用されています。他にもいくつかの方法がありますが（詳細は [日付型データ](#dates) の章を参照してください）、時系列の場合は1つのフレームワーク（**tsibble**）に収めるのがベストです。
+
+```{r clean_data}
+
+## 日付カラムが適切なフォーマットであることを確認する
+counts$date <- as.Date(counts$date)
+
+## 歴週変数を作成する
+## ISOの定義に準拠した月曜日から始まる週の定義にフィットさせる
+counts <- counts %>% 
+     mutate(epiweek = yearweek(date, week_start = 1))
+
+```
+
+### 天候データのダウンロード {.unnumbered}
+
+この章の <u>2つの時系列の関連</u> では、カンピロバクターの症例数と気候データを比較します。
+
+世界各地の気候データは、EUのコペルニクス衛星からダウンロードできます。これらは正確な測定値ではなくモデルに基づいていますが（補間に似ています）、全世界を1時間ごとにカバーし、予測もできるという利点があります。 
+
+これらの各気候データファイルは、[ハンドブックとデータのダウンロード](#data-used)の章からダウンロードできます。 
+
+ここではデモンストレーションとして、 **ecmwfr** パッケージを使用して Copernicus 気候データストアからこれらのデータを取得するための R コードを紹介します。この機能を利用するには無料のアカウントの作成が必要です。パッケージのウェブサイトには、この方法に関する便利な[ウォークスルー](https://github.com/bluegreen-labs/ecmwfr#use-copernicus-climate-data-store-cds)があります。以下は、適切な API キーを取得した上で、これを実行する方法のサンプルコードです。下記の X をお客様のアカウントIDに置き換えていただく必要があります。一度に1年分のデータをダウンロードしないと、サーバーがタイムアウトしてしまうので注意が必要です。
+
+データをダウンロードしたい場所の座標がわからない場合は、**tmaptools** パッケージを使って、オープンストリートマップから座標を引き出すことができます。別の選択肢として、[**photon**](https://github.com/rCarto/photon) パッケージがありますが、これはまだ CRAN にはリリースされていません。**photon** パッケージの良い点は、検索に複数のマッチがあった場合に、より多くの文脈的なデータを提供することです。
+
+```{r weather_data, eval = FALSE}
+
+## 位置情報の取得
+coords <- geocode_OSM("Germany", geometry = "point")
+
+## ERA-5のクエリに対応したフォーマットでlong/latsをまとめる(bounding box) 
+## (1つの点が欲しいだけなので、座標を繰り返すことはできない)
+request_coords <- str_glue_data(coords$coords, "{y}/{x}/{y}/{x}")
+
+
+## copernicus satellite (ERA-5 reanalysis)からモデル化したデータを引っ張ってくる。
+## https://cds.climate.copernicus.eu/cdsapp#!/software/app-era5-explorer?tab=app
+## https://github.com/bluegreen-labs/ecmwfr
+
+## 天気データ用のキーを設定
+wf_set_key(user = "XXXXX",
+           key = "XXXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXX",
+           service = "cds") 
+
+## 対象となる年ごとに実行（そうしないとサーバーがタイムアウトする）
+for (i in 2002:2011) {
+  
+  ## クエリを作成する
+  ## 方法はこちらを参照：https://bluegreen-labs.github.io/ecmwfr/articles/cds_vignette.html#the-request-syntax
+  ## 上記の Addins ボタンを使って request を list に変更（Python で list 化)
+  ## Target は出力ファイルの名前です！！
+  request <- request <- list(
+    product_type = "reanalysis",
+    format = "netcdf",
+    variable = c("2m_temperature", "total_precipitation"),
+    year = c(i),
+    month = c("01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"),
+    day = c("01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12",
+            "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24",
+            "25", "26", "27", "28", "29", "30", "31"),
+    time = c("00:00", "01:00", "02:00", "03:00", "04:00", "05:00", "06:00", "07:00",
+             "08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00",
+             "16:00", "17:00", "18:00", "19:00", "20:00", "21:00", "22:00", "23:00"),
+    area = request_coords,
+    dataset_short_name = "reanalysis-era5-single-levels",
+    target = paste0("germany_weather", i, ".nc")
+  )
+  
+  ## ファイルをダウンロードして、現在の作業ディレクトリに保存
+  file <- wf_request(user     = "XXXXX",  # ユーザーID（認証用）
+                     request  = request,  # request
+                     transfer = TRUE,     # ファイルのダウンロード
+                     path     = here::here("data", "Weather")) ## 保存データへのパス
+  }
+
+```
+
+### 天候データの読み込み {.unnumbered}
+
+気候データをハンドブックからダウンロードした場合も、上記のコードを使用した場合も、コンピュータの同じフォルダに10年分の ".nc" 気候データファイルが保存されているはずです。
+
+以下のコードを使用して、これらのファイルを **stars** パッケージで R にインポートします。
+
+```{r read_climate, warning = FALSE, message = FALSE}
+
+## 天気フォルダへのパスの定義
+file_paths <- list.files(
+  here::here("data", "time_series", "weather"), # あなた自身のファイルパスとの置き換え
+  full.names = TRUE)
+
+## 現在の興味ある名前のものだけを残す 
+file_paths <- file_paths[str_detect(file_paths, "germany")]
+
+## 全てのファイルをstartsオブジェクトとして読み込み
+data <- stars::read_stars(file_paths)
+```
+
+これらのファイルがオブジェクト `data` としてインポートされたら、データフレームに変換します。
+
+```{r}
+## データフレームへの変更
+temp_data <- as_tibble(data) %>% 
+  ## 変数の追加と単位の修正
+  mutate(
+    ## 歴週変数の作成
+    epiweek = tsibble::yearweek(time), 
+    ## 日付変数の作成（カレンダーの週の始まり）
+    date = as.Date(epiweek),
+    ## 気温をケルビンから摂氏へ変更
+    t2m = set_units(t2m, celsius), 
+    ## 降水量をメートル単位からミリ単位へ変更
+    tp  = set_units(tp, mm)) %>% 
+  ## 週でグループ化（日付も残す）
+  group_by(epiweek, date) %>% 
+  ## 週平均を取得
+  summarise(t2m = as.numeric(mean(t2m)), 
+            tp = as.numeric(mean(tp)))
+
+```
+
+
+
+
+<!-- ======================================================= -->
+## 時系列データ{  }
+
+時系列データを構造化して扱うためのさまざまなパッケージがあります。前述の通り、ここでは **tidyverts** ファミリーのパッケージに焦点を当て、時系列オブジェクトを定義するために **tsibble** パッケージを使用します。データセットが時系列オブジェクトとして定義されていると、分析の構造化が非常に容易になります。
+
+これには、 `tsibble()` を使用して「インデックス」、つまり、対象となる時間単位を指定する変数を指定します。ここでは、 `epiweek` という変数を使っています。
+
+例えば、県別の週間カウントのデータセットがあったとすると、`key = ` という引数でグループ化変数を指定することもできます。 これにより、グループごとの分析が可能となります。
+
+
+```{r ts_object}
+
+## 時系列オブジェクトの定義
+counts <- tsibble(counts, index = epiweek)
+
+```
+
+`class(counts)` を見ると、 tidy なデータフレーム("tbl_df", "tbl", "data.frame")であることに加えて、時系列データフレーム("tbl_ts")の追加特性を持っていることがわかります。
+
+データは **ggplot2** パッケージを使って簡単に見ることができます。このプロットから、明確な季節パターンがあり、欠落がないことがわかります。しかし、毎年年明けの報告には問題があるようで、年末の最終週は件数が減り、翌年の第1週は件数が増えます。
+
+```{r basic_plot}
+
+## 週ごとのケースを折れ線グラフにする
+ggplot(counts, aes(x = epiweek, y = case)) + 
+     geom_line()
+
+```
+
+
+<span style="color: red;">**_警告：_** ほとんどのデータセットはこの例のようにきれいではありません。 重複や欠落を以下のようにチェックする必要があります。</span>。
+
+
+<!-- ======================================================= -->
+### 重複{.unnumbered}
+
+**tsibble** では観測値の重複を認めていません。そのため、各行が一意、またはグループ内で一意である必要があります（`key` 変数）。
+このパッケージには、重複しているかどうかのTRUE/FALSEベクトルを与える `are_duplicated()` や，重複している行のデータフレームを与える `duplicates()` など、重複を識別するのに役立つ関数がいくつかあります。
+
+必要な行の選択方法の詳細については[重複データの排除](#deduplication)の章を参照してください。
+
+```{r duplicates, eval = FALSE}
+
+## 行が重複しているかどうかのTRUE/FALSEのベクトルを得る
+are_duplicated(counts, index = epiweek) 
+
+## 重複している行のデータフレームを取得する
+duplicates(counts, index = epiweek) 
+
+```
+
+<!-- ======================================================= -->
+### 欠損値{.unnumbered}
+
+上記の簡単な検査では見逃しがないことを確認しましたが、新年頃に報告が遅れる問題があるようにも見えました。この問題に対処する1つの方法は、これらの値を欠損に設定して値を入力することです。時系列データに対する代入の最も簡単な方法は、最後の欠損していない値と次の欠損していない値の間を直線で結ぶことです。これを行うために、 **imputeTS** パッケージの`na_interpolation()` を使用します．
+
+代入の他のオプションについては、[欠損データの処理](#missing-data)の章を参照してください。
+
+別の方法として、移動平均を計算して用いることでこれらの明らかな報告の問題をスムーズにすることができます（次のセクション、および[移動平均](#moving-average)の章を参照してください）。
+
+```{r missings}
+
+## 報告書の課題で週数ではなく欠勤数で変数を作成
+counts <- counts %>% 
+     mutate(case_miss = if_else(
+          ## epiweekが52、53、1 または 2を含む場合
+          str_detect(epiweek, "W51|W52|W53|W01|W02"), 
+          ## 欠損値をセット
+          NA_real_, 
+          ## そうでない場合、case に値を保持
+          case
+     ))
+
+## 直線的な傾向で欠損値を補う方法
+## 隣接する2点の間
+counts <- counts %>% 
+  mutate(case_int = imputeTS::na_interpolation(case_miss)
+         )
+
+## 元の値と比較してどのような値が代入されたかを確認する
+ggplot_na_imputations(counts$case_miss, counts$case_int) + 
+  ## 伝統的なプロット（軸が黒で背景が白）を作成
+  theme_classic()
+
+```
+
+
+
+
+<!-- ======================================================= -->
+## 記述統計{  }
+
+
+
+<!-- ======================================================= -->
+### 移動平均{#timeseries_moving .unnumbered}
+
+値が上下に短期間で大きく変動するようなデータの場合は、移動平均を計算することが有効です。以下の例では、各週で、前の4週間の平均件数を計算します。これは、データをスムーズにして解釈しやすくするためのものです。私たちの場合、これにはあまり意味がないため、さらなる解析のために補間されたデータにこだわります。
+詳細は、[移動平均](#moving-average)の章を参照してください。
+
+```{r moving_averages}
+
+## 移動平均変数の作成（欠損値の処理）
+counts <- counts %>% 
+     ## ma_4W 変数の作成
+     ## ケース変数の各行をスライドさせる
+     mutate(ma_4wk = slider::slide_dbl(case, 
+                               ## すべての行について name を計算する
+                               ~ mean(.x, na.rm = TRUE),
+                               ## 4週前を使う
+                               .before = 4))
+
+## 違いを一目で分かるように作成
+ggplot(counts, aes(x = epiweek)) + 
+     geom_line(aes(y = case)) + 
+     geom_line(aes(y = ma_4wk), colour = "red")
+
+```
+
+
+<!-- ======================================================= -->
+### 周期性 {.unnumbered}
+
+以下では、周期表を作成するためのカスタム関数を定義します。R での関数の書き方は[関数の作成](#writing-functions)の章を参照してください。
+
+まず，関数を定義します．この関数の引数には、`counts`列を持つデータセット、データセットの最初の週を表す`start_week = `、1年に何回の期間があるかを示す数字（例：52, 12）、そして最後に出力スタイルが含まれます（詳細は以下のコードを参照してください）。 
+
+
+```{r periodogram}
+## 関数の引数
+#####################
+## xはデータセット
+## countsはx内のカウントデータまたはレートの変数
+## start_weekはデータセットの最初の週
+## periodは1年での単位数
+## outputは スペクトルの周期表を返すか、ピークの週数を返すかの指定
+  ## ”periodogram" or "weeks"
+
+# 関数の定義
+periodogram <- function(x, 
+                        counts, 
+                        start_week = c(2002, 1), 
+                        period = 52, 
+                        output = "weeks") {
+  
+
+    ## tsibble でないことを確認し、プロジェクトにフィルターをかけ、関心のある列だけ残す
+    prepare_data <- dplyr::as_tibble(x)
+    
+    # prepare_data <- prepare_data[prepare_data[[strata]] == j, ]
+    prepare_data <- dplyr::select(prepare_data, {{counts}})
+    
+    ## spec.pgram で使用できるように、中間的な "zoo" 時系列を作成する
+    zoo_cases <- zoo::zooreg(prepare_data, 
+                             start = start_week, frequency = period)
+    
+    ## 高速フーリエ変換を使わずにスペクトル・ピリオドグラムを得ることができる
+    periodo <- spec.pgram(zoo_cases, fast = FALSE, plot = FALSE)
+    
+    ## ピークの週を返す
+    periodo_weeks <- 1 / periodo$freq[order(-periodo$spec)] * period
+    
+    if (output == "weeks") {
+      periodo_weeks
+    } else {
+      periodo
+    }
+    
+}
+
+## 最も多い頻度を持つ週を抽出するためのスペクトル・ピリオドグラムを取得する
+## （季節性の確認）
+periodo <- periodogram(counts, 
+                       case_int, 
+                       start_week = c(2002, 1),
+                       output = "periodogram")
+
+## スペクトルと周期をデータフレームに取り込み、プロットする
+periodo <- data.frame(periodo$freq, periodo$spec)
+
+## 最も頻繁に発生する周期性を示す周期表を作成する
+ggplot(data = periodo, 
+                aes(x = 1/(periodo.freq/52),  y = log(periodo.spec))) + 
+  geom_line() + 
+  labs(x = "Period (Weeks)", y = "Log(density)")
+
+
+# 昇順で週のベクトルを取得する
+peak_weeks <- periodogram(counts, 
+                          case_int, 
+                          start_week = c(2002, 1), 
+                          output = "weeks")
+
+```
+
+<span style="color: black;">**_注釈：_** 上の週を使って sin と cos の項に追加することも可能ですが、ここではこれらの項を生成する関数を使用します（下記の回帰の項を参照）</span>
+
+<!-- ======================================================= -->
+### 分解 {.unnumbered}
+
+古典的分解は、時系列をいくつかの部分に分割するために使用され、それらの部分を組み合わせることで、目に見えるパターンを構成します。これらの異なる部分とは
+
+* トレンド・サイクル（データの長期的な方向性）  
+* 季節性（繰り返されるパターン  
+* ランダム（トレンドと季節を取り除いた後に残るもの）  
+
+
+```{r decomposition, warning=F, message=F}
+
+## counts データセットの分解
+counts %>% 
+  # 追加的な分解モデルを使用する
+  model(classical_decomposition(case_int, type = "additive")) %>% 
+  ## モデルから重要な情報を抽出する
+  components() %>% 
+  ## プロットを生成する
+  autoplot()
+
+```
+
+<!-- ======================================================= -->
+### 自己相関 {.unnumbered}
+
+自己相関は、各週のカウント値とその前の週（ラグと呼ばれる）との関係を示します。
+
+`ACF()` を使って，異なるラグでの関係を示す複数の線を示すプロットを作成することができます。ラグが 0 (x = 0) の場合、この線は観測値とそれ自体の関係を示すため、常に1になります（ここでは示していません）。ここで示されている最初の線（x = 1）は、各観測値とその前の観測値との関係（ラグ 1 ）を示し、2番目の線は、各観測値と直前の観測値との関係（ラグ 2 ）を示し、さらに 1 年後（ 52 週前）の観測値との関係を示すラグ 52 まで続きます。
+
+`PACF()`（部分自己相関）を使うと同じような関係が見られますが、他のすべての週の間で調整されています。これは、周期性を決定するための情報としては不十分です。
+
+```{r autocorrelation}
+
+## counts データセットを使用
+counts %>% 
+  ## 1年分のラグを使用して自己相関を計算する
+  ACF(case_int, lag_max = 52) %>% 
+  ## プロットを表示する
+  autoplot()
+
+## counts データセットを使用する
+counts %>% 
+  ## 1年分のラグを使用して部分自己相関を計算する
+  PACF(case_int, lag_max = 52) %>% 
+  ## プロットを表示
+  autoplot()
+
+```
+
+Ljung-Box 検定（ **stats** パッケージ）を使用して、時系列の独立性の帰無仮説を正式に検定することができます（つまり、自己相関がない）。 
+有意な p 値は、データに自己相関があることを示唆します。
+
+```{r ljung_box}
+
+## 独立性を検定する
+Box.test(counts$case_int, type = "Ljung-Box")
+
+```
+
+
+<!-- ======================================================= -->
+## 回帰式の当てはめ {  }
+
+時系列には多くの異なる回帰をフィットさせることができますが、ここでは、負の二項回帰を当てはめる方法を示します。 これは、感染症のカウントデータに最も適しているからです。
+
+<!-- ======================================================= -->
+### フーリエ列 {.unnumbered}
+
+フーリエ列は、sin と cosin の曲線に相当します。違いは、データを説明するのに最も適した曲線の組み合わせを見つけてフィットさせることです。
+
+1つのフーリエ列をフィッティングするだけなら、周期表で最も頻繁に発生するラグ（ここでは 52 週）に対して、sinとcosinをフィッティングするのと同義になります。ここでは **forecast** パッケージの `fourier()` を使用しています。
+
+以下のコードでは、 `$` を使って代入しています。これは、 `fourier()` が2つの列（sin と cosin）を返すので、これらを "fourier" と呼ばれるリストとしてデータセットに追加しているためです。このリストは回帰分析において通常の変数と同様に利用できます。
+
+```{r fourier}
+
+## epiweek と case_int の変数を使ってフーリエ列を追加する
+counts$fourier <- select(counts, epiweek, case_int) %>% 
+  fourier(K = 1)
+```
+
+<!-- ======================================================= -->
+### 負の二項回帰 {.unnumbered}
+
+ベースとなる **stats** パッケージや **MASS** パッケージの関数（例： `lm()`, `glm()`, `glm.nb()`）を用いて回帰の当てはめを行えます。しかしここでは **trending** パッケージの関数を使用します。これは適切な信頼区間と予測区間を計算できるからです（これは他の方法では利用できません）。構文は同じで、アウトカム変数を指定した後、チルダ（~）を入力し、プラス（+）で区切って関心のある様々な暴露変数を追加します。
+
+もう一つの違いは、まずモデルを定義してそれをデータに `fit()` することです。これは、同じ構文で複数の異なるモデルを比較できるという点で便利です。 
+
+<span style="color: darkgreen;">**_ヒント：_** もし、数ではなく率を使いたい場合は、 `offset(log(population)`  を追加することで、対数オフセット項として population 変数を含めることができます。レートを生成するには、 `predict()` を使う前に population を 1 に設定する必要があります。</span>
+
+<span style="color: darkgreen;">**_ヒント：_** ARIMA や prophet などのより複雑なモデルの当てはめについては、[**fable**](https://fable.tidyverts.org/index.html) パッケージをご参照ください。</span>。
+
+```{r nb_reg, warning = FALSE}
+
+## 当てはめたいモデル（負の二項回帰）の定義
+model <- glm_nb_model(
+  ## 関心のあるアウトカムとしてケースの番号をセットする
+  case_int ~
+    ## トレンドを説明するため epiweek を使用する
+    epiweek +
+    ## 季節性を説明するためフーリエ列を使用する
+    fourier)
+
+## counts データセットを使用してモデルを当てはめる
+fitted_model <- trending::fit(model, data.frame(counts))
+
+## 信頼区間と予測区間を計算する
+observed <- predict(fitted_model, simulate_pi = FALSE)
+
+estimate_res <- data.frame(observed$result)
+
+## 回帰式をプロットする
+ggplot(data = estimate_res, aes(x = epiweek)) + 
+  ## モデル推定値の線を追加する
+  geom_line(aes(y = estimate),
+            col = "Red") + 
+  ## 予測区間のバンドを追加する
+  geom_ribbon(aes(ymin = lower_pi, 
+                  ymax = upper_pi), 
+              alpha = 0.25) + 
+  ## 観察されたケースの数を現す線を追加する
+  geom_line(aes(y = case_int), 
+            col = "black") + 
+  ## 伝統的なプロット（軸が黒で背景が白）を作成する
+  theme_classic()
+
+
+```
+
+<!-- ======================================================= -->
+### 残差 {.unnumbered}
+
+我々のモデルが観測されたデータにどれだけフィットしているかを理解するには、残差を見る必要があります。 残差は、観測されたカウントとモデルから推定されたカウントとの差です。これは、単純に `case_int - estimate` を使って計算することもできますが、 `residuals()` は，回帰から直接残差を抽出してくれます。
+
+下の図からわかることは、モデルで説明できる変動のすべてを説明できていないということです。もっとフーリエ列をフィットさせて、振れ幅に対処すべきかもしれません。しかし、この例では、このままにしておきます。このプロットは、我々のモデルがピークとトラフ（カウントが最高と最低の時）で悪く、観測されたカウントをより過小評価する可能性があることを示しています。
+
+```{r, warning=F, message=F}
+
+## 残差を計算する
+estimate_res <- estimate_res %>% 
+  mutate(resid = fitted_model$result[[1]]$residuals)
+
+## 残差は時間経過で概ね一定か？（そうでない場合： アウトブレイク？治療の変化？）
+estimate_res %>%
+  ggplot(aes(x = epiweek, y = resid)) +
+  geom_line() +
+  geom_point() + 
+  labs(x = "epiweek", y = "Residuals")
+
+## 残差に自己相関があるか（誤差にパターンがあるか？）
+estimate_res %>% 
+  as_tsibble(index = epiweek) %>% 
+  ACF(resid, lag_max = 52) %>% 
+  autoplot()
+
+## 残差が正規分布しているか（過小または過大推定か？）
+estimate_res %>%
+  ggplot(aes(x = resid)) +
+  geom_histogram(binwidth = 100) +
+  geom_rug() +
+  labs(y = "count") 
+  
+## 観測されたカウントとその残差を比較する
+  ## パターンがないべき 
+estimate_res %>%
+  ggplot(aes(x = estimate, y = resid)) +
+  geom_point() +
+  labs(x = "Fitted", y = "Residuals")
+
+## 残差の自己相関を正式に検定する
+## H0 は残差がホワイトノイズ系列（つまりランダム）であるとする
+## 独立性を検定する
+## p 値が有意であればランダムではありません。
+Box.test(estimate_res$resid, type = "Ljung-Box")
+
+```
+
+<!-- ======================================================= -->
+## 2つの時系列の関係性 {  }
+
+ここでは、気象データ（特に気温）を用いてカンピロバクターの症例数を説明する方法を見てみます。
+
+<!-- ======================================================= -->
+### データセットのマージ {.unnumbered}
+
+week の変数を使ってデータセットを結合することができます。結合の詳細については、ハンドブックの[データの結合](#joining-matching)のセクションを参照してください。
+
+```{r join}
+
+## 左結合で、counts にすでに存在する行だけを保持する
+## temp_data から、date 変数を除外する（そうしないと重複する）
+counts <- left_join(counts, 
+                    select(temp_data, -date),
+                    by = "epiweek")
+
+```
+
+<!-- ======================================================= -->
+### 記述統計 {.unnumbered}
+
+まず、データをプロットして、明らかな関係があるかどうかを確認します。
+下のプロットは、2つの変数の季節性に明確な関係があることを示しています。温度がケース番号の数週間前にピークに達することがあります。
+データピボットについての詳細は、ハンドブックの[データの縦横変換](#pivoting)のセクションを参照してください。
+
+```{r basic_plot_bivar}
+
+counts %>% 
+  ## 関心のある変数を保持する
+  select(epiweek, case_int, t2m) %>% 
+  ## 縦型のフォーマットにデータを変更する
+  pivot_longer(
+    ## epiweekをキーとして使用する
+    !epiweek,
+    ## 列名を新たな "measure" 列に移動させる
+    names_to = "measure", 
+    ## セルの値を新たな "values" 列に移動させる
+    values_to = "value") %>% 
+  ## 上記のデータセットでプロットを作成する
+  ## epiweekをX軸、値（カウント/摂氏）をY軸にプロット
+  ggplot(aes(x = epiweek, y = value)) + 
+    ## 気温とケースの数について分離したプロットを作成
+    ## それらを書くY軸に配置する
+    facet_grid(measure ~ ., scales = "free_y") +
+    ## 両方を線にしてプロットする
+    geom_line()
+
+```
+
+<!-- ======================================================= -->
+### ラグと相互相関 {.unnumbered}
+
+ケースと温度の間にどの週が最も高い関係にあるかを正式に検証するために  
+これには **feasts** パッケージの相互相関関数 (`CCF()`) が使用可能です。
+また（ `arrange` ではなく） `autoplot()` を使って視覚化することもできます。
+
+```{r cross_correlation, warning=FALSE}
+
+counts %>% 
+  ## 補完された和と気温の間の相互相関を計算する
+  CCF(case_int, t2m,
+      ## 最大のラグを52週としてセットする
+      lag_max = 52, 
+      ## 相関係数を返す
+      type = "correlation") %>% 
+  ## 相関係数を降順に並び替える
+  ## 最も関連するラグを表示する
+  arrange(-ccf) %>% 
+  ## 上位10のみ表示する
+  slice_head(n = 10)
+
+```
+
+このことから、4週間のラグが最も相関性が高いことがわかりますので、ラグ付きの温度変数を作って回帰に含めます。
+
+<span style="color: red;">**<u>警告：</u>** 遅延した温度変数のデータの最初の4週間が欠けている（`NA`）ことに注意してください - データを取得するための4週間前のデータがないからです。このデータセットを **トレンド** の `predict()` で使用するためには、 `predict()` の中の `simulate_pi = FALSE` 引数をさらに下の方で使用する必要があります。simulate オプションを使用したい場合は、以下のコードチャンクに `drop_na(t2m_lag4)` を追加することで、これらのミスを削除し、新しいデータセットとして保存しなければなりません。</span>  
+ 
+
+```{r lag_tempvar}
+
+counts <- counts %>% 
+  ## 4週でラグされた気温の変数を作成する
+  mutate(t2m_lag4 = lag(t2m, n = 4))
+
+```
+
+
+<!-- ======================================================= -->
+### 2変数における負の二項分布 {.unnumbered}
+
+前述のように負の二項回帰を当てはめます。今回は、4週間遅れの温度変数を加えます。
+
+<span style="color: orange;">**_注意：_** `predict()` の引数の中で `simulate_pi = FALSE` を使用していることに注意してください。これは、 **trending** のデフォルトの動作として、 **ciTools** パッケージを使用して予測区間を推定するためです。これは、 `NA` が含まれている場合には機能せず、また、より荒い間隔を生成します。詳細は `?trending::predict.trending_model_fit` を参照してください。</span>  
+
+```{r nb_reg_bivar, warning = FALSE}
+
+## 当てはめたいモデル（負の二項分布）を定義する
+model <- glm_nb_model(
+  ## 関心のあるアウトカムとしてケースの数をセットする
+  case_int ~
+    ## トレンドの説明のために epiweek を使用する
+    epiweek +
+    ## 季節性の説明のためにフーリエ列を使用する
+    fourier + 
+    ## 4週間ラグされた気温を使用する
+    t2m_lag4
+    )
+
+## counts データセットを使用してモデルの当てはめを行う
+fitted_model <- trending::fit(model, data.frame(counts))
+
+## 信頼区間と予測区間を計算する
+observed <- predict(fitted_model, simulate_pi = FALSE)
+
+```
+
+
+個々の項を調べるために `get_model()` を使用して **trending** フォーマットから元の負の二項回帰を取り出し、指数化された推定値とそれに関連する信頼区間を取得するために、これを **broom** パッケージの `tidy()` に渡します。
+
+このことからわかるのは、トレンドと季節性を調整した後のラグ付き気温は症例数（推定値～ 1 ）と似通っており、有意に関連していることがわかります。
+これは、ラグ付き気温が将来の症例数を予測するのに適した変数であることを示唆しています（気候予測は容易に入手可能です）。
+
+```{r results_nb_reg_bivar}
+
+fitted_model %>% 
+  ## 元の負の二項回帰を抽出する
+  get_fitted_model() #%>% 
+  ## 結果についての tidy なデータフレームを取得する
+  # tidy(exponentiate = TRUE, 
+  #      conf.int = TRUE)
+```
+
+このモデルを可視化すると、観測された症例数のより正確な推定が可能かもしれないことがわかります。
+
+```{r plot_nb_reg_bivar, warning=F, message=F}
+estimate_res <- data.frame(observed$result)
+
+## 回帰式をプロットする
+ggplot(data = estimate_res, aes(x = epiweek)) + 
+  ## モデルの推定値の線を追加する
+  geom_line(aes(y = estimate),
+            col = "Red") + 
+  ## 予測区間のバンドを追加する
+  geom_ribbon(aes(ymin = lower_pi, 
+                  ymax = upper_pi), 
+              alpha = 0.25) + 
+  ## 観測されたケースの数の線を追加する
+  geom_line(aes(y = case_int), 
+            col = "black") + 
+  ## 伝統的なプロット（軸が黒で背景が白）を作成する
+  theme_classic()
+
+
+```
+
+
+#### 残差 {.unnumbered}
+
+私たちのモデルが観測されたデータにどれだけフィットしているかを見るために、再び残差を調査します。
+ここでの結果と解釈は前回の回帰のものと似ており、温度なしのよりシンプルなモデルにこだわる方が実現性が高いかもしれません。
+
+```{r}
+
+## 残差を計算する
+estimate_res <- estimate_res %>% 
+  mutate(resid = case_int - estimate)
+
+## 残差は時間経過で概ね一定か？（そうでない場合： アウトブレイク？治療の変化？）
+estimate_res %>%
+  ggplot(aes(x = epiweek, y = resid)) +
+  geom_line() +
+  geom_point() + 
+  labs(x = "epiweek", y = "Residuals")
+
+## 残差に自己相関があるか（誤差にパターンがあるか？）
+estimate_res %>% 
+  as_tsibble(index = epiweek) %>% 
+  ACF(resid, lag_max = 52) %>% 
+  autoplot()
+
+## 残差が正規分布しているか（過小または過大推定か？） 
+estimate_res %>%
+  ggplot(aes(x = resid)) +
+  geom_histogram(binwidth = 100) +
+  geom_rug() +
+  labs(y = "count") 
+  
+## 観測されたカウントとその残差を比較する
+  ## パターンがないべき 
+estimate_res %>%
+  ggplot(aes(x = estimate, y = resid)) +
+  geom_point() +
+  labs(x = "Fitted", y = "Residuals")
+
+## 残差の自己相関を正式に検定する
+## H0 は残差がホワイトノイズ系列（つまりランダム）であるとする
+## 独立性を検定する
+## p 値が有意であればランダムではない
+Box.test(estimate_res$resid, type = "Ljung-Box")
+
+```
+
+<!-- ======================================================= -->
+## アウトブレイク {  }
+
+ここでは、集団発生を検知する2つの（類似した）方法を紹介します。  
+1つ目は、上記のセクションを基にしています。  
+過去の年に回帰を当てはめるために **trending** パッケージを使用し、次の年以降に何が起こるかを予測します。観察された数が予測を上回っていれば、アウトブレイクが発生していることを示唆しています。 
+2つ目の方法は、同様の原理に基づいていますが、 **surveillance** パッケージを使用します。このパッケージには、異常を検出するためのさまざまなアルゴリズムが含まれています。
+
+<span style="color: orange;">**_注意：_** 通常は現在の年（現在の週までのカウントしかわからない場合）におけるアウトブレイクの発生に関心があります。この例では、2011年の第39週にいると仮定しています。</span>
+
+<!-- ======================================================= -->
+### **trending** パッケージ {.unnumbered}
+
+この方法ではベースライン（通常は約5年分のデータ）を定義します。  
+ベースラインのデータに回帰分析を行い、それをもとに次年度の推定値を予測します。
+
+<!-- ======================================================= -->
+#### 日付のカットオフ { -}
+
+日付を一箇所で定義し、それを残りのコードで使用するのが簡単です。
+
+ここでは、開始日（観測を開始した日）とカットオフ日（ベースライン期間の終了日であり、予測したい期間の開始日）を定義します。 また、対象となる年(これから予測するもの)が何週目であるかも定義します。
+
+
+<span style="color: black;">**_ヒント：_** この例では、現在、2011年9月末（ "2011W39" ）にいることにしています。</span>  
+
+```{r cut_off}
+
+## 開始日（いつ観測を開始したか）を定義する
+start_date <- min(counts$epiweek)
+
+## カットオフ週（ベースラインの最終、予測期間の開始）を定義する
+cut_off <- yearweek("2010-12-31")
+
+## 関心のある最終日を定義する（例：予測の最後）
+end_date <- yearweek("2011-12-31")
+
+## 関心のある期間（年）における週数を取得
+num_weeks <- as.numeric(end_date - cut_off)
+
+```
+
+
+<!-- ======================================================= -->
+#### 行の追加 {.unnumbered}
+
+Tidyverse 形式で予測するためには、データセットに適切な数の行が必要です。すなわち、上で定義した `end_date` まで、各週に1行ずつです。 
+以下のコードでは、グループ化変数によってこれらの行を追加することができます。例えば、1つのデータセットに複数の国がある場合、各国をグループとし、それぞれの国に適切な行を追加することができます。
+**tsibble** パッケージの `group_by_key()` でこのグループ化を行い、グループ化されたデータを **dplyr** パッケージの `group_modify()` および `add_row()` に渡すことができます。次に、現在データにある最大の週の1つ後から最終週までの週の順序を指定します。
+
+```{r add_rows}
+
+## 年末までの欠損週を追加する
+counts <- counts %>%
+  ## 地域でグループ化する
+  group_by_key() %>%
+  ## 各グループに対して最も高いepiweekから年末までの行を追加する
+  group_modify(~add_row(.,
+                        epiweek = seq(max(.$epiweek) + 1, 
+                                      end_date,
+                                      by = 1)))
+
+```
+
+
+
+<!-- ======================================================= -->
+#### フーリエ列 {.unnumbered}
+
+フーリエ列を再定義する必要があります。これは、基準日にのみフーリエ列をフィットさせ、翌年のフーリエ列を予測（外挿）したいからです。 
+そのためには、 `fourier()` からの2つのリストの出力を組み合わせる必要があります。1つ目はベースラインデータに対するもので、2つ目は（`h`引数を定義することで）対象となる年の予測です。
+
+<u>備考：</u> 行を結合するためには tidyverse の `bind_rows` ではなく、 `rbind()` を用いなければなりません。これは、フーリエ列がリスト（個別に名前がついていない）であるためです。
+
+```{r fourier_terms_pred}
+
+
+## フーリエ列（sincos）を定義する
+counts <- counts %>% 
+  mutate(
+    ## 2010年のカットオフ日前後の週のフーリエ列を組み合わせる
+    ## （nb. フーリエ列は予測される）
+    fourier = rbind(
+      ## 過去の年のフーリエ列を取得する
+      fourier(
+        ## 2011年以前の行のみ保持する
+        filter(counts, 
+               epiweek <= cut_off), 
+        ## サイン、コサインの項を1つのセットとして含める
+        K = 1
+        ), 
+      ## 2011年におけるフーリエ列を予測する（ベースラインデータを用いる）
+      fourier(
+        ## 2011年以前の行のみ保持する
+        filter(counts, 
+               epiweek <= cut_off),
+        ## サイン、コサインの項を1つのセットとして含める
+        K = 1, 
+        ## 52週後を予測する
+        h = num_weeks
+        )
+      )
+    )
+
+```
+
+<!-- ======================================================= -->
+#### データの分割と回帰式の当てはめ {.unnumbered}
+
+次に、データセットをベースライン期間と予測期間に分割する必要があります。これは、 `group_by()` の後に **dplyr** パッケージの `group_split()` を使って行い、カットオフ前とカットオフ後の2つのデータフレームを持つリストを作成します。
+
+次に，**purrr** パッケージの `pluck()` を使ってリストからデータセットを取り出し（角括弧を使った場合と同じです，例：`dat[[1]]`），ベースラインデータにモデルを当てはめ、カットオフ後の関心のあるデータに対して `predict()` を使います．
+
+**purrr** パッケージについては[ループと反復処理・リストの操作](#iteration)の章を参照してください。
+
+<span style="color: orange;">**<u>注意：</u>** `predict()` の引数で `simulate_pi = FALSE` を使用していることに注意してください。これは、 **trending** パッケージのデフォルトの動作として、 **ciTools** パッケージを使用して予測区間を推定するためです。これは、`NA`カウントがある場合には機能せず、また、より詳細な間隔を生成します。 詳細は `?trending::predict.trending_model_fit` を参照してください。</span>  
+
+```{r forecast_regression, warning = FALSE}
+# 当てはめと予測のためにデータを分割する
+dat <- counts %>% 
+  group_by(epiweek <= cut_off) %>%
+  group_split()
+
+## 当てはめたいモデル（負の二項回帰）を定義する
+model <- glm_nb_model(
+  ## 関心のあるアウトカムとしてケースの数をセットする
+  case_int ~
+    ## トレンドの説明のために epiweek を使用する
+    epiweek +
+    ## 季節性の説明のためにフーリエ列を使用する
+    fourier
+)
+
+# どのデータをあてはめに使用し、どのデータを予測に使用するかを定義する
+fitting_data <- pluck(dat, 2)
+pred_data <- pluck(dat, 1) %>% 
+  select(case_int, epiweek, fourier)
+
+# モデルの当てはめを行う
+fitted_model <- trending::fit(model, data.frame(fitting_data))
+
+# 当てはめたデータのconfintと推定値を得る
+observed <- fitted_model %>% 
+  predict(simulate_pi = FALSE)
+
+# 予測したいデータで予測する
+forecasts <- fitted_model %>% 
+  predict(data.frame(pred_data), simulate_pi = FALSE)
+
+## ベースラインと予測されたデータセットを結合する
+observed <- bind_rows(observed$result, forecasts$result)
+
+```
+
+前述のように、モデルを **ggplot** で可視化することができます。95% 予測区間を超えて観測された数のアラートを赤いドットで強調しています。今回は、予測開始時刻を示す縦線も加えています。
+
+```{r forecast_plot}
+
+## 回帰式をプロットする
+ggplot(data = observed, aes(x = epiweek)) + 
+  ## モデル推定値についての線を追加する
+  geom_line(aes(y = estimate),
+            col = "grey") + 
+  ## 予測区間のバンドを追加する
+  geom_ribbon(aes(ymin = lower_pi, 
+                  ymax = upper_pi), 
+              alpha = 0.25) + 
+  ## 観測されたケースの数についての線を追加する
+  geom_line(aes(y = case_int), 
+            col = "black") + 
+  ## 期待値以上の観測値観測されたケースについての点をプロットする
+  geom_point(
+    data = filter(observed, case_int > upper_pi), 
+    aes(y = case_int), 
+    colour = "red", 
+    size = 2) + 
+  ## 予測開始の箇所を表示するために水平線とラベルを追加する
+  geom_vline(
+           xintercept = as.Date(cut_off), 
+           linetype = "dashed") + 
+  annotate(geom = "text", 
+           label = "Forecast", 
+           x = cut_off, 
+           y = max(observed$upper_pi) - 250, 
+           angle = 90, 
+           vjust = 1
+           ) + 
+  ## 伝統的なプロット（軸が黒で背景が白）を作成する
+  theme_classic()
+```
+
+
+
+<!-- ======================================================= -->
+#### 予測と妥当性検証 {.unnumbered}
+
+残差を調べるだけでなく、モデルが将来のケースをどの程度予測できるかを調べることも重要です。これによりあなたの設定した閾値による警告の信頼性を知ることができます。
+
+伝統的な検証方法としては、一つ前の年をどの程度予測できるかを確認していました（なぜなら、「今の年」の症例数がまだわからないからです）。例えば今回のデータセットでは、2002年から2009年までのデータを使って2010年を予測し、その予測の正確さを確認します。その後、2010年のデータを含むようにモデルを修正し、それを使って2011年の数を予測します。
+
+下の図は <u>Hyndman et al</u> による ["Forecasting principles and practice"](https://otexts.com/fpp3/) に掲載されています。
+
+![](`r "https://otexts.com/fpp3/fpp_files/figure-html/traintest-1.png"`)
+<u>図は著者の許可を得て転載しています。</u>
+
+この場合のデメリットは、使用可能なすべてのデータを使用していないことと、予測に使用する最終モデルではないことです。
+
+もう一つの方法は、交差妥当性と呼ばれる方法です。このシナリオでは、利用可能なすべてのデータをロールオーバーさせ、1年先を予測するための複数のモデルに適合させます。 以下の同じ [<u>Hyndman et al</u> text]((https://otexts.com/fpp3/) の図のように、それぞれのモデルにはより多くのデータを使用します。 例えば、1つ目のモデルは2002年を使って2003年を予測し、2つ目は2002年と2003年を使って2004年を予測する、といった具合です。![](`r "https://otexts.com/fpp2/fpp_files/figure-html/cv1-1.png"`)<u>図は著者の許可を得て転載しています。</u>
+
+以下では、 **purrr** パッケージの `map()` を使用して各データセットをループさせます。次に、推定値を1つのデータセットにまとめ、元の症例数とマージし、 **yardstick** パッケージを使用して精度の測定値を計算します。以下の4つの指標を計算しました。平均平方根誤差（RMSE: root mean square error）、平均絶対誤差（MAE: mean absolute error）、平均絶対尺度誤差（MASE: mean absolute scaled error）、平均絶対パーセント誤差（MAPE: mean absolute percent error）です。
+
+<span style="color: orange;">**<u>注意：</u>** `predict()` の引数で `simulate_pi = FALSE` を使用していることに注意してください。これは **trending** のデフォルトの動作が **ciTools** パッケージを使用して予測区間を推定することだからです。これは これは`NA`カウントがある場合には機能せず、また、より荒い間隔を生成します。 詳細は `?trending::predict.trending_model_fit` を参照してください。</span>  
+
+```{r cross_validation, warning = FALSE}
+
+## 交差確認法： スライディングウィンドウに基づいて1週間先を予測する
+
+## データを52週分（前+後）に分割して表示する
+## 52週先を予測する
+## (観察の連鎖がどんどん長くなり、古いデータが残る）
+
+## ロールオーバーさせたい窓を定義する
+roll_window <- 52
+
+## 何週間先を予測したいかを定義する
+weeks_ahead <- 52
+
+## 繰り返しの、長いデータセットを作成する
+## 各データセットに一意のIDを付与する
+## 関心のある年（例： 2011年）の前のケースのみを使用する
+case_roll <- counts %>% 
+  filter(epiweek < cut_off) %>% 
+  ## 週とケースの数の変数のみを保持する
+  select(epiweek, case_int) %>% 
+    ## 最新の x 観測値を除外する
+    ## 何週間先まで予測するかによって
+    ##（そうでない場合は""unknownへの実際の予測となる） 
+    slice(1:(n() - weeks_ahead)) %>%
+    as_tsibble(index = epiweek) %>% 
+    ## グループ化された ID を作成するために、 x の後のウィンドウで各週をロールオーバーする
+    ## ローリングウィンドウの指定に応じて
+    stretch_tsibble(.init = roll_window, .step = 1) %>% 
+  ## 「以前」のケースがないため - 最初の組み合わせを削除する
+  filter(.id > roll_window)
+
+
+## それぞれのデータセットに対して、以下のコードを実行する
+forecasts <- purrr::map(unique(case_roll$.id), 
+                        function(i) {
+  
+  ## 現在の折り返しをフィットさせるのみ
+  mini_data <- filter(case_roll, .id == i) %>% 
+    as_tibble()
+  
+  ## 予測するための空のデータセットを作成する
+  forecast_data <- tibble(
+    epiweek = seq(max(mini_data$epiweek) + 1,
+                  max(mini_data$epiweek) + weeks_ahead,
+                  by = 1),
+    case_int = rep.int(NA, weeks_ahead),
+    .id = rep.int(i, weeks_ahead)
+  )
+  
+  ## 予測データを元のデータに追加する
+  mini_data <- bind_rows(mini_data, forecast_data)
+  
+  ## 最新の非欠損カウントデータに基づいてカットオフを定義する
+  cv_cut_off <- mini_data %>% 
+    ## 欠損していない行のみを保持する
+    drop_na(case_int) %>% 
+    ## 最新の週を取得する
+    summarise(max(epiweek)) %>% 
+    ## 抽出したものはデータフレームには含まれない
+    pull()
+  
+  ## mini_data を tsibble に戻す
+  mini_data <- tsibble(mini_data, index = epiweek)
+  
+  ## フーリエ列（sincos）を定義する
+  mini_data <- mini_data %>% 
+    mutate(
+    ## カットオフ日の前後の週のフーリエ列を組み合わせる
+    fourier = rbind(
+      ## 以前の年のフーリエ列を取得する
+      forecast::fourier(
+        ## カットオフ以前の行のみを保持する
+        filter(mini_data, 
+               epiweek <= cv_cut_off), 
+        ## サイン・コサイン項のセットを1つ含める
+        K = 1
+        ), 
+      ## 後の年についてのフーリエ列を予測する（ベースラインデータを用いて）
+      fourier(
+        ## カットオフ以前の行のみを保持する
+        filter(mini_data, 
+               epiweek <= cv_cut_off),
+        ## サイン・コサインの項を1つ含める
+        K = 1, 
+        ## 52週先を予測する
+        h = weeks_ahead
+        )
+      )
+    )
+  
+  
+  ## 当てはめと予測のためにデータを分割する
+  dat <- mini_data %>% 
+    group_by(epiweek <= cv_cut_off) %>%
+    group_split()
+
+  ## 当てはめたいモデルを定義する（負の二項回帰）
+  model <- glm_nb_model(
+    ## 関心のあるアウトカムとしてケースの数をセットする
+    case_int ~
+      ## 傾向を説明するために epiweek を使います。
+      epiweek +
+      ## 季節性を説明するためにフーリエ列を使用する
+      fourier
+  )
+
+  # どのデータを当てはめと予測に使用するかを定義する
+  fitting_data <- pluck(dat, 2)
+  pred_data <- pluck(dat, 1)
+  
+  # モデルの当てはめを行う
+  fitted_model <- trending::fit(model, data.frame(fitting_data))
+  
+  # 予測したいデータを予想する
+  forecasts <- fitted_model %>% 
+    predict(data.frame(pred_data), simulate_pi = FALSE)
+  forecasts <- data.frame(forecasts$result[[1]]) %>% 
+    ## 週と予想する推定値のみを保持する
+    select(epiweek, estimate)
+    
+  }
+  )
+
+## リストを全ての予測を含むデータフレームにする
+forecasts <- bind_rows(forecasts)
+
+## 予測値と観測値を結合する
+forecasts <- left_join(forecasts, 
+                       select(counts, epiweek, case_int),
+                       by = "epiweek")
+
+## {yardstick} を用いて指標を計算する
+  ## RMSE： Root mean squared error（平均二乗偏差）
+  ## MAE：  Mean absolute error	（平均絶対誤差）
+  ## MASE： Mean absolute scaled error（平均絶対スケール誤差）
+  ## MAPE： Mean absolute percent error（平均絶対パーセント誤差）
+model_metrics <- bind_rows(
+  ## 予測されたデータセット内の観測値と推定値を比較
+  rmse(forecasts, case_int, estimate), 
+  mae( forecasts, case_int, estimate),
+  mase(forecasts, case_int, estimate),
+  mape(forecasts, case_int, estimate),
+  ) %>% 
+  ## 指標タイプと結果のみを保持する
+  select(Metric  = .metric, 
+         Measure = .estimate) %>% 
+  ## 後で行を結合できるようにワイドフォーマットで作成する
+  pivot_wider(names_from = Metric, values_from = Measure)
+
+## モデルの指標を返す
+model_metrics
+
+```
+
+
+<!-- ======================================================= -->
+### **surveillance** パッケージ {.unnumbered}
+
+このセクションでは、アウトブレイク検出アルゴリズムに基づいて警告の閾値を作成するために **surveillance** パッケージを使用します。このパッケージにはいくつかの異なる手法がありますが、ここでは2つのオプションに焦点を当てます。詳細については、使用したアルゴリズムの [application](https://cran.r-project.org/web/packages/surveillance/vignettes/monitoringCounts.pdf) と [theory](https://cran.r-project.org/web/packages/surveillance/vignettes/glrnb.pdf) に関するこれらの論文を参照してください。
+
+最初のオプションでは、改良型の Farrington 法を使用します。これは負の二項一般化線形モデル（トレンドを含む）に適合し、過去の発生（外れ値）をダウンウェイトして、閾値を作成します。
+
+2つ目のオプションでは glrnb メソッドを使用します。これも負の二項一般化線形モデルに当てはめますが、トレンドとフーリエ列を含んでいます（そのため、ここはメリットです）。この回帰は「統制平均」（～適合値）を計算するために使用されます。そして、各週の平均にシフトがあるかどうかを評価するために、計算された一般化された尤度比統計を使用します。各週のしきい値は、前の週を考慮していることに注意してください。各週の閾値は過去の週を考慮しているため、持続的なシフトがある場合はアラームが作動します。 （また、各アラームの後、アルゴリズムはリセットされることにも注意してください）。
+
+**surveillance** パッケージを使用するためには、まず、フレームワークに適合する "surveillance time series" オブジェクトを定義する必要があります（`sts()` を使用）。
+
+```{r surveillance_obj}
+
+## surveillance time series オブジェクトを定義する
+## 備考: 母集団オブジェクトに分母を含められる（?stsを参照ください）。
+counts_sts <- sts(observed = counts$case_int[!is.na(counts$case_int)],
+                  start = c(
+                    ## start_date から年のみを保持するサブセット
+                    as.numeric(str_sub(start_date, 1, 4)), 
+                    ## start_date から週のみを保持するサブセット
+                    as.numeric(str_sub(start_date, 7, 8))), 
+                  ## データの種類を定義する（このケースでは週次）
+                  freq = 52)
+
+## 含めたい週の範囲を定義する（例：予測期間）
+## 備考： sts オブジェクトは、週を指定せずにオブザベーションをカウントするだけ
+## sts オブジェクトは、週や年の識別子を割り当てずに観測値をカウントしているだけなので、我々のデータを使って適切な観測値を定義する
+weekrange <- cut_off - start_date
+
+```
+
+<!-- ======================================================= -->
+#### Farrington 法 {.unnumbered}
+
+次に、 Farrington メソッドの各パラメータを `list` で定義します。そして、 `farringtonFlexible()` を使用してアルゴリズムを実行し、 `farringtonmethod@upperbound` を使用してアラートの閾値を抽出し、データセットに含めることができます。また、 `farringtonmethod@alarm` を使用して各週にアラートが発生した(閾値を超えた)場合のTRUE/FALSEを抽出することも可能です。
+
+```{r farrington}
+
+## コントロール群を定義する
+ctrl <- list(
+  ## 閾値が必要な期間を定義する（例： 2011年）
+  range = which(counts_sts@epoch > weekrange),
+  b = 9, ## ベースラインを何年前にするか
+  w = 2, ## 移動窓のサイズ
+  weightsThreshold = 2.58, ## 過去の発生事例への再重みづけ（改良型の Noufaily 法 - オリジナルの提案1）
+  ## pastWeeksNotIncluded = 3, ## 利用可能なすべての週を使う (Noufaily は 26 を落とすことを提案)
+  trend = TRUE,
+  pThresholdTrend = 1, ## 通常は 0.05 だが、改良された方法では 1 が推奨される（つまり、常に保持される）
+  thresholdMethod = "nbPlugin",
+  populationOffset = TRUE
+  )
+
+## farrington の柔軟な方法を適用する
+farringtonmethod <- farringtonFlexible(counts_sts, ctrl)
+
+## オリジナルのデータセットに閾値という新たな変数を作成する
+## farrington からの上界を含む
+## 備考： これは2011年の週のみを対象とする（そのため、行をサブセット化する必要がある）
+counts[which(counts$epiweek >= cut_off & 
+               !is.na(counts$case_int)),
+              "threshold"] <- farringtonmethod@upperbound
+```
+
+前に実施したように、結果を ggplot によって可視化できます。
+
+```{r plot_farrington, warning=F, message=F}
+
+ggplot(counts, aes(x = epiweek)) + 
+  ## 観測されたケースを線として追加する
+  geom_line(aes(y = case_int, colour = "Observed")) + 
+  ## 収差アルゴリズムの上界を追加する
+  geom_line(aes(y = threshold, colour = "Alert threshold"), 
+            linetype = "dashed", 
+            size = 1.5) +
+  ## 色を定義する
+  scale_colour_manual(values = c("Observed" = "black", 
+                                 "Alert threshold" = "red")) + 
+  ## 伝統的なプロット（軸が黒で背景が白）を作成する
+  theme_classic() + 
+  ## legend のタイトルを除外する
+  theme(legend.title = element_blank())
+
+```
+
+<!-- ======================================================= -->
+#### GLRNB 法 {.unnumbered}
+
+GLRNB 法の場合も同様に各パラメータを「リスト」で定義します。そしてアルゴリズムを当てはめ、上界を抽出します。
+
+<span style="color: orange;">**<u>注意：</u>** この方法は、閾値の計算に「ブルートフォース」（ブートストラップ法に似た方法）を使用するため、長い時間がかかることがあります！</span>
+
+詳細は [GLRNB ドキュメント（vignette）](https://cran.r-project.org/web/packages/surveillance/vignettes/glrnb.pdf) を参照してください。
+
+```{r glrnb, warning = FALSE, message = FALSE}
+
+## 統制するオプションを定義する
+ctrl <- list(
+  ## 閾値が必要な期間を定義する (例：2011年)
+  range = which(counts_sts@epoch > weekrange),
+  mu0 = list(S = 1,    ## 含めるフーリエ列（ハーモニクス）の数
+  trend = TRUE,   ## トレンドを含めるかどうか
+  refit = FALSE), ## それぞれの警告の後、モデルを再度当てはめるかどうか
+  ## cARL = GLR 統計の閾値（任意）
+     ## 3 ~ 偽陽性を最小限に抑えるための中間地点
+     ## 1 glm.nbの99%PIにフィット - ピーク後の変化あり（警告のために閾値を下げる）
+   c.ARL = 2,
+   # theta = log(1.5), ## アウトブレイクにおける症例数の50%増加に等しい
+   ret = "cases"     ## ケースの数として閾値の上界を返す
+  )
+
+## glrnb 法の適用
+glrnbmethod <- glrnb(counts_sts, control = ctrl, verbose = FALSE)
+
+## 元のデータセットに閾値と名付けた新たな変数をセットする
+## glrnb の上界を含む
+## 備考: これは2011年の週のみを対象としている（そのため、行をサブセット化する必要がある）
+counts[which(counts$epiweek >= cut_off & 
+               !is.na(counts$case_int)),
+              "threshold_glrnb"] <- glrnbmethod@upperbound
+
+```
+
+前述と同様にアウトプットを可視化します。
+
+```{r plot_glrnb, message=F, warning=F}
+
+ggplot(counts, aes(x = epiweek)) + 
+  ## 観測されたケースの数を線として追加する
+  geom_line(aes(y = case_int, colour = "Observed")) + 
+  ## aberration アルゴリズムの上界を追加する
+  geom_line(aes(y = threshold_glrnb, colour = "Alert threshold"), 
+            linetype = "dashed", 
+            size = 1.5) +
+  ## 色を定義する
+  scale_colour_manual(values = c("Observed" = "black", 
+                                 "Alert threshold" = "red")) + 
+  ## 伝統的なプロット（軸が黒で背景が白）を作成する
+  theme_classic() + 
+  ## タイトルのレジェンドを除外する
+  theme(legend.title = element_blank())
+
+```
+
+<!-- ======================================================= -->
+## 中断された時系列 {  }
+
+中断された時系列（セグメント回帰や介入分析とも呼ばれる）は、病気の発生率に対するワクチンの影響を評価する際によく使用されます。しかし、これは広義の介入や導入の影響を評価するのに使用可能です。例えば、病院の手順の変更や、集団への新しい病気の導入などです。
+今回の例では、2008 年末にドイツでカンピロバクターの新しい株が出現したと仮定し、それが患者数に影響を与えるかを調査します。今回も負の二項回帰を使用します。今回の回帰では、介入前（または新菌株の出現）と介入後（前後の期間）の2つの部分に分割します。これにより、2つの期間を比較した罹患率比を算出することができます。式を説明するとわかりやすいかもしれません（そうでなければ無視してください！）。
+
+負の2項回帰は次の通り定義できます。
+
+$$\log(Y_t)= β_0 + β_1 \times t+ β_2 \times δ(t-t_0) + β_3\times(t-t_0 )^+ + log(pop_t) + e_t$$
+
+ここで  
+$Y_t$ は $t$ 時点で観測された症例数    
+$pop_t$ は、 $t$ 時点での10万人単位の人口規模（ここでは使用しません）。   
+$t_0$ は前期間の最後の年（移行期間がある場合はその期間も含みます）。   
+$δ(x)$ は指標関数（x≤0なら0、x>0なら1）。   
+$(x)^+$ はカットオフ演算子（x>0ならx、それ以外は0）。   
+$e_t$ は残差を表します。  
+必要に応じてトレンドや季節などの項を追加することができます。
+
+$β_2 \times δ(t-t_0) + β_3 \times(t-t_0 )^+$ は、後の期間の一般化された線形部分であり、前期はゼロです。
+これは、 $β_2$ と $β_3$ の推定値は介入の効果であることを意味します。
+
+ここでは利用可能なすべてのデータを使用するため、予測を行わずにフーリエ列を再計算する必要があります（つまり、過去にさかのぼって計算することになります）。さらに、回帰に必要な追加の項を計算する必要があります。
+
+```{r define_terms_interrupted}
+
+## epiweek と case_int variabless を使用してフーリエ列を追加する
+counts$fourier <- select(counts, epiweek, case_int) %>% 
+  as_tsibble(index = epiweek) %>% 
+  fourier(K = 1)
+
+## 介入の週を定義する
+intervention_week <- yearweek("2008-12-31")
+
+## 回帰分析のための変数を定義する
+counts <- counts %>% 
+  mutate(
+    ## 公式における t に対応させる
+      ## 週数 (epiweeks をそのまま使うこともできるだろう)
+    # 線形 = 行の数（epiweek）
+    ## 公式におけるデルタ（t-t0）に対応させる
+      ## 前と後の介入期間
+    intervention = as.numeric(epiweek >= intervention_week), 
+    ## 公式に置ける（(t-t0)^+ に対応させる
+      ## 介入後の週の数
+      ## ## (0から計算で出てくる数字のうち、大きい方を選ぶ)
+    time_post = pmax(0, epiweek - intervention_week + 1))
+
+```
+
+次に、これらの項を使って負の二項回帰をあてはめ、変化率の表を作成します。この例では、有意な変化はありませんでした。
+
+<span style="color: orange;">**_注意：_** `predict()` の引数で `simulate_pi = FALSE` を使用していることに注意してください。これは **trending** のデフォルトの動作が **ciTools** パッケージを使用して予測区間を推定することだからです。
+これは`NA`カウントがある場合には機能せず、また、より細かい間隔を生成します。詳細は `?trending::predict.trending_model_fit` を参照してください。</span>  
+
+```{r interrupted_regression, warning = FALSE}
+
+
+## 当てはめたいモデル（負の二項回帰）を定義する
+model <- glm_nb_model(
+  ## 関心のあるアウトカムとしてのケースの数をセットする
+  case_int ~
+    ## トレンドの説明のために epiweek を使用する
+    epiweek +
+    ## 季節性の説明のためにフーリエ列を使用する
+    fourier + 
+    ## 前あるいは後ろの期間であるかを追加する
+    intervention + 
+    ## 介入後の期間を追加する
+    time_post
+    )
+
+## countsデータセットを使用して、モデルを当てはめる
+fitted_model <- trending::fit(model, data.frame(counts))
+
+## 信頼区間と予測区間を算出する
+observed <- predict(fitted_model, simulate_pi = FALSE)
+```
+
+```{r table_regression, eval = FALSE, echo = TRUE}
+## 推定値と変化率をテーブル内に表示する
+fitted_model %>% 
+  ## 元の負の二項回帰を抽出する
+  get_model() %>% 
+  ## 結果についての tidy なデータフレームを取得する
+  tidy(exponentiate = TRUE, 
+       conf.int = TRUE) %>% 
+  ## 介入の値のみを保持する
+  filter(term == "intervention") %>% 
+  ## 推定値と CIs について、 IRR を変化率に変換する
+  mutate(
+    ## 関心のあるそれぞれの列に対して新しい列を作成する
+    across(
+      all_of(c("estimate", "conf.low", "conf.high")), 
+      ## 変化率を算出する公式を適用する
+            .f = function(i) 100 * (i - 1), 
+      ## "_perc" という名前の接尾語を新たな列に追加する
+      .names = "{.col}_perc")
+    ) %>% 
+  ## 特定の列のみを保持する（そして列名を変更）。
+  select("IRR" = estimate, 
+         "95%CI low" = conf.low, 
+         "95%CI high" = conf.high,
+         "Percentage change" = estimate_perc, 
+         "95%CI low (perc)" = conf.low_perc, 
+         "95%CI high (perc)" = conf.high_perc,
+         "p-value" = p.value)
+```
+
+前述のように、回帰の出力を視覚化できます。
+
+```{r plot_interrupted}
+estimate_res <- data.frame(observed$result)
+
+
+ggplot(estimate_res, aes(x = epiweek)) + 
+  ## 観測されたケースの数を追加する
+  geom_line(aes(y = case_int, colour = "Observed")) + 
+  ## モデル推定値についての線を追加する
+  geom_line(aes(y = estimate, col = "Estimate")) + 
+  ## 予測区間のバンドを追加する
+  geom_ribbon(aes(ymin = lower_pi, 
+                  ymax = upper_pi), 
+              alpha = 0.25) + 
+  ## 予測開始の場所を示すため、垂直線とラベルを追加する
+  geom_vline(
+           xintercept = as.Date(intervention_week), 
+           linetype = "dashed") + 
+  annotate(geom = "text", 
+           label = "Intervention", 
+           x = intervention_week, 
+           y = max(observed$upper_pi), 
+           angle = 90, 
+           vjust = 1
+           ) + 
+  ## 色を定義する
+  scale_colour_manual(values = c("Observed" = "black", 
+                                 "Estimate" = "red")) + 
+  ## 伝統的なプロット（軸が黒で背景が白）を作成する
+  theme_classic()
+
+```
+
+
+<!-- ======================================================= -->
+## 参考資料 {  }
+
+[forecasting: principles and practice textbook](https://otexts.com/fpp3/)  
+[EPIET timeseries analysis case studies](https://github.com/EPIET/TimeSeriesAnalysis)  
+[Penn State course](https://online.stat.psu.edu/stat510/lesson/1) 
+[Surveillance package manuscript](https://www.jstatsoft.org/article/view/v070i10)
+
+
+
+
+

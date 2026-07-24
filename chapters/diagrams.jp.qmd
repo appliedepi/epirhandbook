@@ -1,0 +1,755 @@
+---
+aliases:
+  - /new_pages/diagrams.jp.html
+---
+
+# フローチャート・サンキー図・タイムライン {#diagrams}
+
+```{r out.width = c('50%'), fig.show='hold', echo=F}
+knitr::include_graphics(here::here("images", "flow_chart.png"))
+knitr::include_graphics(here::here("images", "sankey_diagram.png"))
+```
+
+この章では、以下の図を作成するためのコードについて説明します。
+
+-   **DiagrammeR** と DOT 言語を使ったフローチャート
+-   沖積図（Alluvial diagram）やサンキー図（Sankey diagram）
+-   イベントタイムライン
+
+<!-- * DAGs (Directed Acyclic Graphs)   -->
+
+<!-- * GANTT charts   -->
+
+<!-- ======================================================= -->
+
+## 準備
+
+### パッケージを読み込む {.unnumbered}
+
+以下のコードを実行すると、図の作成に必要なパッケージが読み込まれます。このハンドブックでは、パッケージを読み込むために、**pacman** パッケージの `p_load()` を主に使用しています。`p_load()` は、必要に応じてパッケージをインストールし、現在の R セッションで使用するためにパッケージを読み込む関数です。また、すでにインストールされたパッケージは、R の基本パッケージである **base** の `library()` を使用して読み込むこともできます。R のパッケージについての詳細は、[R の基礎](#basics) を参照してください。
+
+```{r}
+pacman::p_load(
+  DiagrammeR,     # フロー図
+  networkD3,      # 沖積図・サンキー図
+  tidyverse)      # データ管理と図作成
+```
+
+### データをインポート {.unnumbered}
+
+この章では、ほとんどデータセットを必要としません。しかし、サンキー図（Sankey diagram） のセクションでは、エボラ出血熱の流行をシミュレートした症例ラインリストを使用します。お手元の環境でこの章の内容を実行したい方は、[こちら](https://github.com/appliedepi/epiRhandbook_eng/raw/master/data/case_linelists/linelist_cleaned.rds) をクリックして「前処理済みの」ラインリストをダウンロードしてください（.rds 形式でダウンロードされます）。データは **rio** パッケージの `import()` を利用してインポートしましょう（**rio** パッケージは、.xlsx、.csv、.rds など様々な種類のファイルを取り扱うことができます。詳細は、[データのインポート・エクスポート](#importing) の章をご覧ください）。
+
+```{r, echo=F}
+# ラインリストを R へインポート
+linelist <- rio::import(here::here("data", "case_linelists", "linelist_cleaned.rds"))
+```
+
+```{r, eval=F}
+# ラインリストをインポート
+linelist <- import("linelist_cleaned.rds")
+```
+
+ラインリストの最初の 50 行を以下に表示します。
+
+```{r, message=FALSE, echo=F}
+# ラインリストを表として表示
+DT::datatable(head(linelist, 50), rownames = FALSE, filter="top", options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+<!-- ======================================================= -->
+
+## フローチャート
+
+R パッケージの **DiagrammeR** を使って、フローチャートを作成することができます。グラフは静的なものもあれば、データセットの変化に基づいて動的に調整することもできます。
+
+**ツール**
+
+"Graphviz" で図を作成するには、`grViz()` を用います。この関数は、<u>図を作成するための指示を含む文字列の入力を</u>受け付けます。この文字列の中には、[DOT](https://graphviz.org/doc/info/lang.html) と呼ばれる別の言語で書かれた指示が含まれていますが、基本は容易に学ぶことができます。
+
+**基本的な構造**
+
+1)  指示を開始する `grViz("`
+2)  グラフの方向性と名前を指定し、波括弧を開く - 例：`digraph my_flow_chart {`
+3)  グラフ文（Graph 文） - レイアウト、ランク方向
+4)  ノード文 （Node 文） - ノードを作成
+5)  エッジ文（Edge 文） - ノード間のリンクを与える
+6)  指示を閉じる `}"`
+
+### 簡単な例 {.unnumbered}
+
+以下に 2 つの簡単な例を示します。
+
+最小限のプロットを作成します。
+
+```{r out.width='50%'}
+# 最小限のプロット
+DiagrammeR::grViz("digraph {
+  
+graph[layout = dot, rankdir = LR]
+
+a
+b
+c
+
+a -> b -> c
+}")
+```
+
+もう一つは、公衆衛生の文脈でもう少し応用が効く例です。
+
+```{r out.width='50%'}
+grViz("                           # すべての指示は大きな文字列の中にある
+digraph surveillance_diagram {    # digraph は directional graph という意味で、その後にグラフ名が入る
+  
+  # graph statement
+  #################
+  graph [layout = dot,
+         rankdir = TB,
+         overlap = true,
+         fontsize = 10]
+  
+  # nodes
+  #######
+  node [shape = circle,           # shape = circle
+       fixedsize = true
+       width = 1.3]               # circle の大きさ
+  
+  １番目                          # ノードの名称
+  ２番目
+  ３番目
+
+  # edges
+  #######
+  １番目   -> ２番目 [label = '症例移送']
+  ２番目   -> ３番目 [label = '症例移送']
+}
+")
+```
+
+### 構文 {.unnumbered}
+
+**基本的な構文**
+
+ノード名とエッジ文は、スペース、セミコロン、改行で区切ることができます。
+
+**ランクの方向**
+
+グラフ文の `rankdir` 引数を調整することで、プロットを左から右へと移動させることができます。デフォルトは TB（top-to-bottom）ですが、LR（left-to-right）、RL、BT のいずれかを指定できます。
+
+**ノード名**
+
+ノード名は、上の例のように単一の単語で構いません。複数の単語や特殊文字（括弧やダッシュなど）を使用する場合は、ノード名を一重引用符（`' '`）で囲みます。ノード名を短くして、以下のように角括弧（`[ ]`）で囲んで<u>ラベル</u>を割り当てる方が簡単な場合があります。ノード名の中に改行を入れたい場合は、ラベルを介して行う必要があります。以下のように、一重引用符で囲んだノードラベルの中に `\n` を使用してください。
+
+**サブグループ**
+
+エッジ文の中で、サブグループはエッジの両側に波括弧（`{ }`）で作成できます。エッジは括弧内のすべてのノードに適用され、省略可能です。
+
+**レイアウト**
+
+-   dot（`rankdir` を TB、LR、RL、BT のいずれかに設定）
+-   neato
+-   twopi
+-   circo
+
+**ノード - 属性値**
+
+-   `label`（テキスト、半角スペースを含む場合は一重引用符で囲む）\
+
+-   `fillcolor`（多数の色が使用可能）\
+
+-   `fontcolor`\
+
+-   `alpha`（透明度 0-1）\
+
+-   `shape`（ellipse、oval、diamond、egg、plaintext、point、square、triangle）\
+
+-   `style`\
+
+-   `sides`\
+
+-   `peripheries`\
+
+-   `fixedsize`（縦（高さ）x 横（幅））\
+
+-   `height`\
+
+-   `width`\
+
+-   `distortion`\
+
+-   `penwidth` （境界線の太さ）
+
+-   `x`（左・右への変位）\
+
+-   `y`（上・下への変位）\
+
+-   `fontname`\
+
+-   `fontsize`\
+
+-   `icon`
+
+**エッジ - 属性値**
+
+-   `arrowsize`\
+
+-   `arrowhead`（normal、box、crow、curve、diamond、dot、inv、none、tee、vee）\
+
+-   `arrowtail`\
+
+-   `dir`（direction, ）\
+
+-   `style`（dashed, ...）\
+
+-   `color`\
+
+-   `alpha`\
+
+-   `headport` （矢印の前のテキスト）
+
+-   `tailport` （矢印の後のテキスト）
+
+-   `fontname`\
+
+-   `fontsize`\
+
+-   `fontcolor`\
+
+-   `penwidth` （矢の太さ）
+
+-   `minlen` （長さの最長値）
+
+**色名**：16 進数の値または 'X11' の色名、X11 の詳細は [こちら](http://rich-iannone.github.io/DiagrammeR/graphviz_and_mermaid.html) を参照してください。
+
+### 複雑な例 {.unnumbered}
+
+以下の例は、上で作成した surveillance_diagram を発展させたもので、複雑なノード名、グループ化されたエッジ、色、スタイルを追加しています。
+
+    DiagrammeR::grViz("               # すべての指示は大きな文字列の中にあります。
+    digraph surveillance_diagram {    # digraph は directional graph という意味で、その後にグラフ名が入ります。
+      
+      # graph 文
+      #################
+      graph [layout = dot,
+             rankdir = TB,            # layout top-to-bottom
+             fontsize = 10]
+      
+
+      # ノード (円)
+      #################
+      node [shape = circle,           # shape = circle
+           fixedsize = true
+           width = 1.3]                      
+      
+      Primary   [label = '第一\n施設'] 
+      Secondary [label = '第二\n施設'] 
+      Tertiary  [label = '第三\n施設'] 
+      SC        [label = 'サーベイランス\n調整',
+                 fontcolor = darkgreen] 
+      
+      # エッジ
+      #######
+      Primary   -> Secondary [label = ' 症例移送',
+                              fontcolor = red,
+                              color = red]
+      Secondary -> Tertiary [label = ' 症例移送',
+                              fontcolor = red,
+                              color = red]
+      
+      # エッジのグループ
+      {Primary Secondary Tertiary} -> SC [label = '症例報告',
+                                          fontcolor = darkgreen,
+                                          color = darkgreen,
+                                          style = dashed]
+    }
+    ")
+
+```{r out.width='50%', echo=F}
+DiagrammeR::grViz("               # すべての指示は大きな文字列の中にある
+digraph surveillance_diagram {    # digraph は directional graph という意味で、その後にグラフ名が入る
+  
+  # グラフ文
+  #################
+  graph [layout = dot,
+         rankdir = TB,            # layout top-to-bottom
+         fontsize = 10]
+  
+
+  # ノード (円)
+  #################
+  node [shape = circle,           # shape = circle
+       fixedsize = true
+       width = 1.3]                      
+  
+  Primary   [label = '第一\n施設'] 
+  Secondary [label = '第二\n施設'] 
+  Tertiary  [label = '第三\n施設'] 
+  SC        [label = 'サーベイランス\n調整',
+             fontcolor = darkgreen] 
+  
+  # エッジ
+  #######
+  Primary   -> Secondary [label = '症例移送',
+                          fontcolor = red,
+                          color = red]
+  Secondary -> Tertiary [label = '症例移送',
+                          fontcolor = red,
+                          color = red]
+  
+  # エッジグループ
+  {Primary Secondary Tertiary} -> SC [label = '症例報告',
+                                      fontcolor = darkgreen,
+                                      color = darkgreen,
+                                      style = dashed]
+}
+")
+```
+
+**サブグラフのクラスター**
+
+ノードをボックス型のクラスターにまとめるには、同じ名前のサブグラフ（`subgraph name {}`）の中にノードを入れます。各サブグラフをバウンディングボックス内で識別するには、以下の 4 つのボックスで示すように、サブグラフの名前を "cluster" で始めます。
+
+    DiagrammeR::grViz("             # すべての指示は大きな文字列の中にある
+    digraph surveillance_diagram {  # digraph は directional graph という意味で、その後にグラフ名が入る
+      
+      # グラフ文
+      #################
+      graph [layout = dot,
+             rankdir = TB,            
+             overlap = true,
+             fontsize = 10]
+      
+
+      # ノード (円)
+      #################
+      node [shape = circle,                  # shape = circle
+           fixedsize = true
+           width = 1.3]                      # circle の大きさ
+      
+      subgraph cluster_passive {
+        Primary   [label = '第一\n施設] 
+        Secondary [label = '第二\n施設'] 
+        Tertiary  [label = '第三\n施設'] 
+        SC        [label = 'サーベイランス\n調整',
+                   fontcolor = darkgreen] 
+      }
+      
+      # ノード (ボックス)
+      ###############
+      node [shape = box,                     # ノードの形状
+            fontname = Helvetica]            # ノード中のフォント
+      
+      subgraph cluster_active {
+        Active [label = '能動的\nサーベイランス'] 
+        HCF_active [label = 'HCF\n能動的探索']
+      }
+      
+      subgraph cluster_EBD {
+        EBS [label = 'イベントベース\nサーベイランス (EBS)'] 
+        社会メディア
+        ラジオ
+      }
+      
+      subgraph cluster_CBS {
+        CBS [label = '地域参加型\nサーベイランス (CBS)']
+        RECOs
+      }
+
+
+      # エッジ
+      #######
+      {Primary Secondary Tertiary} -> SC [label = '症例報告']
+
+      Primary   -> Secondary [label = '症例移送',
+                              fontcolor = red]
+      Secondary -> Tertiary [label = '症例移送',
+                              fontcolor = red]
+      
+      HCF_active -> Active
+      
+      {社会メディア ラジオ} -> EBS
+      
+      RECOs -> CBS
+    }
+    ")
+
+```{r out.width='120%', echo=F}
+DiagrammeR::grViz("             # すべての指示は大きな文字列の中にある
+digraph surveillance_diagram {  # digraph は directional graph という意味で、その後にグラフ名が入る
+  
+  # グラフ文
+  #################
+  graph [layout = dot,
+         rankdir = TB,            
+         overlap = true,
+         fontsize = 10]
+  
+
+  # ノード (円)
+  #################
+  node [shape = circle,                  # shape = circle
+       fixedsize = true
+       width = 1.3]                      # circle の大きさ
+  
+  subgraph cluster_passive {
+    Primary   [label = '第一\n施設'] 
+    Secondary [label = '第二\n施設'] 
+    Tertiary  [label = '第三\n施設'] 
+    SC        [label = 'サーベイランス\n調整',
+               fontcolor = darkgreen] 
+  }
+  
+  # ノード (ボックス)
+  ###############
+  node [shape = box,                     # ノードの形状
+        fontname = Helvetica]            # ノード内のフォント
+  
+  subgraph cluster_active {
+    Active [label = '能動的\nサーベイランス'] 
+    HCF_active [label = 'HCF\n能動的探索']
+  }
+  
+  subgraph cluster_EBD {
+    EBS [label = 'イベントベース\nサーベイランス (EBS)'] 
+    社会メディア
+    ラジオ
+  }
+  
+  subgraph cluster_CBS {
+    CBS [label = '地域参加型\nサーベイランス (CBS)']
+    RECOs
+  }
+
+  
+  # エッジ
+  #######
+  {Primary Secondary Tertiary} -> SC [label = '症例報告']
+
+  Primary   -> Secondary [label = '症例移送',
+                          fontcolor = red]
+  Secondary -> Tertiary [label = '症例移送',
+                          fontcolor = red]
+  
+  HCF_active -> Active
+  
+  {社会メディア ラジオ} -> EBS
+  
+  RECOs -> CBS
+}
+")
+
+```
+
+**ノードの形状**
+
+以下の例は、[こちらのチュートリアル](http://rich-iannone.github.io/DiagrammeR/) から引用したもので、適用されたノード形状と、連続するエッジ接続の略記法を示しています。
+
+```{r out.width='75%'}
+DiagrammeR::grViz("digraph {
+
+graph [layout = dot, rankdir = LR]
+
+# ノードのグローバル・スタイルを定義します。必要に応じてボックス内でこれらを上書きすることができます。
+node [shape = rectangle, style = filled, fillcolor = Linen]
+
+data1 [label = 'データ 1', shape = folder, fillcolor = Beige]
+data2 [label = 'データ 2', shape = folder, fillcolor = Beige]
+process [label =  'データ \n 処理']
+statistical [label = '統計 \n 解析']
+results [label= '結果']
+
+# ノードIDを持つエッジ定義
+{data1 data2}  -> process -> statistical -> results
+}")
+```
+
+### 出力 {.unnumbered}
+
+出力の取り扱いと保存方法
+
+-   出力結果は、RStudio の Viewer ペインに表示されます。デフォルトでは右下に Files、Plots、Packages、Help と並んで表示されます。
+-   出力結果をエクスポートしたい場合は、Viewer ペインから "Save as image" （「画像として保存」）または "Copy to clipboard" （「クリップボードにコピー」）を選択してください。画像は指定したサイズに調整されます。
+
+### パラメータ化された図形 {.unnumbered}
+
+以下は、[こちらのチュートリアル](https://mikeyharper.uk/flowcharts-in-r-using-diagrammer/) からの引用です。
+
+「パラメータ化された図形:：R で図形を設計することの大きな利点は、R の値をフローチャートに直接読み込んで、図形を分析に直結させることができることです。例えば、プロセスの各段階の後に値を削除するフィルタリングプロセスを作成したとすると、プロセスの各段階の後にデータセットに残っている値の数を図に表示することができます。これを実現するには、図の中で \@@X 記号を直接使用し、プロットのフッターで [X]: を使用して参照します（X は一意の数値インデックス）。」
+
+パラメータ化された図形に興味をお持ちの方は、引用元のチュートリアルをご覧ください。
+
+<!-- And below is some example code from this tutorial. -->
+
+<!-- ```{r, eval=F} -->
+
+<!-- # Define some sample data -->
+
+<!-- data <- list(a=1000, b=800, c=600, d=400) -->
+
+<!-- DiagrammeR::grViz(" -->
+
+<!-- digraph graph2 { -->
+
+<!-- graph [layout = dot] -->
+
+<!-- # node definitions with substituted label text -->
+
+<!-- node [shape = rectangle, width = 4, fillcolor = Biege] -->
+
+<!-- a [label = '@@1'] -->
+
+<!-- b [label = '@@2'] -->
+
+<!-- c [label = '@@3'] -->
+
+<!-- d [label = '@@4'] -->
+
+<!-- a -> b -> c -> d -->
+
+<!-- } -->
+
+<!-- [1]:  paste0('Raw Data (n = ', data$a, ')') -->
+
+<!-- [2]: paste0('Remove Errors (n = ', data$b, ')') -->
+
+<!-- [3]: paste0('Identify Potential Customers (n = ', data$c, ')') -->
+
+<!-- [4]: paste0('Select Top Priorities (n = ', data$d, ')') -->
+
+<!-- ") -->
+
+<!-- ``` -->
+
+<!-- ### CONSORT diagram  {.unnumbered} -->
+
+<!-- THIS SECTION IS UNDER CONSTRUCTION   -->
+
+<!-- https://scriptsandstatistics.wordpress.com/2017/12/22/how-to-draw-a-consort-flow-diagram-using-r-and-graphviz/ -->
+
+<!-- Note above is out of date via DiagrammeR -->
+
+<!-- ======================================================= -->
+
+## 沖積図・サンキー図
+
+### パッケージを読み込む {.unnumbered}
+
+以下のコードを実行すると、図の作成に必要なパッケージが読み込まれます。このハンドブックでは、パッケージを読み込むために、**pacman** パッケージの `p_load()` を主に使用しています。`p_load()` は、必要に応じてパッケージをインストールし、現在の R セッションで使用するためにパッケージを読み込む関数です。また、すでにインストールされたパッケージは、R の基本パッケージである **base** の `library()` を使用して読み込むこともできます。R パッケージの詳細については、[R の基礎](#basics) の章を参照してください。
+
+ここでは、図を作成するために **networkD3** パッケージを読み込み、データ操作のための **tidyverse** パッケージも読み込んでいます。
+
+```{r}
+pacman::p_load(
+  networkD3,
+  tidyverse)
+```
+
+### データセットからプロット {.unnumbered}
+
+データセット内のつながりをプロットします。以下では、**networkD3** パッケージを `linelist` という症例ラインリストで使ってみます。オンラインチュートリアルをご覧になりたい方は、[こちら](https://r-graph-gallery.com/321-introduction-to-interactive-sankey-diagram-2.html) を参照ください。
+
+まず、年齢区分と病院の組み合わせごとに、症例数を集計します。わかりやすくするために、年齢区分が欠落している症例は除外しました。また、`hospital` 列と `age_cat` 列の列名をそれぞれ `source` と `target` に変更します。これらの列は、沖積図の 2 つの面になります。
+
+```{r}
+# 病院と年齢区分で集計
+links <- linelist %>% 
+  drop_na(age_cat) %>% 
+  select(hospital, age_cat) %>%
+  count(hospital, age_cat) %>% 
+  rename(source = hospital,
+         target = age_cat)
+```
+
+データセットは次のようになります。
+
+```{r message=FALSE, echo=F}
+DT::datatable(links, rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap')
+```
+
+次に、すべてのダイアグラム・ノードのデータフレームを、`name` という列で作成します。`name` 列は、`hospital` 列と `age_cat` 列のすべての値で構成されます。`name` 列を作成する前に、`hospital` 列と `age_cat` 列のデータ型が文字型となっているか確認してください。また、後述のコードで作成する ID 列（`IDsource` 列と `IDtarget` 列）をラベルではなく数字型に変更します。
+
+```{r}
+# ユニークなノード名
+nodes <- data.frame(
+  name=c(as.character(links$source), as.character(links$target)) %>% 
+    unique()
+  )
+
+nodes  # 表示
+```
+
+次に、上述の `count()` で作成した `links` データフレームを編集します。 2 つの数値列 `IDsource` と `IDtarget` を追加します。これらはノード間のリンクを実際に反映・作成します。 これらの列にはソースノードとターゲットノードの行番号（位置）が入ります。 ポジション番号が（1 ではなく）0 から始まるように、1 を引きます。
+
+```{r}
+# 名前ではなく数値にマッチング
+links$IDsource <- match(links$source, nodes$name)-1 
+links$IDtarget <- match(links$target, nodes$name)-1
+```
+
+`links` データセットは以下のようになります。
+
+```{r message=FALSE, echo=F}
+DT::datatable(links, rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap')
+```
+
+では、`sankeyNetwork()` を使用してサンキー図をプロットしてみましょう。 コンソールで `?sankeyNetwork` を実行すると、関数内で使用される各引数について詳細を確認することができます。 なお、`iterations = 0` を設定しないと、ノードの順番が期待通りにならないことがあります。
+
+```{r}
+
+# plot
+######
+p <- sankeyNetwork(
+  Links = links,
+  Nodes = nodes,
+  Source = "IDsource",
+  Target = "IDtarget",
+  Value = "n",
+  NodeID = "name",
+  units = "TWh",
+  fontSize = 12,
+  nodeWidth = 30,
+  iterations = 0)        # ノードの順序をデータ順にする
+p
+```
+
+次に、患者のアウトカムも含まれている例を示します。 なお、データ準備・前処理の段階で、年齢層と 病院、またこれとは別に病院とアウトカムの間の症例の数を計算し、`bind_rows()` で両者のカウントを結合しています。
+
+```{r}
+# 病院と年齢区分で集計
+age_hosp_links <- linelist %>% 
+  drop_na(age_cat) %>% 
+  select(hospital, age_cat) %>%
+  count(hospital, age_cat) %>% 
+  rename(source = age_cat,          # 列名の変更
+         target = hospital)
+
+hosp_out_links <- linelist %>% 
+    drop_na(age_cat) %>% 
+    select(hospital, outcome) %>% 
+    count(hospital, outcome) %>% 
+    rename(source = hospital,       # 列名の変更
+           target = outcome)
+
+# リンクを結合
+links <- bind_rows(age_hosp_links, hosp_out_links)
+
+# ユニークなノード名
+nodes <- data.frame(
+  name=c(as.character(links$source), as.character(links$target)) %>% 
+    unique()
+  )
+
+# ID番号を生成
+links$IDsource <- match(links$source, nodes$name)-1 
+links$IDtarget <- match(links$target, nodes$name)-1
+
+# プロットする
+######
+p <- sankeyNetwork(Links = links,
+                   Nodes = nodes,
+                   Source = "IDsource",
+                   Target = "IDtarget",
+                   Value = "n",
+                   NodeID = "name",
+                   units = "TWh",
+                   fontSize = 12,
+                   nodeWidth = 30,
+                   iterations = 0)
+p
+
+```
+
+<https://www.displayr.com/sankey-diagrams-r/>
+
+<!-- ======================================================= -->
+
+## イベントのタイムライン
+
+特定のイベントを表示するタイムラインを作るには、**vistime** パッケージを使用します。
+
+詳細は、[こちらのドキュメント](https://cran.r-project.org/web/packages/vistime/vignettes/vistime-vignette.html#ex.-2-project-planning) をご覧ください。
+
+```{r}
+# パッケージの読み込み
+pacman::p_load(vistime,  # タイムラインを作成
+               plotly    # インタラクティブな可視化
+               )
+```
+
+```{r, echo=F}
+# 参照: https://cran.r-project.org/web/packages/vistime/vignettes/vistime-vignette.html#ex.-2-project-planning
+
+data <- read.csv(text="event, group, start, end, color
+                       Event 1, Group A,2020-01-22,2020-01-22, #90caf9
+                       Event 1, Group B,2020-01-23,2020-01-23, #90caf9
+                       Event 1, Group C,2020-01-23,2020-01-23, #1565c0
+                       Event 1, Group D,2020-01-25,2020-01-25, #f44336
+                       Event 1, Group E,2020-01-25,2020-01-25, #90caf9
+                       Event 1, Group F,2020-01-26,2020-01-26, #8d6e63
+                       Event 1, Group G,2020-01-27,2020-01-27, #1565c0
+                       Event 1, Group H,2020-01-27,2020-01-27, #90caf9
+                       Event 1, Group I,2020-01-27,2020-01-27, #90a4ae
+                       Event 2, Group A,2020-01-28,2020-01-28, #fc8d62
+                       Event 2, Group C,2020-01-28,2020-01-28, #6a3d9a
+                       Event 2, Group J,2020-01-28,2020-01-28, #90caf9
+                       Event 2, Group J,2020-01-28,2020-01-28, #fc8d62
+                       Event 2, Group J,2020-01-28,2020-01-28, #1565c0
+")
+```
+
+ここでは、まず関心のあるイベントが含まれているデータセットをご紹介します。
+
+```{r message=FALSE, echo=F}
+DT::datatable(data, rownames = FALSE, filter="top", options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap')
+```
+
+```{r}
+p <- vistime(data)    # vistime を適用  
+
+library(plotly)
+
+# step 1: リストに変換  
+pp <- plotly_build(p)
+
+# step 2: マーカーの大きさ  
+for(i in 1:length(pp$x$data)){
+  if(pp$x$data[[i]]$mode == "markers") pp$x$data[[i]]$marker$size <- 10
+}
+
+# step 3: テキストの大きさ  
+for(i in 1:length(pp$x$data)){
+  if(pp$x$data[[i]]$mode == "text") pp$x$data[[i]]$textfont$size <- 10
+}
+
+
+# step 4: テキストの位置  
+for(i in 1:length(pp$x$data)){
+  if(pp$x$data[[i]]$mode == "text") pp$x$data[[i]]$textposition <- "right"
+}
+
+# 表示  
+pp
+
+```
+
+<!-- ======================================================= -->
+
+## DAGs
+
+前述のように、**DiagammeR** パッケージと DOT 言語を使って手動で DAG を構築することができます。
+
+また、**ggdag** や **daggity** などのパッケージもあります。
+
+[DAG の紹介 ggdag に関するドキュメント](https://cran.r-project.org/web/packages/ggdag/vignettes/intro-to-dags.html)
+
+[R で dags を使用した統計的因果推論](https://www.r-bloggers.com/2019/08/causal-inference-with-dags-in-r/#:~:text=In%20a%20DAG%20all%20the,for%20drawing%20analyzing%20DAGs.)
+
+<!-- ======================================================= -->
+
+## 参考資料
+
+本章の DOT言語に関する大部分は[こちら](https://mikeyharper.uk/flowcharts-in-r-using-diagrammer/) のチュートリアルを参考にしています。
+
+より詳細な DiagammeR に関するチュートリアルは、[こちら](http://rich-iannone.github.io/DiagrammeR/) を参照ください。
+
+サンキー図については、[こちら](https://www.displayr.com/sankey-diagrams-r/) のウェブサイトも参考にしてください。

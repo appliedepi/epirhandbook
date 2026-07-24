@@ -1,0 +1,537 @@
+---
+aliases:
+  - /new_pages/tables_presentation.de.html
+---
+
+# Tische für die Präsentation { }
+
+```{r, echo=FALSE, fig.show="hold", message=FALSE, warning=FALSE, out.width=c("50%", "50%")}
+
+linelist <- rio::import(here::here("data", "case_linelists", "linelist_cleaned.rds")) 
+
+border_style = officer::fp_border(color="black", width=1)
+
+pacman::p_load(
+  rio,            # import/export
+  here,           # file pathways
+  flextable,      # make HTML tables 
+  officer,        # helper functions for tables
+  tidyverse)      # data management, summary, and visualization
+
+table <- linelist %>% 
+  # filter
+  ########
+  #filter(!is.na(outcome) & hospital != "Missing") %>%  # Remove cases with missing outcome or hospital
+  
+  # Get summary values per hospital-outcome group
+  ###############################################
+  group_by(hospital, outcome) %>%                      # Group data
+  summarise(                                           # Create new summary columns of indicators of interest
+    N = n(),                                            # Number of rows per hospital-outcome group     
+    ct_value = median(ct_blood, na.rm=T)) %>%           # median CT value per group
+  
+  # add totals
+  ############
+  bind_rows(                                           # Bind the previous table with this mini-table of totals
+    linelist %>% 
+      filter(!is.na(outcome) & hospital != "Missing") %>%
+      group_by(outcome) %>%                            # Grouped only by outcome, not by hospital    
+      summarise(
+        N = n(),                                       # Number of rows for whole dataset     
+        ct_value = median(ct_blood, na.rm=T))) %>%     # Median CT for whole dataset
+  
+  # Pivot wider and format
+  ########################
+  mutate(hospital = replace_na(hospital, "Total")) %>% 
+  pivot_wider(                                         # Pivot from long to wide
+    values_from = c(ct_value, N),                       # new values are from ct and count columns
+    names_from = outcome) %>%                           # new column names are from outcomes
+  mutate(                                              # Add new columns
+    N_Known = N_Death + N_Recover,                               # number with known outcome
+    Pct_Death = scales::percent(N_Death / N_Known, 0.1),         # percent cases who died (to 1 decimal)
+    Pct_Recover = scales::percent(N_Recover / N_Known, 0.1)) %>% # percent who recovered (to 1 decimal)
+  select(                                              # Re-order columns
+    hospital, N_Known,                                   # Intro columns
+    N_Recover, Pct_Recover, ct_value_Recover,            # Recovered columns
+    N_Death, Pct_Death, ct_value_Death)  %>%             # Death columns
+  arrange(N_Known) %>%                                 # Arrange rows from lowest to highest (Total row at bottom)
+
+  # formatting
+  ############
+  flextable() %>% 
+  add_header_row(
+    top = TRUE,                # New header goes on top of existing header row
+    values = c("Hospital",     # Header values for each column below
+               "Total cases with known outcome", 
+               "Recovered",    # This will be the top-level header for this and two next columns
+               "",
+               "",
+               "Died",         # This will be the top-level header for this and two next columns
+               "",             # Leave blank, as it will be merged with "Died"
+               "")) %>% 
+    set_header_labels(         # Rename the columns in original header row
+      hospital = "", 
+      N_Known = "",                  
+      N_Recover = "Total",
+      Pct_Recover = "% of cases",
+      ct_value_Recover = "Median CT values",
+      N_Death = "Total",
+      Pct_Death = "% of cases",
+      ct_value_Death = "Median CT values")  %>% 
+  merge_at(i = 1, j = 3:5, part = "header") %>% # Horizontally merge columns 3 to 5 in new header row
+  merge_at(i = 1, j = 6:8, part = "header") %>%  
+  border_remove() %>%  
+  theme_booktabs() %>% 
+  vline(part = "all", j = 2, border = border_style) %>%   # at column 2 
+  vline(part = "all", j = 5, border = border_style) %>%   # at column 5
+  merge_at(i = 1:2, j = 1, part = "header") %>% 
+  merge_at(i = 1:2, j = 2, part = "header") %>% 
+  width(j=1, width = 2.7) %>% 
+  width(j=2, width = 1.5) %>% 
+  width(j=c(4,5,7,8), width = 1) %>% 
+  flextable::align(., align = "center", j = c(2:8), part = "all") %>% 
+  bg(., part = "body", bg = "gray95")  %>% 
+  #bg(., j=c(1:8), i= ~ hospital == "Military Hospital", part = "body", bg = "#91c293") %>% 
+  bg(j = 7, i = ~ Pct_Death >= 55, part = "body", bg = "red") %>% 
+  colformat_num(., j = c(4,7), digits = 1) %>%
+  bold(i = 1, bold = TRUE, part = "header") %>% 
+  bold(i = 7, bold = TRUE, part = "body")
+
+table
+```
+
+Auf dieser Seite wird gezeigt, wie man zusammenfassende Datenrahmen in präsentationsfähige Tabellen umwandelt, indem man die **flextable** Paket umwandelt. Diese Tabellen können in Powerpoint-Folien, HTML-Seiten, PDF- oder Word-Dokumente usw. eingefügt werden.
+
+Verstehe, dass *vor* verwenden **flextable**verwenden, musst du die Übersichtstabelle als Datenrahmen erstellen. Verwende Methoden aus dem Kapitel [Beschreibenden Tabellen] und [Pivotierung von Daten] wie z. B. Tabellen, Kreuztabellen, Pivotierung und die Berechnung von deskriptiven Statistiken. Der resultierende Datenrahmen kann dann an**flextable** zur Formatierung der Anzeige übergeben werden.
+
+Es gibt viele andere R-Pakete, die zur Erstellung von Tabellen für die Präsentation verwendet werden können - wir haben uns entschieden, Folgendes hervorzuheben **flextable** auf dieser Seite hervorgehoben. Ein Beispiel, das das **knitr** Paket und dessen `kable()`Funktion finden Sie in der [Kontaktverfolgung] Seite. Ebenso kann die**DT**Paket ist auf der Seite hervorgehoben [Dashboards mit Shiny]. Andere wie zum Beispiel**GT** und **huxtable**sind in den [Vorgeschlagene Pakete] Seite.
+
+<!-- ======================================================= -->
+
+## Vorbereitung {  }
+
+### Pakete laden {.unnumbered}
+
+Installieren und laden **flextable**. In diesem Handbuch betonen wir `p_load()` von **pacman**, der das Paket bei Bedarf installiert *und* lädt es zur Verwendung. Du kannst Pakete auch laden mit `library()` von **Basis**R. Siehe die Seite über [R-Grundlagen] für weitere Informationen über R-Pakete.
+
+```{r}
+pacman::p_load(
+  rio,            # import/export
+  here,           # file pathways
+  flextable,      # make HTML tables 
+  officer,        # helper functions for tables
+  tidyverse)      # data management, summary, and visualization
+
+```
+
+### Daten importieren {.unnumbered}
+
+Zunächst importieren wir die bereinigte Liste der Fälle aus einer simulierten Ebola-Epidemie. Wenn du mitmachen willst, <a href='https://github.com/epirhandbook/Epi_R_handbook/raw/master/data/case_linelists/linelist_cleaned.rds' class='download-button'>klicke, um die "saubere" Liste herunterzuladen</a> (als .rds-Datei). Importiere Daten mit dem `import()` Funktion aus der **rio**Paket (sie verarbeitet viele Dateitypen wie .xlsx, .csv, .rds - siehe die [Import und Export] Seite für Details).
+
+```{r, echo=F}
+# import the linelist into R
+linelist <- rio::import(here::here("data", "case_linelists", "linelist_cleaned.rds"))
+```
+
+```{r, eval=F}
+# import the linelist
+linelist <- import("linelist_cleaned.rds")
+```
+
+Die ersten 50 Zeilen der Linienliste werden unten angezeigt.
+
+```{r, message=FALSE, echo=F}
+# display the linelist data as a table
+DT::datatable(head(linelist, 50), rownames = FALSE, filter="top", options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+### Tabelle vorbereiten {.unnumbered}
+
+*Vor* Beginn der Nutzung **flextable** musst du *erstellen*deine Tabelle als Datenrahmen erstellen. Siehe die Seite über [Beschreibende Tabellen] und [Pivotierung von Daten] erfährst du, wie du einen Datenrahmen mit Paketen wie**Hausmeister** und **dplyr**. Du musst den Inhalt in Zeilen und Spalten so anordnen, wie du ihn anzeigen lassen willst. Anschließend wird der Datenrahmen an **flextable** übergeben, um ihn mit Farben, Überschriften, Schriftarten usw. anzuzeigen.
+
+Nachfolgend ein Beispiel aus der [Beschreibende Tabellen] Seite für die Umwandlung des Falles`linelist` in einen Datenrahmen umwandelt, der die Patientenergebnisse und CT-Werte nach Krankenhaus zusammenfasst und unten eine Summenzeile enthält. Die Ausgabe wird gespeichert als `table`.
+
+```{r, message=FALSE, warning=FALSE}
+table <- linelist %>% 
+  
+  # Get summary values per hospital-outcome group
+  ###############################################
+  group_by(hospital, outcome) %>%                      # Group data
+  summarise(                                           # Create new summary columns of indicators of interest
+    N = n(),                                            # Number of rows per hospital-outcome group     
+    ct_value = median(ct_blood, na.rm=T)) %>%           # median CT value per group
+  
+  # add totals
+  ############
+  bind_rows(                                           # Bind the previous table with this mini-table of totals
+    linelist %>% 
+      filter(!is.na(outcome) & hospital != "Missing") %>%
+      group_by(outcome) %>%                            # Grouped only by outcome, not by hospital    
+      summarise(
+        N = n(),                                       # Number of rows for whole dataset     
+        ct_value = median(ct_blood, na.rm=T))) %>%     # Median CT for whole dataset
+  
+  # Pivot wider and format
+  ########################
+  mutate(hospital = replace_na(hospital, "Total")) %>% 
+  pivot_wider(                                         # Pivot from long to wide
+    values_from = c(ct_value, N),                       # new values are from ct and count columns
+    names_from = outcome) %>%                           # new column names are from outcomes
+  mutate(                                              # Add new columns
+    N_Known = N_Death + N_Recover,                               # number with known outcome
+    Pct_Death = scales::percent(N_Death / N_Known, 0.1),         # percent cases who died (to 1 decimal)
+    Pct_Recover = scales::percent(N_Recover / N_Known, 0.1)) %>% # percent who recovered (to 1 decimal)
+  select(                                              # Re-order columns
+    hospital, N_Known,                                   # Intro columns
+    N_Recover, Pct_Recover, ct_value_Recover,            # Recovered columns
+    N_Death, Pct_Death, ct_value_Death)  %>%             # Death columns
+  arrange(N_Known)                                    # Arrange rows from lowest to highest (Total row at bottom)
+
+table  # print
+
+```
+
+<!-- ======================================================= -->
+
+## Basis-Flextisch {  }
+
+### Eine Flextabelle erstellen {.unnumbered}
+
+So erstellen und verwalten Sie **flextable** Objekte zu erstellen und zu verwalten, übergeben wir den Datenrahmen zunächst durch die `flextable()` Funktion. Wir speichern das Ergebnis als `my_table`.
+
+```{r}
+
+my_table <- flextable(table) 
+my_table
+
+```
+
+Danach können wir nach und nach die `my_table` Objekt durch weitere **flextable** Formatierungsfunktionen.
+
+Auf dieser Seite werden wir der Übersichtlichkeit halber die Tabelle bei Zwischenschritten als `my_table` und fügen **flextable** Funktionen Stück für Stück hinzu. Wenn du sehen willst *alle* Code von Anfang bis Ende in einem Stück sehen willst, besuche die [Alle Codes zusammen](#tbl_pres_all) Abschnitt unten.
+
+Die allgemeine Syntax der einzelnen Zeilen von **flextable** Codes lautet wie folgt:
+
+- `function(table, i = X, j = X, part = "X")`, wobei:
+  - Die "Funktion" kann eine von vielen verschiedenen Funktionen sein, wie zum Beispiel `width()` um Spaltenbreiten zu bestimmen, `bg()` um Hintergrundfarben festzulegen, `align()` um festzulegen, ob der Text mittig/rechts/links ausgerichtet ist, und so weiter.
+  - `table = ` ist der Name des Datenrahmens, muss aber nicht angegeben werden, wenn der Datenrahmen in die Funktion eingefügt wird.
+  - `part = ` gibt an, auf welchen Teil der Tabelle die Funktion angewendet wird. Z.B. "Kopf", "Körper" oder "alles".
+  - `i = ` legt fest, dass die *Zeile* auf die die Funktion angewendet werden soll, wobei "X" die Zeilennummer ist. Bei mehreren Zeilen, z. B. der ersten bis dritten Zeile, kann man angeben: `i = c(1:3)`. Wenn du "Körper" auswählst, beginnt die erste Zeile unterhalb des Kopfbereichs.
+  - `j = ` spezifiziert die *Spalte* auf die die Funktion angewendet werden soll, wobei "x" die Spaltennummer oder der Spaltenname ist. Bei mehreren Spalten, z. B. der fünften und sechsten, kann man angeben: `j = c(5,6)`.
+
+Du findest die vollständige Liste der **flextable** Formatierungsfunktion [hier](https://davidgohel.github.io/flextable/reference/index.html) oder sehen Sie sich die Dokumentation an, indem Sie `?flextable`.
+
+### Spaltenbreite {.unnumbered}
+
+Wir können die `autofit()` Funktion verwenden, die die Tabelle so streckt, dass jede Zelle nur eine Zeile Text enthält. Die Funktion `qflextable()` ist eine praktische Abkürzung für `flextable()` und `autofit()`.
+
+```{r}
+
+my_table %>% autofit()
+
+```
+
+Dies ist jedoch nicht immer sinnvoll, vor allem wenn die Zellen sehr lange Werte enthalten und die Tabelle nicht auf die Seite passt.
+
+Stattdessen können wir die Breite mit der Option `width()` Funktion angeben. Man muss ein bisschen herumspielen, um herauszufinden, welchen Breitenwert man angeben muss. Im folgenden Beispiel geben wir unterschiedliche Breiten für Spalte 1, Spalte 2 und die Spalten 4 bis 8 an.
+
+```{r}
+
+my_table <- my_table %>% 
+  width(j=1, width = 2.7) %>% 
+  width(j=2, width = 1.5) %>% 
+  width(j=c(4,5,7,8), width = 1)
+
+my_table
+  
+```
+
+### Spaltenüberschriften {.unnumbered}
+
+Wir wollen klarere Überschriften, damit der Inhalt der Tabelle leichter zu verstehen ist.
+
+Für diese Tabelle wollen wir eine zweite Kopfebene hinzufügen, damit Spalten, die dieselben Untergruppen abdecken, gruppiert werden können. Wir tun dies mit der `add_header_row()` Funktion mit `top = TRUE`. Wir geben den neuen Namen der einzelnen Spalten an `values = ` und lassen leere Werte `""` für Spalten, von denen wir wissen, dass wir sie später zusammenführen werden.
+
+Wir benennen auch die Namen der Überschriften in der nun zweiten Überschrift in einer separaten `set_header_labels()` Befehl.
+
+Um schließlich bestimmte Spaltenüberschriften in der oberen Kopfzeile zu "kombinieren", verwenden wir `merge_at()` um die Spaltenüberschriften in der obersten Kopfzeile zusammenzuführen.
+
+```{r}
+my_table <- my_table %>% 
+  
+  add_header_row(
+    top = TRUE,                # New header goes on top of existing header row
+    values = c("Hospital",     # Header values for each column below
+               "Total cases with known outcome", 
+               "Recovered",    # This will be the top-level header for this and two next columns
+               "",
+               "",
+               "Died",         # This will be the top-level header for this and two next columns
+               "",             # Leave blank, as it will be merged with "Died"
+               "")) %>% 
+    
+  set_header_labels(         # Rename the columns in original header row
+      hospital = "", 
+      N_Known = "",                  
+      N_Recover = "Total",
+      Pct_Recover = "% of cases",
+      ct_value_Recover = "Median CT values",
+      N_Death = "Total",
+      Pct_Death = "% of cases",
+      ct_value_Death = "Median CT values")  %>% 
+  
+  merge_at(i = 1, j = 3:5, part = "header") %>% # Horizontally merge columns 3 to 5 in new header row
+  merge_at(i = 1, j = 6:8, part = "header")     # Horizontally merge columns 6 to 8 in new header row
+
+my_table  # print
+
+```
+
+### Umrandungen und Hintergrund {.unnumbered}
+
+Du kannst die Ränder, inneren Linien usw. mit verschiedenen **flextable** Funktionen anpassen. Oft ist es einfacher, zunächst alle vorhandenen Ränder mit `border_remove()`.
+
+Dann kannst du Standard-Rahmenmotive anwenden, indem du die Tabelle an `theme_box()`, `theme_booktabs()`, oder `theme_alafoli()`.
+
+Du kannst vertikale und horizontale Linien mit einer Vielzahl von Funktionen hinzufügen. `hline()` und `vline()` fügen Linien zu einer bestimmten Zeile bzw. Spalte hinzu. In jeder Funktion musst du die `part = ` entweder als "alle", "Körper" oder "Kopfzeile" angeben. Für vertikale Zeilen gibst du die Spalte an, die `j = ` und für horizontale Zeilen die Zeile auf `i = `. Andere Funktionen wie `vline_right()`, `vline_left()`, `hline_top()`, und `hline_bottom()` füge nur an den Außenseiten Linien hinzu.
+
+Bei all diesen Funktionen muss der eigentliche Linienstil selbst angegeben werden, um `border = ` angegeben werden und muss die Ausgabe eines separaten Befehls sein, der die `fp_border()` Funktion aus dem **Offizier** Paket. Mit dieser Funktion kannst du die Breite und Farbe der Linie festlegen. Du kannst dies über die Tabellenbefehle festlegen, wie unten gezeigt.
+
+```{r}
+# define style for border line
+border_style = officer::fp_border(color="black", width=1)
+
+# add border lines to table
+my_table <- my_table %>% 
+
+  # Remove all existing borders
+  border_remove() %>%  
+  
+  # add horizontal lines via a pre-determined theme setting
+  theme_booktabs() %>% 
+  
+  # add vertical lines to separate Recovered and Died sections
+  vline(part = "all", j = 2, border = border_style) %>%   # at column 2 
+  vline(part = "all", j = 5, border = border_style)       # at column 5
+
+my_table
+```
+
+### Schriftart und Ausrichtung {.unnumbered}
+
+Wir richten alle Spalten außer der Spalte ganz links mit den Namen der Krankenhäuser mittig aus, indem wir die `align()` Funktion von **flextable**.
+
+```{r}
+my_table <- my_table %>% 
+   flextable::align(align = "center", j = c(2:8), part = "all") 
+my_table
+```
+
+Außerdem können wir die Schriftgröße der Kopfzeile erhöhen und sie fett machen. Wir können auch die gesamte Zeile fett formatieren.
+
+```{r}
+
+my_table <-  my_table %>%  
+  fontsize(i = 1, size = 12, part = "header") %>%   # adjust font size of header
+  bold(i = 1, bold = TRUE, part = "header") %>%     # adjust bold face of header
+  bold(i = 7, bold = TRUE, part = "body")           # adjust bold face of total row (row 7 of body)
+
+my_table
+
+```
+
+Wir können sicherstellen, dass die Proportionsspalten nur eine Dezimalstelle anzeigen, indem wir die Funktion `colformat_num()`. Dies hätte auch bei der Datenverwaltung mit der Funktion `round()` Funktion.
+
+```{r}
+my_table <- colformat_num(my_table, j = c(4,7), digits = 1)
+my_table
+```
+
+### Zellen zusammenführen {.unnumbered}
+
+Genauso wie wir Zellen in der Kopfzeile horizontal zusammenführen, können wir auch Zellen vertikal zusammenführen, indem wir `merge_at()` und der Angabe der Zeilen (`i`) und Spalte (`j`). Hier fassen wir die Werte "Krankenhaus" und "Fälle mit bekanntem Ausgang insgesamt" vertikal zusammen, um ihnen mehr Platz zu geben.
+
+```{r}
+my_table <- my_table %>% 
+  merge_at(i = 1:2, j = 1, part = "header") %>% 
+  merge_at(i = 1:2, j = 2, part = "header")
+
+my_table
+```
+
+### Hintergrundfarbe {.unnumbered}
+
+Um den Inhalt der Tabelle von den Überschriften zu unterscheiden, können wir zusätzliche Formatierungen hinzufügen, z. B. die Hintergrundfarbe ändern. In diesem Beispiel ändern wir den Tabellenkörper in grau.
+
+```{r}
+my_table <- my_table %>% 
+    bg(part = "body", bg = "gray95")  
+
+my_table 
+```
+
+<!-- ======================================================= -->
+
+## Bedingte Formatierung {  }
+
+Wir können alle Werte in einer Spalte hervorheben, die eine bestimmte Regel erfüllen, z.B. wenn mehr als 55% der Fälle gestorben sind. Setze die Kriterien einfach in die `i = ` oder `j = ` Argument, dem eine Tilde vorangestellt ist `~`. Verweise auf die Spalte im Datenrahmen, nicht auf die Werte der Anzeigeüberschrift.
+
+```{r}
+
+my_table %>% 
+  bg(j = 7, i = ~ Pct_Death >= 55, part = "body", bg = "red") 
+
+```
+
+Oder wir können die gesamte Zeile hervorheben, die ein bestimmtes Kriterium erfüllt, z. B. ein Krankenhaus von Interesse. Dazu entfernen wir einfach die Spalte (`j`), damit die Kriterien für alle Spalten gelten.
+
+```{r}
+
+my_table %>% 
+  bg(., i= ~ hospital == "Military Hospital", part = "body", bg = "#91c293") 
+
+```
+
+## Alle Codes zusammen {#tbl\_pres\_all}
+
+Im Folgenden zeigen wir den gesamten Code aus den obigen Abschnitten zusammen.
+
+```{r}
+
+border_style = officer::fp_border(color="black", width=1)
+
+pacman::p_load(
+  rio,            # import/export
+  here,           # file pathways
+  flextable,      # make HTML tables 
+  officer,        # helper functions for tables
+  tidyverse)      # data management, summary, and visualization
+
+table <- linelist %>% 
+
+  # Get summary values per hospital-outcome group
+  ###############################################
+  group_by(hospital, outcome) %>%                      # Group data
+  summarise(                                           # Create new summary columns of indicators of interest
+    N = n(),                                            # Number of rows per hospital-outcome group     
+    ct_value = median(ct_blood, na.rm=T)) %>%           # median CT value per group
+  
+  # add totals
+  ############
+  bind_rows(                                           # Bind the previous table with this mini-table of totals
+    linelist %>% 
+      filter(!is.na(outcome) & hospital != "Missing") %>%
+      group_by(outcome) %>%                            # Grouped only by outcome, not by hospital    
+      summarise(
+        N = n(),                                       # Number of rows for whole dataset     
+        ct_value = median(ct_blood, na.rm=T))) %>%     # Median CT for whole dataset
+  
+  # Pivot wider and format
+  ########################
+  mutate(hospital = replace_na(hospital, "Total")) %>% 
+  pivot_wider(                                         # Pivot from long to wide
+    values_from = c(ct_value, N),                       # new values are from ct and count columns
+    names_from = outcome) %>%                           # new column names are from outcomes
+  mutate(                                              # Add new columns
+    N_Known = N_Death + N_Recover,                               # number with known outcome
+    Pct_Death = scales::percent(N_Death / N_Known, 0.1),         # percent cases who died (to 1 decimal)
+    Pct_Recover = scales::percent(N_Recover / N_Known, 0.1)) %>% # percent who recovered (to 1 decimal)
+  select(                                              # Re-order columns
+    hospital, N_Known,                                   # Intro columns
+    N_Recover, Pct_Recover, ct_value_Recover,            # Recovered columns
+    N_Death, Pct_Death, ct_value_Death)  %>%             # Death columns
+  arrange(N_Known) %>%                                 # Arrange rows from lowest to highest (Total row at bottom)
+
+  # formatting
+  ############
+  flextable() %>%              # table is piped in from above
+  add_header_row(
+    top = TRUE,                # New header goes on top of existing header row
+    values = c("Hospital",     # Header values for each column below
+               "Total cases with known outcome", 
+               "Recovered",    # This will be the top-level header for this and two next columns
+               "",
+               "",
+               "Died",         # This will be the top-level header for this and two next columns
+               "",             # Leave blank, as it will be merged with "Died"
+               "")) %>% 
+    set_header_labels(         # Rename the columns in original header row
+      hospital = "", 
+      N_Known = "",                  
+      N_Recover = "Total",
+      Pct_Recover = "% of cases",
+      ct_value_Recover = "Median CT values",
+      N_Death = "Total",
+      Pct_Death = "% of cases",
+      ct_value_Death = "Median CT values")  %>% 
+  merge_at(i = 1, j = 3:5, part = "header") %>% # Horizontally merge columns 3 to 5 in new header row
+  merge_at(i = 1, j = 6:8, part = "header") %>%  
+  border_remove() %>%  
+  theme_booktabs() %>% 
+  vline(part = "all", j = 2, border = border_style) %>%   # at column 2 
+  vline(part = "all", j = 5, border = border_style) %>%   # at column 5
+  merge_at(i = 1:2, j = 1, part = "header") %>% 
+  merge_at(i = 1:2, j = 2, part = "header") %>% 
+  width(j=1, width = 2.7) %>% 
+  width(j=2, width = 1.5) %>% 
+  width(j=c(4,5,7,8), width = 1) %>% 
+  flextable::align(., align = "center", j = c(2:8), part = "all") %>% 
+  bg(., part = "body", bg = "gray95")  %>% 
+  bg(., j=c(1:8), i= ~ hospital == "Military Hospital", part = "body", bg = "#91c293") %>% 
+  colformat_num(., j = c(4,7), digits = 1) %>%
+  bold(i = 1, bold = TRUE, part = "header") %>% 
+  bold(i = 7, bold = TRUE, part = "body")
+
+table
+```
+
+<!-- ======================================================= -->
+
+## Deine Tabelle speichern {  }
+
+Es gibt verschiedene Möglichkeiten, wie die Tabelle in deine Ausgabe integriert werden kann.
+
+### Einzelne Tabelle speichern {.unnumbered}
+
+Du kannst die Tabellen in Word, PowerPoint oder HTML oder als Bild (PNG) exportieren. Verwende dazu eine der folgenden Funktionen:
+
+- `save_as_docx()`
+- `save_as_pptx()`
+- `save_as_image()`
+- `save_as_html()`
+
+Unten speichern wir zum Beispiel unsere Tabelle als Word-Dokument. Beachte die Syntax des ersten Arguments - du kannst einfach den Namen deines Flextable-Objekts angeben, z. B. `my_table` angeben, oder du kannst ihm einen "Namen" geben, wie unten gezeigt (der Name ist "Meine Tabelle"). Wenn du einen Namen angibst, wird dieser als Titel der Tabelle in Word angezeigt. Wir zeigen auch den Code zum Speichern als PNG-Bild.
+
+```{r, message=FALSE, warning=FALSE, eval=F}
+# Edit the 'my table' as needed for the title of table.  
+save_as_docx("my table" = my_table, path = "file.docx")
+
+save_as_image(my_table, path = "file.png")
+```
+
+Beachte die Pakete `webshot` oder `webshot2` sind erforderlich, um eine Flextabelle als Bild zu speichern. Die Bilder können einen transparenten Hintergrund haben.
+
+Wenn du dir eine "Live"-Version der **flextable** Ausgabe im gewünschten Dokumentformat anzeigen lassen möchtest, verwende `print()` und gib eine der folgenden Optionen an, um `preview = `. Das Dokument wird auf deinem Computer in dem angegebenen Softwareprogramm "aufpoppen", aber nicht gespeichert. Das kann nützlich sein, um zu prüfen, ob die Tabelle auf eine Seite/Folie passt oder damit du sie schnell in ein anderes Dokument kopieren kannst, kannst du die Druckmethode verwenden, wobei das Argument Vorschau auf "pptx" oder "docx" eingestellt ist.
+
+```{r, eval=F}
+print(my_table, preview = "docx") # Word document example
+print(my_table, preview = "pptx") # Powerpoint example
+```
+
+### Tabelle in R Markdown drucken {.unnumbered}
+
+Diese Tabelle kann in dein automatisiertes Dokument, eine R Markdown-Ausgabe, integriert werden, wenn das Tabellenobjekt innerhalb des R Markdown-Chunks aufgerufen wird. Das bedeutet, dass die Tabelle als Teil eines Berichts aktualisiert werden kann, wenn sich die Daten ändern, sodass die Zahlen aktualisiert werden können.
+
+Details dazu findest du in der [Berichte mit R Markdown] Seite dieses Handbuchs.
+
+<!-- ======================================================= -->
+
+## Ressourcen {  }
+
+Die vollständige **flextable** Buch ist hier: [https://ardata-fr.github.io/flextable-book/](https://ardata-fr.github.io/flextable-book/)
+Die Github-Seite ist [hier](https://davidgohel.github.io/flextable/)  
+Ein Handbuch mit allen **flextable** Funktionen findest du [hier](https://davidgohel.github.io/flextable/reference/index.html)
+
+Eine Galerie mit schönen Beispielen **flextable** Tabellen mit Code kann aufgerufen werden [hier](https://ardata-fr.github.io/flextable-gallery/gallery/)
+
+

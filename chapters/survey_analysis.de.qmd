@@ -1,0 +1,1102 @@
+---
+aliases:
+  - /new_pages/survey_analysis.de.html
+---
+
+# Umfrage-Analyse { }
+
+<!-- ======================================================= -->
+
+## Übersicht {  }
+
+Diese Seite demonstriert die Verwendung verschiedener Pakete für die Umfrageanalyse.
+
+Die meisten Umfrage-R-Pakete basieren auf dem [**Umfrage** Paket](https://cran.r-project.org/web/packages/survey/index.html)
+um eine gewichtete Analyse durchzuführen.
+Wir verwenden **Umfrage** als auch [**srvyr**](https://cran.r-project.org/web/packages/srvyr/index.html)
+(ein Wrapper für **Umfrage** die eine Codierung im Stil von Tidyverse ermöglicht) und
+[**gtsummary**](https://cran.r-project.org/web/packages/gtsummary/index.html)
+(ein Wrapper für **Umfrage** die es ermöglicht, Tabellen zu veröffentlichen).
+Während die ursprüngliche **Umfrage** Paket keine Kodierung im Tidyverse-Stil zulässt,
+hat es den zusätzlichen Vorteil, dass es umfragegewichtete generalisierte lineare
+Modelle (die wir zu einem späteren Zeitpunkt auf dieser Seite hinzufügen werden).
+Wir werden auch die Verwendung einer Funktion aus der [**sitrep**](https://github.com/R4EPI/sitrep)
+Paket, um Stichprobengewichte zu erstellen (*n.b* Dieses Paket ist derzeit noch nicht auf CRAN verfügbar,
+kann aber von github installiert werden).
+
+Der Großteil dieser Seite basiert auf der Arbeit für die ["R4Epis" Projekt](https://r4epis.netlify.app/);
+Für detaillierten Code und R-markdown Vorlagen siehe die ["R4Epis" github Seite](https://github.com/R4EPI/sitrep).
+Einige der **Umfrage** paketbasierte Code basiert auf frühen Versionen von
+[EPIET-Fallstudien](https://github.com/EPIET/RapidAssessmentSurveys).
+
+Diese Seite befasst sich derzeit nicht mit der Berechnung des Stichprobenumfangs oder der Probenahme.
+Einen einfach zu bedienenden Stichprobenberechner findest du unter [OpenEpi](https://www.openepi.com/Menu/OE_Menu.htm).
+Die [GIS-Grundlagen](https://epirhandbook.com/gis-basics.html) Seite des Handbuchs
+einen Abschnitt über räumliche Zufallsstichproben enthalten, und diese Seite wird
+einen Abschnitt über Stichprobenrahmen und die Berechnung des Stichprobenumfangs enthalten.
+
+1. Umfragedaten
+2. Beobachtungszeit
+3. Gewichtung
+4. Entwurfsobjekte der Umfrage
+5. Deskriptive Analyse
+6. Gewichtete Proportionen
+7. Gewichtete Raten
+
+<!-- ======================================================= -->
+
+## Vorbereitung {  }
+
+### Pakete {.unnumbered}
+
+Dieser Codechunk zeigt das Laden der Pakete, die für die Analysen benötigt werden. In diesem Handbuch betonen wir `p_load()` von **pacman**, der das Paket bei Bedarf installiert *und* es zur Verwendung lädt. Du kannst Pakete auch laden mit `library()` von **Basis**R. Siehe die Seite über [R-Grundlagen] für weitere Informationen über R-Pakete.  
+Hier demonstrieren wir auch die Verwendung des `p_load_gh()` Funktion von **pacman** um ein Paket von Github zu installieren und zu laden, das noch nicht auf CRAN veröffentlicht worden ist.
+
+```{r}
+
+## load packages from CRAN
+pacman::p_load(rio,          # File import
+               here,         # File locator
+               tidyverse,    # data management + ggplot2 graphics
+               tsibble,      # handle time series datasets
+               survey,       # for survey functions
+               srvyr,        # dplyr wrapper for survey package
+               gtsummary,    # wrapper for survey package to produce tables
+               apyramid,     # a package dedicated to creating age pyramids
+               patchwork,    # for combining ggplots
+               ggforce       # for alluvial/sankey plots
+               ) 
+
+## load packages from github
+pacman::p_load_gh(
+     "R4EPI/sitrep"          # for observation time / weighting functions
+)
+
+```
+
+### Daten laden {.unnumbered}
+
+Der in diesem Abschnitt verwendete Beispieldatensatz:
+
+- Daten aus der fiktiven Sterblichkeitserhebung.
+- fiktive Bevölkerungszahlen für das Erhebungsgebiet.
+- Datenwörterbuch für die fiktiven Daten der Sterblichkeitserhebung.
+
+Es basiert auf der von der Ethikkommission der MSF OCA genehmigten Erhebung. Die
+fiktive Datensatz wurde im Rahmen der ["R4Epis"-Projekts](https://r4epis.netlify.app/).
+Dies alles basiert auf Daten, die mit [KoboToolbox](https://www.kobotoolbox.org/),
+eine Software zur Datenerfassung, die auf [Open Data Kit](https://opendatakit.org/).
+
+Mit Kobo kannst du sowohl die gesammelten Daten als auch das Datenwörterbuch exportieren.
+für diesen Datensatz zu exportieren. Wir empfehlen dies dringend, da es die Datenbereinigung vereinfacht.
+und ist nützlich, um Variablen/Fragen nachzuschlagen.
+
+<span style="color: darkgreen;">***TIPP:*** Das Kobo Datenwörterbuch hat variable
+Namen in der Spalte "Name" auf dem Erhebungsbogen.
+Mögliche Werte für jede Variable sind in der Tabelle "Auswahl" angegeben.
+In der Registerkarte "Choices" hat "Name" den verkürzten Wert und die "label::english" und
+"label::french" haben die entsprechenden langen Versionen.
+Die Verwendung der **epidict** Paket `msf_dict_survey()` Funktion zum Importieren eines Kobo
+Wörterbuch-Excel-Datei zu importieren, wird diese für dich umformatiert, damit du sie einfach zum Umkodieren verwenden kannst. </span>
+
+<span style="color: orange;">***VORSICHT!*** Der Beispieldatensatz ist nicht derselbe
+wie ein Export (wie in Kobo exportierst du verschiedene Fragebogenebenen einzeln)
+
+- siehe den Abschnitt mit den Umfragedaten unten, um die verschiedenen Ebenen zusammenzuführen.</span>
+
+Der Datensatz wird mit dem `import()` Funktion aus der **rio** Paket. Siehe die Seite auf [Import und Export](https://epirhandbook.com/import-and-export.html) für verschiedene Möglichkeiten, Daten zu importieren.
+
+```{r, echo=FALSE}
+# import the survey into R
+survey_data <- rio::import(here::here("data", "surveys", "survey_data.xlsx"))
+
+# import the dictionary into R
+survey_dict <- rio::import(here::here("data", "surveys", "survey_dict.xlsx")) 
+
+# import the population in to R 
+population <- rio::import(here::here("data", "surveys", "population.xlsx"))
+```
+
+```{r, eval=FALSE}
+# import the survey data
+survey_data <- rio::import("survey_data.xlsx")
+
+# import the dictionary into R
+survey_dict <- rio::import("survey_dict.xlsx") 
+```
+
+Die ersten 10 Zeilen der Umfrage werden unten angezeigt.
+
+```{r, message=FALSE, echo=FALSE}
+# display the survey data as a table
+DT::datatable(head(survey_data, 10), rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+Wir wollen auch die Daten der Stichprobenpopulation importieren, damit wir die
+geeignete Gewichte erstellen können. Diese Daten können in verschiedenen Formaten vorliegen, aber wir möchten
+Wir würden jedoch vorschlagen, dass sie wie unten abgebildet aussehen (sie können einfach in eine Excel-Datei eingegeben werden).
+
+```{r read_data_pop_show, eval=FALSE}
+# import the population data
+population <- rio::import("population.xlsx")
+```
+
+Die ersten 10 Zeilen der Umfrage werden unten angezeigt.
+
+```{r, message=FALSE, echo=F}
+# display the survey data as a table
+DT::datatable(head(population, 10), rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+Bei Clustererhebungen möchtest du vielleicht Erhebungsgewichte auf Clusterebene hinzufügen.
+Du kannst diese Daten wie oben beschrieben einlesen.
+Wenn es nur einige wenige Zählungen gibt, kannst du sie alternativ wie folgt eingeben
+in ein Tibble.
+In jedem Fall brauchst du eine Spalte mit einer Clusterkennung, die
+der mit deinen Umfragedaten übereinstimmt, und eine weitere Spalte mit der Anzahl der Haushalte in
+jedem Cluster.
+
+```{r cluster_counts}
+
+## define the number of households in each cluster
+cluster_counts <- tibble(cluster = c("village_1", "village_2", "village_3", "village_4", 
+                                     "village_5", "village_6", "village_7", "village_8",
+                                     "village_9", "village_10"), 
+                         households = c(700, 400, 600, 500, 300, 
+                                        800, 700, 400, 500, 500))
+
+```
+
+### Saubere Daten {.unnumbered}
+
+Im Folgenden wird sichergestellt, dass die Datumsspalte das richtige Format hat.
+Es gibt verschiedene andere Möglichkeiten, dies zu tun (siehe die [Arbeiten mit Datumsangaben](https://epirhandbook.com/working-with-dates.html)
+Seite), aber mit dem Wörterbuch ist es schnell und einfach, Daten zu definieren.
+
+Wir erstellen auch eine Altersgruppenvariable, indem wir die `age_categories()` Funktion von
+**epikit** - siehe [Daten bereinigen](https://epirhandbook.com/cleaning-data-and-core-functions.html#num_cats)
+Handbuch für Details.
+Außerdem erstellen wir eine Zeichenvariable, die definiert, welcher Bezirk die verschiedenen Cluster
+sind.
+
+Schließlich kodieren wir alle Ja/Nein-Variablen in WAHR/FALSCH-Variablen um - andernfalls
+können diese nicht von der **Umfrage** Proportionsfunktionen.
+
+```{r cleaning}
+
+## select the date variable names from the dictionary 
+DATEVARS <- survey_dict %>% 
+  filter(type == "date") %>% 
+  filter(name %in% names(survey_data)) %>% 
+  ## filter to match the column names of your data
+  pull(name) # select date vars
+  
+## change to dates 
+survey_data <- survey_data %>%
+  mutate(across(all_of(DATEVARS), as.Date))
+
+
+## add those with only age in months to the year variable (divide by twelve)
+survey_data <- survey_data %>% 
+  mutate(age_years = if_else(is.na(age_years), 
+                             age_months / 12, 
+                             age_years))
+
+## define age group variable
+survey_data <- survey_data %>% 
+     mutate(age_group = age_categories(age_years, 
+                                    breakers = c(0, 3, 15, 30, 45)
+                                    ))
+
+
+## create a character variable based off groups of a different variable 
+survey_data <- survey_data %>% 
+  mutate(health_district = case_when(
+    cluster_number %in% c(1:5) ~ "district_a", 
+    TRUE ~ "district_b"
+  ))
+
+
+## select the yes/no variable names from the dictionary 
+YNVARS <- survey_dict %>% 
+  filter(type == "yn") %>% 
+  filter(name %in% names(survey_data)) %>% 
+  ## filter to match the column names of your data
+  pull(name) # select yn vars
+  
+## change to dates 
+survey_data <- survey_data %>%
+  mutate(across(all_of(YNVARS), 
+                str_detect, 
+                pattern = "yes"))
+
+```
+
+<!-- ======================================================= -->
+
+## Umfrage-Daten {  }
+
+Es gibt zahlreiche verschiedene Stichprobenpläne, die für Umfragen verwendet werden können. Hier
+werden wir Code für demonstrieren:
+
+- Stratifiziert
+- Cluster
+- Stratifiziert und geclustert
+
+Wie oben beschrieben (je nachdem, wie du deinen Fragebogen gestaltest), werden die Daten für
+für jede Ebene als separater Datensatz aus Kobo exportiert werden. In unserem Beispiel gibt es
+gibt es eine Ebene für Haushalte und eine Ebene für Einzelpersonen innerhalb dieser Haushalte.
+
+Diese beiden Ebenen sind durch einen eindeutigen Identifikator verbunden.
+Für den Kobo-Datensatz ist diese Variable "\_index" auf Haushaltsebene, die
+mit dem "\_parent\_index" auf der individuellen Ebene übereinstimmt.
+Dadurch werden neue Zeilen für den Haushalt mit jeder passenden Person erstellt,
+siehe den Abschnitt im Handbuch über [Verknüpfung](https://epirhandbook.com/joining-data.html)
+für Details.
+
+```{r merge_data_levels, eval=FALSE}
+
+## join the individual and household data to form a complete data set
+survey_data <- left_join(survey_data_hh, 
+                         survey_data_indiv,
+                         by = c("_index" = "_parent_index"))
+
+
+## create a unique identifier by combining indeces of the two levels 
+survey_data <- survey_data %>% 
+     mutate(uid = str_glue("{index}_{index_y}"))
+
+```
+
+<!-- ======================================================= -->
+
+## Beobachtungszeit {  }
+
+Für Mortalitätserhebungen wollen wir wissen, wie lange jede Person in der
+um eine angemessene Sterblichkeitsrate für unseren Zeitraum berechnen zu können
+von Interesse zu berechnen. Dies ist nicht für alle Erhebungen relevant, aber insbesondere für die Sterblichkeit
+Sterblichkeitserhebungen ist dies wichtig, da sie häufig unter mobilen oder vertriebenen Menschen durchgeführt werden.
+Bevölkerungsgruppen durchgeführt werden.
+
+Dazu legen wir zunächst den Zeitraum fest, der uns interessiert, auch bekannt als Recall
+(d.h. die Zeit, die die Teilnehmer bei der Beantwortung ihrer Fragen angeben sollen).
+Fragen).
+Diesen Zeitraum können wir dann nutzen, um unpassende Daten als fehlend zu markieren, d.h. wenn Todesfälle
+von außerhalb des interessierenden Zeitraums gemeldet werden.
+
+```{r recall_period}
+
+## set the start/end of recall period
+## can be changed to date variables from dataset 
+## (e.g. arrival date & date questionnaire)
+survey_data <- survey_data %>% 
+  mutate(recall_start = as.Date("2018-01-01"), 
+         recall_end   = as.Date("2018-05-01")
+  )
+
+
+# set inappropriate dates to NA based on rules 
+## e.g. arrivals before start, departures departures after end
+survey_data <- survey_data %>%
+      mutate(
+           arrived_date = if_else(arrived_date < recall_start, 
+                                 as.Date(NA),
+                                  arrived_date),
+           birthday_date = if_else(birthday_date < recall_start,
+                                  as.Date(NA),
+                                  birthday_date),
+           left_date = if_else(left_date > recall_end,
+                              as.Date(NA),
+                               left_date),
+           death_date = if_else(death_date > recall_end,
+                               as.Date(NA),
+                               death_date)
+           )
+
+```
+
+Mit unseren Datumsvariablen können wir dann das Start- und Enddatum für jede Person festlegen.
+Wir können die `find_start_date()` Funktion von **sitrep** um die Ursachen für
+und dann die Differenz zwischen den Tagen (Personenzeit) zu berechnen.
+
+Startdatum:
+Frühestes geeignetes Ankunftsdatum innerhalb deines Rückrufzeitraums
+Entweder der Beginn deines Rückrufzeitraums (den du im Voraus festlegst), oder ein
+Datum nach Beginn des Rückrufs, falls zutreffend (z. B. Ankünfte oder Geburten)
+
+Enddatum:
+Frühestes geeignetes Abgangsereignis innerhalb deines Rückrufzeitraums
+Entweder das Ende deines Rückrufzeitraums oder ein Datum vor dem Ende des Rückrufs
+falls zutreffend (z. B. Abgänge, Todesfälle)
+
+```{r observation_time}
+
+## create new variables for start and end dates/causes
+survey_data <- survey_data %>% 
+     ## choose earliest date entered in survey
+     ## from births, household arrivals, and camp arrivals 
+     find_start_date("birthday_date",
+                  "arrived_date",
+                  period_start = "recall_start",
+                  period_end   = "recall_end",
+                  datecol      = "startdate",
+                  datereason   = "startcause" 
+                 ) %>%
+     ## choose earliest date entered in survey
+     ## from camp departures, death and end of the study
+     find_end_date("left_date",
+                "death_date",
+                period_start = "recall_start",
+                period_end   = "recall_end",
+                datecol      = "enddate",
+                datereason   = "endcause" 
+               )
+
+
+## label those that were present at the start/end (except births/deaths)
+survey_data <- survey_data %>% 
+     mutate(
+       ## fill in start date to be the beginning of recall period (for those empty) 
+       startdate = if_else(is.na(startdate), recall_start, startdate), 
+       ## set the start cause to present at start if equal to recall period 
+       ## unless it is equal to the birth date 
+       startcause = if_else(startdate == recall_start & startcause != "birthday_date",
+                              "Present at start", startcause), 
+       ## fill in end date to be end of recall period (for those empty) 
+       enddate = if_else(is.na(enddate), recall_end, enddate), 
+       ## set the end cause to present at end if equall to recall end 
+       ## unless it is equal to the death date
+       endcause = if_else(enddate == recall_end & endcause != "death_date", 
+                            "Present at end", endcause))
+
+
+## Define observation time in days
+survey_data <- survey_data %>% 
+  mutate(obstime = as.numeric(enddate - startdate))
+
+```
+
+<!-- ======================================================= -->
+
+## Gewichtung {  }
+
+Es ist wichtig, dass du fehlerhafte Beobachtungen streichst, bevor du die Gewichte der Umfrage hinzufügst.
+Wenn du zum Beispiel Beobachtungen mit negativer Beobachtungszeit hast, musst du
+überprüfen (dies kannst du mit der Funktion `assert_positive_timespan()` Funktion
+von **sitrep**.
+Eine andere Sache ist, wenn du leere Zeilen löschen willst (z.B. mit `drop_na(uid)`)
+oder Duplikate entfernen willst (siehe Handbuchabschnitt über [Entdoppelung]
+für Details).
+Diejenigen, die keine Zustimmung haben, müssen ebenfalls gelöscht werden.
+
+In diesem Beispiel filtern wir nach den Fällen, die wir löschen wollen, und speichern sie in einem separaten
+Datenrahmen - so können wir diejenigen beschreiben, die von der Umfrage ausgeschlossen wurden.
+Dann verwenden wir die `anti_join()` Funktion von **dplyr** um diese weggelassenen Fälle zu entfernen
+aus unseren Umfragedaten zu entfernen.
+
+<span style="color: red;">***GEFAHR!*** Du kannst keine fehlenden Werte in deiner Gewichtsvariable oder einer der für deinen Erhebungsentwurf relevanten Variablen haben (z. B. Alter, Geschlecht, Schicht- oder Clustervariablen).</span>
+
+```{r remove_unused_data}
+
+## store the cases that you drop so you can describe them (e.g. non-consenting 
+## or wrong village/cluster)
+dropped <- survey_data %>% 
+  filter(!consent | is.na(startdate) | is.na(enddate) | village_name == "other")
+
+## use the dropped cases to remove the unused rows from the survey data set  
+survey_data <- anti_join(survey_data, dropped, by = names(dropped))
+
+```
+
+Wie oben erwähnt, zeigen wir, wie du Gewichte für drei verschiedene Studien hinzufügen kannst
+(Stratified, Cluster und Stratified Cluster). Diese erfordern Informationen
+über die Grundgesamtheit und/oder die befragten Cluster.
+Wir verwenden für dieses Beispiel den geschichteten Cluster-Code, aber je nachdem, welcher Code
+der für dein Studiendesign am besten geeignet ist.
+
+```{r survey_weights}
+
+# stratified ------------------------------------------------------------------
+# create a variable called "surv_weight_strata"
+# contains weights for each individual - by age group, sex and health district
+survey_data <- add_weights_strata(x = survey_data,
+                                         p = population,
+                                         surv_weight = "surv_weight_strata",
+                                         surv_weight_ID = "surv_weight_ID_strata",
+                                         age_group, sex, health_district)
+
+## cluster ---------------------------------------------------------------------
+
+# get the number of people of individuals interviewed per household
+# adds a variable with counts of the household (parent) index variable
+survey_data <- survey_data %>%
+  add_count(index, name = "interviewed")
+
+
+## create cluster weights
+survey_data <- add_weights_cluster(x = survey_data,
+                                          cl = cluster_counts,
+                                          eligible = member_number,
+                                          interviewed = interviewed,
+                                          cluster_x = village_name,
+                                          cluster_cl = cluster,
+                                          household_x = index,
+                                          household_cl = households,
+                                          surv_weight = "surv_weight_cluster",
+                                          surv_weight_ID = "surv_weight_ID_cluster",
+                                          ignore_cluster = FALSE,
+                                          ignore_household = FALSE)
+
+
+# stratified and cluster ------------------------------------------------------
+# create a survey weight for cluster and strata
+survey_data <- survey_data %>%
+  mutate(surv_weight_cluster_strata = surv_weight_strata * surv_weight_cluster)
+
+```
+
+<!-- ======================================================= -->
+
+## Entwurfsobjekte der Umfrage {  }
+
+Erstelle ein Umfragedesign-Objekt entsprechend deines Studienentwurfs.
+Wird wie ein Datenrahmen zur Berechnung von Gewichtsanteilen usw. verwendet.
+Vergewissere dich, dass alle notwendigen Variablen zuvor erstellt wurden.
+
+Es gibt vier Optionen, kommentiere die aus, die du nicht verwendest:
+
+- Einfach zufällig
+- Geschichtet
+- Cluster
+- Geschichtetes Cluster
+
+Für diese Vorlage tun wir so, als ob wir die Umfragen in zwei separaten Clustern
+schichten (Gesundheitsbezirke A und B).
+Um Gesamtschätzungen zu erhalten, müssen wir also Cluster- und Schichtgewichte kombinieren.
+
+Wie bereits erwähnt, gibt es zwei Pakete, die dies ermöglichen. Das
+klassische Variante ist **Umfrage** und dann gibt es noch ein Wrapper-Paket namens **srvyr**
+das tidyverse-freundliche Objekte und Funktionen erstellt. Wir werden beides demonstrieren,
+aber beachte, dass der Großteil des Codes in diesem Kapitel die **srvyr** basierte Objekte.
+Die einzige Ausnahme ist, dass die **gtsummary** Paket nur akzeptiert **Umfrage** Objekte.
+
+### **Übersicht** Paket
+
+Die **Umfrage** Paket nutzt effektiv **Basis** *R* Kodierung und ist daher nicht
+möglich, Pipes zu verwenden (`%>%`) oder andere **dplyr** Syntax.
+Mit der **Umfrage** Paket verwenden wir die `svydesign()` Funktion, um eine Umfrage zu definieren
+Objekt mit entsprechenden Clustern, Gewichten und Schichten.
+
+<span style="color: black;">***HINWEIS:*** wir müssen die tilde verwenden (`~`) vor den Variablen verwenden, da das Paket die **Basis** *R* Syntax der Zuweisung von Variablen auf der Grundlage von Formeln. </span>
+
+```{r survey_design}
+
+# simple random ---------------------------------------------------------------
+base_survey_design_simple <- svydesign(ids = ~1, # 1 for no cluster ids
+                   weights = NULL,               # No weight added
+                   strata = NULL,                # sampling was simple (no strata)
+                   data = survey_data            # have to specify the dataset
+                  )
+
+## stratified ------------------------------------------------------------------
+base_survey_design_strata <- svydesign(ids = ~1,  # 1 for no cluster ids
+                   weights = ~surv_weight_strata, # weight variable created above
+                   strata = ~health_district,     # sampling was stratified by district
+                   data = survey_data             # have to specify the dataset
+                  )
+
+# cluster ---------------------------------------------------------------------
+base_survey_design_cluster <- svydesign(ids = ~village_name, # cluster ids
+                   weights = ~surv_weight_cluster, # weight variable created above
+                   strata = NULL,                 # sampling was simple (no strata)
+                   data = survey_data              # have to specify the dataset
+                  )
+
+# stratified cluster ----------------------------------------------------------
+base_survey_design <- svydesign(ids = ~village_name,      # cluster ids
+                   weights = ~surv_weight_cluster_strata, # weight variable created above
+                   strata = ~health_district,             # sampling was stratified by district
+                   data = survey_data                     # have to specify the dataset
+                  )
+```
+
+### **Srvyr** Paket
+
+Mit dem **srvyr** Paket können wir die `as_survey_design()` Funktion, die
+die gleichen Argumente wie oben hat, aber Pipes erlaubt (`%>%`), und deshalb müssen wir nicht
+die Tilde (`~`).
+
+```{r survey_design_srvyr}
+## simple random ---------------------------------------------------------------
+survey_design_simple <- survey_data %>% 
+  as_survey_design(ids = 1, # 1 for no cluster ids 
+                   weights = NULL, # No weight added
+                   strata = NULL # sampling was simple (no strata)
+                  )
+## stratified ------------------------------------------------------------------
+survey_design_strata <- survey_data %>%
+  as_survey_design(ids = 1, # 1 for no cluster ids
+                   weights = surv_weight_strata, # weight variable created above
+                   strata = health_district # sampling was stratified by district
+                  )
+## cluster ---------------------------------------------------------------------
+survey_design_cluster <- survey_data %>%
+  as_survey_design(ids = village_name, # cluster ids
+                   weights = surv_weight_cluster, # weight variable created above
+                   strata = NULL # sampling was simple (no strata)
+                  )
+
+## stratified cluster ----------------------------------------------------------
+survey_design <- survey_data %>%
+  as_survey_design(ids = village_name, # cluster ids
+                   weights = surv_weight_cluster_strata, # weight variable created above
+                   strata = health_district # sampling was stratified by district
+                  )
+```
+
+<!-- ======================================================= -->
+
+## Deskriptive Analyse {  }
+
+Grundlegende deskriptive Analysen und Visualisierungen werden ausführlich in anderen
+in anderen Kapiteln des Handbuchs ausführlich behandelt, so dass wir hier nicht näher darauf eingehen werden.
+Einzelheiten findest du in den Kapiteln über [Beschreibende Tabellen](https://epirhandbook.com/descriptive-tables.html),
+[statistische Tests](https://epirhandbook.com/simple-statistical-tests.html),
+[Tabellen für die Präsentation](https://epirhandbook.com/tables-for-presentation.html),
+[ggplot Grundlagen](https://epirhandbook.com/ggplot-basics.html) und
+[R Markdown Berichte](https://epirhandbook.com/r-markdown-reports.html).
+
+In diesem Abschnitt werden wir uns darauf konzentrieren, wie du Verzerrungen in deiner Stichprobe untersuchst und visualisierst.
+Wir werden uns auch mit der Visualisierung von Bevölkerungsströmen in einer Umfrage befassen.
+Anschwemmungs-/Sankey-Diagramme.
+
+Generell solltest du die folgenden deskriptiven Analysen in Betracht ziehen:
+
+- Endgültige Anzahl von Clustern, Haushalten und Einzelpersonen
+- Anzahl der ausgeschlossenen Personen und die Gründe für den Ausschluss
+- Mittlere (Bandbreite) Anzahl der Haushalte pro Cluster und Personen pro Haushalt
+
+### Stichprobenverzerrung
+
+Vergleiche die Proportionen in jeder Altersgruppe zwischen deiner Stichprobe und
+der Grundgesamtheit.
+Das ist wichtig, um eine mögliche Verzerrung der Stichprobe zu erkennen.
+Du könntest dies auch wiederholen, indem du die Verteilung nach Geschlecht betrachtest.
+
+Beachte, dass diese p-Werte nur indikativ sind und eine beschreibende Diskussion (oder
+(oder die Visualisierung mit den Alterspyramiden unten) der Verteilungen in deiner Stichprobe
+im Vergleich zur Ausgangspopulation ist wichtiger als der Binomialtest selbst.
+Das liegt daran, dass eine Erhöhung des Stichprobenumfangs in den meisten Fällen dazu führt, dass
+Unterschiede, die nach der Gewichtung deiner Daten irrelevant sein können.
+
+```{r descriptive_sampling_bias, warning=FALSE}
+
+## counts and props of the study population
+ag <- survey_data %>% 
+  group_by(age_group) %>% 
+  drop_na(age_group) %>% 
+  tally() %>% 
+  mutate(proportion = n / sum(n), 
+         n_total = sum(n))
+
+## counts and props of the source population
+propcount <- population %>% 
+  group_by(age_group) %>%
+    tally(population) %>%
+    mutate(proportion = n / sum(n))
+
+## bind together the columns of two tables, group by age, and perform a 
+## binomial test to see if n/total is significantly different from population
+## proportion.
+  ## suffix here adds to text to the end of columns in each of the two datasets
+left_join(ag, propcount, by = "age_group", suffix = c("", "_pop")) %>%
+  group_by(age_group) %>%
+  ## broom::tidy(binom.test()) makes a data frame out of the binomial test and
+  ## will add the variables p.value, parameter, conf.low, conf.high, method, and
+  ## alternative. We will only use p.value here. You can include other
+  ## columns if you want to report confidence intervals
+  mutate(binom = list(broom::tidy(binom.test(n, n_total, proportion_pop)))) %>%
+  unnest(cols = c(binom)) %>% # important for expanding the binom.test data frame
+  mutate(proportion_pop = proportion_pop * 100) %>%
+  ## Adjusting the p-values to correct for false positives 
+  ## (because testing multiple age groups). This will only make 
+  ## a difference if you have many age categories
+  mutate(p.value = p.adjust(p.value, method = "holm")) %>%
+                      
+  ## Only show p-values over 0.001 (those under report as <0.001)
+  mutate(p.value = ifelse(p.value < 0.001, 
+                          "<0.001", 
+                          as.character(round(p.value, 3)))) %>% 
+  
+  ## rename the columns appropriately
+  select(
+    "Age group" = age_group,
+    "Study population (n)" = n,
+    "Study population (%)" = proportion,
+    "Source population (n)" = n_pop,
+    "Source population (%)" = proportion_pop,
+    "P-value" = p.value
+  )
+```
+
+### Demografische Pyramiden
+
+Demografische Pyramiden (oder Alters-Geschlechts-Pyramiden) sind eine einfache Möglichkeit, die Verteilung der Bevölkerung zu visualisieren.
+in deiner Umfragepopulation zu visualisieren. Es lohnt sich auch, die Erstellung von
+[beschreibende Tabellen](https://epirhandbook.com/descriptive-tables.html) des Alters
+und Geschlecht nach Erhebungsschichten.
+Wir werden anhand der **apyramid** Paket verwenden, da es gewichtete
+Proportionen mit unserem oben erstellten Umfrageentwurfsobjekt. Andere Optionen für die Erstellung
+[demografischen Pyramiden](https://epirhandbook.com/demographic-pyramids-and-likert-scales.html)
+werden in diesem Kapitel des Handbuchs ausführlich behandelt. Wir werden auch eine
+Wrapper-Funktion von **apyramid** namens `age_pyramid()` was ein paar Zeilen spart
+Codierung für die Erstellung eines Plots mit Proportionen einspart.
+
+Wie beim formalen Binomialtest für Unterschiede, der oben in der Stichprobenverzerrung
+Abschnitt beschrieben, geht es hier darum, zu visualisieren, ob unsere Stichprobenpopulation
+sich wesentlich von der Ausgangspopulation unterscheidet und ob die Gewichtung die
+diesen Unterschied ausgleicht. Dazu verwenden wir die **Patchwork** Paket, um unsere
+**ggplot** Visualisierungen nebeneinander darzustellen; für Details siehe den Abschnitt über
+Kombinieren von Plots in [ggplot-Tipps](https://epirhandbook.com/ggplot-tips.html?q=patch#combine-plots)
+Kapitel des Handbuchs.
+Wir werden unsere Ausgangspopulation, unsere ungewichtete Umfragepopulation und
+unsere gewichtete Grundgesamtheit.
+Du kannst dir auch überlegen, ob du die einzelnen Schichten deiner Erhebung visualisieren willst - in unserem Beispiel
+in unserem Beispiel wäre das mit dem Argument `stack_by  = "health_district"`
+(siehe `?plot_age_pyramid` für Details).
+
+<span style="color: black;">***HINWEIS:*** Die x- und y-Achsen sind in Pyramiden gespiegelt </span>
+
+```{r weighted_age_pyramid, warning=FALSE, message=FALSE, fig.show="hold", fig.width=15}
+
+## define x-axis limits and labels ---------------------------------------------
+## (update these numbers to be the values for your graph)
+max_prop <- 35      # choose the highest proportion you want to show 
+step <- 5           # choose the space you want beween labels 
+
+## this part defines vector using the above numbers with axis breaks
+breaks <- c(
+    seq(max_prop/100 * -1, 0 - step/100, step/100), 
+    0, 
+    seq(0 + step / 100, max_prop/100, step/100)
+    )
+
+## this part defines vector using the above numbers with axis limits
+limits <- c(max_prop/100 * -1, max_prop/100)
+
+## this part defines vector using the above numbers with axis labels
+labels <-  c(
+      seq(max_prop, step, -step), 
+      0, 
+      seq(step, max_prop, step)
+    )
+
+
+## create plots individually  --------------------------------------------------
+
+## plot the source population 
+## nb: this needs to be collapsed for the overall population (i.e. removing health districts)
+source_population <- population %>%
+  ## ensure that age and sex are factors
+  mutate(age_group = factor(age_group, 
+                            levels = c("0-2", 
+                                       "3-14", 
+                                       "15-29",
+                                       "30-44", 
+                                       "45+")), 
+         sex = factor(sex)) %>% 
+  group_by(age_group, sex) %>% 
+  ## add the counts for each health district together 
+  summarise(population = sum(population)) %>% 
+  ## remove the grouping so can calculate overall proportion
+  ungroup() %>% 
+  mutate(proportion = population / sum(population)) %>% 
+  ## plot pyramid 
+  age_pyramid(
+            age_group = age_group, 
+            split_by = sex, 
+            count = proportion, 
+            proportional = TRUE) +
+  ## only show the y axis label (otherwise repeated in all three plots)
+  labs(title = "Source population", 
+       y = "", 
+       x = "Age group (years)") + 
+  ## make the x axis the same for all plots 
+  scale_y_continuous(breaks = breaks, 
+    limits = limits, 
+    labels = labels)
+  
+  
+## plot the unweighted sample population 
+sample_population <- age_pyramid(survey_data, 
+                 age_group = "age_group", 
+                 split_by = "sex",
+                 proportion = TRUE) + 
+  ## only show the x axis label (otherwise repeated in all three plots)
+  labs(title = "Unweighted sample population", 
+       y = "Proportion (%)", 
+       x = "") + 
+  ## make the x axis the same for all plots 
+  scale_y_continuous(breaks = breaks, 
+    limits = limits, 
+    labels = labels)
+
+
+## plot the weighted sample population 
+weighted_population <- survey_design %>% 
+  ## make sure the variables are factors
+  mutate(age_group = factor(age_group), 
+         sex = factor(sex)) %>%
+  age_pyramid(
+    age_group = "age_group",
+    split_by = "sex", 
+    proportion = TRUE) +
+  ## only show the x axis label (otherwise repeated in all three plots)
+  labs(title = "Weighted sample population", 
+       y = "", 
+       x = "")  + 
+  ## make the x axis the same for all plots 
+  scale_y_continuous(breaks = breaks, 
+    limits = limits, 
+    labels = labels)
+
+## combine all three plots  ----------------------------------------------------
+## combine three plots next to eachother using + 
+source_population + sample_population + weighted_population + 
+  ## only show one legend and define theme 
+  ## note the use of & for combining theme with plot_layout()
+  plot_layout(guides = "collect") & 
+  theme(legend.position = "bottom",                    # move legend to bottom
+        legend.title = element_blank(),                # remove title
+        text = element_text(size = 18),                # change text size
+        axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1) # turn x-axis text
+       )
+```
+
+### Alluvial/Sankey-Diagramm
+
+Die Visualisierung von Ausgangspunkten und Ergebnissen für Einzelpersonen kann sehr hilfreich sein, um
+einen Überblick zu bekommen. Die Anwendung für mobile Bevölkerungsgruppen ist ziemlich offensichtlich,
+aber es gibt auch zahlreiche andere Anwendungsmöglichkeiten, z. B. für Kohorten oder jede andere Situation
+in denen es Zustandsübergänge für Individuen gibt. Diese Diagramme haben mehrere
+verschiedene Namen, darunter Anschwemmungen, Sankey und Parallelmengen - die Details sind
+im Kapitel des Handbuchs über [Diagramme und Tabellen](https://epirhandbook.com/diagrams-and-charts.html#alluvialsankey-diagrams).
+
+```{r visualise_population_flow}
+
+## summarize data
+flow_table <- survey_data %>%
+  count(startcause, endcause, sex) %>%  # get counts 
+  gather_set_data(x = c("startcause", "endcause"))     # change format for plotting
+
+
+## plot your dataset 
+  ## on the x axis is the start and end causes
+  ## gather_set_data generates an ID for each possible combination
+  ## splitting by y gives the possible start/end combos
+  ## value as n gives it as counts (could also be changed to proportion)
+ggplot(flow_table, aes(x, id = id, split = y, value = n)) +
+  ## colour lines by sex 
+  geom_parallel_sets(aes(fill = sex), alpha = 0.5, axis.width = 0.2) +
+  ## fill in the label boxes grey
+  geom_parallel_sets_axes(axis.width = 0.15, fill = "grey80", color = "grey80") +
+  ## change text colour and angle (needs to be adjusted)
+  geom_parallel_sets_labels(color = "black", angle = 0, size = 5) +
+  ## remove axis labels
+  theme_void()+
+  ## move legend to bottom
+  theme(legend.position = "bottom")               
+
+```
+
+<!-- ======================================================= -->
+
+## Gewichtete Proportionen {  }
+
+In diesem Abschnitt wird beschrieben, wie du Tabellen für gewichtete Zählungen und Anteile erstellst,
+mit den dazugehörigen Konfidenzintervallen und dem Designeffekt.
+Es gibt vier verschiedene Optionen, die Funktionen aus den folgenden Paketen verwenden:
+**Umfrage**, **srvyr**, **sitrep** und **gtsummary**.
+Für minimale Codierung, um eine Standard-Epidemiologie-Tabelle zu erstellen, würden wir
+empfehlen die **sitrep** Funktion - die ein Wrapper ist für **srvyr** Code ist; beachte
+dass dieser noch nicht auf CRAN ist und sich in Zukunft ändern kann.
+Ansonsten ist der **Umfrage** Code wahrscheinlich langfristig am stabilsten sein, während
+**srvyr** am besten in die Arbeitsabläufe von tidyverse passen wird. Während **gtsummary**
+Funktionen viel Potenzial haben, scheinen sie experimentell und unvollständig zu sein
+zum Zeitpunkt des Schreibens.
+
+### **Umfrage** Paket
+
+Wir können das `svyciprop()` Funktion aus **Umfrage** um gewichtete Proportionen zu erhalten
+und die dazugehörigen 95%-Konfidenzintervalle zu erhalten. Ein geeigneter Designeffekt kann sein
+extrahiert werden, indem die `svymean()` anstelle von `svyprop()` Funktion.
+Es ist erwähnenswert, dass `svyprop()` anscheinend nur Variablen zwischen 0 und
+1 (oder TRUE/FALSE) zu akzeptieren, sodass kategorische Variablen nicht funktionieren.
+
+<span style="color: black;">***HINWEIS:*** Funktionen von **Umfrage** auch akzeptieren **srvyr** Designobjekte, aber hier haben wir die **Umfrage** Entwurfsobjekt verwendet, nur um die Konsistenz zu gewährleisten </span>
+
+```{r survey_props}
+
+## produce weighted counts 
+svytable(~died, base_survey_design)
+
+## produce weighted proportions
+svyciprop(~died, base_survey_design, na.rm = T)
+
+## get the design effect 
+svymean(~died, base_survey_design, na.rm = T, deff = T) %>% 
+  deff()
+
+```
+
+Wir können die Funktionen von **Umfrage** zu einer Funktion kombinieren, die
+die wir im Folgenden selbst definieren, genannt `svy_prop`; und wir können diese Funktion dann verwenden
+zusammen mit `map()` aus dem Paket purrr verwenden, um über mehrere Variablen zu iterieren
+und eine Tabelle zu erstellen. Siehe das Handbuch [Iteration](https://epirhandbook.com/iteration-loops-and-lists.html)
+Kapitel für Details zu **purrr**.
+
+```{r survey_prop_fun}
+# Define function to calculate weighted counts, proportions, CI and design effect
+# x is the variable in quotation marks 
+# design is your survey design object
+
+svy_prop <- function(design, x) {
+  
+  ## put the variable of interest in a formula 
+  form <- as.formula(paste0( "~" , x))
+  ## only keep the TRUE column of counts from svytable
+  weighted_counts <- svytable(form, design)[[2]]
+  ## calculate proportions (multiply by 100 to get percentages)
+  weighted_props <- svyciprop(form, design, na.rm = TRUE) * 100
+  ## extract the confidence intervals and multiply to get percentages
+  weighted_confint <- confint(weighted_props) * 100
+  ## use svymean to calculate design effect and only keep the TRUE column
+  design_eff <- deff(svymean(form, design, na.rm = TRUE, deff = TRUE))[[TRUE]]
+  
+  ## combine in to one data frame
+  full_table <- cbind(
+    "Variable"        = x,
+    "Count"           = weighted_counts,
+    "Proportion"      = weighted_props,
+    weighted_confint, 
+    "Design effect"   = design_eff
+    )
+  
+  ## return table as a dataframe
+  full_table <- data.frame(full_table, 
+             ## remove the variable names from rows (is a separate column now)
+             row.names = NULL)
+  
+  ## change numerics back to numeric
+  full_table[ , 2:6] <- as.numeric(full_table[, 2:6])
+  
+  ## return dataframe
+  full_table
+}
+
+## iterate over several variables to create a table 
+purrr::map(
+  ## define variables of interest
+  c("left", "died", "arrived"), 
+  ## state function using and arguments for that function (design)
+  svy_prop, design = base_survey_design) %>% 
+  ## collapse list in to a single data frame
+  bind_rows() %>% 
+  ## round 
+  mutate(across(where(is.numeric), round, digits = 1))
+
+```
+
+### **Srvyr** Paket
+
+Mit **srvyr** können wir **dplyr** Syntax verwenden, um eine Tabelle zu erstellen. Beachte, dass die
+`survey_mean()` Funktion verwendet wird und das Proportionsargument angegeben wird, und
+dass dieselbe Funktion auch zur Berechnung des Designeffekts verwendet wird. Das liegt daran, dass
+**srvyr** um die beiden **Umfrage** Paketfunktionen `svyciprop()` und
+`svymean()`, die im obigen Abschnitt verwendet werden.
+
+<span style="color: black;">***HINWEIS:*** Es scheint nicht möglich zu sein, Proportionen von kategorialen Variablen mit **srvyr** zu erhalten. Wenn du das brauchst, schau dir den Abschnitt unten an und benutze **sitrep** </span>
+
+```{r srvyr_prop}
+
+## use the srvyr design object
+survey_design %>% 
+  summarise(
+    ## produce the weighted counts 
+    counts = survey_total(died), 
+    ## produce weighted proportions and confidence intervals 
+    ## multiply by 100 to get a percentage 
+    props = survey_mean(died, 
+                        proportion = TRUE, 
+                        vartype = "ci") * 100, 
+    ## produce the design effect 
+    deff = survey_mean(died, deff = TRUE)) %>% 
+  ## only keep the rows of interest
+  ## (drop standard errors and repeat proportion calculation)
+  select(counts, props, props_low, props_upp, deff_deff)
+
+```
+
+Auch hier könnten wir eine Funktion schreiben, die dann über mehrere Variablen iteriert, indem wir
+die **purrr** Paket.
+Siehe das Handbuch [Iteration](https://epirhandbook.com/iteration-loops-and-lists.html)
+Kapitel für Details zu **purrr**.
+
+```{r srvyr_prop_fun}
+
+# Define function to calculate weighted counts, proportions, CI and design effect
+# design is your survey design object
+# x is the variable in quotation marks 
+
+
+srvyr_prop <- function(design, x) {
+  
+  summarise(
+    ## using the survey design object
+    design, 
+    ## produce the weighted counts 
+    counts = survey_total(.data[[x]]), 
+    ## produce weighted proportions and confidence intervals 
+    ## multiply by 100 to get a percentage 
+    props = survey_mean(.data[[x]], 
+                        proportion = TRUE, 
+                        vartype = "ci") * 100, 
+    ## produce the design effect 
+    deff = survey_mean(.data[[x]], deff = TRUE)) %>% 
+  ## add in the variable name
+  mutate(variable = x) %>% 
+  ## only keep the rows of interest
+  ## (drop standard errors and repeat proportion calculation)
+  select(variable, counts, props, props_low, props_upp, deff_deff)
+  
+}
+  
+
+## iterate over several variables to create a table 
+purrr::map(
+  ## define variables of interest
+  c("left", "died", "arrived"), 
+  ## state function using and arguments for that function (design)
+  ~srvyr_prop(.x, design = survey_design)) %>% 
+  ## collapse list in to a single data frame
+  bind_rows()
+  
+
+```
+
+### **Sitrep** Paket
+
+Das `tab_survey()` Funktion von **sitrep** ist ein Wrapper für **srvyr** und ermöglicht
+Damit kannst du mit minimalem Programmieraufwand gewichtete Tabellen erstellen. Außerdem kannst du damit berechnen
+gewichtete Proportionen für kategoriale Variablen zu berechnen.
+
+```{r sitrep_props}
+
+## using the survey design object
+survey_design %>% 
+  ## pass the names of variables of interest unquoted
+  tab_survey(arrived, left, died, education_level,
+             deff = TRUE,   # calculate the design effect
+             pretty = TRUE  # merge the proportion and 95%CI
+             )
+
+```
+
+### **Gtsummary** Paket
+
+Mit **gtsummary** scheint es noch keine eingebauten Funktionen zu geben, die das Vertrauen
+Intervalle oder Designeffekte hinzuzufügen.
+Hier zeigen wir, wie man eine Funktion zum Hinzufügen von Konfidenzintervallen definiert und dann
+Konfidenzintervalle zu einem **gtsummary** Tabelle hinzu, die mit der Funktion `tbl_svysummary()`
+Funktion.
+
+```{r gtsummary_table}
+
+
+confidence_intervals <- function(data, variable, by, ...) {
+  
+  ## extract the confidence intervals and multiply to get percentages
+  props <- svyciprop(as.formula(paste0( "~" , variable)),
+              data, na.rm = TRUE)
+  
+  ## extract the confidence intervals 
+  as.numeric(confint(props) * 100) %>% ## make numeric and multiply for percentage
+    round(., digits = 1) %>%           ## round to one digit
+    c(.) %>%                           ## extract the numbers from matrix
+    paste0(., collapse = "-")          ## combine to single character
+}
+
+## using the survey package design object
+tbl_svysummary(base_survey_design, 
+               include = c(arrived, left, died),   ## define variables want to include
+               statistic = list(everything() ~ c("{n} ({p}%)"))) %>% ## define stats of interest
+  add_n() %>%  ## add the weighted total 
+  add_stat(fns = everything() ~ confidence_intervals) %>% ## add CIs
+  ## modify the column headers
+  modify_header(
+    list(
+      n ~ "**Weighted total (N)**",
+      stat_0 ~ "**Weighted Count**",
+      add_stat_1 ~ "**95%CI**"
+    )
+    )
+
+```
+
+<!-- ======================================================= -->
+
+## Gewichtete Verhältnisse {  }
+
+Auch für gewichtete Quoten (z. B. für Sterblichkeitsquoten) kannst du die
+**Umfrage** oder die **srvyr** Paket.
+Du könntest auch Funktionen schreiben (ähnlich wie die oben genannten), um über die folgenden Punkte zu iterieren
+mehrere Variablen zu iterieren. Du könntest auch eine Funktion erstellen für **gtsummary** wie oben
+aber derzeit hat es keine eingebauten Funktionen.
+
+### **Umfrage** Paket
+
+```{r survey_ratio}
+
+ratio <- svyratio(~died, 
+         denominator = ~obstime, 
+         design = base_survey_design)
+
+ci <- confint(ratio)
+
+cbind(
+  ratio$ratio * 10000, 
+  ci * 10000
+)
+
+```
+
+### **Srvyr** Paket
+
+```{r srvyr_ratio}
+
+survey_design %>% 
+  ## survey ratio used to account for observation time 
+  summarise(
+    mortality = survey_ratio(
+      as.numeric(died) * 10000, 
+      obstime, 
+      vartype = "ci")
+    )
+
+```
+
+<!-- ======================================================= -->
+
+## Ressourcen {  }
+
+[UCLA-Statistikseite](https://stats.idre.ucla.edu/r/seminars/survey-data-analysis-with-r/)
+
+[Umfragedaten kostenlos auswerten](http://asdfree.com/)
+
+[srvyr packge](http://gdfe.co/srvyr/)
+
+[gtsummary Paket](http://www.danieldsjoberg.com/gtsummary/reference/index.html)
+
+[EPIET-Erhebung Fallstudien](https://github.com/EPIET/RapidAssessmentSurveys)
+
+

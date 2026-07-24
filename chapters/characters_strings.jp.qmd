@@ -1,0 +1,982 @@
+---
+aliases:
+  - /new_pages/characters_strings.jp.html
+---
+
+# 文字型・文字列型データ {#characters-strings}
+
+```{r, out.width=c('100%'), echo=F, message=F}
+knitr::include_graphics(here::here("images", "Characters_Strings_1500x500.png"))
+```
+
+本章では、**stringr** パッケージを使用して、文字（character）と文字列（string）を評価し、処理する方法を紹介します。
+
+1.  結合、並べ替え、分割 - `str_c()`, `str_glue()`, `str_order()`, `str_split()`\
+
+2.  整理と標準化
+
+    -   長さの調整 - `str_pad()`, `str_trunc()`, `str_wrap()`\
+    -   大文字小文字の変更 - `str_to_upper()`, `str_to_title()`, `str_to_lower()`, `str_to_sentence()`\
+
+3.  位置による評価と抽出 - `str_length()`, `str_sub()`, `word()`\
+
+4.  パターン認識
+
+    -   検出と検索 - `str_detect()`, `str_subset()`, `str_match()`, `str_extract()`\
+    -   修正と置換 - `str_sub()`, `str_replace_all()`\
+
+5.  正規表現（"regex"）
+
+使用例を簡単に表示するため、ほとんどの例で短い文字ベクトルを用いていますが、本章の内容はデータフレーム内の列にも簡単に適用できます。
+
+本章は、こちらの [stringr のウェブサイト](https://cran.r-project.org/web/packages/stringr/vignettes/stringr.html) を参考に作成されました。
+
+<!-- ======================================================= -->
+
+## 準備
+
+### パッケージの読み込み {.unnumbered}
+
+**stringr** およびその他の **tidyverse** パッケージをインストールまたは読み込みます。
+
+```{r}
+# パッケージのインストール・読み込み
+pacman::p_load(
+  stringr,    # 文字列を扱うための多くの関数
+  tidyverse,  # データ操作のための追加の関数
+  tools)      # タイトルケースに変更するための関数
+
+```
+
+### データの読み込み {.unnumbered}
+
+エボラ出血熱の流行をシミュレートしたデータセットをインポートします。お手元の環境でこの章の内容を実行したい方は、<a href='https://github.com/appliedepi/epiRhandbook_eng/raw/master/data/case_linelists/linelist_cleaned.rds' class='download-button'>こちら</a> をクリックして「前処理された」ラインリスト（linelist）をダウンロードしてください（.rds 形式で取得できます）。 データは **rio** パッケージの `import()` を利用してインポートしましょう（`import()` は、.xlsx、.csv、.rdsなど、様々な形式のファイルを扱うことができます）。インポートの詳細については、[データのインポート・エクスポート](#importing) の章を参照してください。
+
+```{r, echo=F}
+# 症例ラインリストの読み込み
+linelist <- rio::import(here::here("data", "case_linelists", "linelist_cleaned.rds"))
+```
+
+```{r, eval=F}
+# 症例ラインリストの読み込み 
+linelist <- import("linelist_cleaned.rds")
+```
+
+インポートしたラインリストの最初の 50 行を以下に表示します。
+
+```{r, message=FALSE, echo=F}
+# ラインリストのデータをテーブルで表示
+DT::datatable(head(linelist, 50), rownames = FALSE, filter="top", options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+<!-- ======================================================= -->
+
+## 結合、分割、配列
+
+このセクションでは以下の項目について説明します。
+
+-   `str_c()`、`str_glue()`、`unite()` を使った文字列の結合\
+-   `str_order()` を使った文字列の並べ替え\
+-   `str_split()` と `separate()` 文字列の分割
+
+<!-- ======================================================= -->
+
+### 文字列の結合 {.unnumbered}
+
+複数の文字列を 1 つの文字列に結合する場合は、**stringr** の `str_c` を使うことをおすすめします。結合するそれぞれの文字列を、コンマで区切って指定します。
+
+```{r}
+str_c("String1", "String2", "String3")
+```
+
+引数 `sep =` は、与えられた各引数の間に指定した文字値を挿入します（例：コンマ、スペース、改行 `"\n"`）。
+
+```{r}
+str_c("String1", "String2", "String3", sep = ", ")
+```
+
+引数 `collapse =` は `str_c()` に複数の値を<u>ベクトルで</u>入力する場合に使用します。これは、コード実行後に<u>出力される</u>ベクトルの要素を区切るために使用され、出力されるベクトルが 1 つの長い文字列のみを要素として持つようにします。
+
+以下の例では、2 つのベクトルを 1 つにまとめています（姓と名）。また、似たような例として、管轄区域とその症例数があります。姓名を使用する例では、
+
+-   姓と名の間に `sep =` で指定した値が表示されます\
+-   各姓名の間に `collapse =` で指定した値が表示されます
+
+```{r}
+first_names <- c("abdul", "fahruk", "janice") 
+last_names  <- c("hussein", "akinleye", "okeke")
+
+# sep には入力された文字列（ここでは姓と名）を繋ぐ際間に挿入される文字（列）を指定
+# collapse には繋がれた文字列同士（ここでは各姓名）の間に挿入される文字（列）を指定
+str_c(first_names, last_names, sep = " ", collapse = ";  ")
+```
+
+注釈：出力結果をどのように表示したいかによって、正しく表示されるように`str_c()` を使用したコード全体を `cat()` で囲む必要があります。例えば、以下のように、結合された文字列を改行して表示したい場合などです。
+
+```{r}
+# 改行を正しく表示するためにフレーズ全体をcat()で囲む
+cat(str_c(first_names, last_names, sep = " ", collapse = ";\n"))
+```
+
+<!-- ======================================================= -->
+
+### 動的文字列 {.unnumbered}
+
+`str_glue()` を使うと、文字列に動的な R コードを加えることができます。以下のように、動的なプロットキャプション（見出しや説明文など）を作成する際に非常に便利な関数です。
+
+-   すべての内容を二重引用符で囲んでください。`str_glue("")`\
+-   動的なコードやあらかじめ定義された値への参照は、二重引用符の中の波括弧 `{}` に入力します。1つの `str_glue()` コマンド中に複数の波括弧を入れることができます。
+-   文字として引用符 '' を表示したい場合は、二重引用符の中に<u>一重</u>引用符を使用します（例：日付の書式を指定する場合など。以下の例を参照ください）。\
+-   ヒント：`\n` で改行することができます。\
+-   ヒント：`format()` で日付の表示を調整し、`Sys.Date()` で現在の日付を表示することができます。
+
+以下に、動的なプロットキャプションの簡単な例を示します。
+
+```{r}
+str_glue("Data include {nrow(linelist)} cases and are current to {format(Sys.Date(), '%d %b %Y')}.")
+```
+
+もう一つの方法は、以下のように波括弧内に仮置きの変数を挿入し、`str_glue()` の最後にそれらを定義する方法です。これにより、表示したいプロットキャプションが長い場合でも、コードが読みやすくなります。
+
+```{r}
+str_glue("Linelist as of {current_date}.\nLast case hospitalized on {last_hospital}.\n{n_missing_onset} cases are missing date of onset and not shown",
+         current_date = format(Sys.Date(), '%d %b %Y'),
+         last_hospital = format(as.Date(max(linelist$date_hospitalisation, na.rm=T)), '%d %b %Y'),
+         n_missing_onset = nrow(linelist %>% filter(is.na(date_onset)))
+         )
+
+```
+
+**データフレームからの抜き出し**
+
+データフレームからデータを取り出して、文字列としてまとめておくと便利な場合があります。以下にデータフレームの例を示します。これを使って、管轄区域、新規および総症例数についての要約文を作成します。
+
+```{r}
+# 症例データフレームの作成
+case_table <- data.frame(
+  zone        = c("Zone 1", "Zone 2", "Zone 3", "Zone 4", "Zone 5"),
+  new_cases   = c(3, 0, 7, 0, 15),
+  total_cases = c(40, 4, 25, 10, 103)
+  )
+```
+
+```{r, echo=F}
+DT::datatable(case_table, rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+`str_glue_data()` を使用して、データフレームの各行から取り出した情報を文字列にまとめることができます。
+
+```{r}
+case_table %>% 
+  str_glue_data("{zone}: {new_cases} ({total_cases} total cases)")
+```
+
+**異なる行の文字列を結合する**
+
+複数の行の値を結合して 1 つの行にまとめる場合など、データフレームの値を列に沿って結合したい場合は、[重複データの排除](#de-duplication) の章内の [ロールアップした値](#str_rollup) のセクションを参照してください。
+
+**データフレームを 1 行の文字列にまとめる**
+
+`str_c()` でデータフレーム名と列名を指定し、`sep =` と `collapse =` の引数を与えることで、データフレーム内の情報を 1 行に表示させることができます。
+
+```{r}
+str_c(case_table$zone, case_table$new_cases, sep = " = ", collapse = ";  ")
+```
+
+さらにもう一度 `str_c()` で先に書いた `str_c()` を包むことで、文の先頭に文字列 "New Cases:" を追加することができます（"New Cases:" が元の `str_c()` 内にあった場合、複数回表示されます）。
+
+```{r}
+str_c("New Cases: ", str_c(case_table$zone, case_table$new_cases, sep = " = ", collapse = ";  "))
+```
+
+### 列の結合 {#str_unite .unnumbered}
+
+データフレーム中の複数の列を文字列にまとめるには、**tidyr** パッケージの `unite()` を用います。これは `separate()` の逆の操作にあたります。
+
+まず新しく統合される列の名前を指定します。次に結合したい列の名前を指定します。
+
+-   デフォルトではアンダースコア `_` によって各列の値が結合されますが、これは `sep =` によって変更できます。\
+-   `remove =` は入力に用いた列をデータフレームから削除します（デフォルトでは TRUE）。
+-   `na.rm =` は結合時に欠損値を除外します（デフォルトでは FALSE）。
+
+以下に、例として小さいなデータフレームを作成して説明します。
+
+```{r, message = F, warning=F}
+df <- data.frame(
+  case_ID = c(1:6),
+  symptoms  = c("jaundice, fever, chills",     # 患者 1
+                "chills, aches, pains",        # 患者 2 
+                "fever",                       # 患者 3
+                "vomiting, diarrhoea",         # 患者 4
+                "bleeding from gums, fever",   # 患者 5
+                "rapid pulse, headache"),      # 患者 6
+  outcome = c("Recover", "Death", "Death", "Recover", "Recover", "Recover"))
+```
+
+```{r}
+df_split <- separate(df, symptoms, into = c("sym_1", "sym_2", "sym_3"), extra = "merge")
+```
+
+以下に、作成したデータフレームを表示します。
+
+```{r, echo=F}
+DT::datatable(df_split, rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+以下のコマンドで、症状が入力された 3 つの列を統一します。
+
+```{r}
+df_split %>% 
+  unite(
+    col = "all_symptoms",         # 新しく作られる列の名前
+    c("sym_1", "sym_2", "sym_3"), # 結合する列
+    sep = ", ",                   # 区切りに使われる結合子
+    remove = TRUE,                # TRUEの場合、結合元の列をデータフレームから削除する
+    na.rm = TRUE                  # TRUEの場合、欠損値を無視して結合する
+  )
+```
+
+<!-- ======================================================= -->
+
+### 分割 {.unnumbered}
+
+パターンに基づいて文字列を分割するには、`str_split()` を使います。文字（列）を評価し、新たに分割された値からなる文字ベクトルの `list` を返します。
+
+以下の簡単な例では、1 つの文字列を 3 つに分割しています。デフォルトでは、最初に与えられた文字列ごとに 1 つの要素（文字ベクトル）を持つ `list` を返します。`simplify = TRUE` の場合は、文字行列を返します。
+
+この例では、1 つの文字列が与えられ、コマンドを実行すると、1 つの要素を持つリスト （つまり 3 つの値を持つ文字ベクトル）が出力されます。
+
+```{r}
+str_split(string = "jaundice, fever, chills",
+          pattern = ",")
+```
+
+出力が保存されていれば、角括弧 `[ ]` を使って任意の値（n 番目の値）にアクセスし、抽出できます。特定の値を抽出するには、次のような構文を使用できます。`the_returned_object[[1]][2]`
+
+この例では、最初に評価された文字列から 2 番目の値（"fever"）を抽出します。要素の抽出の詳細については、[R の基礎](#basics) の章をご覧ください。
+
+```{r}
+pt1_symptoms <- str_split("jaundice, fever, chills", ",")
+
+pt1_symptoms[[1]][2]  # リスト内の1つ目（かつここでは唯一）の要素内にある2つ目の値を返す
+```
+
+`str_split()` で複数の文字列を指定した場合、出力されるリストには複数の要素が含まれます。
+
+```{r}
+symptoms <- c("jaundice, fever, chills",     # 患者 1
+              "chills, aches, pains",        # 患者 2 
+              "fever",                       # 患者 3
+              "vomiting, diarrhoea",         # 患者 4
+              "bleeding from gums, fever",   # 患者 5
+              "rapid pulse, headache")       # 患者 6
+
+str_split(symptoms, ",")                     # 各患者の症状を分割する
+```
+
+出力結果を後にデータフレームの列にしたい場合、次のように `simplify = TRUE` を設定し、文字行列を出力すると便利です。
+
+```{r}
+str_split(symptoms, ",", simplify = TRUE)
+```
+
+また `n =` を使って、分割する数を調整することもできます。例えば、以下の例は分割数を 2 に制限するもので、それ以上のコンマは 2 番目の値の中に残ります。
+
+```{r}
+str_split(symptoms, ",", simplify = TRUE, n = 2)
+```
+
+<u>注釈：`str_split_fixed()` を使用しても同じ結果が出力されますが、その場合は `simplify` 引数を与えず、代わりに列数（`n`）を指定しなければなりません。</u>
+
+```{r, eval=F}
+str_split_fixed(symptoms, ",", n = 2)
+```
+
+### 列の分割 {.unnumbered}
+
+データフレームの列を分割する場合は、**dplyr** パッケージの `separate()` が最適です。この関数は、文字列を要素に持つ 1 つの列を複数の列に分割することができます。
+
+例えば、先述の[列の結合](#str_unite)のセクションで作成した簡単なデータフレーム `df` を見てみましょう。このデータフレームには `case_ID` の列、多くの症状をまとめた文字列からなる列、そして予後を示す列が含まれています。ここでは、複数の症状が含まれている `symptoms` 列を症状ごとの列に分割し、各列が単一の症状を表すようにすることを目的とします。
+
+```{r, echo=F}
+DT::datatable(df, rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+データを `separate()` で処理する場合、まず分離する列を指定します。次に、以下のように新しい列名を含むベクトル `c()` を `into =` 引数に指定します。
+
+-   `sep =` 分割する位置を、文字または数字で指定します。
+
+-   `remove =` デフォルトではFALSE。入力された列を削除します。\
+
+-   `convert =` デフォルトではFALSE。文字列 "NA"を `NA` に変換します。
+
+-   `extra =` 分離によって作成された値の数が、指定された新規列の名前よりも多い場合の動作を制御します。
+
+    -   `extra = "warn"` は、警告を表示し、過剰な値は削除されます（**デフォルト**）。
+    -   `extra = "drop"` は、警告を表示せずに余分な値を削除します。
+    -   **`extra = "merge"` は、`into =` で指定された新しい列の数だけ分割します。-** <u>この設定では全ての入力データが保存されます。</u>
+
+`extra = "merge"` を使用した例を以下に示します（ここではデータは失われません）。2 つの新しい列が定義され、3 つ目の症状は 2 つ目の列に入ります。
+
+```{r}
+# 3つ目の症状は2つ目の新しい列に組み込まれる
+df %>% 
+  separate(symptoms, into = c("sym_1", "sym_2"), sep=",", extra = "merge")
+```
+
+デフォルトの `extra = "drop"` に設定した場合、以下のように警告が表示されます。
+
+```{r}
+# 3番目の症状は失われる
+df %>% 
+  separate(symptoms, into = c("sym_1", "sym_2"), sep=",")
+```
+
+[**注意：**`into =` に入力された値の数（新規列の名前）が不足していると、データが切り捨てられる可能性があります。]{style="color: orange;"}
+
+<!-- ======================================================= -->
+
+### アルファベット順に並べる {.unnumbered}
+
+複数の文字列をアルファベット順に並べることができます。`str_order()` を使用すると、順序が返され、`str_sort()` はその順序に並べ替えた文字列を返します。
+
+```{r}
+# 文字列の定義
+health_zones <- c("Alba", "Takota", "Delta")
+
+# アルファベット順を返す
+str_order(health_zones)
+
+# アルファベット順に並び替える
+str_sort(health_zones)
+```
+
+英語以外の他のアルファベットを使用したい場合は、引数 `locale =` を追加します。R コンソールで `stringi::stri_locale_list()` と入力すると、指定可能なアルファベットの一覧を表示することができます。
+
+<!-- ======================================================= -->
+
+### R の基本関数 {.unnumbered}
+
+R の **base** パッケージに含まれている関数である `paste()` や `paste0()` は、与えられたベクトルのすべての要素を文字に変換した後、結合して 1 つの文字列を返すためによく使われます。これらの関数は `str_c()` と似ていますが、使用される構文はより複雑で、括弧の中では各部分がコンマで区切られています。括弧内の各部分は、引用符で囲まれた文字テキストまたはすでに定義されたコードオブジェクト（引用符なし）です。例えば、以下のようになります。
+
+```{r}
+n_beds <- 10
+n_masks <- 20
+
+paste0("Regional hospital needs ", n_beds, " beds and ", n_masks, " masks.")
+```
+
+`sep =` と `collapse =` の引数を指定できます。`paste()` は、`paste0()` で `sep = " "`（半角スペース）を使用した場合と同じです。
+
+## 整理と標準化
+
+<!-- ======================================================= -->
+
+### 大文字小文字の変更 {.unnumbered}
+
+管轄区域の名称など、大文字小文字を変更しなければならない場合がよくあります。その場合は、以下のように **stringr** に含まれる `str_to_upper()`、`str_to_lower()`、`str_to_title()` を使用すると便利です。
+
+```{r}
+str_to_upper("California")
+
+str_to_lower("California")
+```
+
+**base** R の `toupper()`、`tolower()` を使用しても同じ処理をすることができます。
+
+**語頭を大文字にする**
+
+各単語の語頭を大文字にしたい場合は、`str_to_title()` を使います。
+
+```{r}
+str_to_title("go to the US state of california ")
+```
+
+**tools** パッケージの `toTitleCase()` を使うことで、より厳密に（"to"、"the"、"of" のような単語は大文字化されずに）語頭を大文字にすることができます。
+
+```{r}
+tools::toTitleCase("This is the US state of california")
+```
+
+また、`str_to_sentence()` を使うと、文字列の最初の文字の語頭のみを大文字にすることができます。
+
+```{r}
+str_to_sentence("the patient must be transported")
+```
+
+### 文字列を伸長する {#str_pad .unnumbered}
+
+`str_pad()` を用いると、文字列に特定の文字を足すことで、指定した長さまで文字列を伸ばすことができますデフォルトではスペース（空白）が追加されますが、`pad =` によってピリオドなど他の文字を指定することも可能です。
+
+```{r}
+# 異なる長さのICDコード
+ICD_codes <- c("R10.13",
+               "R10.819",
+               "R17")
+
+# 最低7文字になるよう右側に空白を足したICDコード
+str_pad(ICD_codes, 7, "right")
+
+# 空白の代わりにピリオドで文字列を伸長
+str_pad(ICD_codes, 7, "right", pad = ".")
+```
+
+例えば、`pad = "0"` により先頭に 0 を足すことで、時間や分のように数字で構成される文字列の長さが少なくとも 2 になるように処理することができます。
+
+```{r}
+# 先頭に0を足して2桁にする（例：時間・分の表示）
+str_pad("4", 2, pad = "0") 
+
+# "hours"という名前の数字列を作る場合
+# hours <- str_pad(hours, 2, pad = "0")
+```
+
+### 文字列を短縮する {.unnumbered}
+
+`str_trunc()` で文字列の長さの最大値を設定できます。与えられた文字列の長さが指定した最大値を超える場合、その文字列は短縮され、省略記号（...）が挿入されます。このとき、省略記号は文字数にカウントされることに注意してください。使用される省略記号は `ellipsis =` で指定することができます。また `side =` によって、省略記号がどこに挿入されるか（"left"、 "right"、 "center"）を指定することができます。
+
+```{r}
+original <- "Symptom onset on 4/3/2020 with vomiting"
+str_trunc(original, 10, "center")
+```
+
+### 長さの標準化 {.unnumbered}
+
+文字列の長さの最大値を `str_trunc()` で指定し、さらに `str_pad()` を用いて短い文字列をその長さまで伸長することができます。以下の例では、最大値を 6 に設定し（1 つの文字列が短縮されます）、次に設定された最大値 6 に満たない文字列がその長さまで伸長されます。
+
+```{r}
+# 異なる長さのICDコード
+ICD_codes   <- c("R10.13",
+                 "R10.819",
+                 "R17")
+
+# 最大の長さが6になるよう文字列を短縮
+ICD_codes_2 <- str_trunc(ICD_codes, 6)
+ICD_codes_2
+
+# 最小の長さが6になるよう文字列を伸長
+ICD_codes_3 <- str_pad(ICD_codes_2, 6, "right")
+ICD_codes_3
+```
+
+### 先頭・末尾の空白を削除する {.unnumbered}
+
+`str_trim()` を用いて文字列の端にある空白、改行（`\n`）、タブ （`\t`）を削除できます。`"right"`、`"left"`、または `"both"` を指定することにより、どちらの端から削除するかを選択することができます（例：`str_trim(x, "right")`）。
+
+```{r}
+# 右端に余分な空白を持つID
+IDs <- c("provA_1852  ", # 2つの余分な空白あり
+         "provA_2345",   # 余分な空白なし
+         "provA_9460 ")  # 1つの余分な空白あり
+
+# 右端から空白を削除
+str_trim(IDs)
+```
+
+### 繰り返される空白の削除 {.unnumbered}
+
+`str_squish()` を用いて文字列の内部に連続して現れる空白を削除できます。例えば、2 つ続きになっている空白を 1 つの空白に変更できます。`str_trim()` と同様、文字列の端にある空白、改行、タブを削除することもできます。
+
+```{r}
+# 元の文字列は内部に余分な空白を含む
+str_squish("  Pt requires   IV saline\n")
+```
+
+R コンソールに `?str_trim`、`?str_pad` と入力すると、詳細を確認できます。
+
+### 指定の文字数で文章を改行する {.unnumbered}
+
+`str_wrap()` を用いることで、長い文章を指定した文字数で改行し整理することができます。任意の文字数を指定すれば、アルゴリズムにより以下のように文章中に改行（`\n`）が挿入されます。
+
+```{r}
+pt_course <- "Symptom onset 1/4/2020 vomiting chills fever. Pt saw traditional healer in home village on 2/4/2020. On 5/4/2020 pt symptoms worsened and was admitted to Lumta clinic. Sample was taken and pt was transported to regional hospital on 6/4/2020. Pt died at regional hospital on 7/4/2020."
+
+str_wrap(pt_course, 40)
+```
+
+**base** の `cat()` に上記のコマンドを入力することで、改行された文章を表示することができます。
+
+```{r}
+cat(str_wrap(pt_course, 40))
+```
+
+<!-- ======================================================= -->
+
+## 位置による操作
+
+### 位置を指定して文字を抽出する {.unnumbered}
+
+`str_sub()` は文字列の一部を返します。この関数は次の 3 つの引数を取ります。
+
+1)  文字ベクトル
+2)  開始位置
+3)  終了位置
+
+位置を定義する際にいくつかの注意点があります：
+
+-   位置番号が正のとき、位置は文字列の左端からカウントされます。
+-   位置番号が負のとき、位置は文字列の右端からカウントされます。
+-   開始・終了位置は選択範囲に含まれます。
+-   文字列の長さを超えて選択された範囲は無視されます。
+
+以下に文字列 "pneumonia" を用いた例を示します：
+
+```{r}
+# 左から3文字目を開始および終了位置に設定
+str_sub("pneumonia", 3, 3)
+
+# 位置0は存在しません
+str_sub("pneumonia", 0, 0)
+
+# 左から6文字目を開始位置、右から1文字目を終了位置に設定
+str_sub("pneumonia", 6, -1)
+
+# 右から5文字目を開始位置、右から2文字目を終了位置に設定
+str_sub("pneumonia", -5, -2)
+
+# 左から4文字目を開始位置、文字列の長さを超えた位置を終了位置に設定
+str_sub("pneumonia", 4, 15)
+```
+
+### 位置を指定して単語を抽出する {.unnumbered}
+
+n 番目の単語を抽出したい場合は、**stringr** パッケージの `word()` を用います。文字列、開始位置、終了位置を引数に取ります。
+
+初期設定では空白で区切られた部分が単語と認識されます。区切りは `sep =` で変更でき、例えば `sep = "_"` と指定すると下線で区切られた部分が単語と認識されます。
+
+```{r}
+# 評価したい文字列
+chief_complaints <- c("I just got out of the hospital 2 days ago, but still can barely breathe.",
+                      "My stomach hurts",
+                      "Severe ear pain")
+
+# 1から3番目の単語を抽出
+word(chief_complaints, start = 1, end = 3, sep = " ")
+```
+
+### 位置を指定して文字を入れ替える {.unnumbered}
+
+`str_sub()` と代入演算子（`<-`）を組み合わせて文字列の一部を変更できます。
+
+```{r}
+word <- "pneumonia"
+
+# 3番目と4番目の文字をXに変更する
+str_sub(word, 3, 4) <- "XX"
+
+# 結果を表示
+word
+```
+
+データフレームの列など、複数の文字列に対して用いる場合の例を示します。以下の例では、コマンド実行後に "HIV" の文字列が長くなることに注意してください。
+
+```{r}
+words <- c("pneumonia", "tubercolosis", "HIV")
+
+# 3番目と4番目の文字をXに変更する
+str_sub(words, 3, 4) <- "XX"
+
+words
+```
+
+### 長さを評価する {.unnumbered}
+
+```{r}
+str_length("abc")
+```
+
+**base** R の `nchar()` でも同様の操作が可能です。
+
+<!-- ======================================================= -->
+
+## パターン
+
+**stringr** に含まれる関数の多くは、与えられた文字列から特定の<u>パターン</u>を見つけ、その位置を特定したり、抽出・入れ替えなどの操作を行うことができます。
+
+<!-- ======================================================= -->
+
+### パターンを見つける {.unnumbered}
+
+以下の例のように `str_detect()` を使うことで、文字列中に特定のパターンが存在するか否かを判別することができます。初めに検索する文字列を与え（`string =`）、さらに探したいパターンを入力します（`pattern =`）。 初期設定では<u>大文字小文字が区別される</u>ことに注意してください！
+
+```{r}
+str_detect(string = "primary school teacher", pattern = "teach")
+```
+
+引数 `negate =` を `TRUE` に設定することで、パターンが存在「しない」かどうかを判定できます。
+
+```{r}
+str_detect(string = "primary school teacher", pattern = "teach", negate = TRUE)
+```
+
+大文字小文字を無視したい場合は、パターンを `regex()` で包み、`regex()` <u>中に</u> `ignore_case = TRUE`（もしくは短く `T`）と指定します。
+
+```{r}
+str_detect(string = "Teacher", pattern = regex("teach", ignore_case = T))
+```
+
+`str_detect()` で検索する文字列が文字ベクトルやデータフレームの列である場合は、各要素ごとに `TRUE` または `FALSE` が返されます。
+
+```{r}
+# 職業のベクトル・列
+occupations <- c("field laborer",
+                 "university professor",
+                 "primary school teacher & tutor",
+                 "tutor",
+                 "nurse at regional hospital",
+                 "lineworker at Amberdeen Fish Factory",
+                 "physican",
+                 "cardiologist",
+                 "office worker",
+                 "food service")
+
+# 各文字列中に"teach"が含まれるかを判別する - TRUE/FALSE が出力される
+str_detect(occupations, "teach")
+```
+
+`TRUE` がいくつあるかを数えたい場合は、出力された値を `sum()` に入力します。
+
+```{r}
+sum(str_detect(occupations, "teach"))
+```
+
+複数のパターンを探したい場合は、以下のように各パターンを OR 記号（`|`）で区切り、`pattern =` で指定します。
+
+```{r}
+sum(str_detect(string = occupations, pattern = "teach|professor|tutor"))
+```
+
+より多くのパターンを同時に探したいときは、 `str_c()` と `sep = |` を組み合わせた出力を文字オブジェクトとして先に定義することで、コードをより簡潔にすることができます。以下の例では、医療従事者の職業リストをパターンとして検索します。
+
+```{r}
+# 検索するパターン
+occupation_med_frontline <- str_c("medical", "medicine", "hcw", "healthcare", "home care", "home health",
+                                "surgeon", "doctor", "doc", "physician", "surgery", "peds", "pediatrician",
+                               "intensivist", "cardiologist", "coroner", "nurse", "nursing", "rn", "lpn",
+                               "cna", "pa", "physician assistant", "mental health",
+                               "emergency department technician", "resp therapist", "respiratory",
+                                "phlebotomist", "pharmacy", "pharmacist", "hospital", "snf", "rehabilitation",
+                               "rehab", "activity", "elderly", "subacute", "sub acute",
+                                "clinic", "post acute", "therapist", "extended care",
+                                "dental", "dential", "dentist", sep = "|")
+
+occupation_med_frontline
+```
+
+以下の例では、先に定義した職業リストの中に含まれる医療職（`occupation_med_frontline`）の数を返します。
+
+```{r}
+sum(str_detect(string = occupations, pattern = occupation_med_frontline))
+```
+
+**文字列検索のための基本 R 関数**
+
+**base** R の `grepl()` は `str_detect()` と同様、パターンの有無を判定しロジカルベクトルを返します。基本構文は `grepl(pattern, strings_to_search, ignore.case = FALSE, ...)` です。`grepl()` を使用する利点の 1 つとして、`regex()` を使わずに `ignore.case =` を指定するだけで大文字小文字を区別するかを変更することができます。
+
+同様に、**base** R の `sub()` と `gsub()` は `str_replace()` に近い働きをします。 基本構文は `gsub(pattern, replacement, strings_to_search, ignore.case = FALSE)` です。`sub()` は一致したパターンのうち最初に現れるものだけを、`gsub()` は一致したパターンの全てを入れ替えます。
+
+#### コンマをピリオドに入れ替える {.unnumbered}
+
+以下に `gsub()` を用いてコンマをピリオドに入れ替える例を示します。これは米国や英国以外で収集されたデータを扱う際に役に立つかもしれません。
+
+内部の `gsub()` は `lengths` 内のピリオドを除いて ""（空白無し）に入れ替えます。ピリオド "." をパターンとして指定する際は、その前に 2 つバックスラッシュを置くことで「エスケープ」する必要があります。これは正規表現において "." が "全ての文字" を意味するためです。 ここで出力された結果（ピリオドは削除されカンマのみを含む）は外側の `gsub()` に渡され、コンマがピリオドに置き換わります。
+
+```{r, eval=F}
+lengths <- c("2.454,56", "1,2", "6.096,5")
+
+as.numeric(gsub(pattern = ",",                # コンマを見つける
+                replacement = ".",            # ピリオドに入れ替える
+                x = gsub("\\.", "", lengths)  # ピリオド（エスケープして指定）を削除する
+                )
+           )                                  # 出力を数字ベクトルに変更
+```
+
+### 全て入れ替える {.unnumbered}
+
+`str_replace_all()` は「検索と置換」ツールとして使用できます。検索する文字列、パターン、置き換える値をそれぞれ `string =`、`pattern =`、`replacement =` で指定します。 以下の例では、全ての "dead" を "deceased" に入れ替えます。大文字小文字が区別されることに注意してください。
+
+```{r}
+outcome <- c("Karl: dead",
+            "Samantha: dead",
+            "Marco: not dead")
+
+str_replace_all(string = outcome, pattern = "dead", replacement = "deceased")
+```
+
+注釈：
+
+-   指定したパターンを `NA` で置き換えるには `str_replace_na()` を用います。
+-   `str_replace()` は与えられた各文字列中に現れる最初のパターンだけを入れ替えます。
+
+<!-- ======================================================= -->
+
+### パターンの有無による条件分岐 {.unnumbered}
+
+**`case_when()` との組み合わせ**
+
+`str_detect()` は **dplyr** パッケージの `case_when()` と組み合わせて用いられることが多いです。例として、`occupations` がラインリスト内の列であるとします。以下の `mutate()` は `case_when()` による条件分岐に従って新しい列 `is_educator` を作ります。`case_when()` についての詳細は、[データクリーニングと主要関数](#cleaning) の章を参照してください。
+
+```{r, eval=F}
+df <- df %>% 
+  mutate(is_educator = case_when(
+    # occupation内でパターン検索（大文字小文字は区別しない）
+    str_detect(occupations,
+               regex("teach|prof|tutor|university",
+                     ignore_case = TRUE))              ~ "Educator",
+    # その他全て
+    TRUE                                               ~ "Not an educator"))
+```
+
+`negate = F` を用いて除外したいパターンを指定できることも覚えておきましょう。
+
+```{r, eval=F}
+df <- df %>% 
+  # 新しい列is_educatorの値を条件分岐により決定する
+  mutate(is_educator = case_when(
+    
+    # "Educator"の値を取るためには2つの基準を満たす必要がある：
+    # 指定されたパターンを持ち、かつ除外されたパターンを持たない
+
+    # 指定されたパターンを持つ
+    str_detect(occupations,
+               regex("teach|prof|tutor|university", ignore_case = T)) &
+    
+    # 指定されたパターンを持たない
+    str_detect(occupations,
+               regex("admin", ignore_case = T),
+               negate = TRUE                        ~ "Educator"
+    
+    # 上記の条件を満たさない全ての行
+    TRUE                                            ~ "Not an educator"))
+```
+
+<!-- ======================================================= -->
+
+### パターンの位置を特定する {.unnumbered}
+
+指定したパターンが与えられた文字列中に<u>最初に</u>現れる位置を特定するためには、`str_locate()` を用います。パターンの最初と最後の文字の位置を返します。
+
+```{r}
+str_locate("I wish", "sh")
+```
+
+その他の `str` 関数と同様、`str_locate()` にも "\_all" バージョンが存在します（`str_locate_all()`）。与えられた各文字列中に現れるパターンの全ての位置を `list` 形式で返します。
+
+```{r}
+phrases <- c("I wish", "I hope", "he hopes", "He hopes")
+
+str_locate(phrases, "h" )     # *最初に*現れるパターンの位置
+str_locate_all(phrases, "h" ) # *全ての*パターンの位置
+```
+
+<!-- ======================================================= -->
+
+### 一致したパターンを抽出する {.unnumbered}
+
+`str_extract_all()` はマッチしたパターンそのものを返します。これは "OR（`|`）" を用いて複数のパターンを検索したときに特に有用です。例えば、職業の文字列リスト（前のセクションを参照）内で "teach"、"prof"、"tutor" の<u>いずれかの</u>パターンに合致する単語を探したいとします。
+
+`str_extract_all()` 与えられた文字列内の一致するパターン<u>全ての</u> `list` を返します。以下の例では、出力されたリストのうち 3 つ目の要素において 2 つのパターンが一致していることに注目してください。
+
+```{r}
+str_extract_all(occupations, "teach|prof|tutor")
+```
+
+一方、`str_extract()` は<u>最初に一致したパターンのみ</u>を返します。従って、出力結果は与えられた各文字列に対して 1 つのパターンが文字ベクトルで返されます。 一致するパターンがない場合は `NA` が返されます。この `NA` は `str_extract` を `na.exclude()` で包むことで消去することもできます。以下の例では、3 つ目の文字列の 2 つ目の一致パターンが表示されないことに注意してください。
+
+```{r}
+str_extract(occupations, "teach|prof|tutor")
+```
+
+<!-- ======================================================= -->
+
+### サブセットと数え上げ {.unnumbered}
+
+ここでは `str_subset()` と `str_count()` を扱います。
+
+`str_subset()` は一致したパターンだけでなく、そのパターンを含む文字列全体を返します：
+
+```{r}
+str_subset(occupations, "teach|prof|tutor")
+```
+
+`str_count()` は検索した文字列中に指定したパターンが現れる**合計回数**をベクトルで返します。
+
+```{r}
+str_count(occupations, regex("teach|prof|tutor", ignore_case = TRUE))
+```
+
+<!-- ======================================================= -->
+
+### 正規表現グループ {.unnumbered}
+
+作成中
+
+<!-- ======================================================= -->
+
+## 特殊文字
+
+**バックスラッシュ `\` によるエスケープ**
+
+バックスラッシュ `\` はその直後に現れる文字の意味を「エスケープ」するために使われます。例えば、二重引用符の中で使用されている引用符の前にバックスラッシュを置くと（`\"`）、その引用符が二重引用符の*中で*表示されます。その際、中で挟まれる引用符はそれを囲む引用符とは干渉しません。
+
+注釈：バックスラッシュを<u>文字として表示したい</u>場合は、その前に<u>もう 1 つの</u>バックスラッシュを置いて、エスケープ記号としての役割を回避する必要があります。つまり、`\\` と書くことでバックスラッシュを1 つ表示できます。
+
+**特殊文字の例**
+
+| 特殊文字   | 意味                                    |
+|------------|-----------------------------------------|
+| `"\\"`     | バックスラッシュ                        |
+| `"\n"`     | 改行                                    |
+| `"\""`     | <u>二重引用符中での</u>二重引用符の表示 |
+| `'\''`     | <u>一重引用符中での</u>一重引用符の表示 |
+| `` "\`" `` | バッククオート                          |
+| `"\r"`     | キャリッジリターン                      |
+| `"\t"`     | タブ                                    |
+| `"\v"`     | バーティカルタブ                        |
+| `"\b"`     | バックスペース                          |
+
+`?"'"` コマンドを R コンソールで実行すると、特殊文字の一覧が表示できます（RStudio ではヘルプ画面に表示されます）。
+
+<!-- ======================================================= -->
+
+## 正規表現 (regex)
+
+<!-- ======================================================= -->
+
+## 正規表現と特殊文字
+
+正規表現（または regex）とは、文字列パターンを記述するために用いられる言語規則のことです。馴染みがない人にとっては、まるで他の星の言葉のように映るかもしれません。ここでは、その正規表現に対するハードルを少し下げることを目標にします。
+
+<u>このセクションで扱う内容の多くは [こちらのチュートリアル](https://towardsdatascience.com/a-gentle-introduction-to-regular-expressions-with-r-df5e897ca432) と [こちらのチートシート](https://evoldyn.gitlab.io/evomics-2018/ref-sheets/R_strings.pdf) を参考に作成されました。</u>ここでは、このハンドブックがインターネットへのアクセスが無く他のチュートリアルを見れない方からも利用されうることを念頭に、これらの参考文献から内容を選んで参考にしています。
+
+正規表現は<u>決まった構造を持たない</u>文章（例えば、診療録、主訴、既往歴やデータフレーム中の文字列など）から特定のパターンを抜き出すためによく使われます。
+
+正規表現を構築するために使われる基本ツールは以下の 4 つです。
+
+1)  文字セット
+2)  メタ文字
+3)  数量詞
+4)  グループ
+
+**文字セット**
+
+文字セットは角括弧 `[ ]` を用いて文字のリストを表現します。角括弧中に含まれる文字のいずれかが対象の文字列中に含まれる場合、一致パターンとして扱われます。例えば、母音のいずれかを検索したい場合 "[aeiou]" と表現できます。以下によく使われる文字セットを示します。
+
+| 文字セット  | 検索される文字                         |
+|-------------|----------------------------------------|
+| `"[A-Z]"`   | 全ての大文字アルファベット             |
+| `"[a-z]"`   | 全ての小文字アルファベット             |
+| `"[0-9]"`   | 全ての数字                             |
+| `[:alnum:]` | 全てのアルファベットおよび数字         |
+| `[:digit:]` | 全ての数字                             |
+| `[:alpha:]` | 全ての大文字および小文字アルファベット |
+| `[:upper:]` | 全ての大文字アルファベット             |
+| `[:lower:]` | 全ての小文字アルファベット             |
+
+複数の文字セットを 1 つの角括弧中に（空白なしで！）組み合わせることができます。例えば `"[A-Za-z]"` は全ての大文字および小文字アルファベットを、`"[t-z0-5]"` は t から z までの小文字アルファベットと 0 から 5 までの数字を表します。
+
+**メタ文字**
+
+メタ文字は文字セットの省略表記です。以下にいくつかの重要な例を示します：
+
+| メタ文字 | 検索される文字                                         |
+|----------|--------------------------------------------------------|
+| `"\\s"`  | 1 つの空白                                             |
+| `"\\w"`  | 全てのアルファベットおよび数字（A-Z、a-z、または 0-9） |
+| `"\\d"`  | 全ての数字（0-9）                                      |
+
+**数量詞**
+
+多くの場合、検索したいパターンは 2 つ以上の文字を含みます。数量詞により一致を探す文字や数字の長さを規定できます。
+
+数量詞は数を指定したいパターンの<u>後に</u>波括弧 `{ }` を置き、その中に数字を書くことで定義されます。 例えば、
+
+-   `"A{2}"` は大文字 A **2 つ**を示します。\
+-   `"A{2,4}"` は **2 から 4 つの**大文字 A を示します（波括弧中に空白は置かれません！）。\
+-   `"A{2,}"` は **2 つ以上の**大文字 A を示します。
+-   `"A+"` は **1 つ以上の**大文字 A を示します（他の文字が現れるまで、連続した A は全てグループに含まれます）。
+-   アスタリスク `*` を前におくと **0 個以上の**という意味が付加されます（そのパターンが存在するか不確かなときに有用です）。
+
+`+` シンボルを使うと、他の文字が出てくるまでの連続した同一の文字が全て一致するパターンとして扱われます。例えば、`"[A-Za-z]+"` という表現は全ての単語（アルファベットのみでできた文字列）に対応します。
+
+```{r}
+# 数量詞をテストするための文字列
+test <- "A-AA-AAA-AAAA"
+```
+
+数量詞 {2} を用いた場合、2 つ続きの A のみがマッチとして扱われます。`AAAA` からは 2 つのマッチが返されます。
+
+```{r}
+str_extract_all(test, "A{2}")
+```
+
+数量詞 {2,4} を用いた場合、2 つから 4 つ続きの A がマッチとして扱われます。
+
+```{r}
+str_extract_all(test, "A{2,4}")
+```
+
+数量詞 `+` を用いた場合、**1 つ以上の**連続した A がマッチとして扱われます：
+
+```{r}
+str_extract_all(test, "A+")
+```
+
+**相対的位置**
+
+ここで紹介する構文を用いることで、探したいパターンの直前または直後に来る文字ないしはパターンを指定することができます。例えば、「ピリオドが直後に来る 2 つ続きの数字」というパターンを表現したいときは (?\<=\\.)\\s(?=[A-Z])
+
+```{r}
+str_extract_all(test, "")
+```
+
+| 位置構文    | マッチするパターン         |
+|-------------|----------------------------|
+| `"(?<=b)a"` | "b" が**直前に来る** "a"   |
+| `"(?<!b)a"` | "b" が**直前に来ない** "a" |
+| `"a(?=b)"`  | "b" が**直後に来る** "a"   |
+| `"a(?!b)"`  | "b" が**直後に来ない** "a" |
+
+**グループ**
+
+正規表現の中でグループを用いることで、パターン検索をより整理された形で行うことができます。
+
+**正規表現の例**
+
+ここでは、以下の文章から正規表現を用いて有用な情報を抽出する例を示します。
+
+```{r}
+pt_note <- "Patient arrived at Broward Hospital emergency ward at 18:00 on 6/12/2005. Patient presented with radiating abdominal pain from LR quadrant. Patient skin was pale, cool, and clammy. Patient temperature was 99.8 degrees farinheit. Patient pulse rate was 100 bpm and thready. Respiratory rate was 29 per minute."
+```
+
+以下の正規表現は、全ての単語（連続したアルファベットのみからなるまとまり）を抽出します。
+
+```{r}
+str_extract_all(pt_note, "[A-Za-z]+")
+```
+
+正規表現 `"[0-9]{1,2}"` は 1 つのみもしくは 2 つ続きの数字にマッチします。`"\\d{1,2}"` もしくは `"[:digit:]{1,2}"` と書くこともできます。
+
+```{r}
+str_extract_all(pt_note, "[0-9]{1,2}")
+```
+
+<!-- This expression will extract all sentences (assuming first letter is capitalized, and the sentence ends with a period). The pattern reads in English as: "A capital letter followed by some lowercase letters, a space, some letters, a space,     -->
+
+<!-- ```{r} -->
+
+<!-- str_extract_all(pt_note, "[A-Z][a-z]+\\s\\w+\\s\\d{1,2}\\s\\w+\\s*\\w*") -->
+
+<!-- ``` -->
+
+[こちらのチートシート](https://evoldyn.gitlab.io/evomics-2018/ref-sheets/R_strings.pdf) の 2 ページ目に、有用な正規表現のリストやヒントがありますので、参照してください。
+
+[こちらのチュートリアル](https://towardsdatascience.com/a-gentle-introduction-to-regular-expressions-with-r-df5e897ca432) も参考にしてください。
+
+<!-- ======================================================= -->
+
+## 参考資料
+
+**stringr** に含まれる関数の詳細は [こちら](https://evoldyn.gitlab.io/evomics-2018/ref-sheets/R_strings.pdf) を参照してください。
+
+**stringr** に関する簡単な説明は [こちら](https://cran.r-project.org/web/packages/stringr/vignettes/stringr.html) から読むことができます。

@@ -1,0 +1,514 @@
+---
+aliases:
+  - /new_pages/grouping.pt.html
+---
+
+# Agrupando dados {#grouping}  
+
+
+```{r, out.width=c('100%'), echo=F, message=F}
+knitr::include_graphics(here::here("images", "Grouping_1500x500.png"))
+```
+
+
+Esta página cobre como agrupar e agregar dados para análise descritiva. Ela faz uso da família de pacotes **tidyverse** que tem funções comuns e fáceis de usar. 
+
+
+O agrupamento de dados é um componente central do gerenciamento e análise de dados. Os dados agrupados estatisticamente resumidos por grupo e que podem ser traçados por grupo em um gráfico. As funções do pacote **dplyr** (parte do **tidyverse**) tornam o agrupamento e as operações subseqüentes bastante fáceis.  
+
+
+Esta página abordará os seguintes tópicos:  
+
+* Agrupar dados com a função `group_by()`.  
+* Dados desagrupados 
+* `summarise()`dados agrupados com estatísticas  
+* A diferença entre `count()` e `tally()`  
+* 'arrange()`aplicado a dados agrupados  
+* `filter()` aplicado aos dados agrupados  
+* mutate()`aplicado a dados agrupados  
+* select()` aplicado aos dados agrupados  
+O comando do R **base** `aggregate()` como alternativa  
+
+<!-- ======================================================= -->
+## Preparação {  }
+     
+### Carregar pacotes {.unnumbered}  
+     
+Este trecho de código mostra o carregamento dos pacotes necessários para as análises. Neste manual, enfatizamos `p_load()` de **pacman**, que instala o pacote se necessário *e* o carrega para utilização. Você também pode carregar os pacotes instalados com `library()` do R **base**. Veja a página em [Introdução ao R](#basics) para mais informações sobre os pacotes R. 
+
+```{r}
+pacman::p_load(
+  rio,       # para importar os dados
+  here,      # localizar pacotes
+  tidyverse, # limpar, manipular, e visualizar os dados (inlcui dplyr)
+  janitor)   # adicionar totais às linhas e colunas 
+```
+
+
+
+
+### Importar datos {.unnumbered}
+
+Nós importamos os dados de casos de uma epidemia simulada de Ebola. Se você quiser acompanhar, <a href='https://github.com/appliedepi/epirhandbook_eng/raw/master/data/case_linelists/linelist_cleaned.rds' class='download-button'> clique para baixar o linelist "limpo" </a> (as .rds file). O conjunto de dados é importado utilizando a função `import()` do pacote **rio**. Veja a página em [Importar e exportar](#importing) para várias formas de importação de dados.
+
+```{r, echo=F}
+linelist <- rio::import(here("data", "case_linelists", "linelist_cleaned.rds"))
+```
+
+```{r, eval=F}
+linelist <- import("linelist_cleaned.rds")
+```
+
+
+As primeiras 50 linhas da `linelist`:  
+
+```{r message=FALSE, echo=F}
+DT::datatable(head(linelist,50), rownames = FALSE, filter="top", options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+
+
+<!-- ======================================================= -->
+## Agrupando os dados {  }
+     
+A função `group_by()` de **dplyr** agrupa as linhas pelos valores únicos na coluna especificada para ela. Se várias colunas forem especificadas, as linhas são agrupadas pelas combinações únicas de valores através das colunas. Cada valor único (ou combinação de valores) constitui um grupo. Alterações subseqüentes no conjunto de dados ou cálculos podem então ser realizadas dentro do contexto de cada grupo.  
+
+Por exemplo, o comando abaixo toma a "linelist" e agrupa as linhas por valores únicos na coluna "outcome", salvando a saída como uma nova tabela de dados (*dataframe*) chamada "ll_by_outcome". A(s) coluna(s) de agrupamento são colocadas dentro dos parênteses da função `group_by()` 
+
+```{r}
+ll_by_outcome <- linelist %>% 
+  group_by(outcome)
+```
+
+**Note que não há nenhuma mudança perceptível no conjunto de dados** após executar `group_by()`, *até* outra função do **dplyr** tal como `mutate()`, `summarise()`, ou `arrange()` ser aplicada no *dataframe* "grouped".  
+
+Você pode, no entanto, "ver" os agrupamentos imprimindo o quadro de dados. Ao imprimir um quadro de dados agrupados, você verá que ele foi transformado em um objeto de classe [`tibble` (https://tibble.tidyverse.org/) que, quando impresso, mostra quais agrupamentos foram aplicados e quantos grupos existem - escritos logo acima da linha do cabeçalho.  
+
+```{r}
+# visualizar quais grupos estão ativvos
+ll_by_outcome
+```
+
+
+### Grupos únicos {.unnumbered}  
+
+**Os grupos criados refletem cada combinação única de valores através das colunas de agrupamento.** 
+
+Para ver os grupos *e o número de linhas em cada grupo*, passe os dados agrupados para `tally()`. Para ver apenas os grupos únicos sem conta, você pode passar para `group_keys()`.  
+
+Veja abaixo que existem **três** valores únicos na coluna de agrupamento `outcome` (desfecho, em português): "Death" (óbito), "Recover" (Recuperado), e `NA`. Veja que existem ` nrow(linelist %>% filter(outcome == "Death"))` óbitos, ` nrow(linelist %>% filter(outcome == "Recover"))` recuperações, e ` nrow(linelist %>% filter(is.na(outcome)))` sem nenhum resultado registrado.
+
+```{r}
+linelist %>% 
+  group_by(outcome) %>% 
+  tally()
+```
+
+Você pode agrupar por mais de uma coluna. Abaixo, o *dataframe* é agrupado por 'outcome' e 'gender', e depois contada. Observe como cada combinação única de "outcome" e "gender" é registrada como seu próprio grupo - incluindo valores ausentes para cada coluna.   
+
+```{r}
+linelist %>% 
+  group_by(outcome, gender) %>% 
+  tally()
+```
+
+### Novas colunas {.unnumbered} 
+
+Você também pode criar uma nova coluna de agrupamento *dentro* da função `group_by()`. Isto equivale a chamar a função`mutate()` antes da instrução `group_by()`. Para uma tabulação rápida, este estilo pode ser útil, mas para maior clareza em seu código, considere criar esta coluna em seu próprio passo `mutate()` e depois encadear (usando o "pipe" %>%)  com o `group_by()`.
+
+```{r}
+# agrupar dados baseado em uma coluna biária criada dentro do próprio comando group_by  
+linelist %>% 
+  group_by(
+    age_class = ifelse(age >= 18, "adult", "child")) %>% 
+  tally(sort = T)
+```
+
+### Adicionar/Eliminar colunas de agrupamento {.unnumbered}  
+
+Por padrão, se você executar `group_by()` em dados que já estão agrupados, os grupos antigos serão removidos e o(s) novo(s) grupo(s) será(ão) aplicado(s). Se você quiser adicionar novos grupos aos já existentes, inclua o argumento `.add = TRUE'.  
+
+```{r, eval=F}
+# Agrupado por 'outcome' (desfecho)
+by_outcome <- linelist %>% 
+  group_by(outcome)
+
+# Adicionar um agrupamento por 'gender' (sexo) 
+by_outcome_gender <- by_outcome %>% 
+  group_by(gender, .add = TRUE)
+```
+
+
+**Manter todos os grupos**  
+
+Se você agrupar em uma coluna do tipo fator, pode haver níveis do fator que não estão presentes atualmente nos dados. Se você agrupar nesta coluna, por padrão esses níveis não presentes são descartados e não incluídos como grupos. Para alterar isso para que todos os níveis apareçam como grupos (mesmo que não estejam presentes nos dados), defina `.drop = FALSE' em seu comando `group_by()`.    
+
+
+## Desagrupar 
+
+Os dados que foram agrupados permanecerão agrupados até que especificamente não sejam agrupados através do `ungroup()`. Se você se esquecer de desagradar, isso pode levar a cálculos incorretos! Abaixo está um exemplo de remoção de todos os agrupamentos:  
+
+```{r, eval=F}
+linelist %>% 
+  group_by(outcome, gender) %>% 
+  tally() %>% 
+  ungroup()
+```
+
+Você também pode remover o agrupamento apenas para colunas específicas, colocando o nome da coluna dentro de `ungroup()`.  
+
+```{r, eval=F}
+linelist %>% 
+  group_by(outcome, gender) %>% 
+  tally() %>% 
+  ungroup(gender) # remove o agrupamento por `gender` (sexo), mantendo o agrupamento por `outcome` (desfecho) 
+```
+
+
+<span style="color: black;">**_NOTA:_** O verbo `count()` desagrupa os dados automaticamente após a contagem.</span>
+
+
+## Resumir os dados (Summarise) {#group_summarise} 
+
+Consulte a seção **dplyr** da página [Tabelas descritivas](#tables-descriptive) para obter uma descrição detalhada de como produzir tabelas resumidas com `summarise()`. Aqui abordamos brevemente como seu comportamento muda quando aplicado a dados agrupados.  
+
+A função **dplyr** `summarise()` (ou `summarize()`) pega um dataframe e o converte em um *novo* dataframe resumido, com colunas contendo as estatísticas resumidas que você definiu. Em dataframe não agrupados, as estatísticas resumidas serão calculadas a partir de todas as linhas. A aplicação de `summarise()` aos dados agrupados produz estas estatísticas resumidas *para cada grupo*.  
+
+A sintaxe de `summarise()` é tal que você fornece o(s) nome(s) da(s) **nova(s)** coluna(s) resumo, um sinal de igual, e então uma função estatística a ser aplicada aos dados, como mostrado abaixo. Por exemplo, `min()`, `max()`, `median()`, ou `sd()`. Dentro da função estatística, liste a coluna a ser operada e qualquer argumento relevante (por exemplo, `na.rm = TRUE`). Você pode utilizar `sum()` para contar o número de linhas que satisfazem um critério lógico (com duplo igual a `==``).   
+
+Abaixo está um exemplo de `summarise()` aplicado *em dados não-agrupados*. As estatísticas resultantes são produzidas a partir de todo o conjunto de dados. 
+
+```{r}
+# estatísticas resumo na linelist desagrupada 
+linelist %>% 
+  summarise(
+    n_cases  = n(),
+    mean_age = mean(age_years, na.rm=T),
+    max_age  = max(age_years, na.rm=T),
+    min_age  = min(age_years, na.rm=T),
+    n_males  = sum(gender == "m", na.rm=T))
+```
+
+Em contraste, abaixo está a mesma declaração `summarise()` aplicada aos dados agrupados. As estatísticas são calculadas para cada grupo de "outcome" (desfecho). Observe como as colunas de agrupamento serão transportadas para o dataframe.   
+
+```{r}
+# statísticas resumo na linelist agrupada 
+linelist %>% 
+  group_by(outcome) %>% 
+  summarise(
+    n_cases  = n(),
+    mean_age = mean(age_years, na.rm=T),
+    max_age  = max(age_years, na.rm=T),
+    min_age  = min(age_years, na.rm=T),
+    n_males    = sum(gender == "m", na.rm=T))
+```
+
+<span style="color: darkgreen;">**_DICA:_** A função `summarise` funciona com a ortografia britânica e americana - `summarise()` e `summarize()` chamam a mesma função.</span>
+
+
+## Contagens
+
+As funções `count()` e `tally()` tem funcionalidade semelhante mas são diferentes. Leia mais sobre a distinção entre `tally()` e `count()` [here](https://dplyr.tidyverse.org/reference/tally.html)    
+
+### `tally()` {.unnumbered}  
+
+`tally()` é um atalho para `summarise(n = n())`, e *não* agrupa os dados. Assim, para ter `tallys` (contagens) agrupadas, esta função deve ser precedida de um comando `group_by()`. Você pode adicionar `sort = TRUE` para ver os grupos maiores primeiro.    
+
+```{r}
+linelist %>% 
+  tally()
+```
+
+
+```{r}
+linelist %>% 
+  group_by(outcome) %>% 
+  tally(sort = TRUE)
+```
+
+
+### `count()`  {.unnumbered}  
+
+Por outro lado, `count()` faz o seguinte:  
+
+1) aplica `group_by()` nas colunas especificadas  
+2) aplica `summarise()` e retorna a coluna `n` com o número de linhas por grupo
+3) aplica `ungroup()`  
+
+```{r}
+linelist %>% 
+  count(outcome)
+```
+
+Assim como em  `group_by()` você pode adicionar uma nova coluna dentro do comando `count()`:  
+
+```{r}
+linelist %>% 
+  count(age_class = ifelse(age >= 18, "adult", "child"), sort = T)
+```
+
+
+O comando`count()` pode ser chamado várias vezes, com a funcionalidade "rolling-up" (rolando para cima). Por exemplo, para resumir o número de hospitais presentes para cada sexo, execute o seguinte. Nota, o nome da coluna final é alterado do padrão "n" para maior clareza (com `name = `).   
+
+```{r}
+linelist %>% 
+  # produz contagens para grupos únicos de  "outcome-gender" groups
+  count(gender, hospital) %>% 
+  # junta lingas por `gender` (3) e conta a quantidade de hospitais por gênero (6)
+  count(gender, name = "hospitals per gender" ) 
+```
+
+
+### Adicionar contagens {.unnumbered}  
+
+Em contraste com `count()` e `summarise()`, você pode utilizar `add_count()` para *adicionar* uma nova coluna `n` com a contagem de linhas por grupo *enquanto mantém todas as outras colunas do dataframe*.   
+
+Isto significa que o número de contagem de um grupo, na nova coluna `n`, será impresso em cada linha do grupo. Para fins de demonstração, adicionamos esta coluna e depois reorganizamos as colunas para facilitar a visualização. Veja a seção abaixo em [filtro no tamanho do grupo](#group_filter_grp_size) para outro exemplo.  
+
+
+```{r}
+linelist %>% 
+  as_tibble() %>%                   # converte para "tibble" para melhro vizualização
+  add_count(hospital) %>%           # adiciona coluna n com as contages por hospital 
+  select(hospital, n, everything()) # re-organiza para o propósito desta demostração
+```
+
+
+
+### Adicionar totais {.unnumbered} 
+
+Para adicionar facilmente uma linhas ou colunas com os *total* ou colunas após utilizar `tally()` ou `count()`, veja a seção **janitor** da página [Tabelas descritivas](#tbl_janitor). Este pacote oferece funções como `adorn_totals()` e `adorn_percentagens()` para adicionar totais e converter para mostrar porcentagens. Abaixo está um breve exemplo:   
+
+```{r}
+linelist %>%                                  # caso linelist
+  tabyl(age_cat, gender) %>%                  # tabela cruzada para duas colinas
+  adorn_totals(where = "row") %>%             # adiciona uma linha de totais
+  adorn_percentages(denominator = "col") %>%  # converte para proporções com a coluna `denominator`
+  adorn_pct_formatting() %>%                  # converte proporções para porcentagens
+  adorn_ns(position = "front") %>%            # mostrar como: "count (percent)"
+  adorn_title(                                # ajustar título
+    row_name = "Age Category",
+    col_name = "Gender")
+```
+
+Para adicionar linhas de totais mais complexas que envolvam estatísticas resumidas diferentes de *somas*, ver [esta seção da página Tabelas Descritivas](#tbl_dplyr_totals). 
+
+## Agrupoando por data
+
+Ao agrupar os dados por data, você deve ter (ou criar) uma coluna para a unidade de data de interesse - por exemplo "dia", "epiweek", "mês", etc. Você pode fazer esta coluna utilizando `floor_date()` from **lubridate**, como explicado na seção [Semanas Epidemiológicas](#dates_epi_wks) da página [Trabalhando com datas](#dates). Uma vez que você tenha esta coluna, você pode utilizar `count()` from **dplyr*** para agrupar as linhas por esses valores de data únicos e obter contagens agregadas. 
+
+Uma etapa adicional comum para situações de datas, é "preencher" quaisquer datas na seqüência que não estejam presentes nos dados. Utilize `complete()` do **tidyr*** para que a série de datas agregadas seja *completa* incluindo *todas as unidades de data possíveis* dentro do intervalo. Sem esta etapa, uma semana sem casos reportados pode não aparecer em seus dados!  
+
+Dentro de `complete()` você *define* sua coluna de datas como uma *seqüência* de datas `seq.Date()` do mínimo para o máximo - assim, as datas são expandidas. Por padrão, os valores de contagem de casos em qualquer nova linha "expandida" serão `NA`. Você pode defini-los como 0 utilizando o `fill = ` argumento de `complete()`, que espera uma lista nomeada (se sua coluna de contagem for chamada `n`, forneça `fill = lista(n = 0)`. Veja `?complete' para detalhes e a página [Trabalhando com datas](#dates_epi_wks) para um exemplo.  
+
+
+### Os casos da Linelist em dias  {.unnumbered}  
+
+Aqui está um exemplo de agrupamento de casos em dias *sem* utilizar a função `complete()`. Observe que as primeiras linhas saltam as datas sem casos.  
+
+```{r}
+daily_counts <- linelist %>% 
+  drop_na(date_onset) %>%        # remove casos que faltam date_onset
+  count(date_onset)              # conta o número de linhas poro data única 
+```
+
+```{r message=FALSE, echo=F}
+DT::datatable(daily_counts, rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+Abaixo nós adicionamos o comando `complete()` para assegurar que todos os dias estão representados.
+
+```{r, eval=F}
+daily_counts <- linelist %>% 
+  drop_na(date_onset) %>%                 # remove casos em que faltam date_onset
+  count(date_onset) %>%                   # conta o número de linhas poro data única
+  complete(                               # assegura que todos os dias aparecem 
+    date_onset = seq.Date(                # re-define a coluna data como uma sequencia diária
+      from = min(date_onset, na.rm=T), 
+      to = max(date_onset, na.rm=T),
+      by = "day"),
+    fill = list(n = 0))                   # configura as linhas adicionadas para apresentar 0 e na coluna n  (não NAcomo no padrão) 
+```
+
+```{r message=FALSE, echo=F}
+DT::datatable(daily_counts, rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+### Casos Linelist em semanas {.unnumbered}  
+
+O mesmo princípio pode ser aplicado durante semanas. Primeiro cria-se uma nova coluna que é a semana do caso utilizando `floor_date()` com `unit = "semana" `. Em seguida, utilize `count()` como acima para obter contagens semanais de casos. Termine com `complete()` para garantir que todas as semanas sejam representadas, mesmo que não contenham casos.
+
+```{r}
+# Mostrar dados por contagens semanais
+weekly_counts <- linelist %>% 
+  drop_na(date_onset) %>%                 # remove casos em que está faltando date_onset
+  mutate(week = lubridate::floor_date(date_onset, unit = "week")) %>%  # nova coluna com a data 
+  count(week) %>%                         #  agrupa dados por semana e conta 
+  complete(                               # assegura que todos as semanas aparencem 
+    week = seq.Date(                      # redefine a coluna data como uma sequência completa
+      from = min(week, na.rm=T), 
+      to = max(week, na.rm=T),
+      by = "week"),
+    fill = list(n = 0))                   # configura as linhas adicionadas para apresentar 0 e na coluna n  (não NAcomo no padrão) 
+```
+
+Aqui estão as 50 primeiras linhas do dataframe resultante:  
+
+```{r message=FALSE, echo=F}
+DT::datatable(weekly_counts, rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+### Casos da Linelist em meses {.unnumbered}
+
+Para agregar os casos em meses, novamente utilize `floor_date()` do pacote **lubridate**, mas com o argumento `unit = "meses" `. Isto arredonda cada data até o dia 1 de seu mês. A saída será classe Data. Observe que no passo `complete()` também utilizamos `by = "meses"`.
+
+
+```{r}
+# Mostrar dados para contagens mensais
+monthly_counts <- linelist %>% 
+  drop_na(date_onset) %>% 
+  mutate(month = lubridate::floor_date(date_onset, unit = "months")) %>%  # nova colua com o 1 mês do `onset` 
+  count(month) %>%                          # conta casos por mês
+  complete(
+    month = seq.Date(
+      min(month, na.rm=T),     # inclui todos os meses mesmo os sem casos reportados 
+      max(month, na.rm=T),
+      by="month"),
+    fill = list(n = 0))
+```
+
+```{r message=FALSE, echo=F}
+DT::datatable(monthly_counts, rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+
+### Contagens diárias em semanas {.unnumbered}
+
+Para agregar as contagens diárias em contagens semanais, utilize `floor_date()` como acima. Entretanto, utilize `group_by()` e `summarize()` em vez de `count()` porque você precisa `sum()` contar casos diários em vez de apenas contar o número de filas por semana.
+
+
+#### Contagens diárias em meses {.unnumbered}
+
+Para agregar as contagens diárias em contagens de meses, utilize `floor_date()` com `unit = "month"` (mês) como acima. Entretanto, utilize `group_by()` e `summarize()` em vez de `count()` porque você precisa `sum()` contar casos diários em vez de apenas contar o número de filas por mês.    
+
+
+## Organizando dados agrupados
+
+Utilizando o verbo `arrange()`do **dplyr** para ordenar as linhas em um quadro de dados se comporta da mesma forma quando os dados são agrupados, *a menos que* você defina o argumento `.by_group =TRUE`. Neste caso, as linhas são ordenadas primeiro pelas colunas de agrupamento e depois por quaisquer outras colunas que você especificar para `arrange()`.   
+
+
+## Filtrando dados agrupados
+
+### `filter()` {.unnumbered}
+
+Quando aplicadas em conjunto com funções que avaliam o dataframe (como `max()`, `min()`, `mean()`), estas funções serão agora aplicadas aos grupos. Por exemplo, se você quiser filtrar e manter linhas onde os pacientes estão acima da mediana de idade, isto agora será aplicado por grupo - filtrando para manter linhas acima da mediana de idade do *grupo*.   
+
+
+### Linhas de corte por grupo {.unnumbered} 
+
+A função `slice()` (literalmente: fatiar) do pacote **dplyr** , que [filtra linhas com base em sua posição](https://dplyr.tidyverse.org/reference/slice.html) nos dados, também pode ser aplicada por grupo. Lembre-se de levar em conta a ordenação dos dados dentro de cada grupo para obter a "fatia" desejada.  
+
+Por exemplo, para recuperar apenas as últimas 5 admissões de cada hospital:  
+
+1) Agrupar a lineliste por coluna "hospital".  
+2) Organizar os registros da mais recente à mais antiga `date_hospitalisation` (data de hospitalização) *em cada grupo hospitalar*.  
+3) Divide para recuperar as 5 primeiras fileiras de cada hospital  
+
+```{r,}
+linelist %>%
+  group_by(hospital) %>%
+  arrange(hospital, date_hospitalisation) %>%
+  slice_head(n = 5) %>% 
+  arrange(hospital) %>%                            # para visualizar
+  select(case_id, hospital, date_hospitalisation)  # para visualizar
+```
+
+`slice_head()` - selecciona n linhas do topo  
+`slice_tail()` - selecciona n linhas do final 
+`slice_sample()` - seleciona aleatoriamente n linhas 
+`slice_min()` - seleciona n linhas com os valores mais altos da coluna `order_by = `, use `with_ties = TRUE` para manter os vínculos
+`slice_max()` - seleciona os menores valores da coluna `order_by = ` column, , use `with_ties = TRUE` para manter os vínculos
+
+Veja a página [Eliminando duplicidades](#deduplication) para meis exemplos e detalhes de `slice()`.  
+
+
+### Filtrar por tamanho do grupo {#group_filter_grp_size .unnumbered} 
+
+A função `add_count()` adiciona uma coluna `n` aos dados originais dando o número de linhas no grupo daquela linha. 
+
+Mostrado abaixo, `add_count()` é aplicado à coluna `hospital`, assim os valores na nova coluna `n` refletem o número de linhas no grupo hospitalar. Observe como os valores na coluna `n` são repetidos. No exemplo abaixo, o nome da coluna `n` poderia ser alterado utilizando `name = ` dentro de `add_count()`. Para fins de demonstração, reorganizamos as colunas com `select()`. 
+
+
+```{r}
+linelist %>% 
+  as_tibble() %>% 
+  add_count(hospital) %>%          # adiciona "número de linhas adimitidas no mesmo hospital que o dessa linha" 
+  select(hospital, n, everything())
+```
+
+Torna-se então fácil filtrar para linhas de casos que foram hospitalizados em um hospital "pequeno", digamos, um hospital que admitiu menos de 500 pacientes:  
+
+```{r, eval=F}
+linelist %>% 
+  add_count(hospital) %>% 
+  filter(n < 500)
+```
+
+
+## Criando novas variáveis (mutate) em dados agrupados  
+
+Para manter todas as colunas e linhas (não resumir) e *adicionar uma nova coluna contendo estatísticas de grupo*, utilizar `mutate()` após `group_by()` em vez de `summarise()`. 
+
+Isto é útil se você quiser estatísticas de grupo no conjunto de dados original * com todas as outras colunas presentes* - por exemplo, para cálculos que comparam uma linha com seu grupo.  
+
+Por exemplo, este código abaixo calcula a diferença entre o atraso de para a admissão de uma observação e o atraso mediano para seu hospital. As etapas são:  
+
+1) Agrupar os dados por hospital  
+2) Utilize a coluna `days_onset_hosp` (atraso à hospitalização) para criar uma nova coluna contendo o atraso médio no hospital para *aquela linha*.  
+3) Calcular a diferença entre as duas colunas  
+
+Nós usamos a função `select()` para selecionar apenas certas colunas a serem exibidas, para fins de demonstração.  
+
+```{r}
+linelist %>% 
+  # agrupando dados por hospital (sem mudanças na linelist ainda)
+  group_by(hospital) %>% 
+  
+  # novas colunas
+  mutate(
+    # quantidades de dias média para admissão por hospital (arredondado para 1 decimal)
+    group_delay_admit = round(mean(days_onset_hosp, na.rm=T), 1),
+    
+    # diferença entre o atraso daquela observação e o atraso medio do hospital (arredondado para 1 decimal)
+    diff_to_group     = round(days_onset_hosp - group_delay_admit, 1)) %>%
+  
+  # seleciona alguma linhas apenas - para fim de demostração/visualização  
+  select(case_id, hospital, days_onset_hosp, group_delay_admit, diff_to_group)
+```
+
+
+
+## Selecionar em dados agrupados
+
+O verbo `select()` funciona em dados agrupados, mas as colunas de agrupamento são sempre incluídas (mesmo se não mecionadas explicitamente em `select()`). Se você não quiser essas colunas, precisa usarprimeiro a função `ungroup()` para desagrupá-los.  
+
+
+<!-- ======================================================= -->
+## Recursos {  }
+
+Aqui estão alguns recursos úteis para mais informações. 
+
+Você pode aplicar funções de resumo em dados agrupados; ver a ["cheat sheet" (cola) de transformação de dados do RStudio. ](https://github.com/rstudio/cheatsheets/blob/master/data-transformation.pdf)  
+
+A página do Data Carpentry [**dplyr**](https://datacarpentry.org/R-genomics/04-dplyr.html)  
+As páginas de referência do **tidyverse** em [group_by()](https://dplyr.tidyverse.org/reference/group_by.html) and [grouping](https://dplyr.tidyverse.org/articles/grouping.html)  
+
+Esta página em [Manipulação de dados](https://itsalocke.com/files/DataManipulationinR.pdf)  
+
+[Resumindo com condicionamento no dplyr](https://stackoverflow.com/questions/23528862/summarize-with-conditions-in-dplyr)  
+
+
+
+
+
+

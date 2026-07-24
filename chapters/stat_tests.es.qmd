@@ -1,0 +1,498 @@
+---
+aliases:
+  - /new_pages/stat_tests.es.html
+---
+
+# Tests estadísticos sencillos {#simple-statistical-tests}
+
+Esta página muestra cómo realizar tests estadísticos sencillos utilizando **R base**, **rstatix** y **gtsummary**.
+
+* Prueba o Test T de Student
+* Prueba o Test de Shapiro-Wilk
+* Prueba o Test de suma de rangos de Wilcoxon
+* Prueba o Test de Kruskal-Wallis
+* Prueba o Test de Chi-cuadrado
+* Correlaciones entre variables numéricas
+
+...Se pueden realizar otras muchas pruebas. Solo mostraremos éstas, las más comunes y enlazaremos con más documentación.
+
+Cada uno de los paquetes mencionados tienen unos usos específicos:
+
+* Utiliza las funciones  de **R base** para imprimir una salida estadística en la consola de R
+* Utiliza las funciones **rstatix** para devolver los resultados en un dataframe, o si deseas que las pruebas se ejecuten por grupos
+* Utiliza **gtsummary** si tienes interés en rápidamente tablas listas para su publicación
+
+
+
+<!-- ======================================================= -->
+## Preparación {#preparation-9}
+
+
+### Cargar paquetes {.unnumbered}
+
+Este trozo de código muestra la carga de los paquetes necesarios para los análisis. En este manual destacamos la función `p_load()` de **pacman**, que instala el paquete si es necesario *y* lo carga para su uso. También puedes cargar los paquetes ya instalados con el comando `library()` de **R base** Consulta la página sobre [fundamentos de R](#r-basics) para obtener más información sobre los paquetes de R.
+
+
+```{r}
+pacman::p_load(
+  rio,          # Importación de ficheros
+  here,         # localizador de ficheros
+  skimr,        # obtener una visión general de los datos
+  tidyverse,    # gestión de datos + gráficos ggplot2, 
+  gtsummary,    # resumen estadístico y pruebas
+  rstatix,      # estadísticas
+  corrr,        # análisis de correlación para variables numéricas
+  janitor,      # añadir totales y porcentajes a las tablas
+  flextable     # conversión de tablas a HTML
+  )
+```
+
+### Importar datos {.unnumbered}
+
+Importaremos los datos de casos de una epidemia de ébola simulada. Si quieres seguir el proceso, [clica para descargar linelist "limpio"](https://github.com/epirhandbook/Epi_R_handbook/raw/master/data/case_linelists/linelist_cleaned.rds) (archivo linelist_cleaned.rds). Importa tus datos con la función `import()` del paquete **rio** (acepta muchos tipos de archivos como .xlsx, .rds, .csv - Mira la página de [importación y exportación](#import-and-export) para más detalles).
+
+
+```{r, echo=F}
+# importar linelist a R
+linelist <- rio::import(here::here("data", "case_linelists", "linelist_cleaned.rds"))
+```
+
+```{r, eval=F}
+# importar linelist
+linelist <- import("linelist_cleaned.rds")
+```
+
+A continuación se muestran las primeras 50 filas del listado.
+
+```{r, message=FALSE, echo=F}
+# mostrar los datos de linelist como una tabla
+DT::datatable(head(linelist, 50), rownames = FALSE, filter="top", options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+
+
+
+
+## ** R base** {#base-r-2}
+
+Puedes utilizar las funciones de ** R base** para realizar pruebas estadísticas. Los comandos son relativamente sencillos y los resultados se imprimen en la consola de R para su visualización. Sin embargo, las salidas suelen ser listas y, por lo tanto, son más difíciles de manipular en el caso que se desee utilizar los resultados en operaciones posteriores.
+
+### Tests-T {.unnumbered} 
+
+Un [test-t](https://es.wikipedia.org/wiki/Prueba_t_de_Student), también llamado "Test t de Student" o "Prueba t de Student", se utiliza normalmente para determinar si existe una diferencia significativa entre las medias de alguna variable numérica entre dos grupos. Aquí mostraremos la sintaxis para hacer esta prueba dependiendo de si las columnas se encuentran o no en el mismo dataframe.
+
+**Sintaxis 1:** Esta es la sintaxis cuando las columnas numéricas y categóricas están en el mismo dataframe. Sitúa la columna numérica en el lado izquierdo de la ecuación y la columna categórica en el lado derecho. Especifica los datos en `data =`. Opcionalmente, establece `paired = TRUE`, `conf.level = ` (0.95 por defecto), y `alternative = ` (ya sea "two.sided", "less", o "greater"). Escribe `?t.test` para obtener más detalles.
+
+```{r}
+## comparar la edad media por grupo de resultados con un test-t
+t.test(age_years ~ gender, data = linelist)
+```
+
+**Sintaxis 2:** Puedes comparar dos vectores numéricos separados utilizando esta sintaxis alternativa. Por ejemplo, si las dos columnas están en dataframes diferentes.
+  
+
+```{r, eval=F}
+t.test(df1$age_years, df2$age_years)
+```
+
+También se puede utilizar una prueba t de Student para determinar si la media de una muestra es significativamente diferente de algún valor específico. Aquí realizamos una prueba t de una muestra con la media poblacional conocida/hipotética como `mu = `:
+
+```{r, eval=F}
+t.test(linelist$age_years, mu = 45)
+```
+
+### Prueba de Shapiro-Wilk {.unnumbered}  
+
+El [test de Shapiro-Wilk](https://es.wikipedia.org/wiki/Test_de_Shapiro–Wilk) puede utilizarse para determinar si una muestra procede de una población distribuida normalmente (un supuesto en muchas otras pruebas y análisis, como la prueba t). Sin embargo, sólo puede utilizarse en una muestra de entre 3 y 5000 observaciones. Para muestras más grandes puede ser útil un [gráfico de cuantiles](https://ggplot2.tidyverse.org/reference/geom_qq.html).
+
+
+```{r, eval=F}
+shapiro.test(linelist$age_years)
+```
+
+### Test de suma de rangos de Wilcoxon {.unnumbered}
+
+El test de suma de rangos de Wilcoxon, también llamada [test U de Mann-Whitney](https://en.wikipedia.org/wiki/Mann–Whitney_U_test), se utiliza a menudo para ayudar a determinar si dos muestras numéricas proceden de la misma distribución cuando tus poblaciones no se distribuyen normalmente o tienen una varianza desigual.
+
+```{r wilcox_base}
+
+## comparar la distribución de edad por grupo de resultados con un test de wilcox
+wilcox.test(age_years ~ outcome, data = linelist)
+
+```
+
+
+### Test de Kruskal-Wallis {.unnumbered}
+
+El test de [Kruskal-Wallis](https://en.wikipedia.org/wiki/Kruskal–Wallis_one-way_analysis_of_variance) es una extensión del test de suma de rangos de Wilcoxon. Puede utilizarse para comprobar las diferencias en la distribución de más de dos muestras. Cuando sólo se utilizan dos muestras, los resultados son idénticos a los del test de suma de rangos de Wilcoxon.
+
+```{r }
+
+## comparar la distribución de edad por grupo de resultados con un test de kruskal-wallis
+kruskal.test(age_years ~ outcome, linelist)
+
+```
+
+### Test de Chi-cuadrado {.unnumbered} 
+
+El [test de Chi-cuadrado de Pearson](https://en.wikipedia.org/wiki/Chi-squared_test) se utiliza para comprobar las diferencias significativas entre grupos categóricos.
+
+```{r}
+
+## comparar las proporciones en cada grupo con un test de chi-cuadrado
+chisq.test(linelist$gender, linelist$outcome)
+
+```
+
+
+
+## Paquete **rstatix** {#rstatix-package}
+
+El paquete **rstatix** ofrece la posibilidad de ejecutar pruebas estadísticas y recuperar los resultados en un formato "amigable". Los resultados se encuentran automáticamente en un dataframe para que puedan realizar operaciones posteriores con los resultados. También es fácil agrupar los datos que se pasan a las funciones, de modo que las estadísticas se ejecutan para cada grupo.
+
+
+### Estadísticas resumidas {.unnumbered}  
+
+La función `get_summary_stats()` es una forma rápida de generar estadísticas de resumen. Únicamente tienes que tienes que seleccionar tu dataframe al aplicar esta función así como especificar las columnas que deseas analizar. Si no se especifica ninguna columna, las estadísticas se calculan para todas ellas.
+
+Por defecto, la función devuelve una gama completa de estadísticas de resumen: n, max, min, mediana, cuartil 25%, cuartil 75%, IQR, desviación absoluta mediana (mad), media, desviación estándar, error estándar y un intervalo de confianza de la media.
+
+
+```{r}
+linelist %>%
+  rstatix::get_summary_stats(age, temp)
+```
+
+Puedes especificar un subconjunto de estadísticas de resumen a calcular proporcionando uno de los siguientes valores a `type = `: "full", "common", "robust", "five_number", "mean_sd", "mean_se", "mean_ci", "median_iqr", "median_mad", "quantile", "mean", "median", "min", "max".  
+
+También puede utilizarse con datos agrupados, de forma que se devuelva una fila por cada variable de agrupación:
+
+```{r}
+linelist %>%
+  group_by(hospital) %>%
+  rstatix::get_summary_stats(age, temp, type = "common")
+```
+
+Por último, también se puede utilizar **rstatix** para realizar las siguientes pruebas estadísticas:
+
+### Test-T {.unnumbered}  
+
+Utiliza una sintaxis de fórmula para especificar las columnas numéricas y categóricas:
+
+```{r}
+linelist %>% 
+  t_test(age_years ~ gender)
+```
+
+Utiliza `~ 1` y especifica `mu = ` para un test-T de una muestra. Esto también puede hacerse por grupo.
+
+```{r}
+linelist %>% 
+  t_test(age_years ~ 1, mu = 30)
+```
+
+Si procede, las pruebas estadísticas pueden realizarse por grupos, como se muestra a continuación:
+
+```{r}
+linelist %>% 
+  group_by(gender) %>% 
+  t_test(age_years ~ 1, mu = 18)
+```
+
+### Prueba de Shapiro-Wilk {.unnumbered}  
+
+Como ya se ha dicho, el tamaño de la muestra debe estar entre 3 y 5000.
+
+```{r}
+linelist %>% 
+  head(500) %>%            # las 500 primeras filas de la lista de casos, sólo como ejemplo
+  shapiro_test(age_years)
+```
+
+### Prueba de suma de rangos de Wilcoxon {.unnumbered}  
+
+```{r}
+linelist %>% 
+  wilcox_test(age_years ~ gender)
+```
+
+
+### Prueba de Kruskal-Wallis {.unnumbered}  
+
+También conocida como la prueba U de Mann-Whitney.
+
+```{r}
+linelist %>% 
+  kruskal_test(age_years ~ outcome)
+```
+
+
+### Prueba de Chi-cuadrado {.unnumbered}  
+
+La función para la prueba de chi-cuadrado funciona con tablas, así que primero creamos una tabulación cruzada. Hay muchas formas de crear una tabulación cruzada (véase [Tablas descriptivas](#descriptive-tables)), pero aquí utilizamos `tabyl()` de **janitor** y eliminamos la columna más a la izquierda de las etiquetas de valores antes de pasarla a `chisq_test()`.
+
+```{r}
+linelist %>% 
+  tabyl(gender, outcome) %>% 
+  select(-1) %>% 
+  chisq_test()
+
+```
+
+Se pueden ejecutar muchas más funciones y pruebas estadísticas con las funciones de rstatix. Consulta [la documentación](https://github.com/kassambara/rstatix) de **rstatix** o escribiendo `?rstatix`.
+
+
+
+
+## Paquete `gtsummary` {#stats_gt}
+
+Utilizaa **gtsummary** si quieres añadir los resultados de una prueba estadística a una tabla estéticamente presentada, creada con este paquete (como se describe en la sección **gtsummary** del capítulo [Tablas descriptivas](#tbl_gt)).
+
+La realización de pruebas estadísticas de comparación con `tbl_summary` se lleva a cabo añadiendo la función `add_p` a una tabla y especificando qué prueba utilizar. Es posible obtener p-valores corregidos para múltiples pruebas utilizando la función `add_q`. Ejecuta `?tbl_summary` para obtener más detalles.
+
+### Prueba de Chi-cuadrado {.unnumbered}
+
+Compara las proporciones de una variable categórica en dos grupos. La prueba estadística por defecto de `add_p`(), cuando se aplica a una variable categórica es realizar una prueba de independencia de chi-cuadrado con corrección de continuidad, pero si algúna celda de valores esperados es inferior a 5, se utiliza una prueba exacta de Fisher.
+```{r chi_gt}
+linelist %>% 
+  select(gender, outcome) %>%    # mantiene las variables de interés
+  tbl_summary(by = outcome) %>%  # produce la tabla resumen y especifica la variable de agrupación
+  add_p()                        # especifica qué test realizar
+```
+
+
+### Tests-T {.unnumbered} 
+
+Compara la diferencia de medias de una variable continua en dos grupos. Por ejemplo, hace la comparación de la media de edad por resultado del paciente.
+
+```{r ttest_gt}
+
+linelist %>% 
+  select(age_years, outcome) %>%             # mantiene las variables de interés
+  tbl_summary(                               # produce la tabla resumen
+    statistic = age_years ~ "{mean} ({sd})", # especifica qué estadísticas mostrar
+    by = outcome) %>%                        # especifica la variable de agrupación
+  add_p(age_years ~ "t.test")                # especifica qué prueba realizar
+
+
+```
+
+### Test de suma de rangos de Wilcoxon {.unnumbered}
+
+Compara la distribución de una variable continua en dos grupos. Por defecto se utiliza la prueba de suma de rangos de Wilcoxon y la mediana (IQR) cuando se comparan dos grupos. Sin embargo, para datos no distribuidos normalmente o para comparar varios grupos, la prueba de Kruskal-wallis es más apropiada.
+
+```{r wilcox_gt}
+
+linelist %>% 
+  select(age_years, outcome) %>%                       # mantiene las variables de interés
+  tbl_summary(                                         # produce la tabla resumen
+    statistic = age_years ~ "{median} ({p25}, {p75})", # especifica que estadistica mostrar (esta es por defecto asi que puede quitarse)
+    by = outcome) %>%                                  # especifica la variable de agrupación
+  add_p(age_years ~ "wilcox.test")                     # especifica qué prueba realizar (por defecto así que se pueden dejar los paréntesis vacíos)
+
+
+```
+
+### Test de Kruskal-Wallis {.unnumbered}
+
+Se usa para comparar la distribución de una variable continua en dos o más grupos, independientemente de que los datos se distribuyan normalmente.
+
+```{r kruskal_gt}
+
+linelist %>% 
+  select(age_years, outcome) %>%                       # mantiene las variables de interés
+  tbl_summary(                                         # produce la tabla resumen
+    statistic = age_years ~ "{median} ({p25}, {p75})", # especifica que estadistica mostrar (por defecto asi que puede quitarse)
+    by = outcome) %>%                                  # especifica la variable de agrupación
+  add_p(age_years ~ "kruskal.test")                    # especifica qué test realizar
+
+
+```
+
+
+
+
+<!-- ## `dplyr` package {} -->
+
+<!-- Performing statistical tests in `dplyr` alone is very dense, again because it  -->
+<!-- does not fit within the tidy-data framework. It requires using `purrr` to create -->
+<!-- a list of dataframes for each of the subgroups you want to compare. See the page on [Iteration, loops, and lists] to learn about **purrr**.   -->
+
+<!-- An easier alternative may be the `rstatix` package.  -->
+
+<!-- ### T-tests {.unnumbered}  -->
+
+<!-- ```{r ttest_dplyr} -->
+
+<!-- linelist %>%  -->
+<!--   ## only keep variables of interest -->
+<!--   select(age, outcome) %>%  -->
+<!--   ## drop those missing outcome  -->
+<!--   filter(!is.na(outcome)) %>%  -->
+<!--   ## specify the grouping variable -->
+<!--   group_by(outcome) %>%  -->
+<!--   ## create a subset of data for each group (as a list) -->
+<!--   nest() %>%  -->
+<!--   ## spread in to wide format -->
+<!--   pivot_wider(names_from = outcome, values_from = data) %>%  -->
+<!--   mutate( -->
+<!--     ## calculate the mean age for the death group -->
+<!--     Death_mean = map(Death, ~mean(.x$age, na.rm = TRUE)), -->
+<!--     ## calculate the sd among dead  -->
+<!--     Death_sd = map(Death, ~sd(.x$age, na.rm = TRUE)), -->
+<!--     ## calculate the mean age for the recover group -->
+<!--     Recover_mean = map(Recover, ~mean(.x$age, na.rm = TRUE)),  -->
+<!--     ## calculate the sd among recovered  -->
+<!--     Recover_sd = map(Recover, ~sd(.x$age, na.rm = TRUE)), -->
+<!--     ## using both grouped data sets compare mean age with a t-test -->
+<!--     ## keep only the p.value -->
+<!--     t_test = map2(Death, Recover, ~t.test(.x$age, .y$age)$p.value) -->
+<!--   ) %>%  -->
+<!--   ## drop datasets  -->
+<!--   select(-Death, -Recover) %>%  -->
+<!--   ## return a dataset with the medians and p.value (drop missing) -->
+<!--   unnest(cols = everything()) -->
+
+<!-- ``` -->
+
+
+<!-- ### Wilcoxon rank sum test {.unnumbered} -->
+
+<!-- ```{r wilcox_dplyr} -->
+
+<!-- linelist %>%  -->
+<!--   ## only keep variables of interest -->
+<!--   select(age, outcome) %>%  -->
+<!--   ## drop those missing outcome  -->
+<!--   filter(!is.na(outcome)) %>%  -->
+<!--   ## specify the grouping variable -->
+<!--   group_by(outcome) %>%  -->
+<!--   ## create a subset of data for each group (as a list) -->
+<!--   nest() %>%  -->
+<!--   ## spread in to wide format -->
+<!--   pivot_wider(names_from = outcome, values_from = data) %>%  -->
+<!--   mutate( -->
+<!--     ## calculate the median age for the death group -->
+<!--     Death_median = map(Death, ~median(.x$age, na.rm = TRUE)), -->
+<!--     ## calculate the sd among dead  -->
+<!--     Death_iqr = map(Death, ~str_c( -->
+<!--       quantile(.x$age, probs = c(0.25, 0.75), na.rm = TRUE),  -->
+<!--       collapse = ", " -->
+<!--       )), -->
+<!--     ## calculate the median age for the recover group -->
+<!--     Recover_median = map(Recover, ~median(.x$age, na.rm = TRUE)),  -->
+<!--     ## calculate the sd among recovered  -->
+<!--     Recover_iqr = map(Recover, ~str_c( -->
+<!--       quantile(.x$age, probs = c(0.25, 0.75), na.rm = TRUE),  -->
+<!--       collapse = ", " -->
+<!--       )), -->
+<!--     ## using both grouped data sets compare age distribution with a wilcox test -->
+<!--     ## keep only the p.value -->
+<!--     wilcox = map2(Death, Recover, ~wilcox.test(.x$age, .y$age)$p.value) -->
+<!--   ) %>%  -->
+<!--   ## drop datasets  -->
+<!--   select(-Death, -Recover) %>%  -->
+<!--   ## return a dataset with the medians and p.value (drop missing) -->
+<!--   unnest(cols = everything()) -->
+
+<!-- ``` -->
+
+<!-- ### Kruskal-wallis test {.unnumbered} -->
+
+
+<!-- ```{r kruskal_dplyr} -->
+
+<!-- linelist %>%  -->
+<!--   ## only keep variables of interest -->
+<!--   select(age, outcome) %>%  -->
+<!--   ## drop those missing outcome  -->
+<!--   filter(!is.na(outcome)) %>%  -->
+<!--   ## specify the grouping variable -->
+<!--   group_by(outcome) %>%  -->
+<!--   ## create a subset of data for each group (as a list) -->
+<!--   nest() %>%  -->
+<!--   ## spread in to wide format -->
+<!--   pivot_wider(names_from = outcome, values_from = data) %>%  -->
+<!--   mutate( -->
+<!--     ## calculate the median age for the death group -->
+<!--     Death_median = map(Death, ~median(.x$age, na.rm = TRUE)), -->
+<!--     ## calculate the sd among dead  -->
+<!--     Death_iqr = map(Death, ~str_c( -->
+<!--       quantile(.x$age, probs = c(0.25, 0.75), na.rm = TRUE),  -->
+<!--       collapse = ", " -->
+<!--       )), -->
+<!--     ## calculate the median age for the recover group -->
+<!--     Recover_median = map(Recover, ~median(.x$age, na.rm = TRUE)),  -->
+<!--     ## calculate the sd among recovered  -->
+<!--     Recover_iqr = map(Recover, ~str_c( -->
+<!--       quantile(.x$age, probs = c(0.25, 0.75), na.rm = TRUE),  -->
+<!--       collapse = ", " -->
+<!--       )), -->
+<!--     ## using the original data set compare age distribution with a kruskal test -->
+<!--     ## keep only the p.value -->
+<!--     kruskal = kruskal.test(linelist$age, linelist$outcome)$p.value -->
+<!--   ) %>%  -->
+<!--   ## drop datasets  -->
+<!--   select(-Death, -Recover) %>%  -->
+<!--   ## return a dataset with the medians and p.value (drop missing) -->
+<!--   unnest(cols = everything()) -->
+
+<!-- ``` -->
+
+<!-- ### Chi-squared test {.unnumbered}  -->
+
+
+<!-- ```{r} -->
+<!-- linelist %>%  -->
+<!--   ## do everything by gender  -->
+<!--   group_by(outcome) %>%  -->
+<!--   ## count the variable of interest -->
+<!--   count(gender) %>%  -->
+<!--   ## calculate proportion  -->
+<!--   ## note that the denominator here is the sum of each gender -->
+<!--   mutate(percentage = n / sum(n) * 100) %>%  -->
+<!--   pivot_wider(names_from = outcome, values_from = c(n, percentage)) %>%  -->
+<!--   filter(!is.na(gender)) %>%  -->
+<!--   mutate(pval = chisq.test(linelist$gender, linelist$outcome)$p.value) -->
+<!-- ``` -->
+
+
+<!-- ======================================================= -->
+
+## Correlaciones {#correlations}
+
+La correlación entre variables numéricas puede investigarse con el paquete **corrr** de **tidyverse**. Permite calcular las correlaciones mediante los test de Pearson, tau de Kendall o rho de Spearman. El paquete crea una tabla y también tiene una función para representar automáticamente los valores. 
+
+```{r, warning=F, message=F}
+
+correlation_tab <- linelist %>% 
+  select(generation, age, ct_blood, days_onset_hosp, wt_kg, ht_cm) %>%   # keep numeric variables of interest
+  correlate()      # mantiene las variables numéricas de interés
+
+correlation_tab    # imprimir
+
+## eliminar entradas duplicadas (la tabla anterior está reflejada) 
+correlation_tab <- correlation_tab %>% 
+  shave()
+
+## ver la tabla de correlaciones 
+correlation_tab
+
+## representar correlaciones 
+rplot(correlation_tab)
+```
+
+
+<!-- ======================================================= -->
+
+## Recursos {#resources-11}
+
+Gran parte de la información de esta página está adaptada de los siguientes recursos y viñetas en línea:
+
+[gtsummary](http://www.danieldsjoberg.com/gtsummary/articles/tbl_summary.html)
+
+[dplyr](https://dplyr.tidyverse.org/articles/grouping.html) 
+
+[corrr](https://corrr.tidymodels.org/articles/using-corrr.html) 
+
+[correlaciones en sthda ](http://www.sthda.com/english/wiki/correlation-test-between-two-variables-in-r)

@@ -1,0 +1,1900 @@
+---
+aliases:
+  - /new_pages/cleaning.es.html
+---
+
+# Limpieza de datos y funciones básicas {#cleaning-data-and-core-functions} 
+
+```{r, out.height = "10%", fig.align = "center", echo=F}
+knitr::include_graphics(here::here("images", "cleaning.png"))
+
+```
+
+Esta página muestra los pasos más utilizados en el proceso de "limpieza" de datos, y también explica el uso de muchas funciones esenciales de gestión de datos en R. 
+
+Para explicarlo, esta página comienza importando datos de un listado de casos crudo, y se avanza paso a paso a través del proceso de limpieza. En el código R, esto se manifiesta como una cadena de "pipes", que hacen referencia al operador "pipes" `%>%` que pasa unos datos de una operación a la siguiente. 
+
+### Funciones principales  {.unnumbered}
+
+Este manual hace hincapié en el uso de las funciones de la familia de paquetes de R [**tidyverse**](https://www.tidyverse.org/). Las funciones esenciales que se muestran en esta página se enumeran a continuación. 
+
+Muchas de estas funciones pertenecen al paquete [**dplyr**](https://dplyr.tidyverse.org/), que proporciona funciones "verbales" para resolver los retos de la manipulación de datos (el nombre hace una referencia a unos alicates - [plier](https://www.thefreedictionary.com/plier#:~:text=also ply·er (plī′,holding%2C bending%2C or cutting.)) - de dataframes). **dplyr** forma parte de la familia de paquetes de R **tidyverse** (que también incluye **ggplot2**, **tidyr**, **stringr**, **tibble**, **purrr**, **magrittr** y **forcats**, entre otros). 
+
+
+Función      | Utilidad                             | Paquete
+-------------|--------------------------------------|------------------------------
+[%>%](https://magrittr.tidyverse.org/reference/pipe.html) | "canalizar" (pasar) datos de una función a la siguiente | **magrittr**   
+[mutate()](https://dplyr.tidyverse.org/reference/mutate.html) | crear, transformar y redefinir columnas | **dplyr**   
+[selecct()](https://dplyr.tidyverse.org/reference/select.html) | mantener, eliminar, seleccionar o renombrar columnas | **dplyr**  
+[rename()](https://dplyr.tidyverse.org/reference/rename.html) | cambiar el nombre de las columnas | **dplyr**  
+clean_names() | estandarizar la sintaxis de los nombres de las columnas | **janitor** 
+[as.character()](https://rdrr.io/r/base/character.html), [as.numeric()](https://rdrr.io/r/base/numeric.html), [as.Date()](https://rdrr.io/r/base/as.Date.html), etc. | convertir el tipo de una columna | R **base**
+across() | transformar varias columnas a la vez | **dplyr**   
+funciones **tidyselect** | utilizar la lógica para seleccionar las columnas | **tidyselect**
+[filter()](https://dplyr.tidyverse.org/reference/filter.html) | mantener ciertas filas | **dplyr**  
+[distinct()](https://dplyr.tidyverse.org/reference/distinct.html) | de-duplicar filas | **dplyr**  
+rowwise() | operaciones por/en cada fila | **dplyr**   
+add_row() | añadir filas manualmente | **tiblle**   
+[arrange()](https://dplyr.tidyverse.org/reference/arrange.html) | ordenar las filas | **dplyr**   
+recode() |recodificar los valores de una columna | **dplyr**   
+case_when() | recodificar los valores de una columna con criterios lógicos más complejos | **dplyr**   
+replace_na(), na_if(), coalesce() | funciones especiales de recodificación | **tidyr**   
+age_categories() y [cut()](https://rdrr.io/r/base/cut.html) | crear grupos categóricos a partir de una columna numérica | **epikit** y R **base**
+match_df() | recodificación/limpieza de valores mediante un diccionario de datos | **matchmaker**   
+[which()](https://rdrr.io/r/base/which.html) | aplicar los criterios lógicos; devolver los índices | R **base**
+
+Si quieres ver cómo se comparan estas funciones con los comandos de Stata o SAS, consulta la página sobre la [transición a R](#transition-to-r). 
+
+Puedes encontrar una gestión de datos alternativa en el paquete R **data.table** con operadores como `:=` y el uso frecuente de corchetes `[ ]`. Este enfoque y la sintaxis se explican brevemente en la página [Data.Table](#data-table). 
+
+### Nomenclatura {.unnumbered} 
+
+En este manual, generalmente hacemos referencia a "columnas" y "filas" en lugar de "variables" y "observaciones". Como se explica en este manual sobre ["datos ordenados"](https://tidyr.tidyverse.org/articles/tidy-data.html), la mayoría de los conjuntos de datos estadísticos epidemiológicos se componen estructuralmente de filas, columnas y valores. 
+
+Las *variables* contienen los valores que miden el mismo atributo subyacente (como el grupo de edad, el resultado o la fecha de inicio). Las *observaciones* contienen todos los valores medidos en la misma unidad (por ejemplo, una persona, un lugar o una muestra de laboratorio). Por lo tanto, estos aspectos pueden ser más difíciles de definir de forma tangible. 
+
+En los conjuntos de datos "ordenados", cada columna es una variable, cada fila es una observación y cada celda es un único valor. Sin embargo, algunos conjuntos de datos que se encuentran no se ajustan a este molde: unos datos de formato "amplio" pueden tener una variable dividida en varias columnas (véase un ejemplo en la página [Pivotar datos](#pivoting-data)). Del mismo modo, las observaciones pueden estar divididas en varias filas. 
+
+La mayor parte de este manual trata sobre la gestión y la transformación de datos, por lo que las referencias a las estructuras de datos concretas de filas y columnas son más relevantes que las observaciones y las variables más abstractas. Las excepciones se dan sobre todo en las páginas sobre análisis de datos, en las que verás más referencias a las variables y las observaciones. 
+
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+
+## Limpieza de pipes {#cleaning-pipeline}
+
+**Esta página recorre los pasos típicos de limpieza, añadiéndolos secuencialmente a una cadena de pipes de limpieza.** 
+
+En el análisis epidemiológico y el procesamiento de datos, los pasos de limpieza se realizan a menudo de forma secuencial, enlazados entre sí. En R, esto se manifiesta a menudo como una "tubería" de limpieza, en la que *los datos en bruto se pasan o se "canalizan" de un paso de limpieza a otro*. 
+
+Estas cadenas utilizan las funciones de **dplyr** y el operador `%>%` de **magrittr**. Esta tubería comienza con los datos "en bruto" ("linelist_raw.xlsx") y termina con un dataframe de R "limpio" (`linelist`) que se puede utilizar, guardar, exportar, etc. 
+
+En un proceso de limpieza, el orden de los pasos es importante. Los pasos de limpieza pueden incluir: 
+
+* Importación de datos 
+* Limpieza o cambio de los nombres de las columnas 
+* de-duplicación 
+* Creación y transformación de columnas (por ejemplo, recodificación o normalización de valores) 
+
+* Filtrado o añadido de filas 
+
+
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+
+## Carga de paquetes  {#load-packages}
+
+Este trozo de código muestra la carga de los paquetes necesarios para el análisis. En este manual destacamos `p_load()` de **pacman**, que instala el paquete si es necesario *y* lo carga para su uso. También puedes cargar los paquetes instalados con `library()` de R **base.** Consulta la página sobre [Fundamentos de R](#r-basics) para obtener más información sobre los paquetes de R. 
+
+```{r, message = F}
+pacman::p_load(
+  rio,        # importación/exportación de múltiples tipos de datos
+  here,       # ruta relativa de los archivos
+  janitor,    # limpieza de datos y tablas
+  lubridate,  # trabajar con fechas
+  epikit,     # función age_categories()
+  tidyverse   # gestión y visualización de datos 
+  
+
+)
+```
+
+
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+
+## Importar datos {#import-data-1}
+
+### Importar {.unnumbered} 
+
+Aquí importamos el archivo Excel de la lista de casos "en bruto" utilizando la función `import()` del paquete **rio**. El paquete **rio** maneja con flexibilidad muchos tipos de archivos (por ejemplo, .xlsx, .csv, .tsv, .rds. Consulta la página sobre [importación y exportación](#import-and-export) para obtener más información y consejos sobre situaciones inusuales (por ejemplo, omitir filas, establecer valores que faltan, importar hojas de Google, etc). 
+
+Para continuar, [cliquea para descargar linelist "en crudo"](https://github.com/epirhandbook/Epi_R_handbook/raw/master/data/case_linelists/linelist_raw.xlsx) (como archivo .xlsx). 
+
+Si tu conjunto de datos es grande y tarda mucho en importarse, puede ser útil que el comando de importación esté separado de la cadena de pipes y que el "crudo" se guarde como un archivo distinto. Esto también permite comparar fácilmente las versiones original y limpia. 
+
+A continuación, importamos el archivo de Excel sin procesar y lo guardamos como el dataframe `linelist_raw`. Suponemos que el archivo se encuentra en tu directorio de trabajo o en la raíz del proyecto R, por lo que no se especifican subcarpetas en la ruta del archivo. 
+
+
+```{r, echo=F, message=F}
+# OCULTO PARA EL LECTOR
+# carga los datos usando here() para saber en que subcarpetas están los datos
+linelist_raw <- rio::import(here::here("data", "case_linelists", "linelist_raw.xlsx"))
+```
+
+```{r, eval=F}
+linelist_raw <- import("linelist_raw.xlsx")
+```
+
+Puedes ver las primeras 50 filas del dataframe a continuación. Nota: la función **base** de R `head(n)` te permite ver sólo las primeras n filas en la consola de R. 
+
+```{r message=FALSE, echo=F}
+# muestra los datos de linelist como una tabla
+DT::datatable(head(linelist_raw,50), rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+
+### Revisar {.unnumbered}  
+
+Puedes utilizar la función `skim()` del paquete **skimr** para obtener una visión general de todo el dataframe (véase la página sobre [tablas descriptivas](#descriptive-tables) para más información). Las columnas se resumen por clase o tipo, como, por ejemplo, carácter, numérico. Nota: "POSIXct" es un tipo de fecha cruda (ver [Trabajar con fechas](#working-with-dates-1). 
+
+```{r, eval=F}
+skimr::skim(linelist_raw)
+```
+
+```{r, echo=F}
+skimr::skim_without_charts(linelist_raw)
+```
+
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+
+## Nombres de columnas {#column-names}
+
+En R, los *nombres* de las columnas son la "cabecera" o el valor "superior" de una columna. Se utilizan para referirse a las columnas en el código, y sirven como etiqueta por defecto en las figuras. 
+
+Otros programas estadísticos, como SAS y STATA, utilizan *"etiquetas"* que coexisten como versiones impresas más largas de los nombres de columna más cortos. Aunque R ofrece la posibilidad de añadir etiquetas de columna a los datos, no es una práctica que sea muy utilizada. Para hacer que los nombres de las columnas sean "fáciles de imprimir" para las figuras, normalmente se ajusta su visualización dentro de los comandos de gráficas que crean las salidas (por ejemplo, los títulos de los ejes o de las leyendas de una gráfica, o las cabeceras de las columnas en una tabla impresa - véase la [sección de escalas de la página de consejos de ggplot](#ggplot_tips_scales) y las páginas de [Tablas para la presentación](#tables-for-presentation)). Si deseas asignar etiquetas de columna en los datos, lee más online [aquí](https://cran.r-project.org/web/packages/expss/vignettes/labels-support.html) y [aquí](https://cran.r-project.org/web/packages/labelled/vignettes/intro_labelled.html). 
+
+Como los nombres de las columnas de R se utilizan con mucha frecuencia, deben tener una sintaxis "limpia". Sugerimos lo siguiente: 
+
+* Nombres cortos 
+* Sin espacios (sustituir por barras bajas _ ) 
+* Sin caracteres inusuales (&, #, <, >, ...) 
+* Nomenclatura de estilo similar (por ejemplo, todas las columnas de fecha nombradas como **date**_onset, **date**_report, **date**_death...) 
+
+Los nombres de las columnas de `linelist_raw` se muestran a continuación utilizando `names()` de R **base**. Podemos ver que inicialmente 
+
+* Algunos nombres contienen espacios (por ejemplo, `infection date`) 
+
+* Se utilizan diferentes patrones de nomenclatura para las fechas (`date onset` vs. `infection date`) 
+
+* Debe haber habido una *cabecera fusionada* en las dos últimas columnas del .xlsx. Lo sabemos porque el nombre de dos columnas fusionadas ("merged_header") fue asignado por R a la primera columna, y a la segunda columna se le asignó un nombre de marcador de posición "...28" (ya que entonces estaba vacía y es la columna 28). 
+
+```{r}
+names(linelist_raw)
+```
+
+<span style="color: black;">***NOTA:*** Para hacer referencia a un nombre de columna que incluya espacios, rodea el nombre con tildes, por ejemplo: linelist$`` ` '\x60infection date\x60'` ``. Ten en cuenta que, en tu teclado, la tilde (\`) es diferente de la comilla simple ('). </span>
+
+### Limpieza automática {.unnumbered}  
+
+La función `clean_names()` del paquete **janitor** estandariza los nombres de las columnas y los hace únicos haciendo lo siguiente: 
+
+* Convierte todos los nombres para que estén compuestos sólo por barras bajas, números y letras 
+* Los caracteres acentuados se transliteran a ASCII (por ejemplo, la o alemana con diéresis se convierte en "o", la "ñ" española se convierte en "n") 
+* Se puede especificar la preferencia de mayúsculas para los nuevos nombres de columna utilizando `case =` argumento ("snake" es el valor por defecto, las alternativas incluyen "sentence", "title", "small_camel"...) 
+* Puedes especificar sustituciones de nombres concretos proporcionando un vector `replace =` argumento (por ejemplo, `replace = c(onset = "date_of_onset")`)
+
+* Aquí puedes encontrar una  [viñeta](https://cran.r-project.org/web/packages/janitor/vignettes/janitor.html#cleaning) en línea sobre dicho paquete. 
+
+A continuación, el proceso de limpieza comienza utilizando `clean_names()` sobre linelist_raw. 
+
+```{r clean_names}
+# enlaza el conjunto de datos con un pipe a la función clean_names(), y el resultado lo guarda como "linelist"  
+linelist <- linelist_raw %>% 
+  janitor::clean_names()
+
+# ver los nombres de las columnas
+names(linelist)
+```
+
+<span style="color: black;">***NOTA:*** El nombre de la última columna "...28" se ha cambiado por "x28". </span>
+
+### Limpieza manual de nombres {.unnumbered}  
+
+A menudo es necesario renombrar las columnas manualmente, incluso después del paso de estandarización anterior. A continuación, el renombramiento se realiza utilizando la función `rename()` del paquete **dplyr**, como parte de una cadena de pipes. `rename()` utiliza el estilo `NUEVO = ANTIGUO` - el nombre nuevo de la columna se escribe antes que el antiguo. 
+
+A continuación, se añade un comando de renombramiento a la tubería de limpieza. Se han añadido espacios estratégicamente para alinear el código y facilitar la lectura. 
+
+```{r}
+# CADENA DE LIMPIEZA CON 'PIPE' (comienza con los datos crudos y 
+# mediante pipes encadena una serie de pasos de limpieza#
+##################################################################################
+linelist <- linelist_raw %>%
+    
+    # estandariza los nombres de las columnas
+    janitor::clean_names() %>% 
+    
+    # manualmente re-nombra columnas
+           # nombre NUEVO         # nombre ANTIGUO
+    rename(date_infection       = infection_date,
+           date_hospitalisation = hosp_date,
+           date_outcome         = date_of_outcome)
+```
+
+
+Ahora puedes ver que los nombres de las columnas han cambiado: 
+
+```{r message=FALSE, echo=F}
+names(linelist)
+```
+
+#### Renombrar por posición de columna {.unnumbered} 
+
+También puedes renombrar por la posición de la columna, en lugar del nombre de la columna, por ejemplo: 
+
+```{r, eval=F}
+rename(newNameForFirstColumn  = 1,
+       newNameForSecondColumn = 2)
+```
+
+#### Renombrar mediante `select()` y `summarise()` {.unnumbered}
+
+Como método abreviado, también puedes cambiar el nombre de las columnas dentro de las funciones de **dplyr** `select()` y `summarise()`. `select()` se utiliza para mantener sólo ciertas columnas (y se muestra más adelante en esta página). `summarise()` se muestra en las páginas [Agrupar datos](#grouping-data) y [Tablas descriptivas](#descriptive-tables). Estas funciones también utilizan el formato `nombre_nuevo = nombre_antiguo`. He aquí un ejemplo: 
+
+```{r, eval=F}
+linelist_raw %>% 
+  select(# nombre NUEVO         # nombre ANTIGUO
+         date_infection       = `infection date`,    # renombra y MANTIENE estas colunas
+         date_hospitalisation = `hosp date`)
+```
+
+### Otros retos {.unnumbered} 
+
+#### Nombres de columnas de Excel vacíos {.unnumbered} 
+
+R no puede tener columnas de conjuntos de datos que no tengan nombres de columnas (cabeceras). Así, si importa unos datos de Excel con datos pero sin cabeceras de columna, R rellenará las cabeceras con nombres como "...1" o "...2". El nombre asignado representa el número de la columna (por ejemplo, si la cuarta columna de los datos no tiene cabecera, R la nombrará "...4"). 
+
+Puedes limpiar estos nombres manualmente haciendo referencia a su número de posición (véase el ejemplo anterior), o a su nombre asignado (`linelist_raw$...1`). 
+
+#### Nombres de columnas y celdas fusionadas de Excel {.unnumbered}
+
+Las celdas combinadas en un archivo de Excel son una ocurrencia común cuando se reciben datos. Como se explica en [Transición a R](#transition-to-r), las celdas combinadas pueden ser agradables para la lectura humana de los datos, pero no son "datos ordenados" y causan muchos problemas para la lectura de los datos por parte de las máquinas. R no puede ajustar las celdas combinadas. 
+
+Recuerda a las personas que introducen los datos que **los datos legibles para el ser humano no son lo mismo que los datos legibles para la máquina**. Esfuérzate en formar a los usuarios sobre los principios de los [**datos ordenados**](https://es.r4ds.hadley.nz/datos-ordenados.html). Si es posible, intenta cambiar los procedimientos para que los datos lleguen en un formato ordenado y sin celdas fusionadas. 
+
+* Cada variable debe tener su propia columna. 
+* Cada observación debe tener su propia fila. 
+* Cada valor debe tener su propia celda. 
+
+Al utilizar la función `import()` de **rio**, el valor de una celda combinada se asignará a la primera celda y las siguientes estarán vacías. 
+
+Una solución para tratar las celdas combinadas es importar los datos con la función `readWorkbook()` del paquete **openxlsx**. Establece el argumento `fillMergedCells = TRUE`. Esto da el valor en una celda fusionada a todas las celdas dentro del rango de fusión. 
+
+```{r, eval=F}
+linelist_raw <- openxlsx::readWorkbook("linelist_raw.xlsx", fillMergedCells = TRUE)
+```
+
+<span style="color: red;">***PELIGRO:*** Si los nombres de las columnas se fusionan con `readWorkbook()`, terminarás con nombres de columnas duplicados, que tendrás que arreglar manualmente - ¡R no funciona bien con nombres de columnas duplicados! Puedes renombrarlas haciendo referencia a su posición (por ejemplo, la columna 5), como se explica en la sección de limpieza manual de nombres de columnas. </span>
+
+
+
+
+ 
+
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+
+## Seleccionar o reordenar columnas {#select-or-re-order-columns} 
+
+Utiliza `select()` de **dplyr** para seleccionar las columnas que deseas conservar y para especificar su orden en el dataframe. 
+
+<span style="color: orange;">***ATENCIÓN:*** En los ejemplos siguientes, el dataframe `linelist` se modifica con `select()` y se muestra, pero no se guarda. Esto es a efectos de demostración. Los nombres de las columnas modificadas se imprimen pasando el dataframe a `names()`.</span>
+
+**Aquí están TODOS los nombres de las columnas en linelist en este punto de la cadena de limpieza:** 
+
+```{r}
+names(linelist)
+```
+
+### Mantener las columnas {.unnumbered}  
+
+**Selecciona sólo las columnas que desees conservar** 
+
+Escribe sus nombres en el comando `select()`, sin comillas. Aparecerán en el dataframe en el orden que indiques. Ten en cuenta que si incluyes una columna que no existe, R devolverá un error (véase el uso de `any_of()` más adelante para evitar un error de este tipo). 
+
+```{r}
+# linelist se enlaza con pipe al comando select(), y names() imprime (en consola) sólo los nombres de columna
+linelist %>% 
+  select(case_id, date_onset, date_hospitalisation, fever) %>% 
+  names()  # display the column names
+```
+
+
+
+### Funciones de ayuda "tidyselect" {#clean_tidyselect .unnumbered}
+
+Estas funciones de ayuda existen para facilitar la especificación de las columnas a conservar, descartar o transformar. Provienen del paquete **tidyselect**, que se incluye en **tidyverse** y se basa en la forma en que se seleccionan las columnas en las funciones de **dplyr**. 
+
+Por ejemplo, si deseas reordenar las columnas, `everything()` es una función útil para indicar "todas las demás columnas no mencionadas". El comando siguiente mueve las columnas `date_onset` y `date_hospitalisation` al principio (izquierda) de los datos, pero mantiene todas las demás columnas después. Fíjate en que `everything()` se escribe con paréntesis vacíos: 
+
+```{r}
+# mueve date_onset y date_hospitalisation al principio
+linelist %>% 
+  select(date_onset, date_hospitalisation, everything()) %>% 
+  names()
+```
+
+Aquí hay otras funciones de ayuda "tidyselect" que también funcionan *dentro de* las funciones de **dplyr** como `select()`, `across()` y `summarise()`: 
+
+* `everything()` - todas las demás columnas no mencionadas 
+* `last_col()` - la última columna 
+* `where()` - aplica una función a todas las columnas y selecciona las que son TRUE 
+* `contains()` - columnas que contienen una cadena de caracteres
+  * ejemplo: `select(contains("time"))`
+* `starts_with()` - coincide con un prefijo especificado  
+  * ejemplo: `select(starts_with("date_"))`
+* `ends_with()` - coincide con un sufijo especificado  
+  * ejemplo: `select(ends_with("_post))` 
+* `matches()` - para aplicar una expresión regular (regex)  
+  * ejemplo: `select(matches("[pt]al"))` 
+* `num_range()` - un rango numérico como x01, x02, x03 
+* `any_of()` - coincide con la columna SI existe pero no devuelve ningún error si no se encuentra
+  * ejemplo: `select(any_of(date_onset, date_death,     cardiac_arrest)) `
+
+Además, utiliza operadores normales como `c()` para listar varias columnas, `:` para columnas consecutivas, `!` para opuestas, `&` para "Y" y `|` para "O". 
+
+Utiliza `where()` para especificar criterios lógicos para las columnas. Si escribes una función dentro de `where()`, no incluyas los paréntesis vacíos de la función. El comando siguiente selecciona las columnas de tipo Numeric. 
+
+```{r}
+# selecciona las columnas que son de clase Numeric
+linelist %>% 
+  select(where(is.numeric)) %>% 
+  names()
+```
+
+Utiliza `contains()` para seleccionar sólo las columnas en las que el nombre de la columna contiene una cadena de caracteres especificada. `ends_with()` y `starts_with()` proporcionan más matices. 
+
+```{r}
+# selecciona las columnas que contienen ciertos caracteres
+linelist %>% 
+  select(contains("date")) %>% 
+  names()
+```
+
+La función `matches()` funciona de forma similar a `contains()`, pero puede escribirse en una expresión regular (mira la página sobre [Caracteres y cadenas](#characters-and-strings)), como varias cadenas separadas por barras "O" dentro de los paréntesis: 
+
+```{r}
+# selecciona por multiples coincidencias de caracteres
+linelist %>% 
+  select(matches("onset|hosp|fev")) %>%   # note the OR symbol "|"
+  names()
+```
+
+<span style="color: orange;">***ATENCIÓN:*** Si has escrito un nombre de columna y no existen datos para ella, puede devolver un error y detener tu código. Considera el uso de `any_of()` para citar columnas que pueden o no existir, especialmente útil en selecciones negativas (eliminar). </span>
+
+Sólo existe una de estas columnas, pero no se produce ningún error y el código continúa sin detener su cadena de limpieza. 
+
+```{r}
+linelist %>% 
+  select(any_of(c("date_onset", "village_origin", "village_detection", "village_residence", "village_travel"))) %>% 
+  names()
+```
+
+
+### Eliminar columnas {.unnumbered} 
+
+**Indica qué columnas se van a eliminar** colocando el símbolo "-" delante del nombre de la columna (por ejemplo, `select(-outcome)`), o un vector de nombres de columnas (como se indica a continuación). Todas las demás columnas se mantendrán. 
+```{r}
+linelist %>% 
+  select(-c(date_onset, fever:vomit)) %>% # remove date_onset and all columns from fever to vomit
+  names()
+```
+
+También puedes eliminar una columna utilizando la sintaxis de R **base**, definiéndola como `NULL`. Por ejemplo: 
+```{r, eval=F}
+linelist$date_onset <- NULL   # borra columnas con sentencias de R base 
+```
+
+
+### Independiente {.unnumbered}
+
+`select()` también puede utilizarse como un comando independiente (no en una cadena de pipes). En este caso, el primer argumento es el dataframe original sobre el que se va a operar. 
+
+```{r}
+# Crea un linelist nuevo con las columnas id y age-related
+linelist_age <- select(linelist, case_id, contains("age"))
+
+# muestra los nombres de las columnas
+names(linelist_age)
+```
+
+
+
+#### Añadir a la cadena de pipes {.unnumbered}  
+
+En `linelist_raw`, hay algunas columnas que no necesitamos: `row_num`, `merged_header` y `x28`. Las eliminamos con un comando `select()` en la cadena de pipes de limpieza: 
+
+```{r}
+# CADENA DE LIMPIEZA CON 'PIPE' (comienza con los datos crudos y 
+# mediante pipes encadena una serie de pasos de limpieza#
+##################################################################################
+
+# comienza la cadena de limpieza con un pipe
+############################################
+linelist <- linelist_raw %>%
+    
+    # sintaxis para estandarizar los nombres de columnas
+    janitor::clean_names() %>% 
+    
+    # renombrar manualment las columnas
+           # nombre NUEVO         # nombre ANTIGUO
+    rename(date_infection       = infection_date,
+           date_hospitalisation = hosp_date,
+           date_outcome         = date_of_outcome) %>% 
+    
+    # a
+    #####################################################
+
+    # quitar una columna
+    select(-c(row_num, merged_header, x28))
+```
+
+
+
+
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+## De-duplicación {#deduplication}
+
+Consulta la página sobre [de-duplicación](#de-duplication) para ver la cantidad de opciones sobre cómo eliminar las duplicidades (de-duplicar). Aquí sólo se presenta un ejemplo muy sencillo de de-duplicación de filas. 
+
+El paquete **dplyr** ofrece la función `distinct()`. Esta función examina cada fila y reduce el dataframe con sólo filas únicas. Es decir, elimina las filas que están 100% duplicadas. 
+
+Al evaluar las filas duplicadas, tiene en cuenta un rango de columnas - por defecto considera todas las columnas. Como se muestra en la página de de-duplicación, puedes ajustar este rango de columnas para que la singularidad de las filas sólo se evalúe con respecto a determinadas columnas. 
+
+En este sencillo ejemplo, simplemente añadimos el comando vacío `distinct()` a la cadena de pipes. Esto garantiza que no haya filas que estén 100% duplicadas de otras filas (evaluadas en todas las columnas). 
+
+Comenzamos con ` nrow(linelist)` filas en `linelist`. 
+
+```{r}
+linelist <- linelist %>% 
+  distinct()
+```
+
+Después de la de-duplicación hay `nrow(linelist)` filas. Las filas eliminadas habrían sido 100% duplicados de otras filas. 
+
+A continuación, se añade el comando `distinct()` a la cadena de pipes de limpieza: 
+
+```{r}
+# CADENA DE LIMPIEZA CON 'PIPE' (comienza con los datos crudos y 
+# mediante pipes encadena una serie de pasos de limpieza#
+##################################################################################
+
+# comienza la cadena de limpieza con un pipe
+############################################
+
+linelist <- linelist_raw %>%
+    
+    # sintaxis para estandarizar los nombres de columnas
+    janitor::clean_names() %>% 
+    
+    # renombrar manualment las columnas
+           # nombre NUEVO       # nombre ANTIGUO
+    rename(date_infection       = infection_date,
+           date_hospitalisation = hosp_date,
+           date_outcome         = date_of_outcome) %>% 
+    
+    # quitar una columna
+    select(-c(row_num, merged_header, x28)) %>% 
+  
+    # ARRIBA SE ENCUENTRAN LOS PASOS DE LIMPIEZA ANTERIORES YA DISCUTIDOS
+    #####################################################################
+    
+    # de-duplicar
+    distinct()
+```
+
+
+
+
+
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+## Creación y transformación de columnas  {#column-creation-and-transformation}
+
+**Recomendamos utilizar la función  `mutate()` de dplyr para añadir una nueva columna, o para modificar una existente.** 
+
+A continuación se muestra un ejemplo de creación de una nueva columna con `mutate()`. La sintaxis es: `mutate(nombre_nueva_columna = valor o transformación) `
+
+En Stata, esto es similar al comando `generate`, pero también se puede utilizar `mutate()` de R para modificar una columna existente. 
+
+
+### Nuevas columnas  {.unnumbered}
+
+El comando más básico de `mutate()` para crear una nueva columna podría tener este aspecto. Crea una nueva columna `new_col` donde el valor en cada fila es 10. 
+
+```{r, eval=F}
+linelist <- linelist %>% 
+  mutate(new_col = 10)
+```
+
+También puedes referenciar valores en otras columnas, para realizar cálculos. A continuación, se crea una nueva columna `bmi` para mantener el Índice de Masa Corporal (BMI) de cada caso - calculado mediante la fórmula `BMI = kg/m^2`, utilizando la columnas `ht_cm` y `wt_kg`. 
+
+```{r}
+linelist <- linelist %>% 
+  mutate(bmi = wt_kg / (ht_cm/100)^2)
+```
+
+Si creas varias columnas nuevas, separa cada una con una coma y una nueva línea. A continuación se muestran ejemplos de nuevas columnas, incluidas las que consisten en valores de otras columnas combinadas mediante `str_glue()` del paquete **stringr** (véase la página sobre [Caracteres y cadenas](#characters-and-strings).
+
+```{r}
+new_col_demo <- linelist %>%                       
+  mutate(
+    new_var_dup    = case_id,             # columna nueva = duplicar/copiar otra columna existente
+    new_var_static = 7,                   # columna nueva = todos los valores iguales
+    new_var_static = new_var_static + 5,  # se puede sobreescribir una columna y puede ser un cálculo con otras variables
+    new_var_paste  = stringr::str_glue("{hospital} on ({date_hospitalisation})") # columna nueva = pegar valores de otras columnas
+    ) %>% 
+  select(case_id, hospital, date_hospitalisation, contains("new"))        # muestra solo columnas nuevas, sólo por mostrarlas
+```
+
+
+Revisa las columnas nuevas. A efectos de demostración, sólo se muestran las columnas nuevas y las utilizadas para crearlas:  
+
+
+```{r message=FALSE, echo=F}
+# muestra los datos de linelist como una tabla
+DT::datatable(head(new_col_demo,50), rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+<span style="color: darkgreen;">***CONSEJO:*** Una variación de `mutate()` es la función `transmute()`. Esta función añade una nueva columna al igual que `mutate()`, pero también elimina todas las demás columnas que no se mencionan dentro de sus paréntesis. </span>
+
+
+```{r, eval=F}
+# OCULTO AL LECTOR
+# quita las columnas de prueba creadas más arriba
+# linelist <- linelist %>% 
+#   select(-contains("new_var"))
+```
+
+
+
+### Convertir el tipo de columna  {.unnumbered}
+
+Las columnas que contienen valores que son fechas, números o valores lógicos (TRUE/FALSE) sólo se comportarán como se espera si están correctamente clasificadas. Hay una diferencia entre "2" de tipo carácter y 2 de tipo numérico! 
+
+Hay formas de establecer el tipo de la columna durante los comandos de importación, pero esto suele ser engorroso. Consulta la sección sobre los tipos de objeto en [Fundamentos de R](#r-basics) para saber más sobre la conversión de los tipos de objetos y columnas. 
+
+En primer lugar, vamos a realizar algunas comprobaciones en las columnas importantes para ver si son del tipo correcto. También vimos esto al principio cuando ejecutamos `skim()`. 
+
+Actualmente, el tipo de la columna `age` es un carácter. Para realizar análisis cuantitativos, ¡necesitamos que estos números sean reconocidos como numéricos!. 
+
+```{r}
+class(linelist$age)
+```
+
+El tipo de la columna `date_onset` ¡también es un carácter! Para realizar los análisis, ¡estas fechas deben ser reconocidas como fechas! 
+ 
+```{r}
+class(linelist$date_onset)
+```
+
+
+Para resolver esto, utiliza la capacidad de `mutate()` para redefinir una columna mediante una transformación. Definimos la columna como ella misma, pero convertida a un tipo diferente. He aquí un ejemplo básico, convirtiendo o asegurando que la columna `age` sea de tipo Numeric: 
+
+```{r, eval=F}
+linelist <- linelist %>% 
+  mutate(age = as.numeric(age))
+```
+
+De forma similar, puedes utilizar `as.character()` y `as.logical()`. Para convertir al tipo Factor, puedes utilizar `factor()` de R **base** o `as_factor()` de **forcats**. Lee más sobre esto en la página de [Factores](#factors). 
+
+Hay que tener cuidado al convertir al tipo Fecha. En la página [Trabajar con fechas](#working-with-dates-1) se explican varios métodos. Normalmente, los valores de fecha en el fichero crudo deben estar todos en el mismo formato para que la conversión funcione correctamente (por ejemplo, "MM/DD/AAAA", o "DD MM AAAA"). Después de convertir al tipo Fecha, comprueba tus datos para confirmar que cada valor se ha convertido correctamente. 
+
+
+
+
+### Datos agrupados {.unnumbered}  
+
+Si tu dataframe ya está *agrupado* (véase la página sobre [Agrupar datos](#grouping-data)), `mutate()` puede comportarse de forma diferente que si el dataframe no está agrupado. Cualquier función de resumen, como `mean()`, `median()`, `max()`, etc. calculará con datos agrupados, no con filas de registros individualizados.    
+
+```{r, eval=F}
+# edad normalizada para hacer la media de TODAS las filas
+linelist %>% 
+  mutate(age_norm = age / mean(age, na.rm=T))
+
+# edad normalizada para hacer la media por grupo de hospital
+linelist %>% 
+  group_by(hospital) %>% 
+  mutate(age_norm = age / mean(age, na.rm=T))
+```
+
+Lee más sobre el uso de `mutate()` sobre dataframes agrupados en esta [documentación mutate de tidyverse](https://dplyr.tidyverse.org/reference/mutate.html). 
+
+
+
+### Transformar múltiples columnas  {#clean_across .unnumbered}
+
+A menudo, para escribir un código conciso, se desea aplicar la misma transformación a varias columnas a la vez. Se puede aplicar una transformación a varias columnas a la vez utilizando la función `across()` del paquete **dplyr** (también contenido en el paquete **tidyverse**). `across()` se puede utilizar con cualquier función **de dplyr**, pero se suele utilizar dentro de `select()`, `mutate()`, `filter()` o `summarise()`. Mira cómo se aplica a `summarise()` en la página sobre [Tablas descriptivas](#descriptive-tables). 
+
+Especificar los argumentos de las columnas `.cols = ` y la(s) función(es) a aplicar a `.fns = `. Cualquier argumento adicional a la función `.fns ` puede incluirse después de una coma, todavía dentro de `across()`.  
+
+#### Selección de columnas con `across()`  {.unnumbered}  
+
+Especificar las columnas de `.cols = `. Puedes nombrarlas individualmente, o utilizar funciones de ayuda "tidyselect". Especifica la función en `.fns = `. Ten en cuenta que, utilizando el modo de función mostrado a continuación, la función se escribe *sin* sus paréntesis (). 
+
+Aquí la transformación `as.character()` se aplica a columnas específicas nombradas dentro de `across()`.
+
+```{r, eval=F}
+linelist <- linelist %>% 
+  mutate(across(.cols = c(temp, ht_cm, wt_kg), .fns = as.character))
+```
+
+Las funciones de ayuda "tidyselect" están disponibles para ayudarle a especificar las columnas. Se detallan más arriba en la sección sobre Selección y reordenación de columnas, e incluyen: `everything()`, `last_col()`, `where()`, `starts_with()`, `ends_with()`, `contains()`, `matches()`, `num_range()` y `any_of()`. 
+
+Este es un ejemplo de cómo se pueden cambiar **todas las columnas** al tipo carácter: 
+
+```{r, eval=F}
+#cambiar todas las columnas a clase character
+linelist <- linelist %>% 
+  mutate(across(.cols = everything(), .fns = as.character))
+```
+
+Convertir en caracteres todas las columnas cuyo nombre contenga la cadena "date" (fíjate en la colocación de comas y paréntesis): 
+
+```{r, eval=F}
+#cambiar todas las columnas que contienen "date" a clase character
+linelist <- linelist %>% 
+  mutate(across(.cols = contains("date"), .fns = as.character))
+```
+
+A continuación, un ejemplo de mutación de las columnas que actualmente son de tipo POSIXct (un tipo datetime cruda que muestra etiquetas) - en otras palabras, donde la función `is.POSIXct()` evalúa a `TRUE`. Entonces queremos convertirlas con la función `as.Date()` en columnas de tipo Date normal. 
+
+```{r, eval=F}
+linelist <- linelist %>% 
+  mutate(across(.cols = where(is.POSIXct), .fns = as.Date))
+```
+
+* Ten en cuenta que dentro de `across()` también utilizamos la función `where()` como `is.POSIXct` está evaluando a TRUE o FALSE. 
+
+* Ten en cuenta que `is.POSIXct()` es del paquete **lubridate**. Otras funciones "is" similares como `is.character()`, `is.numeric()`, e `is.logical()` son de R **base** 
+
+#### funciones `across()`  {.unnumbered}
+
+Puedes leer la documentación de ayuda con detalles sobre cómo proporcionar funciones a `across()` escribiendo `?across`: hay varias formas de especificar la(s) función(es) a realizar en una columna e incluso puedes definir tus propias funciones: 
+
+* Puedes escribir el nombre de la función sola (por ejemplo, `mean` o `as.character`) 
+* Puedes escribir la función en **estilo purrr** (por ejemplo, `~ mean(.x, na.rm = TRUE)`) (mira [esta página](#iteration-loops-and-lists)) 
+* Puedes especificar varias funciones escribiendo una lista (por ejemplo,  `list(mean = mean, n_miss = ~ sum(is.na(.x))`).  * Si proporcionas varias funciones, se devolverán varias columnas     transformadas por cada columna de entrada, con nombres únicos con formato `col_fn`. Puedes ajustar cómo se nombran las columnas nuevas con el argumento `.names = ` utilizando la sintaxis **glue** (mira la página sobre [Caracteres y cadenas](#characters-and-strings)) donde `{.col}` y `{.fn}` son la abreviatura de la columna de entrada y la función. 
+
+Aquí hay algunos recursos en línea sobre el uso de `across()`: [pensamientos/razones del creador Hadley Wickham](https://www.tidyverse.org/blog/2020/04/dplyr-1-0-0-colwise/) 
+
+
+
+
+### `coalesce()` {.unnumbered}  
+
+Esta función de **dplyr** encuentra el primer valor no missing en cada posición. Rellena los valores que faltan con el primer valor disponible en el orden que especifiques. 
+
+Aquí hay un ejemplo *fuera del contexto de un dataframe*: Supongamos que tienes dos vectores, uno que contiene el pueblo de detección del paciente y otro que contiene el pueblo de residencia del paciente. Puedes utilizar coalesce para elegir el primer valor no ausente de cada índice: 
+
+```{r}
+village_detection <- c("a", "b", NA,  NA)
+village_residence <- c("a", "c", "a", "d")
+
+village <- coalesce(village_detection, village_residence)
+village    # print
+```
+
+Esto funciona de la misma manera si se proporcionan columnas del dataframe: para cada fila, la función asignará el nuevo valor de la columna con el primer valor que no falte en las columnas proporcionadas (en el orden indicado). 
+
+```{r, eval=F}
+linelist <- linelist %>% 
+  mutate(village = coalesce(village_detection, village_residence))
+```
+
+Este es un ejemplo de operación "por filas". Para cálculos más complicados por filas, consulta la sección siguiente sobre cálculos por filas. 
+
+
+
+### Matemáticas acumulativas {.unnumbered}
+
+Si deseas que una columna refleje acumulados la sum/mean/min/max, etc., tal y como se ha evaluado en las filas de un dataframe hasta ese punto, utiliza las siguientes funciones: 
+
+`cumsum()` devuelve la suma acumulada, como se muestra a continuación: 
+
+```{r}
+sum(c(2,4,15,10))     # devuelve sólo un número
+cumsum(c(2,4,15,10))  # devuelve la suma acumulativa de cada paso
+```
+
+Esto se puede utilizar en un dataframe al crear una nueva columna. Por ejemplo, para calcular el número acumulado de casos por día en un brote, considere un código como este:  
+
+```{r, warning=F, message=F}
+cumulative_case_counts <- linelist %>%  # begin with case linelist
+  count(date_onset) %>%                 # count of rows per day, as column 'n'   
+  mutate(cumulative_cases = cumsum(n))  # new column, of the cumulative sum at each row
+```
+
+A continuación se muestran las 10 primeras filas: 
+
+```{r}
+head(cumulative_case_counts, 10)
+```
+
+Consulta la página sobre [curvas epidémicas](#epidemic-curves) para saber cómo representar la incidencia acumulada con epicurve. 
+
+Véase también:  
+`cumsum()`, `cummean()`, `cummin()`, `cummax()`, `cumany()`, `cumall()`  
+
+
+
+
+
+### Utilizando R **base**  {.unnumbered}  
+
+Para definir una nueva columna (o redefinir una columna) utilizando R **base**, escribe el nombre del dataframe, conectado con `$`, a la *nueva* columna (o la columna a modificar). Utiliza el operador de asignación `<-` para definir el nuevo valor o valores. Recuerda que al usar R **base** debes especificar siempre el nombre del dataframe antes del nombre de la columna (por ejemplo, `dataframe$column`). Este es un ejemplo de creación de la columna `bmi` usando R **base**: 
+
+```{r, eval=F}
+linelist$bmi = linelist$wt_kg / (linelist$ht_cm / 100) ^ 2)
+```
+
+
+
+### Añadir a la cadena de pipes  {.unnumbered}  
+
+**A continuación, se añade una nueva columna a la cadena de pipes y se convierten algunos tipos.**  
+
+```{r }
+# CADENA DE LIMPIEZA CON 'PIPE' (comienza con los datos crudos y 
+# mediante pipes encadena una serie de pasos de limpieza
+##################################################################################
+
+# comienza la cadena de limpieza con un pipe
+############################################
+linelist <- linelist_raw %>%
+    
+    # estandarizar los nombres de columnas
+    janitor::clean_names() %>% 
+    
+    # renombrar manualmente las columnas
+           # nombre NUEVO       # nombre ANTIGUO
+    rename(date_infection       = infection_date,
+           date_hospitalisation = hosp_date,
+           date_outcome         = date_of_outcome) %>% 
+    
+    # quitar columna
+    select(-c(row_num, merged_header, x28)) %>% 
+  
+    # de-duplicar
+    distinct() %>% 
+ 
+    # ARRIBA SE ENCUENTRAN LOS PASOS DE LIMPIEZA ANTERIORES DISCUTIDOS
+    ##################################################################
+    # añadir una columna nueva
+    mutate(bmi = wt_kg / (ht_cm/100)^2) %>% 
+  
+    # convertir el tipo de datos de las columns
+    mutate(across(contains("date"), as.Date), 
+           generation = as.numeric(generation),
+           age        = as.numeric(age)) 
+```
+
+
+
+
+
+## Recodificar valores  {#re-code-values}
+
+A continuación, se presentan algunos escenarios en los que es necesario recodificar (cambiar) los valores: 
+
+* para editar un valor específico (por ejemplo, una fecha con un año o formato incorrecto) 
+* para conciliar valores que no se escriben igual 
+* para crear una nueva columna de valores categóricos 
+* para crear una nueva columna de categorías numéricas (por ejemplo, categorías de edad)  
+
+
+
+### Valores específicos  {.unnumbered}  
+
+Para cambiar los valores manualmente puedes utilizar la función `recode()` dentro de la función `mutate()`. 
+
+Imagínate que hay una fecha sin sentido en los datos (por ejemplo, "2014-14-15"): podrías corregir la fecha manualmente en los datos originales, o bien, podrías escribir el cambio en la serie de comandos de limpieza a través de `mutate()` y `recode()`. Esto último es más transparente y reproducible para cualquier otra persona que quiera entender o repetir su análisis. 
+
+```{r, eval=F}
+# corregir valores incorrectos          # valor antiguo   # valor nuevo
+linelist <- linelist %>% 
+  mutate(date_onset = recode(date_onset, "2014-14-15" = "2014-04-15"))
+```
+
+La línea `mutate()` anterior puede leerse como: "mutar la columna `date_onset` para que sea igual a la columna `date_onset` recodificada de forma que el VALOR ANTIGUO se cambie por el NUEVO VALOR". Ten en cuenta que este patrón (VIEJO = NUEVO) para `recode()` es el opuesto a la mayoría de los patrones de R (nuevo = viejo). La comunidad de desarrollo de R está trabajando en la revisión de esto. 
+
+**Aquí hay otro ejemplo de recodificación de múltiples valores dentro de una columna.** 
+
+En `linelist` hay que limpiar los valores de la columna "hospital". Hay varias grafías diferentes y muchos valores que faltan. 
+
+```{r}
+table(linelist$hospital, useNA = "always")  # imprimir la tabla de todos los valores únicos, incluidos los que faltan  
+```
+
+El comando `recode()` de abajo redefine la columna "hospital" como la columna actual "hospital", pero con los cambios especificados en la recodificación. ¡No olvides las comas después de cada uno! 
+
+```{r}
+linelist <- linelist %>% 
+  mutate(hospital = recode(hospital,
+                     # for reference: OLD = NEW
+                      "Mitylira Hopital"  = "Military Hospital",
+                      "Mitylira Hospital" = "Military Hospital",
+                      "Military Hopital"  = "Military Hospital",
+                      "Port Hopital"      = "Port Hospital",
+                      "Central Hopital"   = "Central Hospital",
+                      "other"             = "Other",
+                      "St. Marks Maternity Hopital (SMMH)" = "St. Mark's Maternity Hospital (SMMH)"
+                      ))
+```
+
+
+Ahora vemos que se han corregido y consolidado las grafías de la columna `hospital`: 
+
+```{r}
+table(linelist$hospital, useNA = "always")
+```
+
+<span style="color: darkgreen;">***CONSEJO:*** El número de espacios antes y después de un signo de igualdad no importa. Haz que tu código sea más fácil de leer alineando el signo = para todas o la mayoría de las filas. Además, considera la posibilidad de añadir una fila de comentarios con hash (#) para aclarar a los futuros lectores qué lado es VIEJO y qué lado es NUEVO.  </span>  
+
+<span style="color: darkgreen;">***CONSEJO:*** A veces existe un valor con caracteres *en blanco* en unos datos (no reconocido como valor Missing - `NA` de R. Puedes hacer referencia a este valor con dos comillas sin espacio intermedio (""). </span>  
+
+
+
+
+### Por lógica  {.unnumbered}
+
+A continuación, demostramos cómo recodificar los valores de una columna utilizando lógica y condiciones: 
+
+* Uso de `replace()`, `ifelse()` e `if_else()` para una lógica simple 
+* Uso de `case_when()` para una lógica más compleja 
+  
+
+
+
+### Lógica simple  {.unnumbered}  
+
+
+#### sustituir con `replace()` {.unnumbered}  
+
+Para recodificar con criterios lógicos simples, puedes utilizar `replace()` dentro de `mutate()`. `replace()` es una función de R **base**. Utiliza una condición lógica para especificar las filas a cambiar. La sintaxis general es: 
+
+`mutate(col_to_change = replace(col_a_cambiar, criterio para filas, nuevo valor))`.  
+
+Una situación frecuente es utilizar `replace()` para **cambiar sólo un valor en una fila, utilizando un identificador de fila único**. A continuación, el género se cambia a "Mujer" en la fila donde la columna `case_id` es "2195".   
+
+```{r, eval=F}
+# Ejemplo: cambiar el género de una observación específica a "Female" 
+linelist <- linelist %>% 
+  mutate(gender = replace(gender, case_id == "2195", "Female"))
+```
+
+Abajo se puede ver un ejemplo equivalente utilizando la sintaxis de R **base** y los paréntesis de indexación `[ ]`. Se lee como "Cambia el valor de la columna `gender` del dataframe `linelist` a 'Female'" (para las filas en las que la columna `case_id` de `linelist` tiene el valor '2195').   
+
+```{r, eval=F}
+linelist$gender[linelist$case_id == "2195"] <- "Female"
+```
+
+
+
+
+#### `ifelse()` e `if_else()` {.unnumbered}  
+
+Otra herramienta para la lógica simple es `ifelse()` y su compañero `if_else()`. Sin embargo, en la mayoría de los casos para la recodificación es más claro utilizar `case_when()` (detallado a continuación). Estos comandos "if else" son versiones simplificadas de una sentencia de programación `if` y `else`. La sintaxis general es:  
+`ifelse(condición, valor a devolver si la condición evalúa como TRUE, valor a devolver si la condición evalúa como FALSE)` 
+
+A continuación, se define la columna `source_known`. Su valor en una fila determinada se establece como "known" si *no falta* el valor de la fila en la columna `source`. *Si falta* el valor en `source`, el valor de `source_known` se establece como "unknown". 
+
+```{r, eval=F}
+linelist <- linelist %>% 
+  mutate(source_known = ifelse(!is.na(source), "known", "unknown"))
+```
+
+`if_else()` es una versión especial de **dplyr** que maneja fechas. Ten en cuenta que, si el valor "verdadero" es una fecha, el valor "falso" también debe calificar una fecha, de ahí que se utilice el valor especial `NA_real_` en lugar de simplemente `NA`. 
+
+```{r, eval=F}
+# Crear una columna de fecha de muerte, que es NA si el paciente no ha muerto.
+linelist <- linelist %>% 
+  mutate(date_death = if_else(outcome == "Death", date_outcome, NA_real_))
+```
+
+**Evita encadenar muchos comandos ifelse... ¡utilza** case_when**() en su lugar!** `case_when()` es mucho más fácil de leer y cometerás menos errores.   
+
+```{r, fig.align = "center", out.width = "100%", echo=F}
+knitr::include_graphics(here::here("images", "ifelse bad.png"))
+```
+
+Fuera del contexto de un dataframe, si deseas que un objeto utilizado en su código cambie su valor, considere el uso de `switch()` de R **base**. 
+
+
+
+### Lógica compleja  {#clean_case_when .unnumbered}  
+
+Utiliza `case_when()` de **dplyr** si estás recodificando en muchos grupos nuevos, o si necesita utilizar sentencias lógicas complejas para recodificar valores. Esta función evalúa si cada fila del dataframe cumple los criterios especificados y asigna el nuevo valor correcto. 
+
+Los comandos `case_when()` consisten en sentencias que tienen un lado derecho (RHS) y un lado izquierdo (LHS) separados por una "tilde" `~` (cola de chancho). Los criterios lógicos están en el lado izquierdo y los valores de conformidad están en el lado derecho de cada sentencia. Las declaraciones están separadas por comas. 
+
+Por ejemplo, aquí utilizamos las columnas `age` y `age_unit` para crear una columna `age_years`: 
+
+
+```{r}
+linelist <- linelist %>% 
+  mutate(age_years = case_when(
+            age_unit == "years"  ~ age,       # si la edad se da en años
+            age_unit == "months" ~ age/12,    # si la edad se da en meses
+            is.na(age_unit)      ~ age))      # si falta la unidad de edad, asumir años
+                                              # cualquier otra circunstancia, asignar NA (missing)
+```
+
+
+A medida que se evalúa cada fila de los datos, los criterios se aplican/evalúan en el orden en que se escriben las sentencias `case_when()`, de arriba a abajo. Si el criterio superior se evalúa como `TRUE` para una fila determinada, se asigna el valor RHS, y los criterios restantes ni siquiera se prueban para esa fila. Por lo tanto, es mejor escribir los criterios más específicos primero y los más generales al final. A una fila de datos que no cumpla ninguno de los criterios del RHS se le asignará `NA`.   
+
+En esta línea, en su declaración final, coloca `TRUE` en el lado izquierdo, lo que capturará cualquier fila que no cumpla ninguno de los criterios anteriores. Al lado derecho de esta declaración se le podría asignar un valor como "¡comprobado!" o faltante.  
+
+A continuación se muestra otro ejemplo de `case_when()` utilizado para crear una nueva columna con la clasificación del paciente, según una definición de caso para los casos confirmados y sospechosos:  
+
+```{r, eval=F}
+linelist <- linelist %>% 
+     mutate(case_status = case_when(
+          
+          # si el paciente se somete a una prueba de laboratorio y es positiva,
+          # entonces se marca como un caso confirmado  
+          ct_blood < 20                   ~ "Confirmed",
+          
+          # si el paciente no tiene un resultado de laboratorio positivo,
+          # si el paciente tiene una "fuente" (vínculo epidemiológico) Y tiene fiebre, 
+          # entonces se marca como caso sospechoso
+          !is.na(source) & fever == "yes" ~ "Suspect",
+          
+          # cualquier otro paciente que no haya sido tratado anteriormente 
+          # se marca para su seguimiento
+          TRUE                            ~ "To investigate"))
+```
+
+<span style="color: red;">***PELIGRO:* Los valores del lado derecho deben ser todos del mismo tipo**: numéricos, de caracteres, de fecha, lógicos, etc. Para asignar faltantes (`NA`), puede ser necesario utilizar variaciones especiales de `NA` como `NA_character_`, `NA_real_` (para numérico o POSIX), y `as.Date(NA)`. Lee más en [Trabajar con fechas](#working-with-dates-1). </span>  
+
+
+
+
+### Valores faltantes {.unnumbered} 
+
+A continuación, se presentan funciones especiales para el tratamiento de los valores faltantes en el contexto de la limpieza de datos. 
+
+Consulta la página sobre [Valores faltantes](#missing-data) para obtener consejos más detallados sobre la identificación y el tratamiento de los valores faltantes. Por ejemplo, la función `is.na()` que comprueba lógicamente la ausencia de datos. 
+
+
+**`replace_na()`**  
+
+Para cambiar los valores faltantes (`NA`) por un valor específico, como "Missing", utiliza la función de **dplyr** `replace_na()` dentro de `mutate()`. Ten en cuenta que se utiliza de la misma manera que recodificar anteriormente - el nombre de la variable debe repetirse dentro de `replace_na()`.  
+
+```{r}
+linelist <- linelist %>% 
+  mutate(hospital = replace_na(hospital, "Missing"))
+```
+
+
+**fct_explicit_na()**  
+
+Esta es una función del paquete **forcats**. El paquete **forcats** maneja columnas del tipo Factor. Los factores son la forma en que R maneja valores *ordenados* como `c("First", "Second", "Third")` o para establecer el orden en que los valores (por ejemplo, hospitales) aparecen en las tablas y gráficos. Vea la página sobre [Factores](#factors). 
+
+Si tus datos son del tipo Factor y tratas de convertir `NA` en "Missing" utilizando `replace_na()`, obtendrás este error: `invalid factor level, NA generated` (nivel de factor no válido, NA generado). Has intentado añadir "Missing" como valor, cuando no estaba definido como un posible nivel del factor, y ha sido rechazado. 
+
+La forma más fácil de resolver esto es utilizar la función `fct_explicit_na()` de  **forcats** que convierte una columna en factor de tipo, y convierte los valores `NA` en el carácter "(Missing)".  
+
+```{r, eval=F}
+linelist %>% 
+  mutate(hospital = fct_explicit_na(hospital))
+```
+
+Una alternativa más lenta sería añadir el nivel del factor utilizando `fct_expand()` y luego convertir los valores que faltan.   
+
+**`na_if()`**  
+
+Para convertir un *valor específico en* `NA`, utiliza `na_if()` de **dplyr**. El comando siguiente realiza la operación opuesta a `replace_na()`. En el siguiente ejemplo, cualquier valor de "Missing" en la columna `hospital` se convierte en `NA`. 
+
+```{r}
+linelist <- linelist %>% 
+  mutate(hospital = na_if(hospital, "Missing"))
+```
+
+Nota: `na_if()` **no puede utilizarse para criterios lógicos** (por ejemplo, "todos los valores > 99") - utiliza `replace()` o `case_when()` para ello:  
+
+```{r, eval=F}
+# Convierte las temperaturas superiores a 40 en NA 
+linelist <- linelist %>% 
+  mutate(temp = replace(temp, temp > 40, NA))
+
+# Convierte las fechas de inicio anteriores al 1 de enero de 2000 en missing
+linelist <- linelist %>% 
+  mutate(date_onset = replace(date_onset, date_onset > as.Date("2000-01-01"), NA))
+```
+
+
+
+
+### Diccionario de limpieza  {.unnumbered}
+
+Utiliza el paquete R **matchmaker** y su función `match_df()` para limpiar un dataframe con un *diccionario de limpieza*.  
+
+1.  Crear un diccionario de limpieza con 3 columnas:  
+     * Una columna "desde" (el valor incorrecto)  
+     * Una columna "para" (el valor correcto)  
+     * Una columna que especifica la columna a la que se aplicarán los cambios (o ".global" para aplicarlo a todas las columnas) 
+
+Nota: Las entradas del diccionario .global serán anuladas por las entradas del diccionario específico de la columna. 
+
+```{r, fig.align = "center", out.width = "100%", echo=F}
+knitr::include_graphics(here::here("images", "cleaning_dict.png"))
+```
+
+
+2.  Importa el archivo del diccionario a R. Este ejemplo puede descargarse a través de las instrucciones de la página [Descargar manual y datos](#download-handbook-and-data).   
+
+```{r, echo=F}
+cleaning_dict <- rio::import(here("data", "case_linelists", "cleaning_dict.csv"))
+```
+
+```{r, eval=F}
+cleaning_dict <- import("cleaning_dict.csv")
+```
+
+3.  Pasa linelist crudas a `match_df()`, especificando en `dictionary = ` el dataframe del diccionario de limpieza. El argumento `from = ` debe ser el nombre de la columna del diccionario que contiene los valores "originales", el argumento `by = ` debe ser la columna del diccionario que contiene los correspondientes valores "nuevos", y la tercera columna enumera la columna en la que se realizará el cambio. Utilice `.global` en la columna `by = ` para aplicar un cambio en todas las columnas. Una cuarta columna del diccionario `order` se puede utilizar para especificar el orden del factor de los nuevos valores.  
+
+```{r}
+linelist <- linelist %>%     # proporcionar o canalizar el conjunto de datos
+     matchmaker::match_df(
+          dictionary = cleaning_dict,  # nombre de tu diccionario
+          from = "from",               # columna con los valores a reemplazar (por defecto es col 1)
+          to = "to",                   # columna con los valores finales (por defecto es col 2)
+          by = "col"                   # columna con los nombres de las columnas (por defecto es col 3)
+  )
+```
+
+Ahora desplázate a la derecha para ver cómo han cambiado los valores - en particular el `gender` (de minúsculas a mayúsculas), y todas las columnas de síntomas se han transformado de sí/no a 1/0. 
+
+```{r message=FALSE, echo=F}
+# display the linelist data as a table
+DT::datatable(head(linelist,50), rownames = FALSE, filter="top", options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+
+Ten en cuenta que los nombres de las columnas en el diccionario de limpieza deben corresponder a los nombres *en este punto* de tu script de limpieza. Consulta esta [referencia en línea para el paquete linelist](https://cran.r-project.org/web/packages/matchmaker/vignettes/intro.html) para obtener más detalles. 
+
+
+
+
+#### Añadir a la cadena de pipes {.unnumbered}  
+
+**A continuación, se añaden algunas columnas y transformaciones de columna nuevas a la cadena de pipes.** 
+
+```{r}
+# CADENA DE LIMPIEZA (comienza con los datos en bruto y enlaza con pipes los pasos de limpieza)
+#######################################################################################################
+
+# Comienza la cadena de pipes de limpieza
+#########################################
+linelist <- linelist_raw %>%
+    
+    # sintaxis para estandarizar los nombres de las columnas
+    janitor::clean_names() %>% 
+    
+    # renombrar manualmente las columnas
+           # Nombre NUEVO         # Nombre ANTIGUO
+    rename(date_infection       = infection_date,
+           date_hospitalisation = hosp_date,
+           date_outcome         = date_of_outcome) %>% 
+    
+    # eliminar columna
+    select(-c(row_num, merged_header, x28)) %>% 
+  
+    # de-duplicar
+    distinct() %>% 
+  
+    # añadir columna
+    mutate(bmi = wt_kg / (ht_cm/100)^2) %>%     
+
+    # convertir el tipo de columnas
+    mutate(across(contains("date"), as.Date), 
+           generation = as.numeric(generation),
+           age        = as.numeric(age)) %>% 
+    
+    # añadir columna: retraso en la hospitalización
+    mutate(days_onset_hosp = as.numeric(date_hospitalisation - date_onset)) %>% 
+    
+   # ARRIBA ESTÁN LOS PASOS DE LIMPIEZA YA DISCUTIDOS
+   ###################################################
+
+    # limpiar los valores de la columna hospital
+    mutate(hospital = recode(hospital,
+                      # ANTIGUO = NUEVO
+                      "Mitylira Hopital"  = "Military Hospital",
+                      "Mitylira Hospital" = "Military Hospital",
+                      "Military Hopital"  = "Military Hospital",
+                      "Port Hopital"      = "Port Hospital",
+                      "Central Hopital"   = "Central Hospital",
+                      "other"             = "Other",
+                      "St. Marks Maternity Hopital (SMMH)" = "St. Mark's Maternity Hospital (SMMH)"
+                      )) %>% 
+    
+    mutate(hospital = replace_na(hospital, "Missing")) %>% 
+
+    # crear la columna age_years (A partir de age y age_unit)
+    mutate(age_years = case_when(
+          age_unit == "years" ~ age,
+          age_unit == "months" ~ age/12,
+          is.na(age_unit) ~ age))
+```
+
+
+
+
+
+
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+## Categorías numéricas  {#num_cats}
+
+Aquí describimos algunos enfoques especiales para crear categorías a partir de columnas numéricas. Algunos ejemplos comunes son las categorías de edad, los grupos de valores de laboratorio, etc. Aquí discutiremos: 
+
+* `age_categories()`, del paquete **epikit**  
+* `cut()`, de R **base**
+* `case_when()`  
+* ruptura de cuantiles con `quantile()` y `ntile()` 
+
+
+### Revisión de la distribución {.unnumbered}
+
+Para este ejemplo crearemos una columna `age_cat` utilizando la columna `age_years.` 
+
+```{r}
+#check the class of the linelist variable age
+class(linelist$age_years)
+```
+
+En primer lugar, examina la distribución de tus datos, para hacer los puntos de corte apropiados. Consulta la página sobre [Conceptos básicos de ggplot](#ggplot-basics).  
+
+```{r, out.height='50%'}
+# examine the distribution
+hist(linelist$age_years)
+```
+
+```{r}
+summary(linelist$age_years, na.rm=T)
+```
+
+<span style="color: orange;">***ATENCIÓN:*** A veces, las variables numéricas se importarán como tipo "carácter". Esto ocurre si hay caracteres no numéricos en algunos de los valores, por ejemplo, una entrada de "2 meses" para la edad, o (dependiendo de la configuración de su configuración local de R) si se utiliza una coma en el lugar de los decimales (por ejemplo, "4,5" para significar cuatro años y medio). </span>
+
+
+<!-- ======================================================= -->
+### `age_categories()` {.unnumbered}
+
+Con el paquete **epikit**, puedes utilizar la función `age_categories()` para categorizar y etiquetar fácilmente las columnas numéricas (nota: esta función puede aplicarse también a las variables numéricas no relacionadas con la edad). Además, la columna de salida es automáticamente un factor ordenado. 
+
+Aquí están las entradas requeridas: 
+
+* Un vector numérico (columna) 
+* El argumento + breakers = ` - proporciona un vector numérico de puntos de ruptura para los nuevos grupos 
+
+Primero, el ejemplo más sencillo:   
+
+```{r}
+# Ejemplo simple
+################
+pacman::p_load(epikit)                    # cargar paquete
+
+linelist <- linelist %>% 
+  mutate(
+    age_cat = age_categories(             # crear una columna nueva
+      age_years,                            # columna numérica para hacer grupos
+      breakers = c(0, 5, 10, 15, 20,        # puntos de ruptura
+                   30, 40, 50, 60, 70)))
+
+# mostrar la tabla
+table(linelist$age_cat, useNA = "always")
+```
+
+Los valores de ruptura que especificas son por defecto los límites inferiores - es decir, están incluidos en el grupo "superior" / los grupos están "abiertos" en la parte inferior/izquierda. Como se muestra a continuación, puedes añadir 1 a cada valor de ruptura para conseguir grupos que estén abiertos por la parte superior/derecha. 
+ 
+```{r}
+# Incluir los extremos superiores para las mismas categorías
+############################################################
+linelist <- linelist %>% 
+  mutate(
+    age_cat = age_categories(
+      age_years, 
+      breakers = c(0, 6, 11, 16, 21, 31, 41, 51, 61, 71)))
+
+# mostrar tabla
+table(linelist$age_cat, useNA = "always")
+```
+
+
+Puedes ajustar cómo se muestran las etiquetas con el `separator = `. El valor predeterminado es "-" 
+
+Puedes ajustar cómo se manejan los números superiores, con el argumento `ceiling = `. Para establecer un corte superior establezca `ceiling = TRUE`. En este uso, el valor de ruptura más alto proporcionado es un "techo" y no se crea una categoría "XX+". Cualquier valor por encima del valor de corte más alto (o hasta el límite  `upper = `, si está definido) se categoriza como `NA`. A continuación, se muestra un ejemplo con `ceiling = TRUE`, de modo que no hay categoría de XX+ y los valores por encima de 70 (el valor de ruptura más alto) se asignan como `NA`. 
+
+```{r}
+# Con ceiling fijado en TRUE
+############################
+linelist <- linelist %>% 
+  mutate(
+    age_cat = age_categories(
+      age_years, 
+      breakers = c(0, 5, 10, 15, 20, 30, 40, 50, 60, 70),
+      ceiling = TRUE)) # 70 is ceiling, all above become NA
+
+# mostrar tabla
+table(linelist$age_cat, useNA = "always")
+```
+
+Alternativamente, en lugar de los `breakers = `, puedes proporcionar todos los `lower = `, `upper = `, and `by = `: 
+
+* `lower = ` El número más bajo que se quiere considerar - por defecto es 0 
+* `upper = ` El número más alto que quiere que se considere   
+* `by = `    El número de años entre los grupos 
+
+```{r}
+linelist <- linelist %>% 
+  mutate(
+    age_cat = age_categories(
+      age_years, 
+      lower = 0,
+      upper = 100,
+      by = 10))
+
+# mostrar tabla
+table(linelist$age_cat, useNA = "always")
+```
+
+
+Consulta la página de ayuda de la función para más detalles (escribe `?age_categories` en la consola de R). 
+
+
+<!-- ======================================================= -->
+### `cut()` {.unnumbered}
+
+`cut()` es una alternativa a `age_categories()` de R **base**, pero creo que verás por qué `age_categories()` se desarrolló para simplificar este proceso. Algunas diferencias notables de `age_categories()` son: 
+
+* No es necesario instalar/cargar otro paquete 
+* Puedes especificar si los grupos están abiertos/cerrados a la derecha/izquierda 
+* Debes proporcionar etiquetas precisas 
+* Si quieres que el 0 se incluya en el grupo más bajo debes especificarlo 
+
+La sintaxis básica dentro de `cut()` es proporcionar primero la columna numérica que se va a cortar (`age_years`), y luego el argumento *breaks*, que es un vector numérico `c()` de puntos de ruptura. Utilizando `cut()`, la columna resultante es un factor ordenado. 
+
+Por defecto, la categorización se produce de manera que el lado derecho/superior es "abierto" e inclusivo (y el lado izquierdo/inferior es "cerrado" o exclusivo). Este es el comportamiento opuesto al de la función `age_categories()`. Las etiquetas por defecto utilizan la notación "(A, B]", lo que significa que A no está incluido pero B sí. **Invierte este comportamiento proporcionando el argumento right = TRUE**. 
+
+Así, por defecto, ¡los valores "0" se excluyen del grupo más bajo, y se categorizan como `NA`! Los valores "0" podrían ser codificados para los bebés como edad 0, así que ¡ten cuidado! Para cambiar esto, añade el argumento `include.lowest = TRUE`  para que cualquier valor "0" se incluya en el grupo más bajo. La etiqueta generada automáticamente para la categoría más baja será entonces "[A],B]". Ten en cuenta que si incluye el argumento `include.lowest = TRUE` **y** `right = TRUE`, la inclusión extrema se aplicará ahora al valor del punto de ruptura y a la categoría *más altos*, no a los más bajos. 
+
+Puedes proporcionar un vector de etiquetas personalizadas utilizando el argumento `labels = `. Como se escriben manualmente, ¡ten mucho cuidado de que sean precisas! Comprueba el trabajo utilizando una tabulación cruzada, como se describe a continuación. 
+
+A continuación se muestra un ejemplo de `cut()` aplicado a `age_years` para crear la nueva variable `age_cat`: 
+
+```{r}
+# Crear una nueva variable, cortando la variable numérica age
+# Se excluye el corte inferior pero se incluye el superior en cada categoría
+linelist <- linelist %>% 
+  mutate(
+    age_cat = cut(
+      age_years,
+      breaks = c(0, 5, 10, 15, 20,
+                 30, 50, 70, 100),
+      include.lowest = TRUE         # # incluye 0 en el grupo más bajo
+      ))
+
+# tabular el número de observaciones por grupo
+table(linelist$age_cat, useNA = "always")
+```
+
+
+**¡Comprueba tu trabajo!** Verifica que cada valor de edad fue asignado a la categoría correcta cruzando las columnas numéricas y de categoría. Examina la asignación de los valores límite (por ejemplo, 15, si las categorías vecinas son 10-15 y 16-20). 
+
+```{r}
+# Tabulación cruzada de las columnas numéricas y categóricas. 
+table("Numeric Values" = linelist$age_years,   # nombres especificados en la tabla para mayor claridad.
+      "Categories"     = linelist$age_cat,
+      useNA = "always")                        # no olvides examinar los valores NA
+```
+
+
+
+
+
+**Re-etiquetado de los valores `NA`** 
+
+Puedes asignar a los valores `NA` una etiqueta como "Missing". Como la nueva columna es del tipo Factor (valores restringidos), no puedes simplemente mutarla con `replace_na()`, ya que este valor será rechazado. En su lugar, utilice `fct_explicit_na()` de **forcats** como se explica en la página de [Factores](#factors).   
+
+```{r}
+linelist <- linelist %>% 
+  
+  # cut() crea age_cat, automáticamente de clase Factor           
+  mutate(age_cat = cut(
+    age_years,
+    breaks = c(0, 5, 10, 15, 20, 30, 50, 70, 100),          
+    right = FALSE,
+    include.lowest = TRUE,        
+    labels = c("0-4", "5-9", "10-14", "15-19", "20-29", "30-49", "50-69", "70-100")),
+         
+    # hacer explícitos los valores que faltan
+    age_cat = fct_explicit_na(
+      age_cat,
+      na_level = "Missing age")  # puedes especificar la etiqueta
+  )    
+
+# tabla para ver los recuentos
+table(linelist$age_cat, useNA = "always")
+```
+
+**Realiza rápidamente pausas y etiquetas** 
+
+Para una forma rápida de hacer rupturas y etiquetar vectores, utiliza algo como lo siguiente. Consulta la página de [fundamentos de R](#r-basics) para obtener referencias sobre `seq()` y `rep()`. 
+
+```{r, eval=F}
+# Crear puntos de ruptura de 0 a 90 por 5
+age_seq = seq(from = 0, to = 90, by = 5)
+age_seq
+
+# Crear etiquetas para las categorías anteriores, asumiendo la configuración por defecto de cut()
+age_labels = paste0(age_seq + 1, "-", age_seq + 5)
+age_labels
+
+# comprobar que ambos vectores tienen la misma longitud
+length(age_seq) == length(age_labels)
+```
+
+
+Lee más sobre `cut()` en la página de ayuda escribiendo `?cut` en la consola de R.  
+
+
+
+
+### Roturas cuartílicas  {.unnumbered}  
+
+En el entendimiento común, los "cuartiles" o "percentiles" suelen referirse a un valor por debajo del cual cae una proporción de valores. Por ejemplo, el percentil 95 de las edades en `linelist` sería la edad por debajo de la cual cae el 95% de las edades. 
+
+Sin embargo, en el lenguaje común, "cuartiles" y "deciles" también pueden referirse a los *grupos de datos* divididos por igual en 4 o 10 grupos (Ten en cuenta que habrá un punto de ruptura más que un grupo). 
+
+Para obtener los puntos de ruptura de los cuartiles, se puede utilizar `quantile()` del paquete **stats** de R **base.** Se proporciona un vector numérico (por ejemplo, una columna en unos datos) y un vector de valores de probabilidad numérica que van de 0 a 1,0. Los puntos de ruptura se devuelven como un vector numérico. Explore los detalles de las metodologías estadísticas escribiendo `?quantile.` 
+
+* Si el vector numérico de entrada tiene valores faltantes, es mejor establecer `na.rm = TRUE` 
+* Establecer `names = FALSE` para obtener un vector numérico sin nombre 
+
+```{r}
+quantile(linelist$age_years,               # especificar el vector numérico con el que se va a trabajar
+  probs = c(0, .25, .50, .75, .90, .95),   # especificar los percentiles deseados
+  na.rm = TRUE)                            # ignorar los valores perdidos 
+```
+
+Puedes utilizar los resultados de `quantile()` como puntos de ruptura en `age_categories()` o `cut()`. A continuación creamos una nueva columna `deciles` utilizando `cut()` donde los puntos de ruptura se definen utilizando `quantiles()` en `age_years`. A continuación, mostramos los resultados utilizando `tabyl()` de **janitor** para que puedas ver los porcentajes (véase la página de [tablas descriptivas](#descriptive-tables)). Observa cómo no son exactamente el 10% en cada grupo. 
+
+```{r}
+linelist %>%                                # comienza con linelist
+  mutate(deciles = cut(age_years,           # crea una nueva columna con deciles de la columna age_years
+    breaks = quantile(                      # define puntos de corte usando quantile()
+      age_years,                               # opera sobre age_years
+      probs = seq(0, 1, by = 0.1),             # 0.0 a 1.0 por 0.1
+      na.rm = TRUE),                           # ignora los valores perdidos
+    include.lowest = TRUE)) %>%             # para cut() incluye age 0
+  janitor::tabyl(deciles)                   # pipe para mostrar la tabla
+```
+
+### Grupos de tamaño uniforme  {.unnumbered}  
+
+Otra herramienta para hacer grupos numéricos es la función `ntile()` de **dplyr**, que intenta dividir los datos en n *grupos de tamaño uniforme -* pero ten en cuenta que, a diferencia de *quantile(),* el mismo valor podría aparecer en más de un grupo*.* Proporcione el vector numérico y luego el número de grupos. Los valores de la nueva columna creada son sólo "números" de grupo (por ejemplo, del 1 al 10), no el rango de valores en sí mismo como cuando se utiliza `cut()`. 
+
+```{r}
+# crea grupos con ntile()
+ntile_data <- linelist %>% 
+  mutate(even_groups = ntile(age_years, 10))
+
+# crea una tabla de recuentos y proporciones por grupo
+ntile_table <- ntile_data %>% 
+  janitor::tabyl(even_groups)
+  
+# adjunta los valores mínimo/máximo para demostrar los rangos
+ntile_ranges <- ntile_data %>% 
+  group_by(even_groups) %>% 
+  summarise(
+    min = min(age_years, na.rm=T),
+    max = max(age_years, na.rm=T)
+  )
+
+# combina e imprime - ten en cuenta que los valores están presentes en varios grupos
+left_join(ntile_table, ntile_ranges, by = "even_groups")
+```
+
+
+<!-- ======================================================= -->
+### `case_when()` { .unnumbered}
+
+Es posible utilizar la función `case_when()` de **dplyr** para crear categorías a partir de una columna numérica, pero es más fácil utilizar `age_categories()` de **epikit** o `cut()` porque éstas crearán un factor ordenado automáticamente. 
+
+Si utilizas `case_when()`, por favor, revise el uso adecuado como se ha descrito anteriormente en la sección Re-codificar valores de esta página. También Ten en cuenta que todos los valores del lado derecho deben ser del mismo tipo. Por lo tanto, si quiere `NA` en el lado derecho debes escribir "Missing" o utilizar el valor especial `NA_character_`. 
+
+
+### Añadir a la cadena de pipes {.unnumbered}  
+
+A continuación, se añade el código para crear dos columnas categóricas de edad a la cadena de pipes de limpieza: 
+
+```{r}
+# CADENA DE LIMPIEZA (comienza con los datos en bruto y enlaza con pipes los pasos de limpieza)
+################################################################################################
+
+# Comienza la cadena de pipes de limpieza
+#########################################
+linelist <- linelist_raw %>%
+    
+    # sintaxis para estandarizar los nombres de las columnas
+    janitor::clean_names() %>% 
+    
+    # renombrar manualmente las columnas
+           # Nombre NUEVO         # Nombre ANTIGUO
+    rename(date_infection       = infection_date,
+           date_hospitalisation = hosp_date,
+           date_outcome         = date_of_outcome) %>% 
+    
+    # eliminar columna
+    select(-c(row_num, merged_header, x28)) %>% 
+  
+    # de-duplicar
+    distinct() %>% 
+
+    # añadir columna
+    mutate(bmi = wt_kg / (ht_cm/100)^2) %>%     
+
+    # convertir el tipo de columnas
+    mutate(across(contains("date"), as.Date), 
+           generation = as.numeric(generation),
+           age        = as.numeric(age)) %>% 
+    
+    # añadir columna: retraso en la hospitalización
+    mutate(days_onset_hosp = as.numeric(date_hospitalisation - date_onset)) %>% 
+    
+    # limpiar los valores de la columna hospital
+    mutate(hospital = recode(hospital,
+                      # ANTIGUO = NUEVO
+                      "Mitylira Hopital"  = "Military Hospital",
+                      "Mitylira Hospital" = "Military Hospital",
+                      "Military Hopital"  = "Military Hospital",
+                      "Port Hopital"      = "Port Hospital",
+                      "Central Hopital"   = "Central Hospital",
+                      "other"             = "Other",
+                      "St. Marks Maternity Hopital (SMMH)" = "St. Mark's Maternity Hospital (SMMH)"
+                      )) %>% 
+    
+    mutate(hospital = replace_na(hospital, "Missing")) %>% 
+
+    # crear la columna age_years (A partir de age y age_unit)
+    mutate(age_years = case_when(
+          age_unit == "years" ~ age,
+          age_unit == "months" ~ age/12,
+          is.na(age_unit) ~ age)) %>% 
+  
+    # ARRIBA ESTÁN LOS PASOS DE LIMPIEZA YA DISCUTIDOS
+    ###################################################   
+    mutate(
+          # categorías de edad: personalizadas
+          age_cat = epikit::age_categories(age_years, breakers = c(0, 5, 10, 15, 20, 30, 50, 70)),
+        
+          # categorías de edad: 0 a 85 por 5s
+          age_cat5 = epikit::age_categories(age_years, breakers = seq(0, 85, 5)))
+```
+
+
+
+
+
+
+
+
+<!-- ======================================================= -->
+## Añadir filas {#add-rows}
+
+### Uno a uno  {.unnumbered}  
+
+Añadir filas una a una manualmente es tedioso pero puede hacerse con `add_row()` de **dplyr**. Recuerda que cada columna debe contener valores de un solo tipo (ya sea carácter, numérico, lógico, etc.). Así que añadir una fila requiere matizar para mantener esto. 
+
+```{r, eval=F}
+linelist <- linelist %>% 
+  add_row(row_num = 666,
+          case_id = "abc",
+          generation = 4,
+          `infection date` = as.Date("2020-10-10"),
+          .before = 2)
+```
+
+Utiliza `.before` y `.after`. para especificar la ubicación de la fila que deseas añadir. `.before = 3` pondrá la nueva fila antes de la tercera fila actual. El comportamiento por defecto es añadir la fila al final. Las columnas no especificadas se dejarán vacías (`NA`). 
+
+El nuevo *número de fila* puede parecer extraño ("...23") pero los números de fila de las filas preexistentes *han* cambiado. Por lo tanto, si utiliza el comando dos veces, examine/pruebe la inserción cuidadosamente. 
+
+Si uno de los tipos que proporcionas está desactivado, verás un error como este: 
+
+```
+Error: Can't combine ..1$infection date <date> and ..2$infection date <character>.
+```
+
+(al insertar una fila con un valor de fecha, recuerde envolver la fecha en la función `as.Date()` como `as.Date("2020-10-10")`). 
+
+
+### Unir filas  {.unnumbered}  
+
+Para combinar conjuntos de datos uniendo las filas de un dataframe al final de otro dataframe, puedes utilizar `bind_rows()` de **dplyr**. Esto se explica con más detalle en la página [Unir datos](#joining-data).
+
+
+
+
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+## Filtrar filas  {#filter-rows}
+
+
+Un paso típico de limpieza después de haber limpiado las columnas y recodificado los valores es *filtrar* el dataframe para filas específicas usando el verbo **dplyr** `filter()`. 
+
+Dentro de `filter()`, especifique la lógica que debe ser `TRUE` para que se mantenga una fila en los datos. A continuación, mostramos cómo filtrar filas basándose en condiciones lógicas simples y complejas.  
+
+
+
+<!-- ======================================================= -->
+### Filtro simple  {.unnumbered} 
+
+Este sencillo ejemplo redefine el dataframe `linelist` en sí mismo, habiendo filtrado las filas para que cumplan una condición lógica. **Sólo se conservan las filas en las que la declaración lógica dentro de los paréntesis se evalúa como TRUE.** 
+
+En este ejemplo, la sentencia lógica es `gender == "f"`, que pregunta si el valor de la columna `gender` es igual a "f" (distingue entre mayúsculas y minúsculas). 
+
+Antes de aplicar el filtro, el número de filas de `linelist` es ` nrow(linelist)`. 
+
+```{r, eval=F}
+linelist <- linelist %>% 
+  filter(gender == "f")   # mantener sólo las filas en las que gender es igual a "f"
+```
+
+Después de aplicar el filtro, el número de filas de `linelist` is ` linelist %>% filter(gender == "f") %>% nrow()`. 
+
+
+### Filtrar los valores faltantes  {.unnumbered}  
+
+Es bastante común querer filtrar las filas que tienen valores faltantes. Resiste la tentación de escribir `filter(!is.na(column) & !is.na(column))` y utiliza en su lugar la función de tidyr que está hecha a medida para este propósito: drop_na(). Si se ejecuta con paréntesis vacíos, elimina las filas con *cualquier* valor que falte. Como alternativa, puedes proporcionar los nombres de las columnas específicas que deben evaluarse para comprobar si faltan, o utilizar las funciones de ayuda "tidyselect" descritas [anteriormente](#clean_tidyselect).  
+
+```{r, eval=F}
+linelist %>% 
+  drop_na(case_id, age_years)  # eliminar las filas con valores perdidos para case_id o age_years
+```
+
+Consulta la página sobre [Valores faltantes](#missing-data) para conocer muchas técnicas para analizar y gestionar los datos ausentes. 
+
+
+
+
+### Filtrar por número de fila  {.unnumbered}  
+
+En un dataframe o tibble, cada fila suele tener un "número de fila" que (cuando se ve en R Viewer) aparece a la izquierda de la primera columna. No es en sí misma una columna real en los datos, pero puede utilizarse en una sentencia `filter()`. 
+
+Para filtrar en base al "número de fila", puedes utilizar la función `row_number()` de **dplyr** con paréntesis abiertos como parte de una sentencia lógica de filtrado. A menudo se utiliza el operador `%in%` y un rango de números como parte de esa sentencia lógica, como se muestra a continuación. Para ver las *primeras* N filas, también puedes utilizar la función especial `head()` de **dplyr**.  
+
+```{r, eval=F}
+# Ver las 100 primeras filas
+linelist %>% head(100)     #  o usar tail() para ver las n últimas filas
+
+# Mostrar sólo la fila 5
+linelist %>% filter(row_number() == 5)
+
+# Ver las filas 2 a 20, y sólo tres columnas específicas
+linelist %>% filter(row_number() %in% 2:20) %>% select(date_onset, outcome, age)
+```
+
+También puedes convertir los números de fila en una verdadera columna pasando su dataframe a la función `rownames_to_column()` de **tibble** (no escribas nada en los paréntesis). 
+
+
+<!-- ======================================================= -->
+### Filtro complejo  {.unnumbered} 
+
+Se pueden construir sentencias lógicas más complejas utilizando paréntesis `( )`, OR `|`, negación `!` , `%in%`, y operadores AND `&`. Un ejemplo es el siguiente: 
+
+Nota: Puedes utilizar el operador `!` delante de un criterio lógico para negarlo. Por ejemplo, `!is.na(column)` se evalúa como verdadero si el valor de la columna *no* falta. Del mismo modo, `!column %in% c("a", "b", "c")` es verdadero si el valor de la columna *no está* en el vector.  
+
+
+#### Examinar los datos  {.unnumbered}  
+
+A continuación, se muestra un sencillo comando de una línea para crear un histograma de las fechas de inicio. Vea que un segundo brote más pequeño de 2012-2013 también está incluido en este conjunto de datos sin procesar. **Para nuestros análisis, queremos eliminar las entradas de este brote anterior.**  
+
+```{r, out.width = "50%"}
+hist(linelist$date_onset, breaks = 50)
+```
+
+
+#### ¿Cómo manejan los filtros los valores numéricos y de fecha que faltan? {.unnumbered}  
+ 
+¿Podemos simplemente filtrar por `date_onset` a las filas posteriores a junio de 2013? **Precaución. La aplicación del código `filter(date_onset > as.Date("2013-06-01"))` eliminaría todas las filas de la epidemia posterior con una fecha de inicio ausente!** 
+
+<span style="color: red;">***PELIGRO:*** Filtrar a mayor que (>) o menor que (<) una fecha o número puede eliminar cualquier fila con valores faltantes (`NA`). Esto se debe a que `NA` es tratado como infinitamente grande y pequeño. </span>
+
+*(Consulta la página sobre el [trabajando con fechas](#working-with-dates) para obtener más información sobre el trabajo con fechas y el paquete **lubridate**)* 
+
+#### Diseñar el filtro {.unnumbered}  
+
+Examina una tabulación cruzada para asegurarte de que excluimos sólo las filas correctas:  
+
+
+```{r}
+table(Hospital  = linelist$hospital,                     # nombre del hospital
+      YearOnset = lubridate::year(linelist$date_onset),  # año de date_onset
+      useNA     = "always")                              # mostrar los valores perdidos
+```
+
+¿Qué otros criterios podemos filtrar para eliminar el primer brote (en 2012 y 2013) de los datos? Vemos que: 
+
+* La primera epidemia en 2012 y 2013 ocurrió en el Hospital A, el Hospital B, y que también hubo 10 casos en el Hospital del Puerto. 
+* Los hospitales A y B *no* tuvieron casos en la segunda epidemia, pero Port Hospital sí. 
+
+Queremos excluir: 
+
+* Las filas con inicio en 2012 y 2013 en cualquiera de los hospitales A, B o Port `nrow(linelist %>% filter(hospital %in% c("Hospital A", "Hospital B") | date_onset < as.Date("2013-06-01")))` :  
+  * Excluir `nrow(linelist %>% filter(date_onset < as.Date("2013-06-01")))` filas con inicio en 2012 y 2013   * Excluir `nrow(linelist %>% filter(hospital %in% c('Hospital A', 'Hospital B') & is.na(date_onset)))` filas de los hospitales A y B con fechas de inicio ausentes  
+  * **No** excluir `nrow(linelist %>% filter(!hospital %in% c('Hospital A', 'Hospital B') & is.na(date_onset)))` otras filas con fechas de inicio ausentes. 
+
+Comenzamos con un listado de `nrow(linelist)`. Aquí está nuestro filtro: 
+
+```{r}
+linelist <- linelist %>% 
+  # conservar las filas donde el inicio sea posterior al 1 de junio de 2013 O en las que falte el inicio y se trate de un hospital distinto del Hospital A o B
+  filter(date_onset > as.Date("2013-06-01") | (is.na(date_onset) & !hospital %in% c("Hospital A", "Hospital B")))
+
+nrow(linelist)
+```
+
+Cuando volvemos a hacer la tabulación cruzada, vemos que los hospitales A y B se eliminan por completo, y los 10 casos del Port Hospital de 2012 y 2013 se eliminan, y todos los demás valores son los mismos, tal y como queríamos. 
+ 
+```{r}
+table(Hospital  = linelist$hospital,                     # nombre del hospital
+      YearOnset = lubridate::year(linelist$date_onset),  # año de date_onset
+      useNA     = "always")                              # mostrar los valores perdidos
+```
+
+Se pueden incluir varias sentencias dentro de un comando de filtrado (separadas por comas), o siempre se puede canalizar a un comando `filter()` separado para mayor claridad. 
+
+*Nota: algunos lectores pueden notar que sería más fácil filtrar sólo por date_hospitalisation porque es 100% completo sin valores faltantes. Esto es cierto. Pero date_onset se utiliza para demostrar un filtro complejo.* 
+
+
+
+
+### Independiente  {.unnumbered}  
+
+El filtrado también puede realizarse como un comando independiente (no como parte de una cadena de pipes). Como otros verbos de **dplyr**, en este caso el primer argumento debe ser el propio conjunto de datos.   
+
+```{r, eval=F}
+# dataframe <- filter(dataframe, condición(es) para las filas a conservar)
+
+linelist <- filter(linelist, !is.na(case_id))
+```
+
+También puedes utilizar R **base** para hacer un subconjunto utilizando corchetes que reflejen las [filas, columnas] que deseas conservar.  
+
+```{r, eval=F}
+# dataframe <- dataframe[condiciones para filas, condiciones para columnas] (en blanco significa todas)
+
+linelist <- linelist[!is.na(case_id), ]
+```
+
+
+
+
+
+### Revisar rápidamente los registros  {.unnumbered} 
+
+A menudo se quiere revisar rápidamente unos pocos registros, para sólo unas pocas columnas. La función View() de R **base** imprimirá un dataframe para su visualización en su RStudio. 
+
+Mira el listado en RStudio: 
+
+```{r, eval=F}
+View(linelist)
+```
+
+Aquí hay dos ejemplos de visualización de celdas específicas (filas específicas y columnas específicas): 
+
+**Con las funciones `filter()` y `select()` de dplyr :**
+
+Dentro de `View()`, canaliza los datos a `filter()` para mantener ciertas filas, y luego a `select()` para mantener ciertas columnas. Por ejemplo, para revisar las fechas de inicio y hospitalización de 3 casos específicos: 
+
+```{r, eval=F}
+View(linelist %>%
+       filter(case_id %in% c("11f8ea", "76b97a", "47a5f5")) %>%
+       select(date_onset, date_hospitalisation))
+```
+
+
+Puedes lograr lo mismo con la sintaxis de R **base**, utilizando los corchetes `[ ]` para el subconjunto que deseas ver. 
+
+```{r, eval=F}
+View(linelist[linelist$case_id %in% c("11f8ea", "76b97a", "47a5f5"), c("date_onset", "date_hospitalisation")])
+```
+
+
+
+
+
+#### Añadir a la cadena de pipes  {.unnumbered}  
+
+
+```{r}
+# CADENA DE LIMPIEZA (comienza con los datos en bruto y enlaza con pipes los pasos de limpieza)
+################################################################################################
+
+# Comienza la cadena de pipes de limpieza
+#########################################
+linelist <- linelist_raw %>%
+    
+    # sintaxis para estandarizar los nombres de las columnas
+    janitor::clean_names() %>% 
+    
+    # renombrar manualmente las columnas
+           # Nombre NUEVO         # Nombre ANTIGUO
+    rename(date_infection       = infection_date,
+           date_hospitalisation = hosp_date,
+           date_outcome         = date_of_outcome) %>% 
+    
+    # eliminar columna
+    select(-c(row_num, merged_header, x28)) %>% 
+  
+    # de-duplicar
+    distinct() %>% 
+
+    # añadir columna
+    mutate(bmi = wt_kg / (ht_cm/100)^2) %>%     
+
+    # convertir el tipo de columnas
+    mutate(across(contains("date"), as.Date), 
+           generation = as.numeric(generation),
+           age        = as.numeric(age)) %>% 
+    
+    # añadir columna: retraso en la hospitalización
+    mutate(days_onset_hosp = as.numeric(date_hospitalisation - date_onset)) %>% 
+    
+    # limpiar los valores de la columna hospital
+    mutate(hospital = recode(hospital,
+                      # OLD = NEW
+                      "Mitylira Hopital"  = "Military Hospital",
+                      "Mitylira Hospital" = "Military Hospital",
+                      "Military Hopital"  = "Military Hospital",
+                      "Port Hopital"      = "Port Hospital",
+                      "Central Hopital"   = "Central Hospital",
+                      "other"             = "Other",
+                      "St. Marks Maternity Hopital (SMMH)" = "St. Mark's Maternity Hospital (SMMH)"
+                      )) %>% 
+    
+    mutate(hospital = replace_na(hospital, "Missing")) %>% 
+
+    # crear la columna age_years (A partir de age y age_unit)
+    mutate(age_years = case_when(
+          age_unit == "years" ~ age,
+          age_unit == "months" ~ age/12,
+          is.na(age_unit) ~ age)) %>% 
+  
+    mutate(
+          # categorías de edad: personalizada
+          age_cat = epikit::age_categories(age_years, breakers = c(0, 5, 10, 15, 20, 30, 50, 70)),
+        
+          # categorías de edad: 0 a 85 por 5s
+          age_cat5 = epikit::age_categories(age_years, breakers = seq(0, 85, 5))) %>% 
+    
+   # ARRIBA ESTÁN LOS PASOS DE LIMPIEZA YA DISCUTIDOS
+   ###################################################
+    filter(
+          # mantener sólo las filas en las que no falta case_id
+          !is.na(case_id),  
+          
+          # también filtrar para mantener sólo el segundo brote
+          date_onset > as.Date("2013-06-01") | (is.na(date_onset) & !hospital %in% c("Hospital A", "Hospital B")))
+```
+
+
+
+
+
+
+
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+## Cálculos por filas   {#row-wise-calculations}
+
+Si deseas realizar un cálculo dentro de una fila, puedes utilizar `rowwise()` de **dplyr**. Consulta esta viñeta en línea sobre los cálculos [por filas](https://cran.r-project.org/web/packages/dplyr/vignettes/rowwise.html). Por ejemplo, este código aplica `rowwise()` y luego crea una nueva columna que suma el número de las columnas de síntomas especificadas que tienen valor "yes", para cada fila Las columnas se especifican dentro de `sum()` por su nombre dentro de un vector `c()`. `rowwise()` es esencialmente un tipo especial de `group_by()`, por lo que es mejor utilizar `ungroup()` cuando hayas terminado (página sobre [Agrupar datos](#grouping-data)). 
+
+```{r,}
+linelist %>%
+  rowwise() %>%
+  mutate(num_symptoms = sum(c(fever, chills, cough, aches, vomit) == "yes")) %>% 
+  ungroup() %>% 
+  select(fever, chills, cough, aches, vomit, num_symptoms) # for display
+```
+
+  
+Al especificar la columna a evaluar, puedes utilizar las funciones de ayuda "tidyselect" descritas en la sección `select()` de esta página. Sólo tiene que hacer un ajuste (porque no las está utilizando dentro de una función **de dplyr** como `select()` o `summarise()`). 
+
+Especifica los criterios de la columna dentro de la función `c_across()` de **dplyr**. Esto se debe a que c_across ([documentación](https://dplyr.tidyverse.org/reference/c_across.html)) está diseñada para trabajar con `rowwise()` específicamente. Por ejemplo, el siguiente código: 
+
+* Utiliza `rowwise()` para que la siguiente operación (`sum()`) se aplique dentro de cada fila (no sumando columnas enteras) 
+* Crea una nueva columna `num_NA_dates`, definida para cada fila como el número de columnas (con nombre que contiene "date") para las que `is.na()` se evaluó como TRUE (son valores faltantes). 
+* `ungroup()` para eliminar los efectos de `rowwise()` en los pasos siguientes  
+
+```{r,}
+linelist %>%
+  rowwise() %>%
+  mutate(num_NA_dates = sum(is.na(c_across(contains("date"))))) %>% 
+  ungroup() %>% 
+  select(num_NA_dates, contains("date")) # for display
+```
+
+También podrías proporcionar otras funciones, como `max()` para obtener la fecha más reciente o más reciente de cada fila:  
+
+```{r}
+linelist %>%
+  rowwise() %>%
+  mutate(latest_date = max(c_across(contains("date")), na.rm=T)) %>% 
+  ungroup() %>% 
+  select(latest_date, contains("date"))  # for display
+```
+
+
+## Ordenar y clasificar {#arrange-and-sort}
+
+Utiliza la función arrange() de **dplyr** para ordenar las filas por los valores de las columnas. 
+
+Lista las columnas en el orden en que deben ser ordenadas. Especifica `.by_group = TRUE` si deseas que la ordenación se realice primero por cualquier *agrupación* aplicada a los datos (véase la página sobre [Agrupar datos](#grouping-data)). 
+
+Por defecto, la columna se ordenará en orden "ascendente" (que se aplica a las columnas numéricas y también a las de caracteres). Puedes ordenar una variable en orden "descendente" envolviéndola con `desc()`. 
+
+La ordenación de los datos con `arrange()` es particularmente útil cuando se hacen [Tablas para presentaciones](#tables-for-presentation), utilizando `slice()` para tomar las filas "superiores" por grupo, o estableciendo el orden de los niveles de los factores por orden de aparición. 
+
+Por ejemplo, para ordenar las filas de nuestro `linelist` por `hospital` y luego por `date_onset` (fecha de inicio) en orden descendente, utilizaríamos:  
+
+```{r, eval=F}
+linelist %>% 
+   arrange(hospital, desc(date_onset))
+```
+
+
+```{r, echo=F}
+# OCULTO
+#
+# convierte las filas del resto de brotes en valores perdidos para facilitarlo
+linelist <- linelist %>% 
+  mutate(
+    date_hospitalisation = case_when(
+      date_hospitalisation < as.Date("2013-01-01") ~ as.Date(NA),
+      TRUE                                         ~ date_hospitalisation),
+    date_outcome = case_when(
+      date_outcome < as.Date("2013-01-01") ~ as.Date(NA),
+      TRUE                                 ~ date_outcome)
+    )
+
+#min(linelist$date_hospitalisation, na.rm=T)
+#min(linelist$date_outcome, na.rm=T)
+```
+
+
+
+```{r echo=F}
+# REORDENAR LAS COLUMNAS PARA LA EXPORTACIÓN
+linelist <- linelist %>% 
+  select(case_id:gender, age, age_unit, age_years, age_cat, age_cat5, everything())
+```
+
+```{r echo=F}
+# EXPORTAR EL ARCHIVO LINELIST LIMPIO A LA CARPETA "DATA"
+#jfmont rio::export(linelist, here::here("data", "case_linelists", "linelist_cleaned.xlsx"))
+rio::export(linelist, here::here("data", "case_linelists", "linelist_cleaned.rds"))
+```

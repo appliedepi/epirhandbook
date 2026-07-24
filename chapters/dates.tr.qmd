@@ -1,0 +1,704 @@
+---
+aliases:
+  - /new_pages/dates.tr.html
+---
+
+# Tarihlerle çalışma {}
+
+
+```{r, out.width=c('50%'), fig.align='center', echo=F, message=F}
+knitr::include_graphics(here::here("images", "Dates_500x500.png"))
+```
+
+
+R'da tarihlerle çalışmak, diğer nesne sınıflarıyla kıyasla daha fazla dikkat etmeyi gerektirmektedir. Aşağıda, bu süreci daha az acı verici hale getirmek için bazı araçlar ve örnekler sunacağız Neyse ki, tarihler pratikle ve **lubridate** gibi bir dizi yardımcı paketle kolayca yönetilebilir.
+
+Ham veriler içe aktarıldığında R genellikle tarihleri karakter nesneleri olarak yorumlamaktadır - bu, zaman serilerini hazırlamak ve zaman aralıklarını hesaplamak gibi genel tarih işlemleri için kullanılamayacakları anlamına gelmektedir. İşleri daha da zorlaştırmak adına, bir tarihin biçimlendirilmesinin birden çok yolu vardır ve bunun için R'ın bir tarihin hangi bölümünün neyi temsil ettiğini (ay, gün, saat, vb.) bilmesine yardımcı olmalısınız. 
+
+R'daki tarihler özgün nesne sınıflarıdır - 'Date' sınıfı. Bu sınıf ayrıca gün *ve* saat nesnelerini saklayan bir sınıftır. Tarih, saat nesneleri resmi olarak 'POSIXt', 'POSIXct' ve/veya 'POSIXlt' sınıfları olarak adlandırılır (aralarındaki fark önemli değildir). Bu nesnelere gayri resmi olarak *datetime* sınıfları denir.
+
+* Bir sütun tarih içerdiğinde R'nin bunu tanımasını sağlamak önemlidir.  
+* Tarihler bir nesne sınıfıdır ve üzerinde çalışmak zor olabilir.
+* Burada tarih sütunlarını Date sınıfına dönüştürmenin birkaç yolunu sunuyoruz. 
+
+
+<!-- ======================================================= -->
+## Hazırlık
+
+### Paketleri yüklemek {.unnumbered}  
+
+Aşağıdaki kod parçası, bu sayfa için gerekli olan paketlerin yüklenmesini göstermektedir. Bu el kitabında, gerekirse paketi kuran *ve* kullanım için yükleyen **pacman**'dan `p_load()` fonksiyonuna vurgulamaktayız. **base** R'dan `library()` ile kurulu paketleri de yükleyebilirsiniz. R paketleri hakkında daha fazla bilgi için [R basics](basics.tr.qmd) sayfasına bakınız. 
+
+```{r dates_packages, warning=F, message=F}
+# Paketin kurulu olup olmadığını kontrol eder, gerekirse kurar ve mevcut oturum için paketi yükler
+
+pacman::p_load(
+  lubridate,  # tarihlerin işlenmesi ve dönüştürülmesi için genel paket 
+  parsedate,   # dağınık tarihleri "tahmin etme" işlevi sağlar
+  aweek,      # tarihleri haftalara ve haftaları tarihe dönüştürmek için alternatif bir seçenek
+  zoo,        # ek tarih/saat işlevleri
+  here,       # dosya yönetimi
+  tidyverse,  # veri yönetimi ve görselleştirme 
+  rio)        # veri içe/dışa aktarma
+```
+
+### Verileri içe aktarma {.unnumbered}  
+
+Simüle edilmiş bir Ebola salgını ile ilişkili vakaların veri setini içe aktarıyoruz. Adım adım izlenecek verileri indirmek istiyorsanız, [El kitabını ve verileri indir](data_used.tr.qmd) sayfasındaki talimatlara bakınız. İlgili dosyaların çalışma dizininde olduğunu varsayıyoruz, bu nedenle bu dosya yolunda hiçbir alt klasör belirtilmemiştir.
+
+```{r,  echo=F}
+linelist <- rio::import(here::here("data", "case_linelists", "linelist_cleaned.rds"))
+
+```
+
+```{r, eval=F}
+linelist <- import("linelist_cleaned.xlsx")
+
+```
+
+
+
+<!-- ======================================================= -->
+## Güncel tarih
+
+**base** R ile aşağıdaki işlemleri tamamlayarak bilgisayarınızın güncel "sistem" tarihini veya sistem tarih saatini görebilirsiniz. 
+
+```{r}
+# sistem tarihini al - bu bir DATE sınıfıdır
+Sys.Date()
+
+# sistem saatini al - bu bir DATETIME sınıfıdır
+Sys.time()
+```
+
+
+**lubridate** paketi ile bu fonksiyonlar, sırasıyla 'today()' ve 'now()' ile de elde edilebilir. `date()`, haftanın günü ve ay adlarıyla birlikte geçerli tarih ve saati vermektedir.  
+  
+  
+
+<!-- ======================================================= -->
+## Tarihe Dönüştürme 
+
+Bir veri kümesini R'a aktardıktan sonra, tarih sütunu değerleri "1989/12/30", "05/06/2014" veya "13 Ocak 2020" gibi görünebilir. Bu durumlarda, R muhtemelen bu değerleri hala karakter değerleri olarak ele alıyordur. R'a bu değerlerin tarih olduğu *söylenmelidir* - tarih formatının ne olduğu (hangi kısım Gün, hangisi Ay, hangisi Yıl vb.). 
+
+Gerekli formatlar tanımlandığında, R bu değerleri Date sınıfına dönüştürür. Arka planda R, tarihleri sayı olarak saklayacaktır ("başlangıç" tarihi 1 Ocak 1970'den itibaren gün sayısı). Tarih numarasını büyük bir ihtimalle arayüzde ve hesaplamalarda kullanmayacaksınız, ancak bu, R'ın tarihleri sürekli değişkenler olarak ele almasına ve tarihler arasındaki mesafeyi hesaplama gibi özel işlemlerde kullanmasına izin verir.  
+
+Varsayılan olarak, R'daki Date sınıfının değerleri YYYY-AA-GG olarak görüntülenmektedir. Bu bölümün ilerleyen kısımlarında, tarih değerlerinin görüntüsünün nasıl değiştirilebileceğini paylaşacağız
+
+Aşağıda, bir sütunu karakter değerlerinden Date sınıfına dönüştürmek için iki yaklaşım sunmaktayız. 
+
+
+<span style="color: darkgreen;">**_İPUCU:_** Bir sütunun geçerli sınıfını **base** R fonksiyonu olan `class()` ile kontrol edebilirsiniz, örneğin `class(linelist$date_onset)`.</span>  
+
+  
+
+### **base** R {.unnumbered}  
+
+`as.Date()`, bir nesneyi veya sütunu Date sınıfına dönüştürmek için standart, **temel** R fonksiyonudur. ("D" harfinin büyük harf kullanımına dikkat ediniz).  
+
+`as.Date()` kullanımı aşağıdaki koşulları içermektedir:  
+
+* Ham karakter tarihinin **mevcut** formatını veya tarihleri sayı olarak veriyorsanız *başlangıç tarihini* belirtirmelisiniz (Excel tarihleriyle ilgili bölüme bakınız)  
+* Eğer bir karakter sütununda kullanılıyorsa, tüm tarih değerleri aynı formata sahip olmalıdır (eğer durum böyle değilse, **parsedate** paketinden `parse_date()` deneyebilirsiniz)
+
+**İlk olarak**, sütununuzun sınıfını **base** R'den `class()` fonksiyonu ile kontrol edin. Verilerinizin sınıfı hakkında emin değilseniz veya kafanız karıştıysa (örneğin, "POSIXct" vs. görüyorsanız) ilk adım olarak formatı sıfırlamak kolay bir strateji olabilir. Bunun için sütunu `as.character()` fonksiyonu ile Karakter sınıfına ve ardından onu Date sınıfına dönüştürebilirsiniz. 
+
+**İkinci olarak**, 'as.Date()' fonksiyonu içinde, R'a karakter tarih bileşenlerinin *geçerli* biçimini - hangi karakterlerin ay, gün ve yılı ifade ettiğini ve bunların nasıl ayrıldığını belirtmek için 'format =' bağımsız değişkenini kullanabilirsiniz. Değerleriniz zaten R'ın standart tarih biçimlerinden ("YYYY-AA-GG" veya "YYYY/AA/GG") biriyse, "format =" bağımsız değişkeni gerekli değildir.
+
+`format =` için, aşağıdaki özel "strptime" kısaltmalarını kullanarak *geçerli* tarih biçimini temsil eden bir karakter dizisi (tırnak içinde) sağlamalısınız. Örneğin, karakter tarihleriniz şu anda "24/04/1968" gibi "GG/AA/YYYY" biçimindeyse, o zaman karakteri dönüştürmek için `format = "%d/%m/%Y"` kullanabilirsiniz. İlgili değerler tarihlere dönüştürülecektir. **Formatı tırnak içine almanız gerekmektedir. Eğik çizgi veya kısa çizgileri de eklemeyi unutmayın!**
+
+```{r eval=F}
+# Date sınıfına çevir
+linelist <- linelist %>% 
+  mutate(date_onset = as.Date(date_of_onset, format = "%d/%m/%Y"))
+```
+
+strptime kısaltmalarının çoğu aşağıda listelenmiştir. `?strptime` komutunu çalıştırarak tam listeyi görebilirsiniz.
+
+%d = Aydaki gün (5, 17, 28, vb.)  
+%j = Yıl-gün numarası (Julian günü 001-366)  
+%a = Kısaltılmış gün (Pt, sa, Çar, vb.)  
+%A = Tam gün (Pazartesi, Salı, vb.)
+%w = Gün sırası (0-6, Pazar 0'dır)  
+%u = Gün sırası (1-7, Pazartesi 1'dir)  
+%W = Hafta sırası (00-53, Pazartesi haftanın ilk günüdür)  
+%U = Hafta sırası (01-53, Pazar haftanın ilk günüdür)  
+%m = Ay sırası (örn. 01, 02, 03, 04)  
+%b = Kısaltılmış ay (Oca, Şub, vb.)  
+%B = Tam ay (Ocak, Şubat, vb.)  
+%y = 2-basamak yıl  (örn. 89)  
+%Y = 4-basamak yıl  (örn. 1989)  
+%h = saat (24-saat)  
+%m = dakika  
+%s = saniye
+%z = GMT farkı
+%Z = Saat dilimi (karakter)  
+
+<span style="color: darkgreen;">**_İPUCU:_** 'as.Date()' fonksiyonun 'format =' argümanı, R'a tarihlerin olmasını istediğiniz biçimi *söylemez*, bunun yerine tarih bölümlerini siz komutu çalıştırmadan *önce* oldukları gibi nasıl tanımlayacağınızı söyler.</span>  
+
+<span style="color: darkgreen;">**_İPUCU:_** "format =" bağımsız değişkeninde tarihlerinizde bulunan *tarih-ayracı* (ör. /, - veya boşluk) kullandığınızdan emin olun.</span>  
+
+Değerler Date sınıfında olduğunda, R varsayılan olarak bunları YYYY-AA-GG olan standart biçimde görüntüler.
+
+
+
+### **lubridate** {.unnumbered}  
+
+**lubridate** paketi kullanılarak karakter nesnelerinin tarihlere dönüştürülmesi daha kolay hale getirilebilir. Bu, tarih ve saatlerle çalışmayı **base** R'dan daha basit ve tutarlı hale getirmek için tasarlanmış bir **tidyverse** paketidir. **lubridate** genellikle tarihler ve saatler için altın standart paket olarak kabul edilmektedir. Tarih hesaplamalarında bu paketle çalışmanızı tavsiye etmekteyiz.
+
+**lubridate** paketi, karakter nesnelerini 'as.Date()' biçiminde belirtmekten daha kolaydır. Paket tarihleri dönüştürmek için tasarlanmış birkaç farklı yardımcı fonksiyon sağlamaktadır. Bu fonksiyonlar çoğunlukla, kaba tarih biçimine özgüdür. Ancak tarihler için çeşitli ayırıcılara ve eş anlamlı tabirlerin kullanılmasına izin verir (ör. 01 - Oca - Ocak) - bunlar, tarih biçimlerinin kısaltmalarından sonra tanımlanır.
+
+
+```{r, }
+# lubridate paketini indirip/yükler 
+pacman::p_load(lubridate)
+```
+
+'ymd()' fonksiyonu, **yıl, sonra ay, sonra gün** olarak sağlanan tarih değerlerini esnek bir şekilde dönüştürür.
+
+```{r}
+# tarihi yıl-ay-gün biçiminde okur
+ymd("2020-10-11")
+ymd("20201011")
+```
+
+`mdy()` fonksiyonu, **ay, sonra gün, sonra yıl** olarak sağlanan tarih değerlerini esnek bir şekilde dönüştürür.  
+
+```{r}
+# tarihi ay-gün-yıl biçiminde okur
+mdy("10/11/2020")
+mdy("Oct 11 20")
+```
+
+`dmy()` fonksiyonu, **gün, sonra ay, sonra yıl** olarak sağlanan tarih değerlerini esnek bir şekilde dönüştürür.
+
+```{r}
+# tarihi gün-ay-yıl biçiminde okur
+dmy("11 10 2020")
+dmy("11 October 2020")
+```
+
+<!-- The `as.character()` and `as.Date()` commands can optionally be combined as:   -->
+
+<!-- ```{r eval=F} -->
+<!-- linelist_cleaned$date_of_onset <- as.Date(as.character(linelist_cleaned$date_of_onset), format = "%d/%m/%Y") -->
+<!-- ``` -->
+
+Tünelleme kullanılıyorsa, bir karakter sütununun **lubridate** ile tarihlere dönüştürülmesi şöyle görünebilir:
+
+```{r, eval=F}
+linelist <- linelist %>%
+  mutate(date_onset = lubridate::dmy(date_onset))
+```
+
+İşlemler tamamlandığında, sütunun sınıfını doğrulamak için `class()` komutunu çalıştırabilirsiniz.
+
+```{r, eval=F}
+# Sütunun sınıfını kontrol edin
+class(linelist$date_onset)  
+```
+
+
+Değerler Date sınıfında olduğunda, R varsayılan olarak bunları YYYY-AA-GG olan standart biçimde görüntüler. 
+
+Yukarıdaki fonksiyonların 4 basamaklı yıllarda en verimli şekilde çalıştığını unutmayın. **lubridate** yüzyılı tahmin etmeye çalıştığı için 2 basamaklı yıllar beklenmedik sonuçlar üretebilmektedir.
+
+2 basamaklı bir yılı 4 basamaklı bir yıla dönüştürmek için (tümü aynı yüzyılda) sınıf karakterine dönüştürebilir ve ardından **stringr** paketinden (bkz. [Karakterler ve dizeler](characters_strings.tr.qmd)) `str_glue()` fonksiyonu kullanarak mevcut rakamları bir ön ek ile birleştirebilirsiniz. Ardından tarihe dönüştürebilirsiniz.
+
+```{r}
+two_digit_years <- c("15", "15", "16", "17")
+str_glue("20{two_digit_years}")
+```
+
+
+
+### Sütunları birleştirme {.unnumbered}  
+
+Birden çok sütunu tek bir tarih sütununda birleştirmek için `make_date()` ve `make_datetime()` **lubridate** fonksiyonlarını kullanabilirsiniz. Örneğin, "linelist" veri formatında `onset_day`, `onset_month` ve `onset_year` sütunlarınız mevcutsa: 
+
+```{r, eval=F}
+linelist <- linelist %>% 
+  mutate(onset_date = make_date(year = onset_year, month = onset_month, day = onset_day))
+```
+
+
+
+
+<!-- ======================================================= -->
+## Excel tarihleri
+
+Arka planda, çoğu yazılım, tarihleri sayı olarak kaydeder. R 1 Ocak 1970 tarihini başlangıç tarihi olarak ele almaktadır. Bu nedenle, `as.numeric(as.Date("1970-01-01))` komutunu çalıştırırsanız `0` sonucunu elde edersiniz.
+
+Microsoft Excel, işletim sisteminize bağlı olarak 30 Aralık 1899 (Windows) veya 1 Ocak 1904 (Mac) tarihleri başlangıç tarihi olarak depolamaktadır. Detaylar için [Microsoft rehberini](https://docs.microsoft.com/en-us/office/troubleshoot/excel/1900-and-1904-date-system) inceleyebilirsiniz.  
+
+Excel tarihleri genellikle R'a karakter yerine sayısal değerler olarak aktarılmaktadır. Excel'den içe aktardığınız veri kümesi, tarihleri sayı veya "41369" gibi karakterler olarak gösteriyorsa bunları istenilen formata dönüştürmek için `as.Date()` (veya **lubridate**'nin `as_date()` işlevini) kullanabilirsiniz. Ancak **yukarıdaki gibi bir "formatı" tanımlamak** yerine, `origin = ` argümanıyla Excel başlangıç tarihini R'a bildirebilirsiniz.  
+
+Excel tarihi bir Karakter türü olarak R'a aktarılmışsa bu fonksiyon işe yaramaz, bu nedenle sayının Numeric sınıfında olduğundan emin olun!
+
+<span style="color: black;">**_NOT:_** Başlangıç tarihini R'ın varsayılan tarih biçiminde ("YYYY-AA-GG") formatlamalısınız.</span>
+
+```{r, eval = FALSE}
+# Exceldeki sayı formatındaki tarihleri dönüştürürken Excel 'başlangıç tarihi' sağlamaya ilişkin bir örnek
+data_cleaned <- data %>% 
+  mutate(date_onset = as.numeric(date_onset)) %>%   # sınıfın numeric olduğundan emin olun
+  mutate(date_onset = as.Date(date_onset, origin = "1899-12-30")) # Excel orijinini kullanarak tarih formatına dönüştürme
+```
+
+
+
+<!-- ======================================================= -->
+## Karışık tarihler  
+
+**parsedate** paketindeki `parse_dates()` fonksiyonu, birçok farklı biçimde tarihleri içeren "dağınık" bir tarih sütununu okumaya ve tarihleri standart bir biçime dönüştürmeye çalışır. [`parse_date()` hakkında daha fazla bilgiyi için bakınız](https://readr.tidyverse.org/reference/parse_datetime.html).  
+
+Örneğin, `parse_dates()`, "03 Oca 2018", "07/03/1982" ve "08/20/85" karakter tarihlerinin bir vektörünü görür ve bunları Date sınıfına dönüştürür: '2018-01-03 ', '1982-03-07' ve '1985-08-20'.  
+
+```{r, }
+parsedate::parse_date(c("03 Janry 18",
+                        "07/03/1982",
+                        "8-20-1985"))
+```
+
+
+```{r eval = FALSE}
+# dater_onset sütununda parse_date() kullanan bir örnek
+linelist <- linelist %>%      
+  mutate(date_onset = parse_date(date_onset))
+```
+
+
+
+
+<!-- ======================================================= -->
+## Date-time sınıfı ile çalışma 
+
+Daha önce belirtildiği gibi, R ek olarak `datetime` sınıfını desteklemektedir - tarih **ve** saat bilgilerini içeren bir sütun. "Date" sınıfında olduğu gibi, bu verilerin genellikle `karakter` nesnelerinden `datetime` nesnelerine dönüştürülmesi gerekmektedir.
+
+### Tarihleri saatlerle dönüştürme {.unnumbered}  
+
+Standart bir "datetime" nesnesi önce tarihle, ardından bir saat bileşeniyle biçimlendirilir - örneğin _01 Ocak 2020, 16:30_. Tarihlerde olduğu gibi, bun durumun biçimlendirilmesinin ve kesinlik düzeyinin (saat, dakika, saniye) tanımlanmasının bir çok yolu mevcuttur.  
+
+Neyse ki, bu dizeleri 'datetime' nesnelerine dönüştürmeye yardımcı olmak için **lubridate** paketinin yardımcı fonksiyonları mevcuttur. Bu fonksiyonların, sonuna "_h" (saati tanımlar), "_hm" (saat ve dakikayı tanımlar) veya "_hms" (saat, dakika ve saniyeyi tanımlar) uzantıları eklenebilir (örn. dmy_hms()`). Aşağıda bu uzantıların kullanımı için örnekler verilmiştir.
+
+Yalnızca saat bilgisi olan datetime verilerini datetime nesnesine dönüştürme:
+
+```{r}
+ymd_h("2020-01-01 16hrs")
+ymd_h("2020-01-01 4PM")
+```
+
+Saat ve dakika bilgisi olan datetime verilerini datetime nesnesine dönüştürme:
+
+```{r}
+dmy_hm("01 January 2020 16:20")
+```
+
+Saat, dakika ve saniye bilgisi olan datetime verilerini datetime nesnesine dönüştürme:
+
+```{r}
+mdy_hms("01 January 2020, 16:20:40")
+```
+
+Saat dilimini formata ekleyebilirsiniz ancak bu bilgi yok sayılmaktadır. Daha detaylı bilgi için ilerleyen bölümlerdeki saat dilimleri bölümüne bakınız. 
+
+```{r}
+mdy_hms("01 January 2020, 16:20:40 PST")
+
+```
+
+Bir veri çerçevesiyle çalışırken, **stringr** paketinden `str_glue()` fonksiyonu ve uygun bir **lubridate** fonksiyonu kullanılarak saat ve tarih sütunları birleştirilebilir. **stringr** ile ilgili ayrıntılar için [Karakterler ve dizeler]((characters_strings.tr.qmd)) hakkındaki sayfaya bakınız.
+
+Bu örnekte, "linelist" veri çerçevesi "saat:dakika" biçiminde bir sütuna sahiptir. Bunu bir datetime formatına dönüştürmek için aşağıdaki adımları izleyebiliriz:
+
+1) Eksik verileri medyan sütunlarından elde edilen verilerle tamamlanmış, "temiz" bir hasta kabul sütunu oluşturun. Bunu yapıyoruz çünkü **lubridate** eksik değerler üzerinde çalışmayacaktır. Bunu "date_hospitalisation" sütunuyla birleştirin ve ardından istenilen formata dönüştürmek için "ymd_hm()" işlevini kullanın. 
+
+```{r, eval = FALSE}
+# paketler
+pacman::p_load(tidyverse, lubridate, stringr)
+
+# time_admission, saat:dakika cinsinden bir sütundur
+linelist <- linelist %>%
+  
+  # uygun saat bulunamadığında, medyan kabul süresini atama
+  mutate(
+    time_admission_clean = ifelse(
+      is.na(time_admission),         # zaman eksikse
+      median(time_admission),        # medyan ata
+      time_admission                 # eksik değilse olduğu gibi tut
+  ) %>%
+  
+    # bir karakter sütunu oluşturmak üzere tarih ve saat sütunlarını birleştirmek için str_glue() fonksiyonunu kullanın
+    # ve sonra onu tarih saatine dönüştürmek için ymd_hm() fonksiyonunu kullanın
+  mutate(
+    date_time_of_admission = str_glue("{date_hospitalisation} {time_admission_clean}") %>% 
+      ymd_hm()
+  )
+
+```
+
+### Sadece saatleri çevirme {.unnumbered}  
+
+Verileriniz yalnızca bir karakter süresi (saat ve dakika) içeriyorsa, **base** R'dan `strptime()` kullanarak bunları zaman formatına dönüştürebilir ve değiştirebilirsiniz. Örneğin, bu iki süre arasındaki farkı elde etmek için:
+
+
+```{r}
+# ham karakter süreleri
+time1 <- "13:45" 
+time2 <- "15:20"
+
+# Datetime sınıfına dönüştürülen zamanlar
+time1_clean <- strptime(time1, format = "%H:%M")
+time2_clean <- strptime(time2, format = "%H:%M")
+
+# Fark, varsayılan olarak "difftime" sınıfındadır, burada sayısal saatlere dönüştürülür
+as.numeric(time2_clean - time1_clean)   # saat farkı
+
+```
+
+Bununla birlikte, herhangi bir tarih değerine ulaşılamazsa, tarihin bugün olduğunu varsayıldığını unutmayın. Bir tarih harf dizisini ve bir zamanı harf dizisiyle birleştirmek için, hemen yukarıdaki bölümde **stringr**'nin nasıl kullanılacağına bakınız. `strptime()` hakkında daha fazla bilgiyi [buradan](https://rdrr.io/r/base/strptime.html) okuyabilirsiniz.
+
+Tek basamaklı sayıları çift basamaklı sayılara dönüştürmek için (ör. 2 basamak elde etmek için baştaki sıfırlarla birlikte saat veya dakika formatına), [Karakterler ve dizeler sayfasının "Taban uzunluğu" bölümüne](#str_pad) bakınız.
+
+### Saati ayıklama {.unnumbered}  
+
+Bir zamanın alt öğelerini **lubridate**'paketinden 'hour()', 'minute()' veya 'second()' fonksiyonu ile seçebilirsiniz.
+
+Saatin ayıklanması ve ardından günün bölümlerine göre sınıflandırılmasına bir örnek verilmesi gerekirse: "SS:DD" biçimindeki Karakter sınıfı olan `time_admission` sütununu göz önüne alalım.  İlk olarak, karakterleri datetime sınıfına dönüştürmek için yukarıda açıklandığı gibi `strptime()` fonksiyonu kullanılır. Daha sonra saat, 0-24 arasında bir sayı döndürerek `hour()` fonksiyonu ile çıkarılır. Son olarak, satırları giriş saatlerine göre Sabah/Öğleden sonra/Akşam/Gece olarak sınıflandırmak için `case_while()` mantığı kullanılarak bir 'time_period' sütunu oluşturulur.
+
+```{r}
+linelist <- linelist %>%
+  mutate(hour_admit = hour(strptime(time_admission, format = "%H:%M"))) %>%
+  mutate(time_period = case_when(
+    hour_admit > 06 & hour_admit < 12 ~ "Morning",
+    hour_admit >= 12 & hour_admit < 17 ~ "Afternoon",
+    hour_admit >= 17 & hour_admit < 21 ~ "Evening",
+    hour_admit >=21 | hour_admit <= 6 ~ "Night"))
+```
+
+`case_while()` hakkında daha fazla bilgi edinmek için [Temizleme verileri ve temel işlevler](cleaning.tr.qmd) hakkındaki sayfaya bakınız.
+
+<!-- ======================================================= -->
+## Tarihlerle çalışma   
+
+`lubridate` aynı zamanda **date/datetime özelliklerini çıkarma**, **tarih aritmetiği gerçekleştirme** veya **tarih aralıklarını hesaplama** gibi çeşitli başka işlevler için de kullanılabilir.
+
+Burada örnekler için kullanılacak bir tarih tanımlayacağız: 
+
+```{r, }
+# Date sınıfının nesnesini oluşturma
+example_date <- ymd("2020-03-01")
+```
+
+### Tarih bileşenlerini ayıklama {.unnumbered}  
+
+Ay, gün, hafta içi gibi ortak yönleri çıkarabilirsiniz: 
+
+```{r}
+month(example_date)  # ay numarası
+day(example_date)    # ayın günü (sayı)
+wday(example_date)   # haftanın gün sayısı (1-7)
+```
+
+Ayrıca bir `datetime` nesnesinden veya sütunundan saat bileşenlerini de çıkarabilirsiniz. Bu durum, özellikle başvuru saatlerinin dağılımını görmek istiyorsanız yararlı olabilir.
+
+```{r, eval=F}
+example_datetime <- ymd_hm("2020-03-01 14:45")
+
+hour(example_datetime)     # saati ayıklama
+minute(example_datetime)   # dakikayı ayıklama
+second(example_datetime)   # saniyeyi ayıklama
+```
+
+Hafta bilgilerini ayıklamak için birkaç seçenek vardır. Aşağıdaki Epidemiyolojik haftalar bölümüne bakın.
+
+Bir tarihi belirli bir şekilde *görüntülemek* istiyorsanız (örneğin, "Ocak 2020" veya "20 Mart Perşembe" veya "20. Hafta, 1977") bunu Tarihi görüntüleme bölümünde açıklandığı gibi daha esnek bir şekilde yapabilirsiniz.
+
+
+### Tarih matematiği {.unnumbered}  
+
+**lubridate**'deki ilgili fonksiyonları kullanarak belirli sayıda gün veya hafta ekleyebilirsiniz.
+
+```{r}
+# bu tarihe 3 gün ekleyin
+example_date + days(3)
+  
+# 7 hafta ekleyin ve bu tarihten iki gün çıkarın
+example_date + weeks(7) - days(2)
+```
+
+### Tarih aralıkları {.unnumbered}  
+
+Tarihler arasındaki fark şu şekilde hesaplanabilir:
+
+1. Her iki tarihin de Date sınıfına ait olduğundan emin olun 
+2. İki tarih arasındaki "zaman farkını (difftime)" elde etmek için çıkarma işlemini kullanın  
+3. Gerekirse, sonraki matematiksel hesaplamaları yapmak için sonucu sayısal sınıfa dönüştürün
+
+Aşağıdaki kodda iki tarih arasındaki aralığın hesaplanması ve görüntülenmesi verilmiştir. Date sınıfındaki değerlerde çıkarma (eksi) işareti ile aralıkları bulabilirsiniz. Ancak, döndürülen değerin sınıfının aşağıda gösterildiği gibi "difftime" olduğunu ve sayısala dönüştürülmesi gerektiğini unutmayın. 
+
+```{r}
+# bu tarih ile 20 Şubat 2020 arasındaki aralığı bulun
+output <- example_date - ymd("2020-02-20")
+output    # yazdır
+class(output)
+```
+
+Bir "difftime" üzerinde sonraki işlemleri yapmak için, onu `as.numeric()` ile sayısal değere dönüştürmelisiniz.
+
+Bunların hepsi verilerle çalışmak için bir araya getirilebilir - örneğin:
+
+```{r, eval = F}
+pacman::p_load(lubridate, tidyverse)   # paketleri yükleme
+
+linelist <- linelist %>%
+  
+  # dmy biçimini belirterek başlangıç tarihini, karakterden tarih nesnelerine dönüştürün
+  mutate(date_onset = dmy(date_onset),
+         date_hospitalisation = dmy(date_hospitalisation)) %>%
+  
+  # Mart ayında başlamayan tüm vakaları filtreleyin
+  filter(month(date_onset) == 3) %>%
+    
+  # başlangıç ve hastaneye yatış arasındaki gün farkını bulun
+  mutate(days_onset_to_hosp = date_hospitalisation - date_of_onset)
+```
+
+Bir veri çerçevesi bağlamında, yukarıdaki tarihlerden biri eksikse, o satır için işlem başarısız olur. Sonuç, sayısal bir değer yerine bir "NA" olarak verilecektir. Bu sütunu hesaplamalar için kullanırken, `na.rm = ` bağımsız değişkenini `TRUE (DOĞRU)` olarak ayarladığınızdan emin olun. Örneğin:
+
+```{r, eval = FALSE}
+# verilerin mevcut olduğu tüm vakalar için; hastaneye yatışa kadar geçen medyan gün sayısını hesaplama
+median(linelist_delay$days_onset_to_hosp, na.rm = T)
+```
+
+
+<!-- ======================================================= -->
+## Tarihi gösterme
+
+Tarihler doğru sınıfta formatlandığında; farklı şekilde görüntülenmelerini isteyebilir (örneğin "2018-01-05" yerine "05 Ocak Pazartesi"), satırları tarih öğelerine göre gruplandırabilir (örneğin ay-yıla göre gruplandırma) gösterilme sırasını istediğiniz gibi düzenleyebilirsiniz.
+
+### `format()` {.unnumbered}  
+
+Tarih gösterimini **base** R fonksiyonu olan `format()` ile ayarlayabilirsiniz. Bu fonksiyon, "%" strptime kısaltmalarında *istenen* çıktı biçimini belirten bir karakter dizesini (tırnak içinde) argüman olarak kabul etmektedir.- (`as.Date()` içinde kullanılanla benzer sözdizimi). Aşağıda yaygın olarak kullanılan kısaltmaların çoğu verilmiştir.
+
+Not: `format()` fonksiyonunu kullanmak değerleri Karakter sınıfına dönüştürür, bu nedenle bu genellikle bir analizin sonuna doğru veya yalnızca görüntüleme amacıyla kullanılır! `?strptime` komutunu çalıştırarak tam listeyi görebilirsiniz.
+
+%d = Aydaki gün (5, 17, 28, vb.)  
+%j = Yıl-gün numarası (Julian günü 001-366)  
+%a = Kısaltılmış gün (Pt, sa, Çar, vb.)  
+%A = Tam gün (Pazartesi, Salı, vb.)
+%w = Gün sırası (0-6, Pazar 0'dır)  
+%u = Gün sırası (1-7, Pazartesi 1'dir)  
+%W = Hafta sırası (00-53, Pazartesi haftanın ilk günüdür)  
+%U = Hafta sırası (01-53, Pazar haftanın ilk günüdür)  
+%m = Ay sırası (örn. 01, 02, 03, 04)  
+%b = Kısaltılmış ay (Oca, Şub, vb.)  
+%B = Tam ay (Ocak, Şubat, vb.)  
+%y = 2-basamak yıl  (örn. 89)  
+%Y = 4-basamak yıl  (örn. 1989)  
+%h = saat (24-saat)  
+%m = dakika  
+%s = saniye
+%z = GMT farkı
+%Z = Saat dilimi (karakter)
+
+Bugünün tarihini biçimlendirmeye bir örnek olarak:
+
+```{r}
+# bugünün tarihi, biçimlendirme ile
+format(Sys.Date(), format = "%d %B %Y")
+
+# tam tarih ve saati almanın kolay yolu (varsayılan biçimlendirme)
+date()
+
+# str_glue() fonksiyonunu kullanarak biçimlendirilmiş birleşik tarih, saat ve saat dilimi
+str_glue("{format(Sys.Date(), format = '%A, %B %d %Y, %z  %Z, ')}{format(Sys.time(), format = '%H:%M:%S')}")
+
+# Haftaları görüntüleme formatını kullanma
+format(Sys.Date(), "%Y Week %W")
+```
+
+`str_glue()` fonksiyonunu kullanıyorsanız, sözdizimi formatındaki çift tırnak içinde (") yalnızca tek tırnak kullanmanız gerektiğini unutmayın (yukarıdaki örnekte verildiği gibi).
+
+
+### Ay-Yıl {.unnumbered}  
+
+Bir Date sütununu Ay-yıl biçimine dönüştürmek için, **zoo** paketindeki `as.yearmon()` işlevini kullanmanızı öneririz. Bu, tarihi "yearmon" sınıfına dönüştürür ve uygun sıralamayı korur. Buna karşılık, `format(column, "%Y %B")` fonksiyonunun kullanılması, değerleri Karakter sınıfına dönüştürecek ve değerleri alfabetik olarak (yanlış) sıralayacaktır.
+
+Aşağıda, "as.yearmon()" fonksiyonu kullanılarak "date_onset" sütunundan yeni bir "yearmonth" sütunu oluşturulmuştur. Elde edilen değerlerin varsayılan (doğru) sıralaması tabloda gösterilmiştir.
+
+```{r}
+# yeni sütun oluştur
+test_zoo <- linelist %>% 
+     mutate(yearmonth = zoo::as.yearmon(date_onset))
+
+# tabloyu yazdır
+table(test_zoo$yearmon)
+```
+
+Buna karşılık, aşağıdaki örnekte, `format()` fonksiyonu ile istenen görüntüleme biçimini verirken, ancak doğru sıralamayı nasıl sağlayamadığını görebilirsiniz.
+
+```{r}
+# yeni sütun oluştur
+test_format <- linelist %>% 
+     mutate(yearmonth = format(date_onset, "%b %Y"))
+
+# tabloyu yazdır
+table(test_format$yearmon)
+```
+
+Not: Bir `ggplot()` içinde çalışıyor ve sadece tarihlerin nasıl *görüntülendiğini* düzenlemek istiyorsanız, `scale_x_date()` fonksiyonu içindeki `date_labels =` argümanına bir strptime formatı sağlamak yeterli olabilir. Bunun için `"%b %Y"` veya `"%Y %b"` formatını kullanabilirsiniz. Detaylı bilgi için [ggplot ipuçları] sayfasına bakınız.  
+
+**zoo** ayrıca `as.yearqtr()` fonksiyonuna da sahiptir ve `ggplot()` kullanırken `scale_x_yearmon()` fonksiyonunu da bu amaçla kullanabilirsiniz.
+
+
+<!-- ======================================================= -->
+## Epidemiyolojik haftalar {#dates_epi_wks}
+
+### **lubridate** {.unnumbered}  
+
+Verileri tarihlerine göre gruplandırmaya ilişkin daha kapsamlı örnekler için [Gruplama verileri]((grouping.tr.qmd)) hakkındaki sayfaya bakınız. Aşağıda, verileri haftalara göre gruplandırmayı kısaca açıklamaktayız.
+
+Genellikle, **lubridate** paketindeki `floor_date()` fonksiyonunu,  `unit = "week"` bağımsız değişkeniyle kullanmanızı önermekteyiz. Bu, `week_start = ` bağımsız değişkeniyle tanımlandığı gibi tarihi haftanın "başlangıcına" yuvarlar. Varsayılan hafta başlangıcı 1'dir (Pazartesiler için), ancak haftanın herhangi bir gününü başlangıç olarak belirtebilirsiniz (ör. Pazar günleri için 7). "floor_date()" çok yönlü bir fonksiyondur; `unit = ` öğesini "saniye (second)", "dakika (minute)", "saat (hour)", "gün (day)", "ay (month)" veya "yıl (year)" olarak ayarlayarak diğer zaman birimlerine yuvarlamak için kullanılabilir.
+
+Döndürülen değer, Date sınıfında haftanın başlangıç tarihidir. Date sınıfı, ggplot() tarafından kolayca tanınacağı ve doğru şekilde sıralanacağı için verileri çizerken de gayet kolaylık sağlamaktadır.
+
+Tarihleri bir grafikte yalnızca haftasına göre *görüntülemek* ile ilgileniyorsanız, bu sayfadaki Tarihi görüntüleme bölümüne bakınız. Örneğin, bir epicurve çizerken, istenen strptime "%" terminolojisini sağlayarak tarih görüntüsünü biçimlendirebilirsiniz. Örneğin, yıl ve hafta numarasını döndürmek için "%Y-%W" veya "%Y-%U" kullanabilirsiniz (sırasıyla Pazartesi veya Pazar haftanın ilk günü olarak kabul edilmektedir).
+
+### Haftalık sayımlar {.unnumbered}  
+
+Verileri `count()`, `group_by()` ve `summarise()` ile gruplandırmanın kapsamlı açıklamaları için [Verileri Gruplama](grouping.tr.qmd) ile ilgili sayfaya bakınız. Aşğıda Kısa bir örnek verilmiştir.
+
+1) `unit = "week"` argümanıyla `floor_date()` ve `mutate()` fonksiyonlarıyla yeni bir "hafta" sütunu oluşturun
+2) `count()` ile haftalık satır (vaka) sayısını alın; tarihi eksik olan vakaları filtreleyin
+3) Verilerde *tüm* haftaların görünmesini sağlamak için **tidyr**'paketinden `complete()` ile fonksiyonunu kullanın (satır/durum bilgisi içermeyenleri de eklemek adına). Varsayılan olarak, herhangi bir "yeni" satır için sayım değerleri NA'dır, ancak bunları adlandırılmış bir liste bekleyen `fill = ` argümanıyla 0 yapabilirsiniz (aşağıdaki örnekte verilen `n` değeri yeni sütununun adıdır)
+
+```{r}
+# Haftalık vaka sayılarının yeni bir veri setinde gösterin
+weekly_counts <- linelist %>% 
+  drop_na(date_onset) %>%             # başlangıç tarihi eksik vakaları kaldırın
+  mutate(weekly_cases = floor_date(   # "weekly_cases" adında yeni bir sütun oluştur
+    date_onset,
+    unit = "week")) %>%            
+  count(weekly_cases) %>%           # verileri haftaya göre gruplandır ve grup başına satırları say ('n' sütununu oluşturur)
+  tidyr::complete(                  # vaka bildirilmemiş olan haftalar da dahil olmak üzere tüm haftaların mevcut olduğundan emin ol
+    weekly_cases = seq.Date(          # "weekly_cases" sütununu eksiksiz bir dizi olarak yeniden tanımla
+      from = min(weekly_cases),       # minimum tarihten itibaren
+      to = max(weekly_cases),         # maksimum tarihe kadar
+      by = "week"),                   # hafta olarak
+    fill = list(n = 0))             # n sütunundaki NA'ları 0 ile değiştir
+```
+
+Ortaya çıkan veri çerçevesinin ilk satırları şunlardır:
+
+```{r message=FALSE, echo=F}
+DT::datatable(head(weekly_counts, 20), rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+
+### Epiweek alternatifleri {.unnumbered}  
+
+**lubridate**'nin ayrıca her biri farklı başlangıç tarih ve nüanslarına sahip olan `week()`, `epiweek()` ve `isoweek()` fonksiyonlarına sahip olduğunu unutmayın. Genel olarak, `floor_date()` ihtiyacınız olan her şeyi kapsamaktadır. Konsola `?week` girerek veya [buradaki belgeleri](https://www.rdocumentation.org/packages/lubridate/versions/1.7.4/topics/week) okuyarak daha fazla bilgiye ulaşabilirsiniz.
+
+Epidemiyolojik haftaları ayarlamak için **aweek** paketini kullanmayı düşünebilirsiniz. Bununla ilgili daha fazla bilgiyi [RECON web sitesinde](https://www.repidemicsconsortium.org/aweek/) okuyabilirsiniz. Haftanın başlangıç gününü `week_start = "Monday"` ile ayarlayabileceğiniz 'date2week()' ve 'week2date()' fonksiyonları mevcuttur. "Hafta" tarzı çıktılar istiyorsanız (örneğin "2020-W12") bu paket en kolay yoldur. **aweek**'in bir başka avantajı da, tarih sütununa `date2week()` uygulandığında, döndürülen sütunun (hafta biçimi) otomatik olarak sınıf Faktörü olması ve zaman aralığındaki tüm haftalar için seviyeleri de içermesidir (bu, yukarıda anlatılan `complete()` komutunda ek adımını yok sayar). **aweek**, tarihleri ay, yıl vb. gibi diğer zaman birimlerine yuvarlama işlevine sahip değildir.
+
+Bir "hafta" biçimini ("2020 W12") göstermek için başka bir zaman serisi alternatifi de, [Zaman serisi ve salgın tespiti] sayfasında anlatılan **tsibble** paketindeki `yearweek()`tir. . 
+
+
+<!-- ======================================================= -->
+## Tarihleri/saat dilimlerini dönüştürme
+
+Veriler farklı saat dilimlerinde olduğunda, bu verileri birleşik bir saat dilimine standart hale getirmek genellikle önemlidir. Çoğu durumda verilerin saat dilimi bileşeninin manuel olarak kodlanması gerektiğinden, bu daha fazla zorluğa neden olmaktadır.
+
+R'da her *datetime* nesnesinin bir saat dilimi bileşeni vardır. Varsayılan olarak, tüm datetime nesneleri kullanılan bilgisayarın yerel saat dilimini kullanmaktadır - bu genellikle, yaz saati uygulaması nedeniyle zaman dilimleri konumlarda sık sık değişeceğinden, adlandırılmış bir saat dilimi yerine *konuma* özgüdür. Bir tarih sütununun temsil ettiği olay belirli bir zamana atfedilemeyeceğinden ve bu nedenle saat cinsinden ölçülen zaman kaymaları makul bir şekilde açıklanamaz. Tarihin zaman bileşeni olmadan saat dilimlerini doğru bir şekilde yönetmek mümkün değildir.
+
+Saat dilimleriyle başa çıkabilmek için, lubridate'de bir datetime nesnesinin saat dilimini farklı bir saat dilimine değiştirmek için kullanılabilecek bir dizi yardımcı fonksiyon mevcuttur. Saat dilimleri, datetime nesnesine geçerli bir tz veritabanı saat dilimi atanarak hesaplanır. Bunların bir listesini aşağıdaki linkte bulabilirsiniz - verileri kullandığınız konum bu listede değilse, saat dilimine yakın büyük şehirleri kullanabilirsiniz, bu, aynı amaca hizmet edecektir.
+
+https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
+
+
+```{r}
+# geçerli saati bir sütuna ata
+time_now <- Sys.time()
+time_now
+
+# saat zamanını DEĞİŞTİRİRKEN sütuna yeni bir saat dilimi atamak için with_tz() kullan
+time_london_real <- with_tz(time_now, "Europe/London")
+
+# sütuna yeni bir saat dilimi atamak için force_tz() kullanın, saat zamanını SABİTLEYİN
+time_london_local <- force_tz(time_now, "Europe/London")
+
+
+# Bu kodu çalıştırmak için kullanılan bilgisayar Londra saat diliminde olmadığını unutmayın,
+# zaman farkı olacaktır
+# (bilgisayar saat diliminden londra'ya kadar olan saat farkı)
+time_london_real - time_london_local
+
+```
+
+Bu büyük ölçüde soyut görünebilir ve kullanıcı farklı zaman dilimlerinde çalışmıyorsa genellikle gerekli değildir.
+
+
+<!-- ======================================================= -->
+## Gecikme ve önden gelme hesaplamaları 
+
+`lead()` ve `lag()`, bir vektördeki önceki (geciken) veya sonraki (önden gelen) değerleri bulmaya yardımcı olan **dplyr** paketindeki fonksiyonlarıdır - tipik olarak bir sayısal veya tarih vektörüdür. Bu fonksiyonlar, zaman birimleri arasındaki değişim/fark hesaplamaları yaparken işe yarar.
+
+
+```{r, echo=F}
+counts <- import(here("data", "example", "district_weekly_count_data.xlsx")) %>% 
+  filter(District == "Nibari") %>% 
+  mutate(Date = as.Date(Date),
+         week_start = lubridate::floor_date(Date, "week")) %>%
+  group_by(week_start) %>% 
+  summarize(cases_wk = sum(Cases, na.rm=T)) %>% 
+  complete(week_start = seq.Date(min(week_start), max(week_start), by = "week"), fill = list(cases_wk = 0))
+```
+
+Mevcut bir hafta ile önceki hafta arasındaki vaka farkını hesaplamak istediğinizi varsayalım. Veriler başlangıçta aşağıda gösterildiği gibi haftalık sayılarla elde edilir. 
+
+```{r message=FALSE, echo=F}
+DT::datatable(counts, rownames = FALSE,  options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+**`lag()` veya `lead()` komutlarını kullanırken veri çerçevesindeki satırların sırası çok önemlidir! - tarihlerinizin / numaralarınızın artan mı yoksa azalan mı olduğuna dikkat etmelisiniz.**  
+
+İlk olarak, önceki (geciken) haftanın değerini içeren yeni bir sütun oluşturun.
+
+* Geri/ileri birim sayısını `n =` ile kontrol edin (negatif olmayan bir tam sayı olmalıdır)  
+* Var olmayan satırlara yerleştirilen değeri tanımlamak için `default =` argümanını kullanın (örneğin, gecikmeli değerin olmadığı ilk satır). Varsayılan olarak bu `NA`dır.  
+* Satırlarınız referans sütununuza göre sıralanmıyorsa `order_by = TRUE` argümanını kullanın
+
+
+```{r}
+counts <- counts %>% 
+  mutate(cases_prev_wk = lag(cases_wk, n = 1))
+```
+
+```{r message=FALSE, echo=F}
+DT::datatable(counts, rownames = FALSE,  options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+Ardından, iki vaka sütunu arasındaki farkı hesaplayan yeni bir sütun oluşturun:
+
+```{r}
+counts <- counts %>% 
+  mutate(cases_prev_wk = lag(cases_wk, n = 1),
+         case_diff = cases_wk - cases_prev_wk)
+```
+
+```{r message=FALSE, echo=F}
+DT::datatable(counts, rownames = FALSE,  options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+
+`lead()` ve `lag()` hakkında daha fazla bilgiyi [buradaki](https://dplyr.tidyverse.org/reference/lead-lag.html) belgelerde veya `?lag`` kodunu konsola girerek elde edebilirsiniz. 
+
+
+<!-- ======================================================= -->
+## Kaynaklar 
+
+**lubridate** [tidyverse sayfası](https://lubridate.tidyverse.org/)  
+**lubridate** RStudio [kopya kağıdı](https://rawgit.com/rstudio/cheatsheets/master/lubridate.pdf)  
+Veri Bilimi için R - [tarih ve saatler sayfası](https://r4ds.had.co.nz/dates-and-times.html)  
+[Çevrimiçi rehber](https://www.statmethods.net/input/dates.html)
+[Tarih formatları](https://www.r-bloggers.com/2013/08/date-formats-in-r/)

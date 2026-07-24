@@ -1,0 +1,655 @@
+---
+aliases:
+  - /new_pages/missing_data.tr.html
+---
+
+# Eksik Veri { }
+
+```{r, out.width=c("50%"), echo=F}
+knitr::include_graphics(here::here("images", "missingness.png"))
+knitr::include_graphics(here::here("images", "missingness_overview.png"))
+```
+
+Bu sayfada aşağıdakilerin nasıl yapılacağı anlatılacaktır:
+
+1) Eksikliği değerlendirin
+2) Eksikliğe göre satırları filtreleyin
+3) Zaman içinde eksikleri çizin
+4) Grafiklerde "Boş Veri"nin nasıl görüntüleneceğini ele alın
+5) Eksik değer atamasını gerçekleştirin: MCAR, MAR, MNAR 
+
+
+
+<!-- ======================================================= -->
+## Hazırlık { }
+
+### Paketleri yükleyin {.unnumbered}
+
+Bu kod parçası, analizler için gerekli olan paketlerin yüklenmesini gösterir. Bu el kitabında, gerekirse paketi kuran *ve* kullanım için yükleyen **pacman**'dan `p_load()` vurgusunu yapıyoruz. **base** R'dan `library()` ile kurulu paketleri de yükleyebilirsiniz. R paketleri hakkında daha fazla bilgi için [R basics] sayfasına bakabilirsiniz.
+
+```{r}
+pacman::p_load(
+  rio,           # İçe aktar/Dışa aktar
+  tidyverse,     # Veri yönetimi ve görselleştirme
+  naniar,        # Eksikliği değerlendir ve görselleştir
+  mice           # Eksik veri yerine aktarma
+)
+```
+
+
+### Verileri içe aktar {.unnumbered}
+
+Simüle edilmiş bir Ebola salgınından vakaların veri setini içe aktarıyoruz. Takip etmek isterseniz, <a href='https://github.com/appliedepi/epirhandbook_eng/raw/master/data/case_linelists/linelist_cleaned.rds' class='download-button'>"clean" satır listesi dosyasını indirmek için tıklayın </a> (.rds dosyası olarak). Verilerinizi **rio** paketinden `import()` fonksiyonuyla içe aktarın (.xlsx, .rds, .csv gibi birçok dosya türünü kabul eder - ayrıntılar için [İçe aktarma ve dışa aktarma] sayfasına bakabilirsiniz).
+
+```{r, echo=F}
+# Satır listesini R'a içe aktar
+linelist <- rio::import(here::here("data", "case_linelists", "linelist_cleaned.rds"))
+```
+
+```{r, eval=F}
+# Satır listesini içe aktar
+linelist <- import("linelist_cleaned.rds")
+```
+
+Satır listesinin ilk 50 satırı aşağıda görüntülenmektedir.
+
+```{r, message=FALSE, echo=F}
+# Satır listesi verisini tabloda göster
+DT::datatable(head(linelist, 50), rownames = FALSE, filter="top", options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+
+### İçe aktarma işleminde eksikliği dönüştürme {.unnumbered}
+
+Verilerinizi içe aktarırken, eksik olarak sınıflandırılması gereken değerlerin farkında olun. Örneğin, 99, 999, "Eksik", boş hücreler ("") veya boşluklu hücreler (" "). Veri içe aktarma komutu sırasında bunları 'NA'ya (R'ın eksik veri sürümü) dönüştürebilirsiniz.
+Tam sözdizimi dosya türüne göre değiştiğinden, ayrıntılar için [Eksik veriler](#import_missing) ile ilgili sayfanın içe aktarılmasıyla ilgili sayfaya bakın.
+
+
+<!-- ============================================ ========= -->
+## R'da eksik değerler { }
+
+Aşağıda, bazı bitişik değerler ve fonksiyonlarla birlikte, R'da eksikliğin sunulma ve değerlendirilme yollarını araştırıyoruz.
+
+### "NA" {.unnumbered}
+
+R'da, eksik değerler 'NA' ile temsil edilir. Bunun * tırnak işaretleri olmadan * yazıldığını unutmayın. "NA" farklıdır ve sadece normal bir karakter değeridir (aynı zamanda Beatles'ın Hey Jude şarkısından bir söz).
+
+Verilerinizin "99" veya "Eksik" veya "Bilinmeyen" gibi eksikleri temsil etmenin başka yolları olabilir - "boş" görünen boş karakter değerini "" veya tek bir boşluk " " bile olabilir. Bunların farkında olun ve [içe aktarma sırasında bunları 'NA'ya dönüştürün](#import_missing) veya 'na_if()' ile veri temizleme sırasında yapabilirsiniz.
+
+Veri temizleme işleminizde, tüm 'NA'ları "Eksik" veya 'replace_na()'ya benzer şekilde veya faktörler için 'fct_explicit_na()' ile de değiştirmek isteyebilirsiniz.
+
+
+
+
+### "NA" sürümleri {.unnumbered}
+
+Çoğu zaman, "NA" eksik bir değeri temsil eder ve her şey yolunda gider. Ancak, bazı durumlarda, bir nesne sınıfına (karakter, sayısal, vb.) özgü "NA"nın *varyasyonları* gereksinimiyle karşılaşabilirsiniz. Bu nadiren olacak, ancak bilmenizde fayda vardır.
+Bunun için tipik senaryo, **dplyr** fonksiyonu "case_while()" ile yeni bir sütun oluştururken gerçekleşmektedir. [Verileri ve temel fonksiyonları temizleme](#clean_case_while) sayfasında açıklandığı gibi, bu fonksiyon veri çerçevesindeki her satırı değerlendirir, satırların belirtilen mantıksal ölçütlerini (kodun sağ tarafı) karşılayıp karşılamadığını değerlendirir ve doğru yeni değerini atar ( kodun sol tarafı). *Önemli olan: sağ taraftaki tüm değerler aynı sınıf olmalıdır*.
+
+```{r, eval=F}
+linelist <- linelist %>% 
+  
+  # "Yaş" sütunundan yeni "yaş_yıl" sütununu oluştur
+  mutate(age_years = case_when(
+    age_unit == "years"  ~ age,       # eğer yaş yıl şeklinde verildiyse, orijinal değeri atayın
+    age_unit == "months" ~ age/12,    # eğer yaş ay şeklinde verildiyse, 12'ye bölün
+    is.na(age_unit)      ~ age,       # eğer yaş birimi eksikse, yılmış gibi kabul edin
+    TRUE                 ~ NA_real_)) # diğer durumlarda kayıp veri olarak atayın
+```
+
+Sağ tarafta 'NA' istiyorsanız, aşağıda listelenen özel 'NA' seçeneklerinden birini belirtmeniz gerekebilir. Diğer sağ taraftaki değerler karakter ise, bunun yerine "Missing" kullanmayı düşünün veya aksi takdirde "NA_character_" kullanın. Hepsi sayısal ise, 'NA_real_' kullanın. Hepsi tarih veya mantıklıysa, 'NA' kullanabilirsiniz.
+
+* `NA` - tarihler veya mantıksal DOĞRU/YANLIŞ için kullanın
+* `NA_character_` - karakterler için kullanın
+* `NA_real_` - sayısal değerler için kullanın
+
+Yine, yeni bir sütun oluşturmak için `case_while()` kullanmıyorsanız bu varyasyonlarla karşılaşmanız pek olası değildir. Daha fazla bilgi için [NA ile ilgili R belgelerine](https://stat.ethz.ch/R-manual/R-devel/library/base/html/NA.html) bakabilirsiniz.
+
+
+
+
+
+### 'NULL' {.unnumbered}
+
+'NULL', R'dan ayrılmış başka bir değerdir. Bu, ne doğru ne de yanlış olan bir ifadenin mantıksal temsilidir. Değerleri tanımsız olan ifadeler veya fonksiyonlar tarafından döndürülür. Belirli senaryolarda "NULL" döndürmek için fonksiyon yazmadıkça veya belki de [**shiny** uygulaması][Shiny Panoları] yazmadıkça NULL değerini genellikle bir değer olarak atamayın.
+
+Boşluk `is.null()` kullanılarak değerlendirilebilir ve `as.null()` ile dönüşüm yapılabilir.
+
+"NULL" ve "NA" arasındaki farkla ilgili bu [blog gönderisine](https://www.r-bloggers.com/2010/04/r-na-vs-null/) bakabilirsiniz.
+
+
+
+
+### `NaN` {.unnumbered}
+
+İmkansız değerler "NaN" özel değeri ile temsil edilir. Bunun bir örneği, R'ı 0'ı 0'a bölmeye zorlamanızdır. Bunu `is.nan()` ile değerlendirebilirsiniz. "is.infinite()" ve "is.finite()" gibi tamamlayıcı fonksiyonlarla da karşılaşabilirsiniz.
+
+
+### "Inf" {.unnumbered}
+
+"Inf", örneğin bir sayıyı 0'a böldüğünüzde olduğu gibi sonsuz bir değeri temsil eder.
+
+Bunun işinizi nasıl etkileyebileceğine dair bir örnek olarak: Diyelim ki şu değerleri içeren bir "z" vektörünüz/sütununuz var: "z <- c(1, 22, NA, Inf, NaN, 5)"
+
+En yüksek değeri bulmak için sütunda 'max()' kullanmak istiyorsanız, 'NA'yı hesaplamadan çıkarmak için 'na.rm = TRUE'yu kullanabilirsiniz, ancak 'Inf' ve 'NaN' arta kalacak ve `Inf` döndürülecektir. Bunu çözmek için, hesaplamada yalnızca sonlu değerlerin kullanılacağı şekilde alt kümeler için "[ ]" ve "is.finite()" köşeli parantezlerini kullanabilirsiniz: "max(z[is.finite(z)])".
+
+```{r, eval=F}
+z <- c(1, 22, NA, Inf, NaN, 5)
+max(z)                           # NA'ya döner
+max(z, na.rm=T)                  # Inf'ye döner
+max(z[is.finite(z)])             # 22'ye döner
+```
+
+
+### Örnekler {.unnumbered}  
+
+
+R Komutları | Çıktısı
+----------|--------------
+`5 / 0` | `Inf`  
+`0 / 0` | `NaN`  
+`5 / NA` | `NA`  
+`5 / Inf | `0`  
+`NA - 5` | `NA`  
+`Inf / 5` | `Inf`  
+`class(NA)` | "logical"  
+`class(NaN)` | "numeric"  
+`class(Inf)` | "numeric"  
+`class(NULL)` | "NULL"  
+
+"Zorlamanın getirdiği NA'lar" yaygın bir uyarı mesajıdır. Bu, aksi takdirde sayısal olan bir vektöre karakter değeri eklemek gibi geçersiz bir dönüştürme yapmaya çalışırsanız olabilir.
+
+```{r}
+as.numeric(c("10", "20", "thirty", "40"))
+```
+
+Bir vektörde "NULL" yok sayılır.
+
+```{r}
+my_vector <- c(25, NA, 10, NULL)  # tanımla
+my_vector                         # yazdır
+```
+
+
+Bir sayının varyansı "NA" ile sonuçlanır.
+
+```{r}
+var(22)
+```
+
+
+<!-- ======================================================= -->
+## Faydalı fonksiyonları{ }
+
+Aşağıdakiler, eksik değerleri değerlendirirken veya işlerken yararlı **base** R fonksiyonlarıdır:
+
+
+### `is.na()` ve `!is.na()` {.unnumbered}
+
+Eksik değerleri belirlemek için `is.na()` kullanın veya eksik olmayan değerleri belirlemek için tersini (önde `!` ile) kullanın. Bunların her ikisi de mantıksal bir değer ("DOĞRU" veya "YANLIŞ") döndürür. 'DOĞRU' sayısını saymak için elde edilen vektörü 'sum()' ile toplayabileceğinizi unutmayın, ör. `sum(is.na(linelist$date_outcome))`.    
+
+```{r}
+my_vector <- c(1, 4, 56, NA, 5, NA, 22)
+is.na(my_vector)
+!is.na(my_vector)
+sum(is.na(my_vector))
+```
+
+
+### `na.omit()` {.unnumbered}
+
+Bu fonksiyon, bir veri çerçevesine uygulanırsa, *herhangi bir* eksik değere sahip satırları kaldıracaktır. Aynı zamanda **base** R'dandır.
+Bir vektöre uygulanırsa, uygulandığı vektörden 'NA' değerlerini kaldıracaktır. Örneğin:
+
+```{r}
+na.omit(my_vector)
+```
+
+### `drop_na()` {.unnumbered}
+
+Bu, [veri temizleme ardışık düzeninde][Verileri ve temel fonksiyonları temizleme] yararlı olan bir **tidyr** fonksiyonudur. Parantezler boş olarak çalıştırılırsa, *herhangi bir* eksik değeri olan satırları kaldırır. Sütun adları parantez içinde belirtilirse, bu sütunlarda eksik değerlere sahip satırlar atlanır. Sütunları belirtmek için "tidyselect" sözdizimini de kullanabilirsiniz.
+
+```{r, eval=F}
+linelist %>% 
+  drop_na(case_id, date_onset, age) # bu sütunlardan herhangi biri için satır eksik değerleri bırakır
+```
+
+
+### `na.rm = DOĞRU` {.unnumbered}
+
+'max()', 'min()', 'sum()' veya 'mean()' gibi bir matematiksel işlevi çalıştırdığınızda, herhangi bir 'NA' değeri mevcutsa, döndürülen değer 'NA' olacaktır. Bu varsayılan davranış kasıtlıdır, böylece verilerinizden herhangi biri eksikse uyarılırsınız.
+
+Hesaplamadan eksik değerleri kaldırarak bunu önleyebilirsiniz. Bunu yapmak için "na.rm = TRUE" bağımsız değişkenini ekleyin ("na.rm", "NA"yı kaldır" anlamına gelir).
+
+```{r}
+my_vector <- c(1, 4, 56, NA, 5, NA, 22)
+
+mean(my_vector)     
+
+mean(my_vector, na.rm = TRUE)
+```
+
+
+
+<!-- ======================================================= -->
+## Bir veri çerçevesindeki eksikliği değerlendir { }
+
+**naniar** paketini, "linelist" veri çerçevesindeki eksiklikleri değerlendirmek ve görselleştirmek için kullanabilirsiniz.  
+
+```{r}
+# paketi kurun ve/veya yükleyin
+pacman::p_load(naniar)
+```
+
+### Eksikliği ölçme {.unnumbered}
+
+Eksik olan tüm değerlerin yüzdesini bulmak için `pct_miss()` kullanın. Eksik değerlerin sayısını almak için `n_miss()` kullanın.
+
+```{r}
+# eksik TÜM veri çerçevesi değerlerinin yüzdesi
+pct_miss(linelist)
+```
+
+Aşağıdaki iki fonksiyon, sırasıyla herhangi bir eksik değere sahip veya tamamen tamamlanmış satırların yüzdesini döndürür. "NA"nın eksik anlamına geldiğini ve ``""` veya `" "` eksik olarak sayılamayacağını unutmayın.
+
+```{r}
+# Herhangi bir değeri eksik olan satırların yüzdesi
+pct_miss_case(linelist)   # sayımlar için n_complete() kullanın
+```
+
+```{r}
+# Tamamlanan satırların yüzdesi (eksik değer yok)  
+pct_complete_case(linelist) # sayımlar için n_complete() kullanın
+```
+
+
+
+### Eksikliği görselleştirme {.unnumbered}
+
+`gg_miss_var()` fonksiyonu size her sütundaki eksik değerlerin sayısını (veya %) gösterecektir. Birkaç nüans:
+
+* Gruplara göre grafiği görmek için `facet = ` değişkenlerine bir sütun adı (tırnak içinde değil) ekleyebilirsiniz.
+* Varsayılan olarak, yüzdeler yerine sayılar gösterilir, bunu `show_pct = TRUE` ile değiştirin
+* `+ labs(...)` ile normal bir `ggplot()` için olduğu gibi eksen ve başlık etiketleri ekleyebilirsiniz.
+
+
+```{r}
+gg_miss_var(linelist, show_pct = TRUE)
+```
+
+Burada veriler fonksiyona `%>%` yoluyla tünellenerek iletilir. `facet = ` değişkeni ayrıca verileri bölmek için kullanılır.
+
+```{r}
+linelist %>% 
+  gg_miss_var(show_pct = TRUE, facet = outcome)
+```
+
+
+Veri çerçevesini her bir değerin eksik olup olmadığını gösteren bir ısı haritası olarak görselleştirmek için vis_miss()'i kullanabilirsiniz. 
+Ayrıca veri çerçevesinden belirli sütunları 'select()' ile seçerek, yalnızca bu sütunların gösterilmesini sağlayabilirsiniz.
+
+```{r}
+# Tüm veri çerçevesindeki eksikliğin ısı grafiği  
+vis_miss(linelist)
+```
+
+
+### Eksiklik ilişkilerini keşfedin ve görselleştirin {.unnumbered}
+
+Olmayan bir şeyi nasıl görselleştirirsiniz??? Varsayılan olarak, "ggplot()" grafiklerden eksik değerlere sahip noktaları kaldırır.
+
+**naniar**, `geom_miss_point()` aracılığıyla bir çözüm sunar. İki sütunlu bir dağılım grafiği oluştururken, değerlerden biri eksik, diğeri mevcut olan kayıtlar, eksik değerler sütundaki en düşük değerden %10 daha düşük olarak ayarlanarak ve belirgin bir şekilde renklendirilerek gösterilir.
+
+Aşağıdaki dağılım grafiğinde kırmızı noktalar, bir sütunun değerinin mevcut olduğu ancak diğer sütunun değerinin eksik olduğu kayıtlardır. Bu, eksik değerlerin eksik olmayan değerlere göre dağılımını görmenizi sağlar.
+
+
+```{r}
+ggplot(
+  data = linelist,
+  mapping = aes(x = age_years, y = temp)) +     
+  geom_miss_point()
+```
+
+Veri çerçevesindeki *başka bir sütun tarafından katmanlandırılmış* eksiklikleri değerlendirmek için, veri çerçevesindeki bir yüzdelik ısı haritasını *bir faktör/kategorik (veya tarih) sütun* ile döndüren 'gg_miss_fct()' fonksiyonu ile sağlayın:
+
+```{r}
+gg_miss_fct(linelist, age_cat5)
+```
+
+
+Bu fonksiyon, eksiklerin zaman içinde nasıl değiştiğini görmek için bir tarih sütunu ile de kullanılabilir:
+
+```{r}
+gg_miss_fct(linelist, date_onset)
+```
+
+
+
+
+### "Gölge" sütunları {.unnumbered}
+
+Bir sütundaki eksikliği ikinci bir sütundaki değerlere göre görselleştirmenin başka bir yolu da **naniar**'ın oluşturabileceği "gölgeyi" kullanmaktır. `bind_shadow()` mevcut her sütun için bir ikili `NA`/``NA` değil` sütunu oluşturur ve tüm bu yeni sütunları "_NA" ekiyle orijinal veri kümesine bağlar. Bu, sütun sayısını iki katına çıkarır - aşağıda göreceğiniz üzere:
+
+
+```{r}
+shadowed_linelist <- linelist %>% 
+  bind_shadow()
+
+names(shadowed_linelist)
+```
+
+Bu "gölge" sütunlar, eksik değerlerin oranını başka bir sütuna göre çizmek için kullanılabilir.
+
+Örneğin, aşağıdaki grafik, "days_onset_hosp" (semptom başlangıcından hastaneye yatışa kadar geçen gün sayısı) eksik kayıtların oranını, bu kaydın "tarih_hastaneye yatış" değerine göre gösterir. Esasen, x ekseni sütununun yoğunluğunu çiziyorsunuz, ancak sonuçları ('renk = ') ilgilenilen bir gölge sütunu ile katmanlıyorsunuz. Bu analiz, x ekseni bir sayısal veya tarih sütunuysa en iyi sonucu verir.
+
+
+```{r, message = F}
+ggplot(data = shadowed_linelist,          # gölge sütunlu veri çerçevesi
+  mapping = aes(x = date_hospitalisation, # sayısal veya tarih sütunu
+                colour = age_years_NA)) + # ilgi alanı gölge sütunu
+  geom_density()                          # yoğunluk eğrilerini çizme
+```
+
+Bu "gölge" sütunları, aşağıda gösterildiği gibi istatistiksel bir özet oluşturmak için de kullanabilirsiniz:
+
+```{r}
+linelist %>%
+  bind_shadow() %>%                # gösteri sütunlarını oluştur
+  group_by(date_outcome_NA) %>%    # katmanlama için gölge sütunları
+  summarise(across(
+    .cols = age_years,             # hesaplamalar için ilgilenilen değişken
+    .fns = list("mean" = mean,     # hesaplanacak istatistikler
+                "sd" = sd,
+                "var" = var,
+                "min" = min,
+                "max" = max),  
+    na.rm = TRUE))                 # stat hesaplamaları için diğer değişkenler
+```
+
+
+Bir sütunun zaman içinde eksik olan değerlerinin oranını çizmenin alternatif bir yolu aşağıda gösterilmiştir. **naniar** içermez. Bu örnek, eksik olan haftalık gözlemlerin yüzdesini gösterir.
+
+1) Verileri, gözlemlerin oranını "NA" (ve diğer ilgili değerler) ile özetleyerek yararlı bir zaman biriminde (günler, haftalar vb.) toplayın.
+2) Eksik oranı `ggplot()` kullanarak bir çizgi olarak çizin.
+
+Aşağıda, satır listesini alıyoruz, hafta için yeni bir sütun ekliyoruz, verileri haftaya göre gruplandırıyoruz ve ardından değerin eksik olduğu o haftanın kayıtlarının yüzdesini hesaplıyoruz. (not: 7 günün yüzdesini istiyorsanız, hesaplama biraz farklı olacaktır).
+
+```{r}
+outcome_missing <- linelist %>%
+  mutate(week = lubridate::floor_date(date_onset, "week")) %>%   # yeni hafta sütunu oluşturun
+  group_by(week) %>%                                             # satırları haftaya göre gruplayın
+  summarise(                                                     # her haftayı özetleyin
+    n_obs = n(),                                                  # kayıtların sayısı
+    
+    outcome_missing = sum(is.na(outcome) | outcome == ""),        # değeri eksik olan kayıt sayısı
+    outcome_p_miss  = outcome_missing / n_obs,                    # değeri eksik kayıtların oranı
+  
+    outcome_dead    = sum(outcome == "Death", na.rm=T),           # ölü olarak kayıt sayısı
+    outcome_p_dead  = outcome_dead / n_obs) %>%                   # ölü olarak kayıtların oranı
+  
+  tidyr::pivot_longer(-week, names_to = "statistic") %>%         # hafta dışındaki tüm sütunları ggplot için uzun biçime döndür
+  filter(stringr::str_detect(statistic, "_p_"))                  # sadece orantı değerlerini tut
+```
+
+Sonra eksik oranı haftaya göre bir çizgi olarak çizeriz. **ggplot2** çizim paketine aşina değilseniz [ggplot temelleri] sayfasına bakabilirsiniz.
+
+```{r, message=F, warning=F}
+ggplot(data = outcome_missing)+
+    geom_line(
+      mapping = aes(x = week, y = value, group = statistic, color = statistic),
+      size = 2,
+      stat = "identity")+
+    labs(title = "Weekly outcomes",
+         x = "Week",
+         y = "Proportion of weekly records") + 
+     scale_color_discrete(
+       name = "",
+       labels = c("Died", "Missing outcome"))+
+    scale_y_continuous(breaks = c(seq(0,1,0.1)))+
+  theme_minimal()+
+  theme(legend.position = "bottom")
+```
+
+
+
+
+
+<!-- ======================================================= -->
+## Eksik değerlere sahip verileri kullanma
+
+
+### Eksik değerlere sahip satırları filtreleyin {.unnumbered}
+
+Eksik değerlere sahip satırları hızla kaldırmak için **dplyr** `drop_na()` fonksiyonunu kullanın.
+
+Orijinal 'linelist', 'nrow(linelist)' satırlarına sahiptir. Ayarlanan satır sayısı aşağıda gösterilmiştir:
+
+```{r}
+linelist %>% 
+  drop_na() %>%     # HERHANGİ eksik değerleri olan satırları kaldırın
+  nrow()
+```
+
+Belirli sütunlarda eksik olan satırların bırakılmasını belirtebilirsiniz:
+
+```{r}
+linelist %>% 
+  drop_na(date_onset) %>% # date_onset eksik satırları kaldırın
+  nrow()
+```
+
+Sütunları arka arkaya listeleyebilir veya ["tidyselect" yardımcı işlevlerini](#clean_tidyselect) kullanabilirsiniz:
+
+```{r}
+linelist %>% 
+  drop_na(contains("date")) %>% # herhangi bir "tarih" sütununda satır eksik değerleri kaldırın 
+  nrow()
+```
+
+
+
+<!-- ======================================================= -->
+### `ggplot()` içindeki `NA`yı işleme {.unnumbered}
+
+Bir başlıktaki bir çizimden hariç tutulan değerlerin sayısını bildirmek genellikle akıllıca olur. Aşağıda bir örnek verilmiştir:
+
+'ggplot()' içinde, 'labs()' ve içine bir 'caption = ' ekleyebilirsiniz. Altyazıda, değerleri bir cümleye dinamik olarak yapıştırmak için **stringr** paketinden `str_glue()` kullanabilirsiniz, böylece verilere uyum sağlarlar. Bir örnek aşağıdadır:
+
+* Yeni bir satır için `\n` kullanımına dikkat edin.
+* Birden fazla sütun, çizilmeyen değerlere katkıda bulunacaksa (örneğin, çizimde yaş veya cinsiyet yansıtılıyorsa), gösterilmeyen sayıyı doğru bir şekilde hesaplamak için bu sütunları da filtrelemeniz gerektiğini unutmayın.
+
+```{r, eval=F}
+labs(
+  title = "",
+  y = "",
+  x = "",
+  caption  = stringr::str_glue(
+  "n = {nrow(central_data)} from Central Hospital;
+  {nrow(central_data %>% filter(is.na(date_onset)))} cases missing date of onset and not shown."))  
+```
+
+Bazen, "ggplot()" komutundan önceki komutlarda dizeyi bir nesne olarak kaydetmek ve "str_glue()" içindeki adlandırılmış dize nesnesine başvurmak daha kolay olabilir.
+
+
+<!-- ======================================================= -->
+###  Faktörlerde "NA" {.unnumbered} 
+
+İlgilendiğiniz sütun bir faktörse, "NA" değerlerini bir karakter değerine dönüştürmek için **forcats** paketinden "fct_explicit_na()" kullanın. [Faktörler] sayfasında daha fazla ayrıntıya bakabilirsiniz. Varsayılan olarak, yeni değer "(Eksik)" şeklindedir ancak bu, `na_level =` değişkeni ile ayarlanabilir.
+
+```{r}
+pacman::p_load(forcats)   # paketi yükle
+
+linelist <- linelist %>% 
+  mutate(gender = fct_explicit_na(gender, na_level = "Missing"))
+
+levels(linelist$gender)
+```
+
+
+
+<!-- ======================================================= -->
+## Atama { }
+
+
+Bazen, verilerinizi analiz ederken, "boşlukları doldurmak" ve eksik verileri eklemek önemli olabilir. Tüm eksik değerleri çıkardıktan sonra bir veri kümesini her zaman basitçe analiz edebilirsiniz. Ancak bu, birçok yönden sorunlara neden olabilir. İşte iki örnek:
+
+1) Eksik değerlere sahip tüm gözlemleri veya büyük miktarda eksik veriye sahip değişkenleri kaldırarak, bazı analiz türlerini yapma gücünüzü veya yeteneğinizi azaltabilirsiniz. Örneğin, daha önce keşfettiğimiz gibi, linelist veri kümemizdeki gözlemlerin yalnızca küçük bir kısmında tüm değişkenlerimizde eksik veri yoktur. Veri setimizin çoğunu kaldırırsak, çok fazla bilgi kaybederiz! Ve değişkenlerimizin çoğunda bir miktar eksik veri var - çoğu analiz için çok fazla verisi olan her değişkeni bırakmak da muhtemelen makul değildir.
+
+2) Verilerinizin neden eksik olduğuna bağlı olarak, yalnızca eksik olmayan verilerin analizi yanlı veya yanıltıcı sonuçlara yol açabilir. Örneğin, daha önce öğrendiğimiz gibi, bazı hastaların ateş veya öksürük gibi bazı önemli semptomları olup olmadığına ilişkin verileri kaçırıyor olabiliriz. Ancak, bir olasılık olarak, belki de bu bilgi çok hasta olmayan insanlar için kaydedilmemiştir. Bu durumda, bu gözlemleri kaldırmış olsaydık, veri kümemizdeki en sağlıklı insanlardan bazılarını hariç tutmuş olurduk ve bu gerçekten herhangi bir sonucu saptırabilirdi.
+
+Ne kadarının eksik olduğunu görmenin yanı sıra verilerinizin neden eksik olabileceğini düşünmek de önemlidir. Bunu yapmak, eksik verileri yüklemenin ne kadar önemli olabileceğine ve ayrıca sizin durumunuzda hangi eksik verileri yükleme yönteminin en iyi olabileceğine karar vermenize yardımcı olabilir.
+
+### Eksik veri türleri {.unnumbered}
+
+İşte üç genel eksik veri türü:
+
+1) **Rastgele Tamamen Eksik** (MCAR). Bu, verilerin eksik olma olasılığı ile verilerinizdeki diğer değişkenlerden herhangi biri arasında bir ilişki olmadığı anlamına gelir. Eksik olma olasılığı tüm durumlarda aynıdır. Bu nadir görülen bir durumdur. Ancak, verilerinizin MCAR olduğuna inanmak için güçlü bir nedeniniz varsa, yalnızca eksik olmayan verileri empoze etmeden analiz ediyorsa, sonuçlarınızı etkilemeyecektir (ancak biraz güç kaybedebilirsiniz). [TODO: MCAR için istatistiksel testleri tartışmayı düşünün]
+
+2) **Rastgele Eksik** (MAR). Bu isim aslında biraz yanıltıcıdır, çünkü MAR, sahip olduğunuz diğer bilgilere dayanarak verilerinizin sistematik, öngörülebilir bir şekilde eksik olduğu anlamına gelir. Örneğin, belki de veri setimizde eksik bir ateş değeri olan her gözlem aslında kaydedilmemiştir çünkü üşüyen ve ağrıyan her hastanın sadece ateşi olduğu varsayıldığından ateşleri hiç ölçülmemiştir. Eğer doğruysa, titreme ve ağrılı her eksik gözlemin de bir ateşi olduğunu kolayca tahmin edebilir ve bu bilgiyi eksik verilerimizi değerlendirmek için kullanabiliriz. Uygulamada, bu daha çok bir spektrumdur. Belki bir hastada hem üşüme hem de ağrı varsa, ateşi ölçülmediyse de ateşi olma olasılığı daha yüksekti, ama her zaman değil. Mükemmel bir şekilde öngörülebilir olmasa bile yine de öngörülebilir. Yaygın bir eksik veri türüdür.
+
+3) **Rastgele Eksik Değil** (MNAR veya NMAR). Bu, bir değerin eksik olma olasılığının sistematik OLMADIĞINI veya sahip olduğumuz diğer bilgiler kullanılarak öngörülebilir olmadığını, ancak rastgele olarak da eksik olmadığını varsayar. Bu durumda, bilinmeyen veya hakkında bilgi sahibi olmadığınız nedenlerden dolayı veriler eksiktir. Örneğin, veri setimizde yaşla ilgili bilgiler eksik olabilir, çünkü bazı çok yaşlı hastalar kaç yaşında olduklarını ya bilmiyorlar ya da söylemeyi reddediyorlardır. Bu durumda, yaşa ilişkin eksik veriler, değerin kendisiyle ilgilidir (ve dolayısıyla rastgele değildir) ve sahip olduğumuz diğer bilgilere dayanarak tahmin edilebilir değildir. MNAR karmaşıktır ve çoğu zaman bununla başa çıkmanın en iyi yolu, verilerin neden eksik olduğu hakkında daha fazla veri veya bilgi toplamaya çalışmaktır.
+
+Genel olarak, MCAR verilerini empoze etmek genellikle oldukça basittir, MNAR ise imkansız değilse de çok zordur. Yaygın veri atama yöntemlerinin çoğu MAR'ı varsayar.
+
+### Faydalı paketler {.unnumbered}
+
+Eksik verileri yüklemek için bazı yararlı paketler Mmisc, missForest (eksik verileri yüklemek için rastgele forestları kullanır) ve MICE'dir (Multivariate Imputation by Chained Equations- Zincirli Denklemlerle Çok Değişkenli Tahminleme). Bu bölüm için sadece çeşitli teknikleri uygulayan MICE paketini kullanacağız. MICE paketi üreticisi, burada daha fazla ayrıntıya giren eksik verilerin empoze edilmesi hakkında bir çevrimiçi kitap yayınlamıştır (https://stefvanbuuren.name/fimd/).
+
+Fare paketini yüklemek için kod:
+
+```{r}
+pacman::p_load(mice)
+```
+
+### Ortalama Atama {.unnumbered}
+
+Bazen basit bir analiz yapıyorsanız veya MCAR'ı varsayabileceğinizi düşünmek için güçlü bir nedeniniz varsa, eksik sayısal değerleri o değişkenin ortalamasına kolayca ayarlayabilirsiniz. Belki de veri setimizde eksik olan sıcaklık ölçümlerinin ya MCAR olduğunu ya da sadece normal değerler olduğunu varsayabiliriz. Veri kümemizdeki eksik sıcaklık değerlerini ortalama sıcaklık değeriyle değiştiren yeni bir değişken oluşturma kodu burada. Bununla birlikte, birçok durumda verileri ortalamayla değiştirmek yanlılığa neden olabilir, bu nedenle kullanırken dikkatli olun.
+
+```{r}
+linelist <- linelist %>%
+  mutate(temp_replace_na_with_mean = replace_na(temp, mean(temp, na.rm = T)))
+```
+
+Kategorik verileri belirli bir değerle değiştirmek için de benzer bir işlem yapabilirsiniz. Tüm gözlemlerin çıktılarının eksik verili olmasına karşın ("Ölüm" veya "İyileşme" olabilir) ölümlerden oluştuğunu bildiğinizi farz edin (not: bu aslında bu veri kümesi için doğru değildir):
+
+```{r}
+linelist <- linelist %>%
+  mutate(outcome_replace_na_with_death = replace_na(outcome, "Death"))
+```
+
+### Regresyon ataması {.unnumbered}
+
+Biraz daha gelişmiş bir yöntem, eksik bir değerin ne olabileceğini tahmin etmek için bir tür istatistiksel model kullanmak ve bunu tahmin edilen değerle değiştirmektir. Burada, sıcaklığın eksik olduğu, ancak yaş ve ateşin olmadığı tüm gözlemler için, tahmin edici olarak ateş durumu ve yaş kullanılarak basit doğrusal regresyon kullanılarak tahmin değerleri oluşturmaya bir örnek verilmiştir. Pratikte bu tür basit yaklaşımlardan daha iyi bir model kullanmak istersiniz.
+
+```{r, warning=F, message=F}
+simple_temperature_model_fit <- lm(temp ~ fever + age_years, data = linelist)
+
+#sadece sıcaklığın eksik olduğu gözlemler için değerleri tahmin etmek için basit sıcaklık modelimizi kullanma
+predictions_for_missing_temps <- predict(simple_temperature_model_fit,
+                                        newdata = linelist %>% filter(is.na(temp))) 
+```
+
+Veya, eksik sıcaklık gözlemleri için emsal değerler oluşturmak üzere MICE paketi aracılığıyla aynı modelleme yaklaşımını kullanarak:
+
+```{r}
+model_dataset <- linelist %>%
+  select(temp, fever, age_years)  
+
+temp_imputed <- mice(model_dataset,
+                            method = "norm.predict",
+                            seed = 1,
+                            m = 1,
+                            print = F)
+
+temp_imputed_values <- temp_imputed$imp$temp
+
+```
+
+
+Bu, eksik verileri tahmin edilen değerlerle değiştirmek için missForest paketini kullanmak gibi bazı daha gelişmiş yöntemlerle aynı türde bir yaklaşımdır. Bu durumda, tahmin modeli doğrusal bir regresyon yerine random forest'tir. Bunu yapmak için diğer model türlerini de kullanabilirsiniz. Bununla birlikte, bu yaklaşım MCAR altında iyi çalışsa da, MAR veya MNAR'ın durumunuzu daha doğru tanımladığına inanıyorsanız biraz dikkatli olmalısınız. Tahmininizin kalitesi, tahmin modelinizin ne kadar iyi olduğuna bağlı olacaktır ve çok iyi bir modelde bile, empoze edilen verilerinizin değişkenliği iyi tahmin edilemeyebilir.
+
+### LOCF ve BOCF {.unnumbered}
+
+İleriye taşınan son gözlem (Last observation carried forward- LOCF) ve ileriye taşınan temel gözlem (Baseline observation carried forward-BOCF), zaman serisi/boylamsal veriler için değerlendirme yöntemleridir. Buradaki fikir, eksik verilerin yerine önceki gözlenen değeri almaktır. Art arda birden fazla değer eksik olduğunda, yöntem en son gözlenen değeri arar.
+
+**tidyr** paketindeki `fill()` fonksiyonu hem LOCF hem de BOCF ataması için kullanılabilir (ancak, **HMISC**, **zoo** ve **data.table** gibi diğer paketler ayrıca bunu yapmak için yöntemler içerir). `fill()` sözdizimini göstermek için 2000 ve 2001 yıllarının her çeyreği için bir hastalık vakalarının sayısını içeren basit bir zaman serisi veri seti oluşturacağız. Ancak, Q1'den sonraki çeyrekler için yıl değeri eksik olduğundan onları saymamız gerekecek. 'fill()' bağlantısı [Pivoting data] sayfasında da gösterilmektedir.
+
+```{r}
+# basit veri setimizi oluşturmak
+disease <- tibble::tribble(
+  ~quarter, ~year, ~cases,
+  "Q1",    2000,    66013,
+  "Q2",      NA,    69182,
+  "Q3",      NA,    53175,
+  "Q4",      NA,    21001,
+  "Q1",    2001,    46036,
+  "Q2",      NA,    58842,
+  "Q3",      NA,    44568,
+  "Q4",      NA,    50197)
+
+# eksik yıl değerlerinin ataması:
+disease %>% fill(year)
+
+```
+
+Not: `fill()` fonskiyonunu kullanmadan önce verilerinizin doğru şekilde sıralandığından emin olun. `fill()` varsayılan olarak "aşağı" doldurma şeklindedir, ancak `.direction` parametresini değiştirerek değerleri farklı yönlere de uygulayabilirsiniz. Yıl değerinin yalnızca yılın sonunda kaydedildiği ve önceki çeyrekler için eksik olduğu benzer bir veri seti yapabiliriz:
+
+```{r}
+# biraz farklı veri kümemizi oluşturmak
+disease <- tibble::tribble(
+  ~quarter, ~year, ~cases,
+  "Q1",      NA,    66013,
+  "Q2",      NA,    69182,
+  "Q3",      NA,    53175,
+  "Q4",    2000,    21001,
+  "Q1",      NA,    46036,
+  "Q2",      NA,    58842,
+  "Q3",      NA,    44568,
+  "Q4",    2001,    50197)
+
+# eksik yıl değerlerini "yukarı" yönde atamak:
+disease %>% fill(year, .direction = "up")
+
+```
+
+Bu örnekte, LOCF ve BOCF açıkça yapılması gereken doğru şeylerdir, ancak daha karmaşık durumlarda bu yöntemlerin uygun olup olmadığına karar vermek daha zor olabilir. Örneğin hastanede yatan bir hasta için ilk günden sonra eksik laboratuvar değerleriniz olabilir. Bazen bu, laboratuvar değerlerinin değişmediği anlamına gelebilir... ama aynı zamanda hastanın iyileştiği ve değerlerinin ilk günden sonra çok farklı olacağı anlamına da gelebilir! Bu yöntemleri dikkatli kullanın.
+
+
+### Çoklu Atama {.unnumbered}
+
+MICE paketinin yazarı tarafından daha önce bahsettiğimiz çevrimiçi kitap (https://stefvanbuuren.name/fimd/), birden fazla değerlemenin ayrıntılı bir açıklamasını ve neden kullanmak isteyeceğinizi içermektedir. Ancak, işte yöntemin temel bir açıklaması:
+
+Birden çok atama yaptığınızda, eksik değerlerin makul veri değerlerine atfedildiği birden çok veri kümesi oluşturursunuz (araştırma verilerinize bağlı olarak, bu atfedilen veri kümelerinden daha fazlasını veya daha azını oluşturmak isteyebilirsiniz, ancak MICE paketi varsayılan sayıyı 5'e ayarlar). Aradaki fark, her bir empoze edilen değerin tek, belirli bir değerden ziyade tahmini bir dağılımdan çekilmesidir (bu nedenle bir miktar rastgelelik içerir). Sonuç olarak, bu veri kümelerinin her biri biraz farklı emsal değerlere sahip olacaktır (ancak, eksik olmayan veriler bu empoze edilen veri kümelerinin her birinde aynı olacaktır). Bu yeni veri kümelerinin her birinde atama yapmak için hala bir tür tahmine dayalı model kullanıyorsunuz (MICE *Tahmini Ortalama Eşleştirme*, *lojistik regresyon* ve *random forest* dahil olmak üzere birçok tahmin yöntemi seçeneği vardır) ancak MICE paketinin modelleme detaylarına dikkat etmelisiniz.
+
+Ardından, bu yeni atfedilen veri kümelerini oluşturduktan sonra, bu yeni empoze edilmiş veri kümelerinin her biri için yapmayı planladığınız istatistiksel modeli veya analizi uygulayabilir ve 
+modellerin sonuçlarını bir araya toplayabilirsiniz. Bu, hem MCAR hem de birçok MAR ayarındaki yanlılığı azaltmak için çok iyi çalışır ve genellikle daha doğru standart hata tahminleriyle sonuçlanır.
+
+Burada, bir yaş ve ateş durumu (yukarıdaki basitleştirilmiş model_veri kümemiz) kullanarak satır listesi veri kümemizdeki sıcaklığı tahmin etmek için Çoklu Atama işleminin uygulanmasına bir örnek verilmiştir:
+
+```{r}
+# model_dataset'imizdeki tüm değişkenler için eksik değerler atamak ve 10 yeni atanmış veri kümesi oluşturmak
+multiple_imputation = mice(
+  model_dataset,
+  seed = 1,
+  m = 10,
+  print = FALSE) 
+
+model_fit <- with(multiple_imputation, lm(temp ~ age_years + fever))
+
+base::summary(mice::pool(model_fit))
+```
+
+Burada MICE'nin standart yöntemi Tahmini Ortalama Eşleştirme yöntemini kullandık. Daha sonra, bu veri kümelerinin her birinde basit doğrusal regresyonlardan elde edilen sonuçları ayrı ayrı tahmin etmek ve havuzlamak için bu emsal veri kümelerini kullandık. Üzerinde durduğumuz birçok ayrıntı ve MICE paketini kullanırken Çoklu Atama  işlemi sırasında ayarlayabileceğiniz birçok ayar vardır. Örneğin, her zaman sayısal verileriniz olmaz ve başka atama yöntemlerini kullanmanız gerekebilir (diğer birçok veri ve yöntem türü için MICE paketini kullanmaya devam edebilirsiniz). Ancak, eksik veriler önemli bir sorun olduğunda daha sağlam bir analiz için, Çoklu Atama iyi bir çözümdür ancak, her zaman tam bir vaka analizi yapmaktan daha fazla işe yaramaz.
+
+
+
+
+
+<!-- ======================================================= -->
+## Kaynaklar { }
+
+Kılavuz [naniar package](https://cran.r-project.org/web/packages/naniar/vignettes/getting-started-w-naniar.html)
+
+Galeri [missing value visualizations](https://cran.r-project.org/web/packages/naniar/vignettes/naniar-visualisation.html)
+
+[Çevrimiçi kitap](https://stefvanbuuren.name/fimd/) R'da birden fazla değer atama hakkında MICE paketi yaratıcısının kitabı

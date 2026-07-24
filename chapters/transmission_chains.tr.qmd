@@ -1,0 +1,610 @@
+---
+aliases:
+  - /new_pages/transmission_chains.tr.html
+---
+
+# İletim Zincirleri { }
+
+
+<!-- ======================================================= -->
+## Genel Bakış {  }
+
+İletim zincirlerini ve temas izleme verilerini işlemek, analiz etmek ve görselleştirmek için birincil araç, RECON tarafından geliştirilen epicontacts paketidir. Daha fazla bilgi için imleci nodların üzerine getirerek, taşımak için sürükleyerek ve aşağı akış durumlarını vurgulamak için üzerlerine tıklayarak aşağıdaki etkileşimli grafiği deneyin
+
+```{r out.width=c('25%', '25%'), fig.show='hold', echo=F}
+
+## epicontacts'ın geliştirme sürümünü yükleyin
+if(
+  !"epicontacts" %in% rownames(installed.packages()) |
+  packageVersion("epicontacts") != "1.2.0"
+) remotes::install_github("reconhub/epicontacts@timeline")
+
+## paketleri yükleyin ve kurun
+pacman::p_load(tidyverse,
+               #epicontacts,
+               magrittr, here, webshot, visNetwork)
+
+library(epicontacts)
+
+## satır listesini yükleyin
+linelist <- rio::import(here::here("data", "case_linelists", "linelist_cleaned.rds")) %>%
+  filter(!duplicated(case_id))
+
+## kişileri oluşturun
+contacts <- linelist %>%
+  transmute(
+    from = infector,
+    to = case_id,
+    location = sample(c("Community", "Nosocomial"), n(), TRUE),
+    duration = sample.int(10, n(), TRUE)
+  ) %>%
+  drop_na(from)
+
+## epicontacts oluşturun
+epic <- epicontacts::make_epicontacts(
+  linelist = linelist,
+  contacts = contacts, 
+  directed = TRUE
+)
+
+## alt küme nesnesi
+epic %<>% subset(
+  node_attribute = list(date_onset = c(as.Date(c("2014-06-01", "2014-07-01"))))
+) %>%
+  thin("contacts")
+
+## x ekseni olarak başlangıç tarihi ile grafik çiz
+plot(
+  epic,
+  x_axis = "date_onset",
+  label = FALSE,
+  node_color = "outcome",
+  col_pal = c(Death = "firebrick", Recover = "green"),
+  node_shape = "gender",
+  shapes = c(f = "female", m = "male"),
+  unlinked_pos = "bottom",
+  date_labels = "%b %d %Y",
+  node_size = 35,
+  font_size = 20,
+  arrow_size = 0.5,
+  height = 800,
+  width = 700,
+  edge_linetype = "location",
+  legend_width = 0.15,
+  highlight_downstream = TRUE,
+  selector = FALSE
+)
+
+```
+
+<!-- ======================================================= -->
+## Hazırlık {  }
+
+### Paketlerin yüklenmesi {.unnumbered}  
+
+Önce verilerin içe aktarılması ve işlenmesi için gereken standart paketleri yükleyin. Bu el kitabında, gerekirse paketi kuran ve kullanım için yükleyen pacman'ın 'p_load()' fonksiyonunu vurguluyoruz. Ayrıca  R tabanı'ndan 'library()' ile paketleri yükleyebilirsiniz. R paketleri hakkında daha fazla bilgi için R’ın temelleri[R Basics] sayfasına bakın.
+ 
+	
+```{r transmission_chains_packages, eval = FALSE}
+pacman::p_load(
+   rio,          # Dosyanın içe aktarımı 
+   here,         # Dosyanın konumlandırılması 
+   tidyverse,    # Veri yönetimi + ggplot2 grafikleri
+   remotes       # github’dan paketlerin kurulumu  
+)
+```
+	
+Pacman'ın p_install_github() fonksiyonu kullanılarak github'dan yüklenebilen epicontacts’ın geliştirme sürümüne ihtiyacınız olacak. Aşağıdaki komutu yalnızca bir kez çalıştırmanız gerekir, paketi her kullandığınızda değil (bundan sonra her zamanki gibi p_load() kullanabilirsiniz).
+
+```{r transmission_chains_epicontacts_install, eval = FALSE}
+pacman::p_install_gh("reconhub/epicontacts@timeline")
+```
+
+
+### Verinin içeri aktarımı {.unnumbered}
+
+Simüle edilmiş bir Ebola salgını vakalarından oluşan veri setini içe aktarıyoruz. Adım adım verileri indirmek istiyorsanız, el kitabı ve verilerin indirilmesi sayfasındaki talimatlara [Download handbook and data](#data-used) bakın. Veri seti, rio paketinden import() fonkisyonu kullanılarak içe aktarılır. Verileri içe aktarmanın çeşitli yolları için İçe ve dışa aktarma sayfasına [Import and export] bakın.
+
+```{r, echo=F}
+# satır listesini R içine aktarın
+linelist <- rio::import(here::here("data", "case_linelists", "linelist_cleaned.rds"))
+```
+
+```{r, eval=F}
+# satır listesini içe aktarın
+linelist <- import("linelist_cleaned.xlsx")
+```
+
+Çizgi listesinin ilk 50 satırı aşağıda gösterilmiştir. Özellikle ilgi çekici olan sütunlar : 'case_id', 'generation', 'infector' ve 'source'.
+
+```{r, message=FALSE, echo=F}
+# satır listesi verisini tabloda gösterin
+DT::datatable(head(linelist, 50), rownames = FALSE, filter="top", options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+
+### Epicontacts nesnesi oluşturma  {.unnumbered}
+
+Daha sonra iki tür veri gerektiren bir epicontacts nesnesi oluşturmamız gerekiyor:
+• Sütunların değişken olduğu ve satırların benzersiz durumlara karşılık geldiği bir satır listesi
+• Benzersiz kimliklerle vakalar arasındaki bağlantıları tanımlayan kenarların bir listesi (bunlar kişiler, aktarım olayları vb. olabilir)
+
+Halihazırda bir satır listemiz olduğundan, vakalar arasında, daha spesifik olarak kimlikleri arasında bir kenar listesi oluşturmamız gerekiyor. Enfektör sütununu 'case_id' sütununa bağlayarak satır listesinden iletim bağlantılarını çıkarabiliriz. Bu noktada, vakaların kendilerini değil, iki durum arasındaki bağlantıyı tanımlayan herhangi bir değişkeni gösterdiğimiz kenar özelliklerini (edge properties) de ekleyebiliriz. Örnek olarak, iletim olayının konumunu tanımlayan bir konum değişkeni ve gün cinsinden temasın süresini tanımlayan bir süre değişkeni ekleyeceğiz.
+
+Aşağıdaki kodda, dplyr fonksiyonu transmut'e, yalnızca fonksiyon içinde belirttiğimiz sütunları tutması dışında mutate’e benzer. drop_na fonksiyonu, belirtilen sütunlarda bir NA değeri olan tüm satırları filtreleyecektir; bu durumda, yalnızca bulaştırıcının bilindiği satırları tutmak istiyoruz.
+
+
+```{r transmission_chains_create_contacts,}
+## kişileri oluştur
+contacts <- linelist %>%
+  transmute(
+    infector = infector,
+    case_id = case_id,
+    location = sample(c("Community", "Nosocomial"), n(), TRUE),
+    duration = sample.int(10, n(), TRUE)
+  ) %>%
+  drop_na(infector)
+```
+
+Artık 'make_epicontacts' fonksiyonunu kullanarak epicontacts nesnesini oluşturabiliriz. Satır listesindeki hangi sütunun benzersiz vaka tanımlayıcısına işaret ettiğini ve ayrıca ilgili kişilerdeki hangi sütunların bağlantıda yer alan vakaların benzersiz tanımlayıcılarına işaret ettiğini belirtmemiz gerekir. Bu bağlantılar, enfeksiyonun bulaştırıcıdan vakaya gittiği yöndedir, bu nedenle başlangıç ve sonuç değişkenlerini belirtmemiz gerekir. Bu sebeple, gelecekteki işlemleri etkileyecek olan yönlendirilmiş (directed) değişkenini TRUE olarak ayarladık.
+
+```{r transmission_chains_create_epicontacts,}
+## epicontacts nesnesi oluştur 
+epic <- make_epicontacts(
+  linelist = linelist,
+  contacts = contacts,
+  id = "case_id",
+  from = "infector",
+  to = "case_id",
+  directed = TRUE
+)
+```
+
+Epicontacts nesnelerini inceledikten sonra, satır listesindeki case_id sütununun id olarak yeniden adlandırıldığını ve temaslılardaki case_id ve infector sütunlarının from (-den) ve to (-e) olarak yeniden adlandırıldığını görebiliriz. Bu adım, sonraki işleme, görselleştirme ve analiz işlemlerinde tutarlılık sağlar.
+
+```{r transmission_chains_view_epicontacts,}
+##  epicontacts nesnesini göster
+epic
+```
+
+<!-- ======================================================= -->
+## İdare {  }
+
+### Altkümeleme {.unnumbered}
+
+epicontacts nesneleri için subset() yöntemi, diğer nesnelerin yanı sıra, satır listesinin ("düğüm(nod) öznitelikleri") ve kişiler veritabanının ("kenar öznitelikleri") özelliklerine dayalı olarak ağların filtrelenmesine olanak tanır. Bu değerler, ilgili bağımsız değişkene adlandırılmış listeler olarak iletilmelidir. Örneğin, aşağıdaki kodda sadece Nisan-Temmuz 2014 arasında enfeksiyonu olan (tarihler aralık olarak belirtilmiştir) erkek vakaları ve hastanede meydana gelen bulaşma bağlantılarını satır listesinde tutuyoruz.
+
+
+```{r transmission_chains_subset_nodes,}
+sub_attributes <- subset(
+  epic,
+  node_attribute = list(
+    gender = "m",
+    date_infection = as.Date(c("2014-04-01", "2014-07-01"))
+  ), 
+  edge_attribute = list(location = "Nosocomial")
+)
+sub_attributes
+```
+
+thin fonksiyonunu, 'what = "linelist"' değişkeniyle temaslılarda bulunan vakaları dahil etmek için satır listesini filtrelemek veya 'what = "contacts”' değişkeniyle satır listesinde bulunan vakaları dahil etmek için kullanabiliriz. Aşağıdaki kodda, yukarıda filtrelediğimiz Nisan ve Temmuz ayları arasında enfekte olan erkek vakaları içeren iletim bağlantılarını tutmak için epicontacts nesnesini ayrıca filtreliyoruz. Sadece iki bilinen iletim bağlantısının bu filtreye uyduğunu görebiliriz.
+
+```{r transmission_chains_thin,}
+sub_attributes <- thin(sub_attributes, what = "contacts")
+nrow(sub_attributes$contacts)
+```
+
+Nod ve kenar özniteliklerine göre alt kümelemeye ek olarak, ağlar yalnızca belirli nodlara bağlı bileşenleri içerecek şekilde budanabilir. 'Cluster_id' değişkeni, vaka kimliklerinin bir vektörünü alır ve doğrudan veya dolaylı olarak bu kimliklere bağlı bireylerin satır listesini getirir. Aşağıdaki kodda, '2ae019' ve '71577a' içeren kümelerde toplam 13 satır listesi vakasının yer aldığını görebiliriz.
+
+
+```{r}
+sub_id <- subset(epic, cluster_id = c("2ae019","71577a"))
+nrow(sub_id$linelist)
+```
+
+epicontacts nesneleri için subset() yöntemi ayrıca cs, cs_min ve cs_max değişkenlerini kullanarak küme boyutuna göre filtrelemeye izin verir. Aşağıdaki kodda, yalnızca 10 vaka veya daha büyük kümelere dahil olan vakaları tutuyoruz ve bu kümelerde 271 satır listesi vakasının yer aldığını görebiliriz.
+
+    
+```{r}   
+sub_cs <- subset(epic, cs_min = 10)
+nrow(sub_cs$linelist)
+```
+
+### ID'lere ulaşmak {.unnumbered}
+
+get_id() fonksiyonu, veri setindeki vaka kimlikleri hakkında bilgi toplar ve aşağıdaki gibi parametrelenebilir:
+• **linelist**: satır listesi verilerindeki kimlikler
+• **contacts**: temaslı veri setindeki kimlikler (“from-kimden” ve “to-kime” birleşik)
+• **from**: temaslı veri setinin "kimden" sütunundaki kimlikler
+• **to**: temaslı veri setinin "to" sütunundaki kimliklere
+• **all**: Her iki veri kümesinde de herhangi bir yerde görünen kimlikler
+• **common**: Hem temaslı veri setinde hem de satır listesinde görünen kimlikler
+
+Örneğin,  veri kümesindeki ilk on kimlik nedir?
+
+```{r transmission_chains_get_ids,}
+contacts_ids <- get_id(epic, "contacts")
+head(contacts_ids, n = 10)
+```
+
+Hem satır listesinde hem de temaslılarda kaç kimlik var?
+
+```{r transmission_chains_get_both,}
+length(get_id(epic, "common"))
+```
+
+<!-- ======================================================= -->
+## Görselleştirme {  }
+
+### Temel grafik oluşturma {.unnumbered}
+
+Epicontacts nesnelerinin tüm görselleştirmeleri, plot fonksiyonu tarafından gerçekleşitirilr. İlk önce epicontacts nesnesini subset fonksiyonunu kullanarak yalnızca Haziran 2014 başlangıç tarihine sahip vakaları içerecek şekilde filtreleyeceğiz ve thin fonksiyonu kullanarak bu vakalarla bağlantılı kişileri dahil edeceğiz.
+
+```{r transmission_chains_basic_plot_sub,}
+## epicontacts nesnesi alt kümesi 
+sub <- epic %>%
+  subset(
+    node_attribute = list(date_onset = c(as.Date(c("2014-06-30", "2014-06-01"))))
+  ) %>%
+ thin("contacts")
+```
+
+Daha sonra basit bir etkileşimli grafiği aşağıdaki gibi kolay şekilde oluşturabiliriz:
+
+```{r transmission_chains_basic_plot,}
+## epicontacts nesne grafiği
+plot(
+  sub,
+  width = 700,
+  height = 700
+)
+```
+
+Bu grafiği daha da değiştirmek için çok sayıda değişken bulunur. Esas olanları burada ele alacağız, ancak fonksiyonun tam bir açıklamasını elde etmek için ?vis_epicontacts (bir epicontacts nesnesi üzerinde çizim kullanılırken çağrılan fonksiyon) aracılığıyla belgelere bakın.
+	 
+####Nod özelliklerinin görselleştirilmesi {.unnumbered}
+
+Nod rengi, şekli ve boyutu, node_color, node_shape ve node_size bağımsız değişkenleri kullanılarak satır listesindeki belirli bir sütuna eşlenebilir. Bu, ggplot2'den tanıyabileceğiniz aes sözdizimine benzer.
+
+Nodların belirli renkleri, şekilleri ve boyutları aşağıdaki gibi belirlenebilir:
+• Col_pal değişkeni aracılığıyla, aşağıda yapıldığı gibi her rengin manuel olarak belirtilmesi için bir ad listesi yazarak ya da colorRampPalette(c("siyah", "kırmızı", "turuncu") gibi bir renk paleti fonksiyonu ile sağlayarak), belirtilenler arasında bir renk gradyanı oluşturulabilir.
+• Shapes (Şekiller) adlandırılmış bir liste ileterek, node_shape  tarafından belirtilen satır listesi sütunundaki her benzersiz öğe için bir şekil belirtilebilir. Kullanılabilir şekiller için codeawesome'a bakın.
+• Size_range nodların boyut aralığını ileterek boyutlandırma.
+Rengin sonucu, cinsiyetin şekli ve yaşın ise boyutu temsil ettiği bir örnek:
+
+
+
+```{r transmission_chains_node_attribute,}
+plot(
+  sub, 
+  node_color = "outcome",
+  node_shape = "gender",
+  node_size = "age",
+  col_pal = c(Death = "firebrick", Recover = "green"),
+  shapes = c(f = "female", m = "male"),
+  size_range = c(40, 60),
+  height = 700,
+  width = 700
+)
+```
+
+#### Kenar özelliklerinin görselleştirilmesi  {.unnumbered}
+
+Kenar rengi, genişliği ve çizgi tipi, edge_color, edge_width ve edge_linetype değişkenleri kullanılarak temasların veri çerçevesindeki belirli bir sütuna eşlenebilir. Kenarların belirli renkleri ve genişlikleri aşağıdaki gibi belirtilebilir:
+
+• Col_pal için kullanılanla aynı şekilde edge_col_pal aracılığıyla renkler.
+• Genişlik_aralığı argümanına nodların boyut aralığını ileterek genişlik belirlenir 
+
+İşte bir örnek: 
+
+
+```{r transmission_chains_edge_attribute,}
+
+plot(
+  sub, 
+  node_color = "outcome",
+  node_shape = "gender",
+  node_size = 'age',
+  col_pal = c(Death = "firebrick", Recover = "green"),
+  shapes = c(f = "female", m = "male"),
+  size_range = c(40, 60),
+  edge_color = 'location',
+  edge_linetype = 'location',
+  edge_width = 'duration',
+  edge_col_pal = c(Community = "orange", Nosocomial = "purple"),
+  width_range = c(1, 3),
+  height = 700,
+  width = 700
+)
+
+```
+
+### Temporal eksen {.unnumbered}
+
+x_axis değişkeni satır listesindeki bir sütuna eşleyerek ağı zamansal bir eksen boyunca görselleştirebiliriz. Aşağıdaki örnekte, x ekseni, semptom başlangıç tarihini temsil eder. Ayrıca okların çok büyük olmamasını sağlamak için arrow_size (ok boyutu) değişkenini belirledik ve şekli daha az karmaşık hale getirmek için label değişkenini = YANLIŞ olarak ayarladık.
+
+```{r transmission_chains_x_axis,}
+plot(
+  sub,
+  x_axis = "date_onset",
+  node_color = "outcome",
+  col_pal = c(Death = "firebrick", Recover = "green"),
+  arrow_size = 0.5,
+  node_size = 13,
+  label = FALSE,
+  height = 700,
+  width = 700
+)
+```
+
+Bu ağın zamansal bir eksen boyunca nasıl görselleştirildiğini daha ayrıntılı olarak göstermek için çok sayıda ek argüman vardır; bunları ?vis_temporal_interactive (bir epicontacts nesnesi üzerinde çizimi x_axis üzerinden belirtilen şekilde göstermek çağrılan fonkisyon) aracılığıyla inceleyebilirsiniz. Aşağıda bazılarını gözden geçireceğiz.
+
+#### İletim ağacı şeklinin belirlenmesi {.unnumbered}
+
+Network_shape değişkeni kullanılarak belirtilen, iletim ağacının alabileceği iki ana şekil vardır. Birincisi, düz bir kenarın herhangi iki düğümü birleştirdiği, yukarıda gösterildiği gibi bir dallanma şeklidir. Bu en iyi anlaşılan temsildir, ancak yoğun bir şekilde bağlantılar içeren bir ağda üst üste binen kenarlara neden olabilir. İkinci şekil, bir filogenik ağaca benzeyen bir ağaç oluşturan dikdörtgendir. Örneğin:
+
+```{r transmission_chains_rectangle,}
+plot(
+  sub,
+  x_axis = "date_onset",
+  network_shape = "rectangle",
+  node_color = "outcome",
+  col_pal = c(Death = "firebrick", Recover = "green"),
+  arrow_size = 0.5,
+  node_size = 13,
+  label = FALSE,
+  height = 700,
+  width = 700
+)
+```
+
+Her durum nodunda, position_dodge değişkeni değiştirilerek benzersiz bir dikey konum atanabilir. Bağlantısız vakaların konumu (yani, bildirilen herhangi bir kişi olmadan), unlinked_pos değişkeni kullanılarak belirtilir. 
+
+```{r transmission_chains_dodge,}
+plot(
+  sub,
+  x_axis = "date_onset",
+  network_shape = "rectangle",
+  node_color = "outcome",
+  col_pal = c(Death = "firebrick", Recover = "green"),
+  position_dodge = TRUE,
+  unlinked_pos = "bottom",
+  arrow_size = 0.5,
+  node_size = 13,
+  label = FALSE,
+  height = 700,
+  width = 700
+)
+```
+
+Üst nodun alt nodlara göre konumu, 'parent_pos' değişkeni kullanılarak belirlenebilir. Varsayılan seçenek, üst nodu ortaya yerleştirmektir, ancak altta (parent_pos = 'alt') veya üstte (parent_pos = 'üst') yerleştirilebilir. 
+
+
+```{r transmission_chains_parent_pos,}
+plot(
+  sub,
+  x_axis = "date_onset",
+  network_shape = "rectangle",
+  node_color = "outcome",
+  col_pal = c(Death = "firebrick", Recover = "green"),
+  parent_pos = "top",
+  arrow_size = 0.5,
+  node_size = 13,
+  label = FALSE,
+  height = 700,
+  width = 700
+)
+```
+
+#### Şekil ve grafiklerin kaydedilmesi  {.unnumbered}
+
+**VisNetwork** paketindeki 'visSave' fonksiyonuyla bir grafiği etkileşimli, bağımsız bir html dosyası olarak kaydedebilirsiniz:
+
+```{r transmission_chains_save, eval=F}
+
+plot(
+  sub,
+  x_axis = "date_onset",
+  network_shape = "rectangle",
+  node_color = "outcome",
+  col_pal = c(Death = "firebrick", Recover = "green"),
+  parent_pos = "top",
+  arrow_size = 0.5,
+  node_size = 13,
+""  label = FALSE,
+  height = 700,
+  width = 700
+) %>%
+  visNetwork::visSave("network.html")
+
+```
+
+Bu ağ çıktılarını bir görüntü olarak kaydetmek ne yazık ki zordur ve dosyayı bir html olarak kaydetmenizi ve ardından 'webshot' paketini kullanarak bu dosyanın ekran görüntüsünü almanızı gerektirir. Aşağıdaki kodda, yukarıda kaydedilen html dosyasını PNG'ye dönüştürüyoruz:
+
+```{r transmission_chains_webshot, eval=F}
+webshot(url = "network.html", file = "network.png")
+```
+
+### Zaman Çizelgeleri {.unnumbered}
+
+Ayrıca, her bir vakanın x ekseninde temsil edildiği zaman çizelgeleri de verebilirsiniz. Zaman çizergeleri, vaka konumlarını veya sonuca ulaşma zamanını görselleştirmek için kullanılabilir. Bir zaman çizelgesi oluşturmak için, vaka kimliğini, "olay"ın başlangıç tarihini ve "olay"ın bitiş tarihini gösteren en az üç sütundan oluşan bir veri çerçevesi oluşturmamız gerekiyor. Ayrıca, zaman çizelgesinin nod ve kenar özelliklerine eşlenebilecek başka bir sütun da ekleyebilirsiniz. Aşağıdaki kodda, semptom başlangıcından sonuç tarihine kadar bir zaman çizelgesi oluşturuyoruz ve nod şeklini ve rengini tanımlamak için kullandığımız sonuç ve hastane değişkenlerini veri tabanımızda tutuyoruz. Örneğin, bir vaka birden fazla hastane arasında sevk ediliyorsa, vaka başına birden fazla zaman çizelgesi satırına/olayına sahip olabileceğinizi unutmayın.
+
+```{r transmission_chains_create_timeline,}
+
+## zaman çizelgesini oluştur
+timeline <- linelist %>%
+  transmute(
+    id = case_id,
+    start = date_onset,
+    end = date_outcome,
+    outcome = outcome,
+    hospital = hospital
+  )
+
+```
+
+Daha sonra zaman çizelgesi öğesini 'timeline' değişkenine iletiriz. Zaman çizelgesi özniteliklerini zaman çizelgesi nod renklerine, şekillerine ve boyutlarına önceki bölümlerde tanımlandığı şekilde eşleyebiliriz, ancak iki nodumuz vardır: Bir zaman çizelgesinin ayrı ayrı değişkenleri olan başlangıç ve bitiş nodları. Örneğin, 'tl_start_node_color', hangi zaman çizelgesi sütununun başlangıç nodunun rengiyle eşlendiğini tanımlarken 'tl_end_node_shape', hangi zaman çizelgesi sütununun bitiş nodunun şekliyle eşlendiğini tanımlar. Ayrıca 'tl_edge_*' değişkenleri aracılığıyla renk, genişlik, çizgi tipi ve etiketleri zaman çizelgesi kenarına eşleyebiliriz.
+
+Değişkenlerle ilgili ayrıntılı belgeler için '?vis_temporal_interactive' e (bir epicontacts nesnesi çizilirken çağrılan fonksiyon) bakın. Her değişken aşağıdaki kodda da açıklanmıştır:
+
+
+```{r transmission_chains_vis_timeline,}
+
+## şekilleri tanımla
+shapes <- c(
+  f = "female",
+  m = "male",
+  Death = "user-times",
+  Recover = "heartbeat",
+  "NA" = "question-circle"
+)
+
+## renkleri tanımla
+colours <- c(
+  Death = "firebrick",
+  Recover = "green",
+  "NA" = "grey"
+)
+
+## grafiği oluştur
+plot(
+  sub,
+  ## başlangıç tarihi için maksimum x koordinatı 
+  x_axis = "date_onset",
+  ## dikdörtgen ağ şeklini kullan 
+  network_shape = "rectangle",
+  ## nod şekillerini cinsiyet sütununa göre şekillendir 
+  node_shape = "gender",
+  ## nod rengini herhangi bir sütun ile eşleştirmiyoruz çünkü varsayılan değeri id sütunudur bu da renk şemamızı bozar
+  node_color = NULL,
+  ## nod büyüklüğünü 30’a ayarla (nod büyüklüğü herhangi bir karakter değildir, herhangi bir sütuna eşleştirilmez, doğrudan nod büyüklüğü belirtilir
+  node_size = 30,
+  ## iletim bağlantısı kalınlığını 4’e ayarla (bu kalınlık bir karakter ile eşleşmemiştir) 
+  edge_width = 4,
+  ## zaman çizelgesi nesnesi sağla 
+  timeline = timeline,
+  ## bitiş nodunun şeklini zaman çizelgesi nesnesindeki sonuç sütununa eşle
+  tl_end_node_shape = "outcome",
+  ## son nodun boyutunu 15'e ayarla (bir karakter olmadığından, bu argüman bir sütuna eşlenmez, bunun yerine gerçek nod boyutu olarak yorumlanır)
+  tl_end_node_size = 15,
+  ## zaman çizelgesi kenarının rengini hastane sütununa eşle
+  tl_edge_color = "hospital",
+  ## zaman çizelgesi kenarının genişliğini 2'ye ayarla (bu bir karakter olmadığından, bu değişken bir sütuna eşlenmez, bunun yerine gerçek kenar genişliği olarak yorumlanır)
+  tl_edge_width = 2,
+  ## kenar etiketlerini hastane değişkenine eşleyin
+  tl_edge_label = "hospital",
+  ## nod şeklini belirt (yukarıda tanımlanmıştır)
+  shapes = shapes,
+  ## renk paletini belirt (yukarıda tanımlanmıştır)
+  col_pal = colours,
+  ## ok büyüklüğünü 0.5’e ayarla 
+  arrow_size = 0.5,
+  ## lejantta iki sütun olsun 
+  legend_ncol = 2,
+  ## font büyüklüğünü ayarla 
+  font_size = 15,
+  ## tarih formatı ayarla 
+  date_labels = c("%d %b %Y"),
+  ## nodların altında ID etiketini grafik olarak gösterme
+  label = FALSE,
+  ## yüksekliği belirt 
+  height = 1000,
+  ## genişliği belirt
+  width = 1200,
+  ## her vaka nodunun benzersiz bir y koordinatına sahip olduğundan emin olun - zaman çizelgelerini kullanırken bu çok önemlidir, aksi takdirde farklı vakalarda çakışan zaman çizelgeleriniz olur 
+  position_dodge = TRUE
+)
+
+```
+
+<!-- ======================================================= -->
+## Analiz {  }
+
+### Özetleme {.unnumbered}
+
+'summary' fonkisyonunu kullanarak bazı ağ özelliklerine genel bir bakış elde edebiliriz.
+
+```{r transmission_chains_summarise_epicontacts,}
+## epicontacts nesnesini özetle 
+summary(epic)
+```
+
+Örneğin, temaslıların yalnızca %57'sinin satır listesinde her iki vakaya da sahip olduğunu görebiliriz. Bu iletim zincirlerine dahil olan önemli sayıda vaka hakkında linelist veriye sahip olmadığımız anlamına gelir. 
+
+### Çift Özellikleri {.unnumbered}
+
+'get_pairwise()' fonkisyonu, temaslı veri kümesindeki her bir çifte göre satır listesindeki değişken(ler)in işlenmesine izin verir. Aşağıdaki örnekte, her bir çift için hastalık başlangıç tarihi arasındaki farkı hesaplamak için, hastalık başlangıç tarihi satır listesinden çıkarılır. Bu karşılaştırmadan üretilen değer, seri aralığını (serial interval-si) temsil eder.
+
+```{r transmission_chains_pairwise,}
+si <- get_pairwise(epic, "date_onset")   
+summary(si)
+tibble(si = si) %>%
+  ggplot(aes(si)) +
+  geom_histogram() +
+  labs(
+    x = "Serial interval",
+    y = "Frequency"
+  )
+```
+
+'get_pairwise()', karşılaştırma için kullanılan sütunun sınıfını yorumlayacak ve buna göre değerleri karşılaştırma yöntemini ayarlayacaktır. Sayılar ve tarihler için (yukarıdaki *si* örneğinde olduğu gibi) fonksiyon, değerleri çıkaracaktır. Karakter içeren veya kategorik sütunlara uygulandığında, get_pairwise() fonksiyonu değerleri birbirine yapıştırır. Fonksiyon aynı zamanda keyfi işlemeye de izin verdiğinden (bkz. “f” değişkeni), bu ayrık kombinasyonlar kolayca tablo haline getirilebilir ve analiz edilebilir.
+    
+```{r transmission_chains_pairwise_2,}
+head(get_pairwise(epic, "gender"), n = 10)
+get_pairwise(epic, "gender", f = table)
+fisher.test(get_pairwise(epic, "gender", f = table))
+```
+
+Burada, iletim bağlantıları ve cinsiyet arasında önemli bir ilişki görüyoruz. 
+
+### Kümelerin tanımlanması  {.unnumbered}
+
+get_clusters() fonksiyonu, bir epicontacts nesnesindeki bağlı bileşenleri tanımlamak için kullanılabilir. İlk olarak, küme bilgisini içeren bir veri çerçevesi elde etmek için kullanırız:
+
+```{r transmission_chains_cluster,}
+clust <- get_clusters(epic, output = "data.frame")
+table(clust$cluster_size)
+ggplot(clust, aes(cluster_size)) +
+  geom_bar() +
+  labs(
+    x = "Cluster size",
+    y = "Frequency"
+  )
+```
+
+En büyük kümelere bakalım. Bunun için epicontacts nesnesine küme bilgisi ekliyoruz ve ardından yalnızca en büyük kümeleri içerecek şekilde alt kümelerini oluşturuyoruz:
+
+```{r transmission_chains_cluster_2,}
+epic <- get_clusters(epic)
+max_size <- max(epic$linelist$cluster_size)
+plot(subset(epic, cs = max_size))
+```
+
+### Derecelerin hesaplanması  {.unnumbered}
+
+Bir nodun derecesi, kenar sayısına veya diğer nodlarla olan bağlantılarına karşılık gelir. 'get_degree()', epicontacts ağları için bu değeri hesaplamakta kolay bir yöntem sağlar. Bu bağlamda yüksek bir derece, başkalarıyla temas halinde olan bir kişiyi gösterir. 'type' değişkeni hem dereceyi hem de dereceyi saymak istediğimizi belirtir, 'only_linelist' değişkeni sadece satır listesindeki vakalar için dereceyi hesaplamak istediğimizi belirtir.
+
+```{r transmission_chains_degree,}
+deg_both <- get_degree(epic, type = "both", only_linelist = TRUE)
+```
+
+Hangi kişiler en fazla on temasa sahip?
+
+```{r}
+head(sort(deg_both, decreasing = TRUE), 10)
+```
+
+Ortalama temaslı sayısı nedir?
+
+```{r}
+mean(deg_both)
+```
+
+<!-- ======================================================= -->
+## Kaynaklar {  }
+
+[epicontacts page](https://www.repidemicsconsortium.org/epicontacts/index.html)
+Epicontacts sayfası, paket fonksiyonlarına genel bir bakış sağlar ve bazı daha ayrıntılı gösterimler içerir.
+
+[github page](http://github.com/reconhub/epicontacts) 
+Github sayfası, sorunları dile getirmek ve yeni özellikler talep etmek için kullanılabilir.

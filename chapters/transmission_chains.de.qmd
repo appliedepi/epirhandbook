@@ -1,0 +1,748 @@
+---
+aliases:
+  - /new_pages/transmission_chains.de.html
+---
+
+# Übertragungsketten { }
+
+<!-- ======================================================= -->
+
+## Übersicht {  }
+
+Das wichtigste Werkzeug zur Handhabung, Analyse und Visualisierung von Übertragungsketten und Kontakten
+Kontaktverfolgungsdaten ist das Paket **epicontacts**, entwickelt von den Leuten bei
+RECON. Probiere die interaktive Grafik unten aus, indem du mit dem Mauszeiger über die Knotenpunkte fährst.
+Informationen, ziehst sie, um sie zu verschieben, und klickst sie an, um nachgelagerte Fälle zu markieren.
+
+```{r, out.width=c("25%", "25%"), fig.show="hold", echo=F}
+
+# install development version of epicontacts
+if(
+  !"epicontacts" %in% rownames(installed.packages()) |
+  packageVersion("epicontacts") != "1.2.0"
+) remotes::install_github("reconhub/epicontacts@timeline")
+
+## install and load packages
+pacman::p_load(tidyverse,
+               #epicontacts,
+               magrittr, here, webshot, visNetwork)
+
+library(epicontacts)
+
+## load linelist
+linelist <- rio::import(here::here("data", "case_linelists", "linelist_cleaned.rds")) %>%
+  filter(!duplicated(case_id))
+## generate contacts
+contacts <- linelist %>%
+  transmute(
+    from = infector,
+    to = case_id,
+    location = sample(c("Community", "Nosocomial"), n(), TRUE),
+    duration = sample.int(10, n(), TRUE)
+  ) %>%
+  drop_na(from)
+
+## generate epicontacts
+epic <- epicontacts::make_epicontacts(
+  linelist = linelist,
+  contacts = contacts, 
+  directed = TRUE
+)
+
+## subset object
+#epic %<>% subset(
+epic_small <- epic %>% 
+  subset(
+    node_attribute = list(date_onset = c(as.Date(c("2014-06-01", "2014-07-01"))))) %>%
+  epicontacts::thin("contacts")
+
+# plot with date of onset as x-axis
+plot(
+  epic_small,
+  x_axis = "date_onset",
+  label = FALSE,
+  node_color = "outcome",
+  col_pal = c(Death = "firebrick", Recover = "green"),
+  node_shape = "gender",
+  shapes = c(f = "female", m = "male"),
+  unlinked_pos = "bottom",
+  date_labels = "%b %d %Y",
+  node_size = 35,
+  font_size = 20,
+  arrow_size = 0.5,
+  height = 800,
+  width = 700,
+  edge_linetype = "location",
+  legend_width = 0.15,
+  highlight_downstream = TRUE,
+  selector = FALSE
+)
+
+```
+
+<!-- ======================================================= -->
+
+## Vorbereitung {  }
+
+### Pakete laden {.unnumbered}
+
+Lade zunächst die Standardpakete, die du für den Datenimport und die Datenmanipulation benötigst. In diesem Handbuch betonen wir `p_load()` von **pacman**, der das Paket bei Bedarf installiert *und* es zur Verwendung lädt. Du kannst Pakete auch laden mit `library()` von **Basis**R. Siehe die Seite über [R-Grundlagen] für weitere Informationen über R-Pakete.
+
+```{r transmission_chains_packages, eval=FALSE}
+pacman::p_load(
+   rio,          # File import
+   here,         # File locator
+   tidyverse,    # Data management + ggplot2 graphics
+   remotes       # Package installation from github
+)
+```
+
+Du benötigst die Entwicklungsversion von **epicontacts**, die Sie
+von Github installiert werden kann, indem die `p_install_github()` Funktion von **pacman**. Du musst nur diesen Befehl ausführen
+unten nur einmal ausführen, nicht jedes Mal, wenn du das Paket verwendest (danach kannst du `p_load()` wie gewohnt).
+
+```{r transmission_chains_epicontacts_install, eval=FALSE}
+pacman::p_install_gh("reconhub/epicontacts@timeline")
+```
+
+### Daten importieren {.unnumbered}
+
+Wir importieren den Datensatz der Fälle aus einer simulierten Ebola-Epidemie. Wenn du die Daten herunterladen möchtest, um Schritt für Schritt vorzugehen, lies die Anweisungen im [Handbuch und Daten herunterladen] Seite. Der Datensatz wird importiert, indem die`import()` Funktion aus dem **rio**Paket. Siehe die Seite über [Import und Export] für verschiedene Möglichkeiten, Daten zu importieren.
+
+```{r, echo=F}
+# import the linelist into R
+linelist <- rio::import(here::here("data", "case_linelists", "linelist_cleaned.rds"))
+```
+
+```{r, eval=F}
+# import the linelist
+linelist <- import("linelist_cleaned.xlsx")
+```
+
+Die ersten 50 Zeilen der Zeilenliste werden unten angezeigt. Von besonderem Interesse sind die Spalten `case_id`, `generation`, `infector`, und `source`.
+
+```{r, message=FALSE, echo=F}
+# display the linelist data as a table
+DT::datatable(head(linelist, 50), rownames = FALSE, filter="top", options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+### Ein epicontacts Objekt erstellen {.unnumbered}
+
+Anschließend müssen wir ein **epicontacts** Objekt erstellen, das zwei Typen von
+Daten:
+
+- eine Zeilenliste, die Fälle dokumentiert, wobei die Spalten Variablen sind und die Zeilen eindeutigen Fällen entsprechen
+- eine Liste von Kanten, die Verbindungen zwischen Fällen auf der Grundlage ihrer eindeutigen IDs definieren (dies können Kontakte sein,
+  Übertragungsereignisse, etc.)
+
+Da wir bereits eine Linienliste haben, müssen wir nur noch eine Liste von Kanten zwischen
+Fällen erstellen, genauer gesagt zwischen ihren IDs. Wir können die Übertragungsverbindungen aus der
+Lineliste extrahieren, indem wir die `infector` Spalte mit der `case_id` Spalte. An dieser Stelle können wir auch "edge" hinzufügen
+Eigenschaften" hinzufügen, womit wir jede Variable meinen, die die Verbindung zwischen den beiden
+Fällen beschreibt, nicht die Fälle selbst. Zur Veranschaulichung fügen wir eine `location`
+Variable, die den Ort des Übertragungsereignisses beschreibt, und eine Dauer
+die die Dauer des Kontakts in Tagen angibt.
+
+In dem folgenden Code wird die **dplyr** Funktion `transmute` ist ähnlich wie die `mutate` mit dem Unterschied, dass sie nur die
+die Spalten, die wir in der Funktion angegeben haben. Die `drop_na` Funktion wird
+alle Zeilen herausfiltern, in denen die angegebenen Spalten ein `NA` Wert haben; in diesem
+Fall wollen wir nur die Zeilen behalten, in denen der Infektor bekannt ist.
+
+```{r transmission_chains_create_contacts,}
+## generate contacts
+contacts <- linelist %>%
+  transmute(
+    infector = infector,
+    case_id = case_id,
+    location = sample(c("Community", "Nosocomial"), n(), TRUE),
+    duration = sample.int(10, n(), TRUE)
+  ) %>%
+  drop_na(infector)
+```
+
+Wir können nun die **epicontacts** Objekt mit Hilfe der `make_epicontacts`
+Funktion. Wir müssen angeben, welche Spalte in der Lineliste auf den eindeutigen Fall verweist
+Identifikator verweist, und welche Spalten in den Kontakten auf die eindeutigen
+Identifikatoren der Fälle, die an jeder Verbindung beteiligt sind. Diese Verknüpfungen sind richtungsweisend in
+die Infektion geht *von* dem Ansteckenden *zu* den Fall, also müssen wir angeben
+die `from` und `to` Argumente entsprechend. Wir setzen daher auch die `directed`
+Argument auf `TRUE` ein, was sich auf zukünftige Operationen auswirkt.
+
+```{r transmission_chains_create_epicontacts,}
+## generate epicontacts object
+epic <- make_epicontacts(
+  linelist = linelist,
+  contacts = contacts,
+  id = "case_id",
+  from = "infector",
+  to = "case_id",
+  directed = TRUE
+)
+```
+
+Nach der Untersuchung der **epicontacts** Objekte können wir sehen, dass die `case_id` Spalte
+in der Linelist umbenannt wurde in `id` und die `case_id` und `infector`
+Spalten in den Kontakten wurden umbenannt in `from` und `to`. Dies gewährleistet
+Konsistenz bei der anschließenden Bearbeitung, Visualisierung und Analyse.
+
+```{r transmission_chains_view_epicontacts,}
+## view epicontacts object
+epic
+```
+
+<!-- ======================================================= -->
+
+## Handhabung {  }
+
+### Teilmenge {.unnumbered}
+
+Die `subset()` Methode für `epicontacts` Objekte ermöglicht unter anderem,
+das Filtern von Netzwerken anhand von Eigenschaften der Lineliste ("Knotenattribute") und der Kontakte
+Datenbank ("Kantenattribute"). Diese Werte müssen als benannte Listen an die
+jeweiligen Argument übergeben werden. Im folgenden Code behalten wir zum Beispiel nur die
+männlichen Fälle in der Liste, die ein Infektionsdatum zwischen April und
+Juli 2014 haben (die Daten sind als Bereiche angegeben), und Übertragungsverbindungen, die
+im Krankenhaus.
+
+```{r transmission_chains_subset_nodes,}
+sub_attributes <- subset(
+  epic,
+  node_attribute = list(
+    gender = "m",
+    date_infection = as.Date(c("2014-04-01", "2014-07-01"))
+  ), 
+  edge_attribute = list(location = "Nosocomial")
+)
+sub_attributes
+```
+
+Wir können die `thin` Funktion können wir entweder die Zeilenliste filtern, um Fälle einzuschließen
+die in den Kontakten gefunden werden, indem wir das Argument `what = "linelist"`, oder
+die Kontakte so filtern, dass sie nur die Fälle enthalten, die in der Linienliste gefunden werden, indem du das Argument
+das Argument `what = "contacts"`. Im folgenden Code filtern wir zusätzlich die
+epicontacts-Objekt weiter, um nur die Übermittlungslinks zu behalten, die die männlichen Fälle betreffen
+die zwischen April und Juli infiziert wurden und nach denen wir oben gefiltert haben. Wir können sehen, dass
+nur zwei bekannte Übertragungswege auf diese Spezifikation passen.
+
+```{r transmission_chains_thin,}
+sub_attributes <- thin(sub_attributes, what = "contacts")
+nrow(sub_attributes$contacts)
+```
+
+Zusätzlich zur Unterteilung nach Knoten- und Kantenattributen können die Netze nach folgenden Kriterien unterteilt werden
+um nur Komponenten zu berücksichtigen, die mit bestimmten Knoten verbunden sind. Die `cluster_id`
+Argument nimmt einen Vektor von Fall-IDs und gibt die Liste der Individuen zurück, die
+die direkt oder indirekt mit diesen IDs verknüpft sind. Im folgenden Code sehen wir
+dass insgesamt 13 Fälle in den Clustern enthalten sind, die in der Lineliste
+`2ae019` und `71577a`.
+
+```{r}
+sub_id <- subset(epic, cluster_id = c("2ae019","71577a"))
+nrow(sub_id$linelist)
+```
+
+Die `subset()` Methode für `epicontacts` Objekte erlaubt auch das Filtern nach Clustern
+Größe zu filtern, indem die `cs`, `cs_min` und `cs_max` Argumente. Im folgenden Code sind wir
+nur die Fälle, die mit Clustern von 10 oder mehr Fällen verknüpft sind, und wir sehen, dass
+271 Fälle in der Linienliste mit solchen Clustern verbunden sind.
+
+```{r}
+sub_cs <- subset(epic, cs_min = 10)
+nrow(sub_cs$linelist)
+```
+
+### Zugriff auf IDs {.unnumbered}
+
+Die `get_id()` Funktion ruft Informationen über Fall-IDs in der
+Datensatz ab und kann wie folgt parametrisiert werden:
+
+- **linelist**: IDs in den Daten der Linienliste
+- **Kontakte**: IDs im Kontaktdatensatz ("von" und "bis" kombiniert)
+- **von**: IDs in der Spalte "von" des Kontaktdatensatzes
+- **an** IDs in der Spalte "bis" des Kontaktdatensatzes
+- **alle**: IDs, die irgendwo in einem der beiden Datensätze erscheinen
+- **gemeinsame**: IDs, die sowohl im Kontaktdatensatz als auch in der Zeilenliste erscheinen
+
+Was sind zum Beispiel die ersten zehn IDs im Datensatz "Kontakte"?
+
+```{r transmission_chains_get_ids,}
+contacts_ids <- get_id(epic, "contacts")
+head(contacts_ids, n = 10)
+```
+
+Wie viele IDs finden sich sowohl in der Linienliste als auch in den Kontakten?
+
+```{r transmission_chains_get_both,}
+length(get_id(epic, "common"))
+```
+
+<!-- ======================================================= -->
+
+## Visualisierung {  }
+
+### Basic Plotting {.unnumbered}
+
+Alle Visualisierungen von **epicontacts** Objekten werden von der `plot`
+Funktion behandelt. Wir filtern zunächst die **epicontacts** Objekt so, dass es nur die
+Fälle mit Eintrittsdatum im Juni 2014 mit der `subset` Funktion, und nur
+die mit diesen Fällen verknüpften Kontakte mit der Funktion `thin` Funktion.
+
+```{r transmission_chains_basic_plot_sub,}
+## subset epicontacts object
+sub <- epic %>%
+  subset(
+    node_attribute = list(date_onset = c(as.Date(c("2014-06-30", "2014-06-01"))))
+  ) %>%
+ thin("contacts")
+```
+
+Dann können wir den grundlegenden, interaktiven Plot ganz einfach wie folgt erstellen:
+
+```{r transmission_chains_basic_plot,}
+## plot epicontacts object
+plot(
+  sub,
+  width = 700,
+  height = 700
+)
+```
+
+Du kannst die Knoten verschieben, indem du sie ziehst, und mit dem Mauszeiger über sie fahren, um mehr
+Informationen und klicke sie an, um zusammenhängende Fälle zu markieren.
+
+Es gibt eine Vielzahl von Argumenten, um diese Darstellung weiter zu verändern. Wir werden behandeln
+die wichtigsten, aber sieh dir auch die Dokumentation unter `?vis_epicontacts` (die
+Funktion, die bei der Verwendung von `plot` auf eine **epicontacts** Objekt), um eine vollständige
+Beschreibung der Funktionsargumente zu erhalten.
+
+#### Visualisierung von Knotenattributen {.unnumbered}
+
+Knotenfarbe, Knotenform und Knotengröße können einer bestimmten Spalte in der Linienliste zugeordnet werden
+mit Hilfe der `node_color`, `node_shape` und `node_size` Argumente. Das ist ähnlich
+dem `aes` Syntax, die du vielleicht von **ggplot2**.
+
+Die spezifischen Farben, Formen und Größen der Knotenpunkte können wie folgt festgelegt werden:
+
+- **Farben** über die `col_pal` Argument, entweder durch die Angabe einer Namensliste für manuelle
+  die manuelle Angabe jeder Farbe, wie unten beschrieben, oder durch die Angabe einer Farbpalette
+  Funktion wie `colorRampPalette(c("black", "red", "orange"))`, die
+  einen Farbverlauf zwischen den angegebenen Farben erzeugt.
+
+- **Formen** durch Übergabe einer benannten Liste an die `shapes` Argument, das eine Form angibt
+  für jedes eindeutige Element in der Spalte der Zeilenliste, die durch die `node_shape`
+  Argument angegeben ist. Siehe `codeawesome` für verfügbare Formen.
+
+- **Größe** durch Übergabe eines Größenbereichs der Knoten an die `size_range` Argument übergeben.
+
+Hier ein Beispiel, bei dem die Farbe das Ergebnis, die Form das Geschlecht und die Größe darstellt
+das Alter:
+
+```{r transmission_chains_node_attribute,}
+plot(
+  sub, 
+  node_color = "outcome",
+  node_shape = "gender",
+  node_size = "age",
+  col_pal = c(Death = "firebrick", Recover = "green"),
+  shapes = c(f = "female", m = "male"),
+  size_range = c(40, 60),
+  height = 700,
+  width = 700
+)
+```
+
+#### Visualisierung von Kantenattributen {.unnumbered}
+
+Kantenfarbe, Breite und Linientyp können einer bestimmten Spalte in den Kontakten zugeordnet werden
+Datenrahmen zugeordnet werden, indem die `edge_color`, `edge_width` und `edge_linetype`
+Argumente. Die spezifischen Farben und Breiten der Kanten können wie folgt festgelegt werden:
+
+- **Farben** über die `edge_col_pal` Argument, auf die gleiche Art und Weise, wie für `col_pal`.
+
+- **Weiten** durch die Übergabe eines Größenbereichs der Knoten an die `width_range` Argument übergeben.
+
+Hier ein Beispiel:
+
+```{r transmission_chains_edge_attribute,}
+
+plot(
+  sub, 
+  node_color = "outcome",
+  node_shape = "gender",
+  node_size = 'age',
+  col_pal = c(Death = "firebrick", Recover = "green"),
+  shapes = c(f = "female", m = "male"),
+  size_range = c(40, 60),
+  edge_color = 'location',
+  edge_linetype = 'location',
+  edge_width = 'duration',
+  edge_col_pal = c(Community = "orange", Nosocomial = "purple"),
+  width_range = c(1, 3),
+  height = 700,
+  width = 700
+)
+
+```
+
+### Zeitliche Achse {.unnumbered}
+
+Wir können das Netzwerk auch entlang einer zeitlichen Achse visualisieren, indem wir die `x_axis`
+Argument auf eine Spalte in der Linelist abbildet. Im folgenden Beispiel wird die x-Achse
+das Datum des Auftretens der Symptome dar. Wir haben auch die `arrow_size`
+Argument, um sicherzustellen, dass die Pfeile nicht zu groß sind, und setzen `label = FALSE` um die
+die Abbildung weniger unübersichtlich zu machen.
+
+```{r transmission_chains_x_axis,}
+plot(
+  sub,
+  x_axis = "date_onset",
+  node_color = "outcome",
+  col_pal = c(Death = "firebrick", Recover = "green"),
+  arrow_size = 0.5,
+  node_size = 13,
+  label = FALSE,
+  height = 700,
+  width = 700
+)
+```
+
+Es gibt eine große Anzahl zusätzlicher Argumente, um genauer festzulegen, wie diese
+Netzwerk entlang der Zeitachse visualisiert wird, die du dir ansehen kannst
+über `?vis_temporal_interactive` (die Funktion, die bei der Verwendung von `plot` auf
+einer **epicontacts** Objekt mit `x_axis` angegeben). Wir gehen durch einige
+unten durch.
+
+#### Festlegen der Form des Übertragungsbaums {.unnumbered}
+
+Es gibt zwei Hauptformen, die der Übertragungsbaum annehmen kann, die mit
+die `network_shape` Argument angegeben wird. Die erste ist ein `branching` Form, wie oben gezeigt,
+bei der eine gerade Kante zwei beliebige Knotenpunkte verbindet. Dies ist die intuitivste
+Darstellung, kann aber in einem dicht vernetzten System zu überlappenden Kanten führen.
+Netzwerk führen. Die zweite Form ist `rectangle`, die einen Baum erzeugt, der einem
+Phylogenie. Zum Beispiel:
+
+```{r transmission_chains_rectangle,}
+plot(
+  sub,
+  x_axis = "date_onset",
+  network_shape = "rectangle",
+  node_color = "outcome",
+  col_pal = c(Death = "firebrick", Recover = "green"),
+  arrow_size = 0.5,
+  node_size = 13,
+  label = FALSE,
+  height = 700,
+  width = 700
+)
+```
+
+Jedem Fallknoten kann eine eindeutige vertikale Position zugewiesen werden, indem du die
+`position_dodge` Argument. Die Position von unverbundenen Fällen (d. h. ohne
+gemeldeten Kontakten) wird mit dem Argument `unlinked_pos` Argument angegeben.
+
+```{r transmission_chains_dodge,}
+plot(
+  sub,
+  x_axis = "date_onset",
+  network_shape = "rectangle",
+  node_color = "outcome",
+  col_pal = c(Death = "firebrick", Recover = "green"),
+  position_dodge = TRUE,
+  unlinked_pos = "bottom",
+  arrow_size = 0.5,
+  node_size = 13,
+  label = FALSE,
+  height = 700,
+  width = 700
+)
+```
+
+Die Position des übergeordneten Knotens im Verhältnis zu den untergeordneten Knoten kann
+angegeben werden, indem die `parent_pos` Argument angegeben werden. Die Standardoption ist, dass der
+Elternknoten in der Mitte zu platzieren, er kann aber auch am unteren Rand platziert werden (`parent_pos = 'bottom'`) oder an der Spitze (`parent_pos = 'top'`).
+
+```{r transmission_chains_parent_pos,}
+plot(
+  sub,
+  x_axis = "date_onset",
+  network_shape = "rectangle",
+  node_color = "outcome",
+  col_pal = c(Death = "firebrick", Recover = "green"),
+  parent_pos = "top",
+  arrow_size = 0.5,
+  node_size = 13,
+  label = FALSE,
+  height = 700,
+  width = 700
+)
+```
+
+#### Speichern von Plots und Zahlen {.unnumbered}
+
+Du kannst einen Plot als interaktive, in sich geschlossene Html-Datei speichern, indem du die
+`visSave` Funktion aus dem **VisNetwork** Paket:
+
+```{r transmission_chains_save, eval=F}
+
+plot(
+  sub,
+  x_axis = "date_onset",
+  network_shape = "rectangle",
+  node_color = "outcome",
+  col_pal = c(Death = "firebrick", Recover = "green"),
+  parent_pos = "top",
+  arrow_size = 0.5,
+  node_size = 13,
+  label = FALSE,
+  height = 700,
+  width = 700
+) %>%
+  visNetwork::visSave("network.html")
+
+```
+
+Das Speichern dieser Netzwerkausgaben als Bild ist leider nicht so einfach und erfordert
+Du musst die Datei als html speichern und dann einen Screenshot von dieser Datei machen, indem du
+der `webshot` Paket. Im folgenden Code konvertieren wir die gespeicherte html-Datei
+oben in ein PNG um:
+
+```{r transmission_chains_webshot, eval=F}
+webshot(url = "network.html", file = "network.png")
+```
+
+### Zeitleisten {.unnumbered}
+
+Du kannst dem Netzwerk auch Zeitleisten zuordnen, die auf der x-Achse dargestellt werden
+eines jeden Falls dargestellt werden. Damit kannst du z. B. die Standorte der Fälle oder die Zeit visualisieren.
+zum Ergebnis. Um eine Zeitleiste zu erstellen, müssen wir einen data.frame mit mindestens
+drei Spalten erstellen, die die Fall-ID, das Startdatum des "Ereignisses" und das Enddatum
+des "Ereignisses". Du kannst auch eine beliebige Anzahl anderer Spalten hinzufügen, die
+die dann auf Knoten- und Kanteneigenschaften der Zeitleiste abgebildet werden können. Im folgenden Code,
+erstellen wir eine Zeitleiste, die vom Datum des Symptombeginns bis zum Datum der
+und behalten die Ergebnis- und Krankenhausvariablen bei, die wir verwenden, um die
+Form und Farbe des Knotens definieren. Beachte, dass du mehr als eine Zeile/Ereignis in der Zeitleiste haben kannst
+pro Fall haben kannst, zum Beispiel wenn ein Fall zwischen mehreren Krankenhäusern verlegt wird.
+
+```{r transmission_chains_create_timeline,}
+
+## generate timeline
+timeline <- linelist %>%
+  transmute(
+    id = case_id,
+    start = date_onset,
+    end = date_outcome,
+    outcome = outcome,
+    hospital = hospital
+  )
+
+```
+
+Anschließend übergeben wir das Zeitleistenelement an die `timeline` Argument. Wir können abbilden
+Timeline-Attribute den Farben, Formen und Größen der Timeline-Knoten auf die gleiche Weise zuordnen
+wie in den vorangegangenen Abschnitten beschrieben, nur dass wir *zwei* Knoten: den Start- und den Endknoten
+Knoten jeder Zeitleiste, die getrennte Argumente haben. Zum Beispiel,
+`tl_start_node_color` definiert, welche Spalte der Zeitleiste auf die Farbe von
+des Startknotens zugeordnet wird, während `tl_end_node_shape` definiert, welche Spalte der Zeitleiste
+auf die Form des Endknotens abgebildet wird. Wir können auch Farbe, Breite, Linientyp und
+Beschriftungen auf die Zeitleiste *Kante* über die `tl_edge_*` Argumente.
+
+Siehe `?vis_temporal_interactive` (die Funktion, die beim Plotten einer
+epicontacts-Objekts aufgerufen wird) für eine detaillierte Dokumentation der Argumente. Jedes Argument
+wird auch im folgenden Code kommentiert:
+
+```{r transmission_chains_vis_timeline,}
+
+## define shapes
+shapes <- c(
+  f = "female",
+  m = "male",
+  Death = "user-times",
+  Recover = "heartbeat",
+  "NA" = "question-circle"
+)
+
+## define colours
+colours <- c(
+  Death = "firebrick",
+  Recover = "green",
+  "NA" = "grey"
+)
+
+## make plot
+plot(
+  sub,
+  ## max x coordinate to date of onset
+  x_axis = "date_onset",
+  ## use rectangular network shape
+  network_shape = "rectangle",
+  ## mape case node shapes to gender column
+  node_shape = "gender",
+  ## we don't want to map node colour to any columns - this is important as the
+  ## default value is to map to node id, which will mess up the colour scheme
+  node_color = NULL,
+  ## set case node size to 30 (as this is not a character, node_size is not
+  ## mapped to a column but instead interpreted as the actual node size)
+  node_size = 30,
+  ## set transmission link width to 4 (as this is not a character, edge_width is
+  ## not mapped to a column but instead interpreted as the actual edge width)
+  edge_width = 4,
+  ## provide the timeline object
+  timeline = timeline,
+  ## map the shape of the end node to the outcome column in the timeline object
+  tl_end_node_shape = "outcome",
+  ## set the size of the end node to 15 (as this is not a character, this
+  ## argument is not mapped to a column but instead interpreted as the actual
+  ## node size)
+  tl_end_node_size = 15,
+  ## map the colour of the timeline edge to the hospital column
+  tl_edge_color = "hospital",
+  ## set the width of the timeline edge to 2 (as this is not a character, this
+  ## argument is not mapped to a column but instead interpreted as the actual
+  ## edge width)
+  tl_edge_width = 2,
+  ## map edge labels to the hospital variable
+  tl_edge_label = "hospital",
+  ## specify the shape for everyone node attribute (defined above)
+  shapes = shapes,
+  ## specify the colour palette (defined above)
+  col_pal = colours,
+  ## set the size of the arrow to 0.5
+  arrow_size = 0.5,
+  ## use two columns in the legend
+  legend_ncol = 2,
+  ## set font size
+  font_size = 15,
+  ## define formatting for dates
+  date_labels = c("%d %b %Y"),
+  ## don't plot the ID labels below nodes
+  label = FALSE,
+  ## specify height
+  height = 1000,
+  ## specify width
+  width = 1200,
+  ## ensure each case node has a unique y-coordinate - this is very important
+  ## when using timelines, otherwise you will have overlapping timelines from
+  ## different cases
+  position_dodge = TRUE
+)
+
+```
+
+<!-- ======================================================= -->
+
+## Analyse {  }
+
+### Zusammenfassend {.unnumbered}
+
+Wir können uns einen Überblick über einige der Netzwerkeigenschaften verschaffen, indem wir die
+`summary` Funktion.
+
+```{r transmission_chains_summarise_epicontacts,}
+## summarise epicontacts object
+summary(epic)
+```
+
+Wir können zum Beispiel sehen, dass nur 57 % der Kontakte beide Fälle in der
+Das bedeutet, dass wir keine Daten für eine signifikante Anzahl von Kontakten in der Linienliste haben.
+Anzahl von Fällen, die an diesen Übertragungsketten beteiligt sind.
+
+### Paarweise Merkmale {.unnumbered}
+
+Die `get_pairwise()` Funktion ermöglicht die Bearbeitung von Variablen in der Zeilenliste
+entsprechend den einzelnen Paaren im Kontaktdatensatz. Im folgenden Beispiel wird das Datum
+des Ausbruchs der Krankheit aus der Zeilenliste extrahiert, um die
+Differenz zwischen dem Datum des Ausbruchs der Krankheit für jedes Paar zu berechnen. Der Wert, der
+aus diesem Vergleich ergibt, stellt die **Serienintervall (si)**.
+
+```{r transmission_chains_pairwise,}
+si <- get_pairwise(epic, "date_onset")   
+summary(si)
+tibble(si = si) %>%
+  ggplot(aes(si)) +
+  geom_histogram() +
+  labs(
+    x = "Serial interval",
+    y = "Frequency"
+  )
+```
+
+Die `get_pairwise()` wird die Klasse der Spalte interpretieren, die für
+Vergleich verwendet wird, und passt seine Methode zum Vergleichen der Werte entsprechend an. Für
+Zahlen und Daten (wie die **si** Beispiel oben), wird die Funktion subtrahieren
+die Werte. Bei der Anwendung auf Spalten, die Zeichen oder kategorisch sind,
+`get_pairwise()` die Werte zusammenfügen. Da die Funktion auch erlaubt
+eine beliebige Verarbeitung zulässt (siehe Argument "f"), können diese diskreten Kombinationen
+leicht tabellarisch dargestellt und analysiert werden.
+
+```{r transmission_chains_pairwise_2,}
+head(get_pairwise(epic, "gender"), n = 10)
+get_pairwise(epic, "gender", f = table)
+fisher.test(get_pairwise(epic, "gender", f = table))
+```
+
+Hier sehen wir einen signifikanten Zusammenhang zwischen Übertragungswegen und Geschlecht.
+
+### Identifizierung von Clustern {.unnumbered}
+
+Die `get_clusters()` Funktion kann verwendet werden, um verbundene Komponenten zu identifizieren
+in einer `epicontacts` Objekt zu identifizieren. Zunächst verwenden wir sie, um eine `data.frame`
+das die Cluster-Informationen enthält:
+
+```{r transmission_chains_cluster,}
+clust <- get_clusters(epic, output = "data.frame")
+table(clust$cluster_size)
+ggplot(clust, aes(cluster_size)) +
+  geom_bar() +
+  labs(
+    x = "Cluster size",
+    y = "Frequency"
+  )
+```
+
+Wir wollen uns die größten Cluster ansehen. Dazu fügen wir die Clusterinformationen zu den
+`epicontacts` Objekt hinzu und unterteilen es dann, um nur die größten Cluster zu behalten:
+
+```{r transmission_chains_cluster_2,}
+epic <- get_clusters(epic)
+max_size <- max(epic$linelist$cluster_size)
+plot(subset(epic, cs = max_size))
+```
+
+### Berechnung der Grade {.unnumbered}
+
+Der Grad eines Knotens entspricht der Anzahl seiner Kanten oder Verbindungen zu anderen
+Knoten. `get_degree()` bietet eine einfache Methode zur Berechnung dieses Wertes für
+`epicontacts` Netzwerke. Ein hoher Grad bedeutet in diesem Zusammenhang, dass eine Person
+der mit vielen anderen in Kontakt war. Die `type` Argument zeigt, dass wir
+sowohl den In-Grad als auch den Out-Grad zählen wollen, die `only_linelist` Argument
+gibt an, dass wir nur den Grad für die Fälle in der Linienliste berechnen wollen.
+
+```{r transmission_chains_degree,}
+deg_both <- get_degree(epic, type = "both", only_linelist = TRUE)
+```
+
+Welche Personen haben die zehn meisten Kontakte?
+
+```{r}
+head(sort(deg_both, decreasing = TRUE), 10)
+```
+
+Wie hoch ist die durchschnittliche Anzahl der Kontakte?
+
+```{r}
+mean(deg_both)
+```
+
+<!-- ======================================================= -->
+
+## Ressourcen {  }
+
+Die
+[epicontacts Seite](https://www.repidemicsconsortium.org/epicontacts/index.html)
+gibt einen Überblick über die Funktionen des Pakets und enthält einige vertiefende
+Vignetten.
+
+Die [github-Seite](http://github.com/reconhub/epicontacts) kann genutzt werden, um die
+Probleme zu melden und Funktionen anzufordern.
+
+

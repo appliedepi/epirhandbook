@@ -1,0 +1,689 @@
+---
+aliases:
+  - /new_pages/regression.jp.html
+---
+
+# 単変量と多変量回帰 {#regression}
+
+<!-- ======================================================= -->
+
+この章では、変数間の関連性（オッズ比、リスク比、ハザード比など）を調べるために、`glm()` といった **base** R の基本的な回帰関数と **gtsummary** パッケージの使い方を説明します。また、**broom** パッケージの `tidy()` のような関数を使用して、回帰の出力を整えます。
+
+1.  単変量: 2 ×2 表
+2.  層別：Mantel-Haenszel 推定
+3.  多変量：変数選択、モデル選択、最終的な結果の表
+4.  フォレストプロット
+
+Cox 比例ハザード回帰分析については、[生存時間解析](#survival-analysis)を参照してください。
+
+<span style="color: black;"><u>**注釈:</u>** この章では、複数の説明変数を持つ回帰を<u>多変量（multivariable）</u>と呼びます。この意味で、<u>多変数（multivariate）</u>モデルは、複数のアウトカムを持つ回帰を示します。より詳しくは、アメリカ公衆衛生学会誌に掲載された[論説](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3518362/)を参照してください。</span> 
+
+<!-- ======================================================= -->
+
+## 準備  {  }
+
+
+### パッケージの読み込み {.unnumbered}
+
+以下のコードを実行すると、分析に必要なパッケージが読み込まれます。このハンドブックでは、パッケージを読み込むために、**pacman** パッケージの `p_load()` を主に使用しています。`p_load()` は、必要に応じてパッケージをインストールし、現在の R セッションで使用するためにパッケージを読み込む関数です。また、すでにインストールされたパッケージは、R の基本パッケージである **base** の `library()` を使用して読み込むこともできます。R のパッケージに関する詳細は [R の基本](#basics) の章をご覧ください。
+
+```{r}
+pacman::p_load(
+  rio,          # ファイルのインポート
+  here,         # ファイルパスの指定
+  tidyverse,    # データ管理と ggplot2 での可視化
+  stringr,      # テキストの編集 
+  purrr,        # tidy な方法でのオブジェクトの反復
+  gtsummary,    # 統計量や検定の要約 
+  broom,        # 回帰の結果を整然化
+  lmtest,       # 尤度比検定
+  parameters,   # 回帰の結果を整然化するための代替手段
+  see           # フォレストプロットを可視化するための代替手段
+  )
+```
+
+### データの読み込み {.unnumbered}
+
+エボラ出血熱の流行をシミュレートしたデータセットをインポートします。お手元の環境でこの章の内容を実行したい方は、 <a href='https://github.com/appliedepi/epiRhandbook_eng/raw/master/data/case_linelists/linelist_cleaned.rds' class='download-button'>クリック</a>して「前処理された」ラインリスト（linelist）データをダウンロードしてください>（.rds 形式で取得できます）。データは **rio** パッケージの `import()` を利用してインポートしましょう（**rio** パッケージは、.xlsx、.csv、.rds など様々な種類のファイルを取り扱うことができます。詳細は、[インポートとエクスポート](#importing) の章をご覧ください。）
+
+
+```{r, echo=F}
+# ラインリストを R へインポートする
+linelist <- rio::import(here::here("data", "case_linelists", "linelist_cleaned.rds"))
+```
+
+```{r, eval=F}
+# ラインリストのインポート
+linelist <- import("linelist_cleaned.rds")
+```
+
+ラインリストの始めの 50 行は次のように表示されます。
+
+```{r, message=FALSE, echo=F}
+# ラインリストを表形式で表示
+DT::datatable(head(linelist, 50), rownames = FALSE, options = list(pageLength = 5, scrollX=T) )
+```
+
+### データの前処理 {.unnumbered}
+
+#### 説明変数を保存 {.unnumbered}  
+
+説明変数の列名を文字ベクトルとして保存します。この文字ベクトルは後で使用します。
+
+```{r}
+## 関心のある変数を定義
+explanatory_vars <- c("gender", "fever", "chills", "cough", "aches", "vomit")
+```
+
+
+#### 1 と 0 に変換 {.unnumbered}
+
+以下では、説明変数の列（はい・いいえ（"yes"/"no"）、男性・女性（"m"/"f"）と死亡・生存（"dead"/"alive"））をロジスティック回帰モデルの解析がうまくいく形（**1 / 0**）へ変換します。これを効率的に行うために、**dplyr** パッケージの `across()` を使って、複数の列を一度に変換します。それぞれの列に適用する関数は `case_when()` （この関数も **dplyr** パッケージ）です。この関数は、特定の変数に対して 1 と 0 に変換するロジックを適用する。`across()` と `case_when()` については[データクリーニングと主要関数](#cleaning)の章を参照してください。
+
+注釈: 下記コード中の「.」は、ある時点で `across()` 処理されている列を表します。
+
+```{r}
+## 2 値変数（yes/no などが格納されている変数）を 0/1 に変換
+linelist <- linelist %>%  
+  mutate(across(                                      
+    .cols = all_of(c(explanatory_vars, "outcome")),  ## 各列と「アウトカム」に対する処理であることを指定
+    .fns = ~case_when(                              
+      . %in% c("m", "yes", "Death")   ~ 1,           ## 男性、はい、死亡を 1 に変換
+      . %in% c("f", "no",  "Recover") ~ 0,           ## 女性、いいえ、回復を 0 に変換
+      TRUE                            ~ NA_real_)    ## それ以外は欠測値に変換
+    )
+  )
+
+       
+      
+```
+
+#### 欠測値のある行を削除 {.unnumbered}  
+
+欠測値を含む行を削除するために、**tidyr** パッケージの関数の `drop_na()` が使用できます。しかし、この処理を行いたいのは、対象となる列の値に欠測がある時だけです。
+
+まず行わなければいけないことは、先に作成した `explanatory_vars` ベクトルに列 `age` が含まれるか確認することです（前述の `case_when()` 操作は 2 値変数のみに対応しているため、`age` はエラーになります）。次に、`linelist` を `drop_na()` に渡して、`outcome` 列や `explanatory_vars` のいずれかで値が欠測している行を削除します。
+
+コードを実行する前に、`linelist` オブジェクトの行数は `nrow(linelist)` で確認できます。
+
+```{r}
+## age_category を説明変数に追加 
+explanatory_vars <- c(explanatory_vars, "age_cat")
+
+## 対象となる変数の情報が欠測している行を削除
+linelist <- linelist %>% 
+  drop_na(any_of(c("outcome", explanatory_vars)))
+
+```
+
+`linelist` オブジェクトに残っている行数は `nrow(linelist)` で確認できます。
+
+
+<!-- ======================================================= -->
+
+## 単変量 {  }
+
+[記述統計表の作り方](#tables-descriptive)の章と同様に、事例によって使用する R パッケージが決まります。ここでは単変量解析を行うための 2 つのオプションを紹介します。
+
+* **base** R で利用可能な関数を使用して、結果をすぐにコンソールに表示します。また、**broom** パッケージを使用して、出力を整然化します。
+* モデルに対して **gtsummary** パッケージを使用して、出版原稿レベルの出力を得ます。
+
+
+
+<!-- ======================================================= -->
+
+### **base** R {.unnumbered}
+
+#### 線形回帰 {.unnumbered}  
+
+**base** R 関数の `lm()` は線形回帰を実行し、連続尺度の応答と説明変数との関連を、線形の関係があるという仮定のもとで評価します。
+
+式を応答と説明変数の列名をチルダ（~）で分けた formula として与え、利用するデータを `data =` で指定しましょう。後で利用するために、実行結果のモデルを R オブジェクトとして定義しておきます。
+
+```{r lin_reg}
+lm_results <- lm(ht_cm ~ age, data = linelist)
+```
+
+そうすると、 `summary()` をモデルの結果に対して実行することができ、回帰係数（推定値）、P 値、残差などの統計指標を確認することができます。
+
+```{r lin_reg_res}
+summary(lm_results)
+```
+
+`summary()` の代わりに、**broom** パッケージの `tidy()` を使って、結果を表にまとめることもできます。結果より、年齢が 1 歳上がるごとに身長が 3.5 cm ずつ高くなり、これは統計的にも有意であることがわかりました。
+
+```{r lin_reg_res_tidy}
+tidy(lm_results)
+```
+
+この回帰の結果を **ggplot** パッケージを使って表すこともできます。これを行うためには、まず **broom** パッケージの `argument()` を使って、観測データ点とモデルに当てはめた直線を 1 つのデータフレームに取り込みます。
+
+```{r lin_reg_res_plot}
+
+## 回帰した点と観測データを 1 つのデータフレームにまとめる
+points <- augment(lm_results)
+
+## 年齢を x 軸としてプロット
+ggplot(points, aes(x = age)) + 
+  ## 身長を追加
+  geom_point(aes(y = ht_cm)) + 
+  ## 得られた回帰直線を追加
+  geom_line(aes(y = .fitted), colour = "red")
+
+```
+
+`geom_smooth()` を使って、**ggplot** パッケージに単純な線形回帰の直線を追加することも可能です。
+
+```{r geom_smooth}
+
+## データをプロット
+ ggplot(linelist, aes(x = age, y = ht_cm)) + 
+  ## 観測データを表示
+  geom_point() + 
+  ## 回帰直線を追加
+  geom_smooth(method = "lm", se = FALSE)
+```
+
+より詳細なチュートリアルは、この章の最後にある参考資料を参照してください。
+
+
+#### ロジスティック回帰 {.unnumbered}
+
+**stats** パッケージ（**base** R の一部）の `glm()` は、一般化線形モデル（GLM: Generalized Linear Models）のあてはめに使われます。
+
+`glm()` は単変量および多変量のロジスティック回帰に使われます（例えば、オッズ比が得られる）。核となる部分は次の通りです。
+
+```{r, eval=F}
+# glm() の引数
+glm(formula, family, data, weights, subset, ...)
+```
+
+* `formula =` モデルは、アウトカムを左に説明変数をチルダの右に配置した式として `glm()` に設定されます。
+* `family =` この引数は実行するモデルのタイプを決めます。ロジスティック回帰の場合は `family = "binomial"` を、ポアソン回帰の場合は `family = "poisson"` を使います。他の例は下の表に示します。
+* `data =` 使用するデータフレームを設定します。
+
+
+必要であれば、`family = familytype(link = "linkfunction"))` 構文を使ってリンク関数を設定します。他の分布族や、`weights =` や `subset =` などのオプション引数については、ヘルプドキュメントで詳しく説明されています（`?glm`）。
+
+
+
+| 分布族               | リンク関数のデフォルト            |
+|----------------------|---------------------------------|
+| `"binomial"`         | `(link = "logit|
+| `"gaussian"`         | `(link = "identity")`                        |
+| `"Gamma"`            | `(link = "inverse")`                         |
+| `"inverse.gaussian"` | `(link = "1/mu^2")`                          |
+| `"poisson"`          | `(link = "log")`                             |
+| `"quasi"`            | `(link = "identity", variance = "constant")` |
+| `"quasibinomial"`    | `(link = "logit")`                           |
+| `"quasipoisson"`     | `(link = "log")`                             |
+
+
+`glm()` を実行する際には、結果を名前付きの R オブジェクトとして保存するのが一般的です。そうすることで、以下のように `summary()` を使って結果をコンソールに表示させたり、結果に対して他の操作（例：指数変換）を行ったりすることができます。
+
+負の二項回帰を実行する必要がある場合は、**MASS** パッケージを使用します。`glm.nb()` は `glm()` と同じ構文を使います。様々な回帰を段階的に知りたい場合は、[UCLA stats のページ](https://stats.idre.ucla.edu/other/dae/)を見てください。
+
+#### 単変量の `glm()` {.unnumbered}
+
+この例では、異なる年齢カテゴリと死亡というアウトカム（準備セクションで死亡を 1 と変換しました）との関連を評価しています。以下は、`age_cat` によるアウトカムの単変量モデルです。モデルの出力を `model` として保存し、`summary()` でコンソールに出力します。出力される推定値は<u>対数オッズ比</u>であり、ベースラインレベルは `age_cat` の 1 番目の因子水準（レベル）（"0 - 4"）です。
+
+```{r}
+model <- glm(outcome ~ age_cat, family = "binomial", data = linelist)
+summary(model)
+```
+
+与えた変数のベースラインレベルを変更するには、列のデータ型が因子であることを確認し、`fct_relevel()` で希望するレベルを最初の位置に移動させます（[因子（ファクタ）型データ](#factors)の章を参照してください）。例えば、下の例では、列 `age_cat` に対して、"20-29" をベースラインとして設定してから、修正したデータフレームを `glm()` に渡しています。
+
+```{r}
+linelist %>% 
+  mutate(age_cat = fct_relevel(age_cat, "20-29", after = 0)) %>% 
+  glm(formula = outcome ~ age_cat, family = "binomial") %>% 
+  summary()
+```
+
+#### 結果の表示 {.unnumbered}
+
+ほとんどの用途では、上記の出力にいくつかの修正を加える必要があります。**broom** パッケージの `tidy()` は、モデルの結果を見やすくするために便利です。
+
+ここでは、モデルの出力とカウントの表を組み合わせる方法を紹介します。
+
+1)  <u>指数変換された</u>対数オッズ比の推定値と信頼区間を得るために、モデルを `tidy()` に渡し、 `exponentiate = TRUE` と `conf.int = TRUE` を設定します。
+
+```{r odds_base_single}
+
+model <- glm(outcome ~ age_cat, family = "binomial", data = linelist) %>% 
+  tidy(exponentiate = TRUE, conf.int = TRUE) %>%        # 指数変換し信頼区間を算出
+  mutate(across(where(is.numeric), round, digits = 2))  # 全ての数値列を四捨五入
+```
+
+以下の表は、整然化された `model` の出力です:
+
+```{r, message=FALSE, echo=F}
+# linelist データの結果を表形式で表示
+DT::datatable(model, rownames = FALSE, options = list(pageLength = nrow(model), scrollX=T), class = 'white-space: nowrap' )
+```
+
+2)  これらのモデルの結果とカウントの表を組み合わせます。下記では、**janitor** パッケージの `tabyl()` を使ってクロス集計表を作成します。これは[記述統計表の作り方](#tables-descriptive)の章で説明しています。
+
+```{r}
+counts_table <- linelist %>% 
+  janitor::tabyl(age_cat, outcome)
+```
+
+
+<!-- * Group rows by outcome, and get counts by age category   -->
+<!-- * Pivot wider so the column are `age_cat`, `0`, and `1`   -->
+<!-- * Remove row for `NA` `age_cat`, if applicable, to align with the model results   -->
+
+<!-- ```{r} -->
+<!-- counts_table <- linelist %>%  -->
+<!--   filter(!is.na(outcome) & !is.na(age_cat)) %>%    # ensure outcome and age_cat are present  -->
+<!--   group_by(outcome) %>%                            # get counts of variable of interest grouped by outcome -->
+<!--   count(age_cat) %>%   ## gets number or rows by unique outcome-age category combinations   -->
+<!--   pivot_wider(names_from = outcome, values_from = n)    ## spread data to wide format (as in cross-tabulation) -->
+
+<!-- ``` -->
+
+
+この `counts_table` データフレームは、次のように見えます:
+
+```{r, message=FALSE, echo=F}
+# linelist データの結果を表形式で表示
+DT::datatable(counts_table, rownames = FALSE, options = list(pageLength = nrow(counts_table), scrollX=T), class = 'white-space: nowrap' )
+```
+
+これで `bind_cols()`（**dplyr** パッケージ）を使って `counts_table` と結果 `model` を水平方向に結合することができます。`bind_cols()` では、2 つのデータフレームの行数が完全に一致していなければならないことを注意してください。このコードでは、一連の引き渡し過程の中で結合しているので、渡されたオブジェクト `counts_table` を表す `.` を使って、そのオブジェクトと `model` を結合しています。最後に、`select()` を使って必要な列とその順番を選択し、**base** R の `round()` で小数点以下 2 桁に指定した四捨五入を全ての数値列に適用しています。
+
+```{r, message=F, warning=F}
+combined <- counts_table %>%           # カウントの集計表から始める
+  bind_cols(., model) %>%              # 回帰の出力と結合
+  select(term, 2:3, estimate,          # 変数を選択し、列の並べ直し
+         conf.low, conf.high, p.value) %>% 
+  mutate(across(where(is.numeric), round, digits = 2)) ## 小数点以下 2 桁に四捨五入
+```
+
+結合されたデータフレームの外観は以下の通りです。これは **flextable** パッケージの関数を使って画像として綺麗に印刷されます。[見やすい表の作り方](#tables-presentation)では、**flextable** パッケージを使ったこのような表のカスタマイズ方法を説明していますが、**knitr** や **GT** などの他のさまざまなパッケージを使うこともできます。
+
+```{r}
+combined <- combined %>% 
+  flextable::qflextable()
+```
+
+
+#### 複数の単変量モデルの反復方法 {.unnumbered}  
+
+以下では、`glm()` と `tidy()` を使った方法を紹介します。よりシンプルな方法については、**gtsummary** パッケージのセクションを参照してください。
+
+いくつかの曝露変数のモデルを立て、単変量のオッズ比（つまり、変数同士で調整しない）を生成するためには、下記のアプローチが使えます。まず、**stringr** パッケージの `str_c()` を使って単変量のモデル式を作成します（[文字型・文字列型データ](#characters-strings)を参照）。次に、それぞれのモデル式に対して `glm()` の回帰を実行し、それぞれの `glm()` の結果を `tidy()` に渡します。最後に **tidyr** パッケージの `bind_rows()` を使って全てのモデルの出力を縦に結合します。このアプローチでは、**purrr** パッケージの `map()` を使って反復処理を行います。このツールのより詳しい情報は[ループと反復処理・リストの操作](#iteration)を参照してください。
+
+1)  説明変数の列名のベクトルを作成します。このベクトルはこの章の準備セクションで `explanatory_vars` としてすでに作っています。
+
+2)  `str_c()` を使って複数の文字列としてのモデル式を作成します。ここでは左に `outcome`、右に `explanatory_vars` から得られる列名を指定します。ピリオド `.` が `explanatory_vars` の列名に置き換わります。
+
+```{r}
+explanatory_vars %>% str_c("outcome ~ ", .)
+```
+
+3)  この文字列としてのモデル式を `map()` に渡して、各入力に適用する関数として `~glm()` に設定します。`glm()` の中では、`as.formula(.x)` を回帰式として設定します。ここで、 `.x` は上のステップで定義した文字列としての式で置き換えられます。`map()` は各文字列の式を反復し、それぞれの回帰を実行します。
+
+4)  この最初の `map()` の出力は 2 番目の `map()` コマンドに渡されることにより、回帰の出力に対して `tidy()` が適用されます。
+
+5)  最後に、2 番目の `map()` の出力（整然化されたデータフレームのリスト）が `bind_rows()` で縦に結合され、全ての単変量の結果が単一のデータフレームになります。
+
+
+```{r odds_base_multiple}
+
+models <- explanatory_vars %>%       # 関心のある変数から始める
+  str_c("outcome ~ ", .) %>%         # 各変数を式にする（"アウトカム ~ 関心のある変数"）
+  
+  # 各単変量の式を反復
+  map(                               
+    .f = ~glm(                       # 式を一つ一つ glm() に渡す
+      formula = as.formula(.x),      # glm() の中で、文字列としての式は .x である
+      family = "binomial",           # glm のタイプ（ロジスティック）を指定
+      data = linelist)) %>%          # データセット
+  
+  # 上記から得られた glm 回帰の出力を整然化
+  map(
+    .f = ~tidy(
+      .x, 
+      exponentiate = TRUE,           # 指数変換 
+      conf.int = TRUE)) %>%          # 信頼区間を算出
+  
+  # 回帰の出力のリストを一つのデータフレームとして結合
+  bind_rows() %>% 
+  
+  # 全ての数値列を四捨五入
+  mutate(across(where(is.numeric), round, digits = 2))
+```
+
+今回は、複数の単変量回帰の結果を結合しているため、`models` の最終的なオブジェクトが長くなっています。クリックすると `model` の全ての行が表示されます。
+
+```{r, message=FALSE, echo=F}
+# linelist データの結果を表形式で表示
+DT::datatable(models, rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+先に示したように、各説明変数の `linelist` から集計表を作成し、`models` に結合して、見栄えの良い表を作ることができます。まず、変数定義からはじめて、`map()` を使って、その変数を反復処理させます。この反復処理には、**dplyr** パッケージの関数を使って集計表を作成するユーザー定義関数を用います。そして、その結果を組み合わせ、`models` の結果と結合します。
+
+
+```{r, warning=F, message=F}
+
+## それぞれの説明変数に対して処理
+univ_tab_base <- explanatory_vars %>% 
+  map(.f = 
+    ~{linelist %>%                ## linelist から始める
+        group_by(outcome) %>%     ## アウトカムごとにデータをグループ化
+        count(.data[[.x]]) %>%    ## 関心のある変数に対して集計
+        pivot_wider(              ## 横長形式に変換（クロス集計表として）
+          names_from = outcome,
+          values_from = n) %>% 
+        drop_na(.data[[.x]]) %>%         ## 欠測行を削除
+        rename("variable" = .x) %>%      ## 関心のある列の変数名を "variable" に変更
+        mutate(variable = as.character(variable))} ## 文字列に変換しないと、2 値でない（カテゴリカル）変数が因子として出てきてしまい結合できない
+      ) %>% 
+  
+  ## 集計結果のリストを 1 つのデータフレームとして結合
+  bind_rows() %>% 
+  
+  ## 回帰の結果と結合
+  bind_cols(., models) %>% 
+  
+  ## 関心のある列のみ抽出
+  select(term, 2:3, estimate, conf.low, conf.high, p.value) %>% 
+  
+  ## 四捨五入する小数点位置を指定
+  mutate(across(where(is.numeric), round, digits = 2))
+
+```
+
+以下は、上で作成したデータフレームです。この表を綺麗な HTML 出力に変換する方法（例えば、**flextable** パッケージの使用）については、[見やすい表の作り方](#tables-presentation)の章を参照してください。
+
+```{r, message=FALSE, echo=F}
+# linelist データの結果を表形式で表示
+DT::datatable(univ_tab_base, rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+
+
+
+
+<!-- ======================================================= -->
+
+### **gtsummary** パッケージ {#reg_gt_uni .unnumbered}
+
+以下では、**gtsummary** パッケージの `tbl_uvregression()` の使い方を紹介します。[記述統計表の作り方](#tables-descriptive)の章に示したように、**gtsummary** パッケージの関数は統計解析を行い、<u>かつ</u>プロフェッショナルな外観の出力を作成するのに良い仕事をします。この関数は単変量の回帰分析の結果の表を作成します。
+
+`linelist` から必要な列（説明変数とアウトカム変数）のみ選択し、それを `tbl_uvregression()` に渡します。これにより、準備のセクションで `explanatory_vars` として定義したそれぞれの列（gender、fever、chills、cough、aches、vomit と age_cat）に対して単変量回帰を行います。
+
+この関数に対して、`method =` として `glm` （引用符はいらない）を、`y =` にアウトカム列を、ロジスティック回帰を行いたい場合は `method.args =` に `family = binomial` を指定し、さらに結果を指数変換するように指示しています。
+
+出力は HTML で、カウントが含まれます。
+
+```{r odds_gt, message=F, warning=F}
+
+univ_tab <- linelist %>% 
+  dplyr::select(explanatory_vars, outcome) %>% ## 関心のある変数を選択
+
+  tbl_uvregression(                         ## 単変量解析の表を生成
+    method = glm,                           ## 実行したい回帰（一般化線形モデル）を定義
+    y = outcome,                            ## アウトカム変数を定義
+    method.args = list(family = binomial),  ## 実行したい glm のタイプを定義（ここではロジスティック）
+    exponentiate = TRUE                     ## 対数オッズ比ではなくオッズ比を得るために指数変換を指定
+  )
+
+## 単変量の結果の表を出力
+univ_tab
+```
+
+この表の出力は、テキストラベルを調整したり、P 値によって行を太字にしたりするなど、さまざまな変更を加えることができます。チュートリアルは[こちら](http://www.danieldsjoberg.com/gtsummary/articles/tbl_regression.html)やオンラインサイトを参照してください。
+
+
+
+<!-- ======================================================= -->
+
+## 層別 {  }
+
+**gtsummary** パッケージを使った層別解析は現在も継続して開発しています。この章は追って更新します。
+
+
+
+
+## 多変量
+
+多変量回帰分析をするために、またしても 2 つのアプローチを提案します。
+
+* `glm()` と `tidy()`
+* **gtsummary** パッケージ
+
+これらのワークフローはそれぞれ似ていて、最後のステップで最終的に表にまとめるところだけが違います。
+
+
+### 多変量回帰分析の実施 {.unnumbered}  
+
+
+ここでは、`glm()` を使います。（単変量解析と違って）プラス記号（ `+` ）で説明変数を区切ることで、式の右辺に変数を追加していきます。
+
+
+全ての説明変数を使ってモデルを実行するには、次のようにします:
+
+```{r}
+mv_reg <- glm(outcome ~ gender + fever + chills + cough + aches + vomit + age_cat, family = "binomial", data = linelist)
+
+summary(mv_reg)
+```
+
+2 つの変数とそれらの交互作用項は、`+` の代わりにアスタリスク（ `*` ）で変数を区切ることでモデルに含めることができます。また交互作用項のみを指定する場合は、コロン（ `:` ）で区切ります。例えば次の通りです。
+
+```{r, eval=F}
+glm(outcome ~ gender + age_cat * fever, family = "binomial", data = linelist)
+```
+
+
+<u>オプション</u>として、下記コードを使うことで、あらかじめ定義された列名のベクトルと `str_c()` を使って上記コードを再生成することもできます。これは、説明変数の名前が変更される場合や、全てを再入力したくない場合に便利です。
+
+```{r mv_regression}
+
+## 全ての関心のある変数に対して回帰を実行
+mv_reg <- explanatory_vars %>%  ## 説明変数の列名ベクトルから始める
+  str_c(collapse = "+") %>%     ## 全ての関心のある説明変数名をプラス記号で区切って結合
+  str_c("outcome ~ ", .) %>%    ## アウトカムと上記文字列を結合し、モデル式の形にする
+  glm(family = "binomial",      ## glm のタイプをロジスティックとして定義
+      data = linelist)          ## データセットを定義
+```
+
+
+#### モデルの構築 {.unnumbered}  
+
+任意の説明変数を含む様々なモデルを保存しながら、段階的にモデルを構築することができます。また以下に示すように、**lmtest** パッケージの `lrtest()` を使ってこれらのモデルを尤度比検定で比較することができます:
+
+<span style="color: black;">**<u>注釈:</u>** **base** の `anova(model1, model2, test = "Chisq")` を使っても同じ結果を得ることができます。</span> 
+
+```{r}
+model1 <- glm(outcome ~ age_cat, family = "binomial", data = linelist)
+model2 <- glm(outcome ~ age_cat + gender, family = "binomial", data = linelist)
+
+lmtest::lrtest(model1, model2)
+```
+
+他の方法は、各モデルのオブジェクトを受け取り、**stats** パッケージの `step()` を適用することです。この関数では、モデルを構築する際に使用したい変数選択の方向を指定します。
+
+```{r}
+## AIC に基づいた変数増加法によりモデルを選択
+## "backward" や "both" を指定することで変数選択の方法を調整できる
+final_mv_reg <- mv_reg %>%
+  step(direction = "forward", trace = FALSE)
+```
+
+
+また数値の表示をわかりやすくするために、指数表記をオフにすることもできます:
+
+```{r}
+options(scipen=999)
+```
+
+単変量解析のセクションで説明したように、モデルの出力を `tidy()` に渡して、対数オッズ比と信頼区間を指数変換します。最後に、全ての数値列を小数点以下 2 桁に四捨五入します。スクロールして全ての行を確認してください。
+
+```{r mv_regression_base}
+
+mv_tab_base <- final_mv_reg %>% 
+  broom::tidy(exponentiate = TRUE, conf.int = TRUE) %>%  ## 推定値の整然化されたデータフレームを得る
+  mutate(across(where(is.numeric), round, digits = 2))          ## 四捨五入
+```
+
+結果として得られたデータフレームは以下のようになります:
+
+```{r, message=FALSE, echo=F}
+DT::datatable(mv_tab_base, rownames = FALSE, options = list(pageLength = 10, scrollX=T), class = 'white-space: nowrap' )
+```
+
+
+
+
+
+<!-- ======================================================= -->
+
+### 単変量と多変量の解析結果の結合 {.unnumbered}
+
+#### **gtsummary** パッケージを使った結合 {.unnumbered}
+
+**gtsummary** パッケージは `tbl_regression()` を提供しており、回帰の結果（この場合は `glm()`）を受け取り、美しくまとめた表を作成します。
+
+```{r mv_regression_gt}
+## 最終的な回帰モデルの結果の表を表示
+mv_tab <- tbl_regression(final_mv_reg, exponentiate = TRUE)
+```
+
+表を確認しましょう。
+
+```{r}
+mv_tab
+```
+
+また、**gtsummary** パッケージで作成したいくつかの異なる表を `tbl_merge()` で結合することができます。ここでは、多変量回帰分析の結果を、[上](#reg_gt_uni)で作成した**gtsummary** パッケージの**単変量**の結果と結合させています。
+
+```{r}
+## 単変量結果を結合 
+tbl_merge(
+  tbls = list(univ_tab, mv_tab),                          # 結合
+  tab_spanner = c("**Univariate**", "**Multivariable**")) # ヘッダー名を設定
+```
+
+
+
+#### **dplyr** を使った結合 {.unnumbered}  
+
+`glm()` / `tidy()` の単変量と多変量の出力を結合する別の方法として、**dplyr** パッケージの結合関数があります。
+
+* 先に示した単変量の結果（カウントを含む `univ_tab_base`）と、整然化された多変量の結果 `mv_tab_base` を結合します。
+* `select()` を使って、必要な列だけを残し、その順序を指定し、名前を変更します。
+* 実数型である全ての列に対して `round()` を適用して、小数点以下 2 桁に四捨五入します。
+
+```{r, warning=F, message=F}
+## 単変量と多変量の表を結合
+left_join(univ_tab_base, mv_tab_base, by = "term") %>% 
+  ## 列を選択し、名前を変更
+  select( # 新しい名前 = 古い名前
+    "characteristic" = term, 
+    "recovered"      = "0", 
+    "dead"           = "1", 
+    "univ_or"        = estimate.x, 
+    "univ_ci_low"    = conf.low.x, 
+    "univ_ci_high"   = conf.high.x,
+    "univ_pval"      = p.value.x, 
+    "mv_or"          = estimate.y, 
+    "mvv_ci_low"     = conf.low.y, 
+    "mv_ci_high"     = conf.high.y,
+    "mv_pval"        = p.value.y 
+  ) %>% 
+  mutate(across(where(is.double), round, 2))   
+
+```
+
+
+
+
+<!-- ======================================================= -->
+
+## フォレストプロット {  }
+
+このセクションでは、回帰の結果を図示する方法を示します。**ggplot2** パッケージを使って自分自身でプロットを作成する方法と、**easystats** と呼ばれるメタパッケージ（多くのパッケージを含むパッケージ）を使う方法があります。
+
+**ggplot2** パッケージに慣れていない方は、[ggplot の基礎](#ggplot-basics)の章をご参照ください。
+
+
+<!-- ======================================================= -->
+
+### **ggplot2** パッケージ {.unnumbered}
+
+`ggplot()` を使って、多変量回帰の結果の要素をプロットすることで、フォレストプロットを構築できます。下の "geoms" を使ってプロットのレイヤーを追加していきます:
+
+* `geom_point()` を使った推定値の図示
+* `geom_errorbar()` を使った信頼区間の図示
+* `geom_vline()` を使った OR = 1 を表す垂直線の図示
+
+プロットする前に、**forcats** パッケージの `fct_relevel()` を使って、y 軸上の変数 / レベルの順序を設定すると良いでしょう。（設定しないと）`ggplot()` は、年齢カテゴリに対して英数字順に表示するといった期待通りの結果を返さないかもしれません。詳しくは[因子（ファクタ）型データ](#factors)を参照してください。
+
+```{r ggplot_forest}
+
+## 多変量の結果から切片項を削除
+mv_tab_base %>% 
+  
+  # y 軸上に示される変数 / レベルの順序を指定
+  mutate(term = fct_relevel(
+    term,
+    "vomit", "gender", "fever", "cough", "chills", "aches",
+    "age_cat5-9", "age_cat10-14", "age_cat15-19", "age_cat20-29",
+    "age_cat30-49", "age_cat50-69", "age_cat70+")) %>%
+  
+  # "intercept" の行をプロットから削除
+  filter(term != "(Intercept)") %>% 
+  
+  ## y 軸に変数を x 軸に推定値（OR）をプロット
+  ggplot(aes(x = estimate, y = term)) +
+  
+  ## 点推定値をポイントとして図示
+  geom_point() + 
+  
+  ## 信頼区間をエラーバーとして追加
+  geom_errorbar(aes(xmin = conf.low, xmax = conf.high)) + 
+  
+  ## OR = 1 を示す参照をダッシュ線で示す
+  geom_vline(xintercept = 1, linetype = "dashed")
+  
+```
+
+
+<!-- ======================================================= -->
+
+### **easystats** パッケージ {.unnumbered}
+
+**ggplot2** パッケージが提供する細かいレベルの制御をしたくない場合は、代わりに **easystats** パッケージの組み合わせを使用することができます。
+
+**parameters** パッケージの `model_parameters()` は **broom** パッケージの `tidy()` と同じ処理を行います。**see** パッケージは、これらの出力を受け取り `ggplot()` オブジェクトとしてデフォルトのフォレストプロットを作成します。
+
+```{r easystats_forest}
+pacman::p_load(easystats)
+
+## 多変量の結果から切片項を削除
+final_mv_reg %>% 
+  model_parameters(exponentiate = TRUE) %>% 
+  plot()
+  
+```
+
+
+<!-- ======================================================= -->
+
+## 参考資料 {  }
+
+この章の内容は、これらの資料やオンラインの動作例を参考にしています。
+
+[Linear regression in R](https://www.datacamp.com/community/tutorials/linear-regression-R)
+
+[gtsummary](http://www.danieldsjoberg.com/gtsummary/articles/tbl_regression.html)
+
+[UCLA stats page](https://stats.idre.ucla.edu/other/dae/)
+
+[sthda stepwise regression](http://www.sthda.com/english/articles/36-classification-methods-essentials/150-stepwise-logistic-regression-essentials-in-r/)
+

@@ -1,0 +1,476 @@
+---
+aliases:
+  - /new_pages/grouping.jp.html
+---
+
+# データのグループ化 {#grouping}
+
+```{r, out.width=c('100%'), echo=F, message=F}
+knitr::include_graphics(here::here("images", "Grouping_1500x500.png"))
+```
+
+本章では、記述的分析のためにデータをグループ化および集約する方法について、一般的で機能が使いやすい **tidyverse** ファミリーのパッケージを用いて説明します。
+
+データのグループ化は、データ管理と分析の核となる主要な要素です。グループ化されたデータは、グループごとに統計的に要約され、グループごとにプロットできます。**dplyr** パッケージ（**tidyverse** の一部）の関数を使用すると、グループ化とその後の操作が非常に簡単になります。
+
+本章では、以下の項目について説明します。
+
+-   `group_by()` によってデータをグループ化する\
+-   データのグループ化を解除する\
+-   グループ化されたデータを `summarise()` で統計的に要約する\
+-   `count()` と `tally()` の違い\
+-   `arrange()` をグループ化されたデータに使う\
+-   `filter()` をグループ化されたデータに使う\
+-   `mutate()` をグループ化されたデータに使う\
+-   `select()` をグループ化されたデータに使う\
+-   代替の方法として、R の基本パッケージである **base** の `aggregate()` を使う
+
+<!-- ======================================================= -->
+
+## 準備
+
+### パッケージの読み込み {.unnumbered}
+
+以下のコードを実行すると、分析に必要なパッケージが読み込まれます。このハンドブックでは、パッケージを読み込むために、**pacman** パッケージの p_load() を主に使用しています。p_load() は、必要に応じてパッケージをインストールし、現在の R セッションで使用するためにパッケージを読み込む関数です。また、すでにインストールされたパッケージは、R の基本パッケージである **base** の library() を使用して読み込むこともできます。R パッケージの詳細については、 [R の基礎](#basics) の章を参照してください。
+
+```{r}
+pacman::p_load(
+  rio,       # データの読み込み
+  here,      # ファイルをみつける
+  tidyverse, # データのクリーニング、処理、プロット (dplyr を含む)
+  janitor)   # 列と行の合計を追加する
+```
+
+### データのインポート {.unnumbered}
+
+エボラ出血熱の流行をシミュレートしたデータセットをインポートします。お手元の環境でこの章の内容を実行したい方は、[こちら](https://github.com/appliedepi/epiRhandbook_eng/raw/master/data/case_linelists/linelist_cleaned.rds) をクリックして「前処理された」ラインリスト（linelist）をダウンロードしてください（.rds 形式で取得できます）。 データは **rio** パッケージの `import()` を利用してインポートしましょう。データをインポートする様々な方法については、[データのインポート・エクスポート](#importing) の章を参照してください。
+
+```{r, echo=F}
+linelist <- rio::import(here("data", "case_linelists", "linelist_cleaned.rds"))
+```
+
+```{r, eval=F}
+linelist <- import("linelist_cleaned.rds")
+```
+
+以下に、`linelist` の最初の 50 行を表示します。
+
+```{r message=FALSE, echo=F}
+DT::datatable(head(linelist,50), rownames = FALSE, filter="top", options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+<!-- ======================================================= -->
+
+## グループ化
+
+**dplyr** の `group_by()` は、指定された列の値によって、行をグループ化する関数です。複数の列が指定されている場合は、列の値の組み合わせによって、行がグループ化されます。それぞれの一意の値（または値の組み合わせ）でグループが構成されます。データセットがグループ化された後は、データセットの変更や計算は各グループ内で実行されます。
+
+たとえば、次のコマンドは `linelist` を `outcome` 列の値で行をグループ化し、出力結果を新しいデータフレーム `ll_by_outcome` として保存します。グループ化する列は `group_by()` の括弧内に書きます。
+
+```{r}
+ll_by_outcome <- linelist %>% 
+  group_by(outcome)
+```
+
+`group_by()` を実行した後も、**データセットには目に見える変化がないことに注意してください。** 「グループ化された」データフレームに `mutate()`、 `summarise()`、 `arrange()` などの別の **dplyr** 関数を適用するまで、目に見える変化はありません。
+
+ただし、データフレームを `print()` で出力すると、グループ化を「見る」ことができます。出力されたデータフレームを確認すると、それが [`tibble` 型のオブジェクト](https://tibble.tidyverse.org/) に変換されていることがわかります。また、グループ化に使用された列名ならびにグループの数がヘッダー行のすぐ上に表示されています。
+
+```{r}
+# 表示して、適用されたグループ化を確認
+ll_by_outcome
+```
+
+### 一意のグループ {.unnumbered}
+
+**複数の列を使用してデータをグループ化する場合、グループ化に使用された列の値の一意の組み合わせによって各グループが作成されます。**
+
+作成された各グループと各グループに含まれる行数を確認する場合は、グループ化されたデータを `tally()` に渡します。各グループに含まれる行数を表示せずに一意のグループだけを表示したい場合は、`group_keys()` に渡します。
+
+下の例では、グループ化に使用された列 `outcome` の結果には、「Death」、「Recover」、`NA` の 3 つの一意の値があります。`r nrow(linelist %>% filter(outcome == "Death"))` 行の deaths, `r nrow(linelist %>% filter(outcome == "Recover"))` 行の recover, `r nrow(linelist %>% filter(is.na(outcome)))` 行の NA（outcome の記録なし）があることがわかります。
+
+```{r}
+linelist %>% 
+  group_by(outcome) %>% 
+  tally()
+```
+
+複数の列でグループ化することもできます。下の例では、データフレームが `outcome` 列と `gender` 列の組み合わせごとにグループ化され、集計されています。 `outcome` 列と `gender` 列の一意の組み合わせが、いずれかの列の欠損値も含めて、独自のグループとして作成されていることに注意してください。
+
+```{r}
+linelist %>% 
+  group_by(outcome, gender) %>% 
+  tally()
+```
+
+### 新しい列 {.unnumbered}
+
+グループ化に使用する列を、`group_by()` のコード内で新しく作成することもできます。これは、 `group_by()` を実行する前に `mutate()` を呼び出すのと同じです。このスタイルは簡素な集計作業には便利ですが、コードをわかりやすくするために `mutate()` で先に新しい列を作成してから、`group_by()` にパイプすることをおすすめします。
+
+```{r}
+#  group_by() コマンド内で作成されたバイナリ変数（列）によってグループ化する
+linelist %>% 
+  group_by(
+    age_class = ifelse(age >= 18, "adult", "child")) %>% 
+  tally(sort = T)
+```
+
+### グループ化した列の追加・削除 {.unnumbered}
+
+デフォルトでは、すでにグループ化されているデータに対して `group_by()` を実行すると、古いグループが削除され、新しく作成されたグループが適用されます。すでに作成されたグループに新しいグループを追加したい場合は、引数に `.add = TRUE` を含めてください。
+
+```{r, eval=F}
+# outcome毎にグループ化
+by_outcome <- linelist %>% 
+  group_by(outcome)
+
+# さらに性別によるグループ化を追加
+by_outcome_gender <- by_outcome %>% 
+  group_by(gender, .add = TRUE)
+```
+
+**すべてのグループの保持**
+
+因子型（factor）の列でデータをグループ化すると、現時点でデータに存在していない因子（factor）のレベルが存在する可能性があります。このような列でグループ化すると、デフォルトでは、存在しないレベルは削除され、グループとして含まれません。すべてのレベルが（データに存在しない場合でも）グループとして表示されるように変更したい場合は、`group_by()` コマンドで `.drop = FALSE` と設定します。
+
+## グループ化の解除 {.unnumbered}
+
+グループ化されたデータは `ungroup()` でグループ化が解除されるまで、グループ化されたままになります。グループ化を解除せずに計算を行うと、期待通りの結果にならない可能性があります！\
+以下は、すべてのグループを解除する例です。
+
+```{r, eval=F}
+linelist %>% 
+  group_by(outcome, gender) %>% 
+  tally() %>% 
+  ungroup()
+```
+
+`ungroup()` 内に列名を書くと、特定の列のみのグループ化を解除することもできます。
+
+```{r, eval=F}
+linelist %>% 
+  group_by(outcome, gender) %>% 
+  tally() %>% 
+  ungroup(gender) # gender によるグループ化を解除し、outcome によるグループ化は残す
+```
+
+**注：** `count()` は、カウントを行った後にデータのグループ化を自動的に解除します。
+
+## グループ化したデータの要約 {#group_summarise}
+
+`summarise()` を使用して要約統計量の表を作成する方法の詳細については、[記述統計表の作り方](#tables-descriptive) の章の **dplyr** セクションを参照してください。ここでは、`summarise()` をグループ化されたデータに適用したときに、`summarise()` の動作がどのように変化するかについて簡単に説明します。
+
+**dplyr** パッケージに含まれている `summarise()` （または `summarize()`）は、データフレームを受け取り、あなたが定義した要約統計量を含む、新しい要約データフレームに変換します。グループ化されていないデータフレームでは、サマリー統計量はデータフレーム内のすべての行から計算されます。`summarise()` がグループ化されたデータに適用されると、各グループの要約統計量が生成されます。
+
+以下に示すように、通常、`summarise()` の構文は、新しく作成される要約列の名前、等号（`=`）、そしてデータに適用する統計関数（例えば `min()`、 `max()`、 `median()`、 `sd()` など）を指定します。統計関数の中に、操作する列と関連する引数を書きます（例：`na.rm = TRUE`）。 `sum()` を使用して、指定する論理条件を満たす行の数を数えることもできます（`==` を使用します）。
+
+以下は、グループ化されていないデータセットに適用された `summarise()` の例です。データセット全体から計算された結果が返されます。
+
+```{r}
+# グループ化されていないラインリストの要約統計量
+linelist %>% 
+  summarise(
+    n_cases  = n(),
+    mean_age = mean(age_years, na.rm=T),
+    max_age  = max(age_years, na.rm=T),
+    min_age  = min(age_years, na.rm=T),
+    n_males  = sum(gender == "m", na.rm=T))
+```
+
+対照的に、以下はグループ化されたデータに適用される同じ `summarise()` を使用したコマンドです。統計は `outcome` グループごとに計算されます。グループ化された列が新しいデータフレームにどのように引き継がれるかに注意してください。
+
+```{r}
+# グループ化されてたラインリストの要約統計量
+linelist %>% 
+  group_by(outcome) %>% 
+  summarise(
+    n_cases  = n(),
+    mean_age = mean(age_years, na.rm=T),
+    max_age  = max(age_years, na.rm=T),
+    min_age  = min(age_years, na.rm=T),
+    n_males    = sum(gender == "m", na.rm=T))
+```
+
+[**ヒント**： summarise 関数は、イギリス英語とアメリカ英語のどちらの綴りで書いても機能します。`summarise()` と `summarize()`は同じ関数を呼び出します。]{style="color: darkgreen;"}
+
+## グループ化したデータの集計
+
+`count()` と `tally()` は同じような処理を行いますが、異なる関数です。`count()` と `tally()` の違いに関する詳細は、[こちら](https://dplyr.tidyverse.org/reference/tally.html) をご覧ください。
+
+### `tally()` {.unnumbered}
+
+`tally()` は `summarise(n = n())` の省略形であり、データをグループ化しません。グループ化された集計を行うには、 `group_by()` コマンドの後に書く必要があります。 `sort = TRUE` を追加すると、最大のグループが一番上に表示されます。
+
+```{r}
+linelist %>% 
+  tally()
+```
+
+```{r}
+linelist %>% 
+  group_by(outcome) %>% 
+  tally(sort = TRUE)
+```
+
+### `count()` {.unnumbered}
+
+対照的に `count()` は以下を行います。
+
+1)  指定された列に `group_by()` を適用する\
+2)  `summarise()` を適用し、各グループに含まれている行数である `n` 列を返す\
+3)  `ungroup()` を適用する
+
+```{r}
+linelist %>% 
+  count(outcome)
+```
+
+`group_by()` と同様に、`count()` コマンド内で新しい列を作成できます。
+
+```{r}
+linelist %>% 
+  count(age_class = ifelse(age >= 18, "adult", "child"), sort = T)
+```
+
+`count()` は「ロールアップ」機能を使用して複数回呼び出すことができます。例えば、病院の数を性別ごとに計算したい場合は、次のように行います。わかりやすくするために、（`name  =` を使って）最後の列の名前がデフォルトの「n」から変更されていることに注意してください。
+
+```{r}
+linelist %>% 
+  # 一意なoutcome - genderグループをカウントします
+  count(gender, hospital) %>% 
+  # 性別ごとに行を集計し（3）、性別ごとに病院の数を数えます（6）
+  count(gender, name = "hospitals per gender" ) 
+```
+
+### 総数を追加する {.unnumbered}
+
+`count()` と `summarise()` とは対照的に、`add_count()` を使用すると、<u>データフレーム内の他のすべての列を保持しつつ</u>、グループごとの行数を含む新しい列 `n` を<u>追加</u>できます。
+
+各グループに含まれる行数が新しい列 `n` に出力され、それぞれグループの各行に表示されます。出力結果を確認するため、この新しい列 `n` 列を追加した後、見やすくなるように列を並べ替えます。他の例については、本章後半の [グループ化したデータを変換する](#group_filter_grp_size) のセクションを参照してください。
+
+```{r}
+linelist %>% 
+  as_tibble() %>%                   # 出力が綺麗になるようにtibbleに変換
+  add_count(hospital) %>%           # 病院ごとのカウント列n を追加
+  select(hospital, n, everything()) # デモ目的に列を並び替え
+```
+
+### 合計を追加する {.unnumbered}
+
+`tally()` か `count()` を使用した後、合計行または列の<u>合計</u>を簡単に追加するには、[記述統計表の作り方](#Descriptive%20tables) の章の **janitor** セクションを参照してください。**janitor** パッケージは、`adorn_totals()` や `adorn_percentages()` のような、合計を追加してパーセンテージを表示する関数を提供します。以下は簡単な例です。
+
+```{r}
+linelist %>%                                  # 症例のラインリスト
+  tabyl(age_cat, gender) %>%                  # 2 つの列の数をクロス集計
+  adorn_totals(where = "row") %>%             # 合計行を追加
+  adorn_percentages(denominator = "col") %>%  # 列の分母を使用して比率に変換
+  adorn_pct_formatting() %>%                  # 比率をパーセントに変換
+  adorn_ns(position = "front") %>%            # 「数（パーセント）」と表示
+  adorn_title(                                # タイトルを調整
+    row_name = "Age Category",
+    col_name = "Gender")
+```
+
+より複雑な合計行、たとえば合計以外の要約統計量を含む行を新しく追加したい場合は、 [記述統計表の作り方の章のこちらのセクション](#tbl_dplyr_totals) をご覧ください。
+
+## 日付によるグループ化
+
+データを日付でグループ化する場合は、対象の日付単位（たとえば「日」、「疫学週」、「月」など）の列が必要です。（なければ作成する必要があります）。この列は [日付型データ](#dates) の章の [疫学週のセクション](#dates_epi_wks) で説明されているように、**lubridate** の `floor_date()` を使用して作成することもできます。 この列を作成後、**dplyr** の `count()` を使用し、これらの一意の日付で行をグループ化し、カウントすることができます。
+
+日付の処理に共通して、よく必要となる追加手順は、データに存在しない日付を追加して埋めることです。そのような場合は、**tidyr** の `complete()` を使用すると、集計された日付系列の、範囲内のすべての日付単位に関して、日付が完全にそろいます。この手順がないと、症例が報告されていない 週はデータに表示されないかもしれません！
+
+`complete()` 内で、日付列を最小から最大までの一連の日付 `seq.Date()`として再定義することで、日付列の値が拡張・展開されます。デフォルトでは、新しく「展開された」行の症例数のカウント値は `NA` になります。`NA` ではなく 0 と表示したい場合は、`complete()` の引数 `fill =` にカウント値の列名をリスト形式で指定します（新しく作成された症例数のカウント列の名前が n であれば `fill = list(n = 0)` と書きます）。詳細については `?complete` を、使用例をご覧になりたい方は、日付型データの章の [日付の操作のセクション](#dates_epi_wks) を参照してください。
+
+### ラインリストの症例を日でグループ化 {.unnumbered}
+
+こちらは `complete()` を使用<u>せずに</u>、症例を日数でグループ化する例です。以下の例では、最初の行で症例のない日をスキップすることに注意してください。
+
+```{r}
+daily_counts <- linelist %>% 
+  drop_na(date_onset) %>%        # date_onset の値がないものを削除する
+  count(date_onset)              # 一意な日付ごとの行数をカウントする
+```
+
+```{r message=FALSE, echo=F}
+DT::datatable(daily_counts, rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+下の例では `complete()` コマンドを追加して、範囲内のすべての日が確実に表示されるようにしました。
+
+```{r, eval=F}
+daily_counts <- linelist %>% 
+  drop_na(date_onset) %>%                 # date_onset 列の値がないものを削除する
+  count(date_onset) %>%                   # 一意な日付ごとの行数をカウントする
+  complete(                               # 症例がない日もすべて表示する
+    date_onset = seq.Date(                # 列を日付シーケンスとして再定義する
+      from = min(date_onset, na.rm=T), 
+      to = max(date_onset, na.rm=T),
+      by = "day"),
+    fill = list(n = 0))  # 新しく行を追加して列 n に（デフォルトの NAの代わりに）0 を表示する
+```
+
+```{r message=FALSE, echo=F}
+DT::datatable(daily_counts, rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+### ラインリストの症例を週でグループ化 {.unnumbered}
+
+同じ原則でデータを週でもグループ化することができます。最初に「症例が発症した週」という新しい列を `floor_date()` の `unit = "week"` を使って作成します。 次に前述のように `count()` を使って週毎の症例数を集計します。最後に `complete()` で症例がない週もすべて表示されるようにします。
+
+```{r}
+# 週毎の症例数のデータセットを作る
+weekly_counts <- linelist %>% 
+  drop_na(date_onset) %>%                 # date_onset 列の値がないものを削除します
+  mutate(week = lubridate::floor_date(date_onset, unit = "week")) %>%  # 発症した週という新しい列
+  count(week) %>%                         # データを週毎にグループ化し、グループごとに行をカウントします。
+  complete(                               # ケースがない場合でも、すべての日が表示されるようにします
+    week = seq.Date(                      # 列を日付シーケンスとして再定義します
+      from = min(week, na.rm=T), 
+      to = max(week, na.rm=T),
+      by = "week"),
+    fill = list(n = 0))                   # 新しく行を追加して列 n に（デフォルトの NA の代わりに）0 を表示します
+```
+
+データフレームの最初の 50 行を以下に表示します。
+
+```{r message=FALSE, echo=F}
+DT::datatable(weekly_counts, rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+### ラインリストの症例を月でグループ化 {.unnumbered}
+
+症例を月毎に集約するには、**lubridate** パッケージの `floor_date()` を使用しますが、引数は `unit = "months"` です。 これにより、各日付はその月の 1 日に切り捨て・切り上げられます。出力結果は、`Date` 型になります。 `complete()` でも `by = "months"` と指定することに注意してください。
+
+```{r}
+# 月毎の症例数のデータセットを作る
+monthly_counts <- linelist %>% 
+  drop_na(date_onset) %>% 
+  mutate(month = lubridate::floor_date(date_onset, unit = "months")) %>%  # 新しい列、発症月の 1 日
+  count(month) %>%                          # 月ごとの症例数をカウント
+  complete(
+    month = seq.Date(
+      min(month, na.rm=T),     # 症例が報告されていない月も含めてすべての月を組み込む
+      max(month, na.rm=T),
+      by="month"),
+    fill = list(n = 0))
+```
+
+```{r message=FALSE, echo=F}
+DT::datatable(monthly_counts, rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+### 日毎の集計数を週毎に {.unnumbered}
+
+日毎の集計を週毎に集約するには、上記のように `floor_date()` を使用します。ただし、 `count()` の代わりに `group_by()` と `summarize()` を使用します。週あたりの行数をカウントするだけでなく、日毎の症例数を `sum()` する必要があるためです。
+
+### 日毎の集計を月毎に {.unnumbered}
+
+日毎の集計を月毎に集約するには、上記のように `floor_date()` と `unit = "month"` を使用します。ただし、 `count()` の代わりに `group_by()` と `summarize()` を使用します。月毎の行数をカウントするだけでなく、日毎の症例数を `sum()` する必要があるためです。
+
+## グループ化したデータの並び替え
+
+**dplyr** の `arrange()` を使用してデータフレーム内の行を並べ替えると、引数に `.by_group = TRUE` を設定しない限り、データがグループ化されたときに同じように動作します。この場合、行はまずグループ化に適用された列、次に `arrange()` に指定した列の順番で並び替えられます。
+
+## グループ化したデータのフィルタリング
+
+### `filter()` {.unnumbered}
+
+データフレームを評価する関数（ `max()`, `min()`, `mean()` など）と組み合わせて `filter()` を適用すると、これらの関数が各グループに適用されます。たとえば、フィルタリングによって患者が年齢の中央値を超えている行のみを保持する場合、グループごとにフィルタリングが適用され、各グループの年齢の中央値を超える行が保持されます。
+
+### グループごとにスライスする {.unnumbered}
+
+[データ内の位置に基づいて行をフィルタリングする](https://dplyr.tidyverse.org/reference/slice.html) **dplyr** の `slice()` も、グループごとに適用できます。期待通りにデータを「スライス」するためためには、各グループ内のデータを並べ替えることを忘れないでください。
+
+例えば、各病院で一番最近入院した 5 つの症例を取得したい場合は、次のように行います。
+
+1)  `hospital` 列でラインリストをグループ化する\
+2)  <u>各病院グループ内で</u> `date_hospitalisation` 列を最新の日付から古い日付へ降順で並べ替える\
+3)  スライスして各病院から最初の 5 行を抽出する
+
+```{r,}
+linelist %>%
+  group_by(hospital) %>%
+  arrange(hospital, date_hospitalisation) %>%
+  slice_head(n = 5) %>% 
+  arrange(hospital) %>%                            # 表示用
+  select(case_id, hospital, date_hospitalisation)  # 表示用
+```
+
+`slice_head()` - 上から n 行を選択する\
+`slice_tail()` - 最後から n 行を選択する\
+`slice_sample()` - n 行をランダムに選択する\
+`slice_min()` - `order_by =` 列で最も高い値を持つ n 行を選択する（`with_ties = TRUE` を使用すると同点を保持する）\
+`slice_max()` - `order_by =` 列で最も低い値を持つ n 行を選択する（`with_ties = TRUE` を使用すると同点を保持する）
+
+`slice()` の他の例と詳細をご覧になりたい方は、[重複データの排除](#De-duplication) を参照ください。
+
+### グループの大きさでフィルタリングする {#group_filter_grp_size .unnumbered}
+
+`add_count()` は、元のデータに列 `n` を追加し、括弧内で指定した行のグループごとの行数を計算する関数です。
+
+以下の例では、`add_count()` が `hospital` 列に適用され、新しい列 `n` の各行の値は、その行の病院の総症例数となります。`n` 列の値がどのように繰り返されるているかに注意してください。以下の例の列名 `n` は、 `add_count()` 内の `name =` を使用して変更できます。結果をわかりやすく表示するため、 `select()` を使用して列を並べ替えています。
+
+```{r}
+linelist %>% 
+  as_tibble() %>% 
+  add_count(hospital) %>%          # 「この行と同じ病院に入院した行数」を追加する
+  select(hospital, n, everything())
+```
+
+こうすれば「小さな」病院、たとえば 500 人未満の患者が入院した病院、に入院した症例列を簡単にフィルタリングできるようになります。
+
+```{r, eval=F}
+linelist %>% 
+  add_count(hospital) %>% 
+  filter(n < 500)
+```
+
+## グループ化したデータを変換する
+
+すべての列と（要約ではない）行を保持したまま、グループ統計を含む新しい列を追加するには `summarise()` ではなく、 `group_by()` の後に `mutate()` を使用します。
+
+これは、他のすべての列を残したまま、グループ統計を算出するときに便利です。例えば、ある行の値をその行を含むグループの値と比較する計算などです。
+
+以下の例では、ある症例（行）の入院までに所要した日数（入院の遅れ）と、病院全体の入院までに所要した日数の平均値との差を計算します。 手順は次のとおりです。
+
+1)  データを病院ごとにグループ化する\
+2)  `days_onset_hosp` 列を使って、病院全体の遅れの平均を含む新しい列を作成する\
+3)  2 つの列の差を計算する
+
+結果をわかりやすく表示するために、表示する列のみを `select()` で選択しています。
+
+```{r}
+linelist %>% 
+  # 病院ごとのグループデータ（ラインリストへの変更はまだ保存されていない）
+  group_by(hospital) %>% 
+  
+  # 新しい列
+  mutate(
+    # 病院ごとの入院までの平均日数（小数点第1位を四捨五入）
+    group_delay_admit = round(mean(days_onset_hosp, na.rm=T), 1),
+    
+    # 各行の遅延と病院の平均遅延の差（小数点以下第1位を四捨五入）
+    diff_to_group     = round(days_onset_hosp - group_delay_admit, 1)) %>%
+  
+  # 特定の行のみを選択 - 表示の目的で
+  select(case_id, hospital, days_onset_hosp, group_delay_admit, diff_to_group)
+```
+
+## グループ化したデータの選択
+
+`select()` はグループ化されたデータに対して機能しますが、グループ化した列は常に（ `select()` で指定されていない場合でも）含まれます。グループ化した列を含みたくない場合は、最初に `ungroup()` を使用してください。
+
+<!-- ======================================================= -->
+
+## 参考資料
+
+詳細については、以下の資料をご参照ください。
+
+-   グループ化されたデータには、いかなる要約機能でも適用することができます。 [RStudio data transformation cheat sheet](https://github.com/rstudio/cheatsheets/blob/master/data-transformation.pdf) を参照ください。
+
+-   The Data Carpentry が作成した [**dplyr**](https://datacarpentry.org/R-genomics/04-dplyr.html) のページ\
+    **tidyverse** 公式ドキュメントの [group_by()](https://dplyr.tidyverse.org/reference/group_by.html) と [grouping](https://dplyr.tidyverse.org/articles/grouping.html) のページ
+
+-   [Data manipulation](https://itsalocke.com/files/DataManipulationinR.pdf) に関するページ
+
+-   [Summarize with conditions in dplyr](https://stackoverflow.com/questions/23528862/summarize-with-conditions-in-dplyr)

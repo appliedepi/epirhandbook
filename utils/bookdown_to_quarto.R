@@ -14,7 +14,7 @@ file_move(path = rmd_names_root,
 
 
 # Change file names ended with .Rmd to .qmd in CHAPTER FOLDER
-rmd_names_chapter <- dir_ls(path = "new_pages", glob = "*.Rmd")    
+rmd_names_chapter <- dir_ls(path = "chapters", glob = "*.Rmd")    
 qmd_names_chapter <- str_replace(string = rmd_names_chapter,
                          pattern = "Rmd",
                          replacement = "qmd")
@@ -40,12 +40,12 @@ write_lines(
 )
 
 
-# In string containing new_pages/, remove quotation marks
+# In string containing chapters/, remove quotation marks
 
 quarto_chapter <- read_lines("_quarto.yml")
 
 quarto_chapter_remove <- str_replace_all(string = quarto_chapter,
-                                         pattern = c('qmd",' = "qmd", '"new_pages/' = '- new_pages/'))
+                                         pattern = c('qmd",' = "qmd", '"chapters/' = '- chapters/'))
 write_lines(
   x = quarto_chapter_remove,
   file = "_quarto.yml"

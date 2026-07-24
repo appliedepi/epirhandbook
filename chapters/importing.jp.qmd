@@ -1,0 +1,919 @@
+---
+aliases:
+  - /new_pages/importing.jp.html
+---
+
+# データのインポート・エクスポート {#importing}
+
+
+```{r, out.width=c('100%'), echo=F, message=F}
+knitr::include_graphics(here::here("images", "Import_Export_1500x500.png"))
+```
+
+
+
+本章では、ファイルを検索、インポート、およびエクスポートする方法について説明します。とりわけ、以下の項目について紹介します。
+
+* **rio** パッケージを使用し、様々な種類のファイルを柔軟に `import()` および `export()` します
+* **here** パッケージを使用し、R プロジェクトルート（R project root）に関連するファイルを検索します。これにより、1台のコンピュータに紐づけられた固有のファイルパスが煩雑な問題を引き起こすことを防ぎます
+* 以下のような具体的なインポートの事例についても扱います
+  * 特定の Excel シート
+  * 煩雑なヘッダーと行のスキップ
+  * グーグルシートからのインポート
+  * ウェブサイト上のデータをインポート
+  * API を用いたデータのインポート
+  * 複数ファイルのうち、<u>最新の</u>ファイルのインポート
+* 手動でのデータ入力について説明します
+* RDS や RData などの R 特有のファイルタイプのインポートについても紹介します
+* ファイルやプロットのエクスポートや保存についても解説します
+
+```{r, include=FALSE}
+pacman::p_load(
+  rio,            # import/export
+  here,           # file pathways
+  tidyverse)      # data management, summary, and visualization
+```
+
+
+<!-- ======================================================= -->
+## 概要
+
+R に「データセット」をインポートする場合、一般的には、お手元の R 環境でフォルダディレクトリ内の特定のファイルパス・アドレスにあるファイル（Excel、CSV、TSV、RDS など）をインポートし、新しい<u>データフレーム</u>オブジェクトとして定義します。
+
+R では、他の統計プログラム（SAS、STATA、SPSS）で作成されたファイルを含め、多くの種類のファイルをインポート・エクスポートすることができます。また、リレーショナルデータベース（relational database）への接続も可能です。
+
+R には、以下のような R 独自のデータフォーマットもあります。
+
+* RDS ファイル（.rds）は、データフレームなどの単一の R オブジェクトを保存します。RDS ファイルは、列のデータ型を維持するため、クリーニングされたデータを保存するのに適しています。詳しくは [こちら](#import_rds) をご覧ください。\
+* RData ファイル（.Rdata）は、複数のオブジェクトや、R のワークスペース全体を保存できます。詳しくは [こちら](#import_rdata) をご覧ください。
+
+
+<!-- ======================================================= -->
+## rio パッケージ {}  
+
+本書では、**rio** パッケージの使用を推奨しています。"rio" は"R I/O"（Input/Output）の略語です。
+
+**rio** パッケージに含まれる関数 `import()` および `export()` は、様々な種類のファイル（例：.xlsx、.csv、.rds、.tsv）を扱うことができ、関数内でファイルパス（ ".csv" のような拡張子を含む）を指定すると、**rio** が拡張子を読み取り、指定された拡張子に最適なツールを使用してファイルをインポートまたはエクスポートします。
+
+**rio** を使わずに、他のパッケージの関数を使うこともできます。他のパッケージは、その使用がファイルの種類に特化しており、例えば、**base** R の `read.csv()`、**openxlsx** パッケージの `read.xlsx()`、 **readr** パッケージの `write_csv()` などが挙げられます。どのパッケージがどのファイル形式を扱えるかを覚えるのは大変ですが、**rio** パッケージの `import()` や `export()` はそのような暗記の必要が無く、扱いが簡単です。
+
+**rio** の関数 `import()` と `export()` は、ファイルの拡張子に基づき、与えられたファイルに適切なパッケージと関数を使用します。**rio** がバックグラウンドで使用するパッケージや関数については、この章の最後に掲載されている表ご覧ください。**rio** は、STATA、SAS、SPSSのファイルをはじめ、さまざまな種類のファイルをインポートすることができます。
+
+シェープファイル（shape file）のインポート・エクスポートには、[GIS の基礎](#gis) の章で紹介する別のパッケージが必要です。
+
+
+
+
+
+## here パッケージ {#here}
+
+**here** パッケージの関数 `here()` を用いてファイルパスを作成することで、ファイルの場所と保存場所を R に簡単に指示することができます。
+
+**here** パッケージは、 R プロジェクトと組み合わせて使用すると、 R プロジェクトのルートディレクトリ（トップレベルにあるフォルダ）に対する R プロジェクト内のファイルの場所を記述することができ、 R プロジェクトを複数の人やコンピュータで共有したり、アクセスしたりする場合に便利です。すべてのユーザーが共通の場所（ R プロジェクトのルート）からファイルパスを「開始」するようにすることで、異なるコンピュータ間のユニークなファイルパス（例*:* `"C:/Users/Laura/Documents..."` ）による煩雑さを避けることができます。
+
+R プロジェクトでの `here()` は以下のように機能します。
+
+* **here** パッケージが R プロジェクト内で最初に読み込まれると、「ベンチマーク」または「アンカー」として、 R プロジェクトのルートフォルダに".here "という小さなファイルが配置されます。
+* 対象の*スクリプトで、*`here()` を使用して<u>そのアンカーに基づいた</u>ファイルパスを作成し、R プロジェクトのサブフォルダ内のファイルを参照できるようにします
+* ファイルパスを作成するには、以下のように、ルートディレクトリ以降のフォルダ名を引用符で囲み、カンマで区切り、最後にファイル名とファイル拡張子を記述します
+* `here()` のファイルパスは、インポートとエクスポートの両方に使用できます
+
+例えば、以下では、関数 `import()` に、 `here()` で構築されたファイルパスが提供されています。
+
+```{r, eval=F}
+linelist <- import(here("data", "linelists", "ebola_linelist.xlsx"))
+```
+
+コマンド `here("data", "linelists", "ebola_linelist.xlsx")` は、実際には<u>ユーザーのコンピュータに固有の</u>完全なファイルパスをコンピュータに指示しています。
+
+```
+"C:/Users/Laura/Documents/my_R_project/data/linelists/ebola_linelist.xlsx"
+```
+
+`here()` を用いた R コマンドは、 R プロジェクトにアクセスするすべてのコンピュータで正常に実行できるのが魅力です。
+
+
+<span style="color: darkgreen;">**<u>ヒント:</u>** ".here" ルートがどこに設定されているかわからない場合は、括弧内を空にして関数 `here()` を実行してください。</span>  
+
+[このリンク](https://here.r-lib.org/) に **here** パッケージの詳細が記載されています。
+
+
+
+<!-- ======================================================= -->
+## ファイルパス
+
+データをインポートまたはエクスポートする際、ファイルパスを指定する必要があります。 次の 3 つの方法のいずれかを実行してください。
+
+1)  <u>推奨</u>：**here** パッケージで「相対」ファイルパス（"relative" file path）を指定する
+2)  「完全」・「絶対」ファイルパス（"full"/"absolute" file path）を指定する
+3)  手動でファイルを選択する
+
+
+
+### 「相対」ファイルパス {.unnumbered}
+
+R では、「相対」ファイルパスは、R プロジェクトのルートを<u>基準にした</u>ファイルパスで構成されます。これにより、さまざまなコンピュータで機能する、より単純なファイルパスが可能になります（例えば、R プロジェクトが共有ドライブ上にある場合や、電子メールで送信される場合）。[上記](#here) のように、相対ファイルパスは **here** パッケージを用いて作成および使用されます。
+
+以下に、`here()` で作成された相対ファイルパスの例を示します。検索したい .xlsx ファイルがサブフォルダ "data" 、そしてその中のサブフォルダ "linelists" を含む R プロジェクト内にある場合のファイルパスです。
+
+```{r, eval=F}
+linelist <- import(here("data", "linelists", "ebola_linelist.xlsx"))
+```
+
+
+
+### 「絶対」ファイルパス {.unnumbered}  
+
+「絶対」または「完全な」ファイルパスを `import()` などの関数に指定できますが、ユーザーの特定のコンピュータに固有である故「壊れやすい」ため、<u>推奨されていません</u>。
+
+以下は、絶対ファイルパスの例です。Laura のコンピュータには、フォルダ "analysis" 、サブフォルダ "data"、そしてその中にサブフォルダ "linelists" があり、そこに対象の .xlsx ファイルがあります。
+
+```{r, eval=F}
+linelist <- import("C:/Users/Laura/Documents/analysis/data/linelists/ebola_linelist.xlsx")
+```
+
+絶対ファイルパスについて、注意すべき点を以下で説明します。
+
+-   スクリプトを別のコンピュータで実行すると機能しないため、**絶対ファイルパスの使用は避けてください**。
+-   上記の例のように、スラッシュ（`/`）を使用してください（注: これは Windows ファイルパスのデフォルトとは異なります）\
+-   二重スラッシュで始まるファイルパス（"//..."など）は、R によって**認識されない**可能性が高く、エラーが発生します。文字で始まる「名前付き」または「文字付き」のドライブ（"J:" や "C:" など）にファイルを移動することをおすすめします。この問題の詳細については、[ディレクトリの操作](#directories) の章をご参照ください。
+
+絶対ファイルパスが適切な事例の 1 つは、すべてのユーザーが同じ絶対ファイルパスを持つ共有ドライブからファイルをインポートする場合です。
+
+<span style="color: darkgreen;"><u>**ヒント:**</u> すべての `\`を `/` にすばやく変換するには、対象のコードを選択し、Ctrl + f（ Windows の場合）を使用し、「選択中」のオプションボックスをオンにしてから、置換機能を使用して変換します。</span>  
+
+
+
+<!-- ======================================================= -->
+### 手動でのファイル選択 {.unnumbered}
+
+次のいずれかの方法でデータを手動でインポートできます。
+
+1)  RStudio の Environment Pane にて、「データセットのインポート」（"Import Dataset"）をクリックし、データの種類を選択します。
+2)  ファイル（File） -\> データセットのインポート（Import Dataset） をクリックし、対象データの種類を選択します。\
+3)  手動でのファイル選択をコード化したい場合は、**base** R コマンドの `file.choose()` を（括弧内を空のまま）使用し、ユーザーがコンピュータからファイルを手動で選択できる**ポップアップウィンドウ**を表示します。以下に例を示します。
+
+```{r import_choose, eval=F}
+# ファイルを手動で選択する
+# このコマンドを実行すると、ポップアップウィンドウが表示される
+# 選択したファイルパスがimport（）コマンドに提供される
+
+my_data <- import(file.choose())
+```
+
+<span style="color: darkgreen;"><u>**ヒント**</u>：**ポップアップウィンドウ**がすでに開いている RStudio ウィンドウの後ろに表示される場合があります。</span>
+
+
+
+## データのインポート  
+
+`import()` を使用してデータセットをインポートするのは非常に簡単です。 ファイルパス（ファイル名とファイル拡張子を含む）を引用符で囲んで指定するだけです。 `here()` を使用してファイルパスを作成する場合は、先述のセクションで説明した手順に従ってください。 以下にいくつかの例を示します。
+
+まず、「作業ディレクトリ」または R プロジェクトのルートフォルダにある csv ファイルをインポートする例です。
+
+```{r, eval=F}
+linelist <- import("linelist_cleaned.csv")
+```
+
+
+次に、R プロジェクトの "data" および "linelists" サブフォルダ（`here()` を使用して作成されたファイルパス）にある Excel ワークブックの最初のシートをインポートする例です。
+
+```{r, eval=F}
+linelist <- import(here("data", "linelists", "linelist_cleaned.xlsx"))
+```
+
+
+最後に、絶対ファイルパスを使用してデータフレーム（.rds ファイル）をインポートする例を紹介します。
+
+```{r, eval=F}
+linelist <- import("C:/Users/Laura/Documents/tuberculosis/data/linelists/linelist_cleaned.rds")
+```
+
+
+
+
+
+### 特定の Excel シート {.unnumbered}
+
+特定の**シート**をインポートする場合は、シート名を `which =` 引数に指定します。 以下に例を示します。
+
+```{r eval=F}
+my_data <- import("my_excel_file.xlsx", which = "Sheetname")
+```
+
+`here()` を使用して `import()` で相対パスを指定する場合でも、`here()` の閉じ括弧の後に `which =` 引数を追加することで、特定のシートを指定することができます。
+
+```{r import_sheet_here, eval=F}
+# デモ: 'here'パッケージで相対パスを使用し特定の Excel シートをインポートする
+linelist_raw <- import(here("data", "linelist.xlsx"), which = "Sheet1")`  
+```
+
+データフレームを R から特定の Excel シートに<u>エクスポート</u>し、 Excel ワークブックの残りの部分を変更しないようにするには、**openxlsx** などの代替パッケージを使用してインポート、編集、およびエクスポートする必要があります。詳細については、[ディレクトリの操作](#directories) の章または [こちらの github ページ](https://ycphs.github.io/openxlsx/)を参照してください。
+
+Excel ワークブックが .xlsb（バイナリ形式の Excel ワークブック）の場合、rio を使用してインポートできない場合があります。その場合は、ファイルを .xlsx として再保存するか、[このような用途](https://cran.r-project.org/web/packages/readxlsb/vignettes/read-xlsb-workbook.html) のために作成された **readxlsb** などのパッケージの使用をおすすめします。
+
+
+
+
+
+
+<!-- ======================================================= -->
+### 欠損値 {#import_missing .unnumbered} 
+
+まず、データセット内でどのような値が欠損しているかの定義を指定することが大切です。[欠損データの処理](#missing-data) の章で説明されているように、R では欠損値は `NA` と表示されますが、インポートするデータセットでの欠損値は、99 や "Missing"、または単に空の文字スペース "" で表されている可能性があります。
+
+`import()` に `na =` 引数を使用し、インポートするデータセットで欠損値とみなしたい値を引用符で囲んで指定します（数値の場合でも同様に指定します）。 以下に示すように、 `c()` を使用して括弧内に複数の値を書くと、複数の値を指定できます。
+
+インポートされたデータセットの値 "99" は欠落していると見なされ、Rで `NA` に変換されます。
+
+```{r, eval=F}
+linelist <- import(here("data", "my_linelist.xlsx"), na = "99")
+```
+
+インポートされたデータセットの "Missing"、""（空のセル）、または " "（単一スペース）の値はすべて、Rで `NA` に変換されます。
+
+```{r, eval=F}
+linelist <- import(here("data", "my_linelist.csv"), na = c("Missing", "", " "))
+```
+
+
+<!-- ======================================================= -->
+### 行をスキップする {.unnumbered} 
+
+.xlsx または .csv ファイル内の一部の行をインポートしたくない場合は、 **rio** の `import()` 内で引数 `skip =` を使用し、インポートをスキップする行数を指定します。
+
+
+```{r, eval=F}
+linelist_raw <- import("linelist_raw.xlsx", skip = 1)  # ヘッダー行をインポートしない
+```
+
+残念ながら、`skip =` には 1 行のみ指定可能であり、<u>範囲</u>を指定することはできません。（例えば、"2:10" はと指定することはできません）。上から連続していない特定の行のインポートをスキップするには、ファイルを複数回インポートし、**dplyr** パッケージの `bind_rows()` を使用することを検討してください。 以下に、2 行目のみをスキップする例を示します。
+
+
+
+### 2番目のヘッダー行を管理する {.unnumbered}  
+
+以下に示すように、データセットの <u>2 番目</u>の行が「データディクショナリ」（data dictionary）行である場合があります。この場合、すべての列が「文字型」としてインポートされる可能性があり、問題にを起こす場合があります。
+
+```{r, echo=F}
+# HIDDEN FROM READER（読者からは見えないコード）
+####################
+# Create second header row of "data dictionary" and insert into row 2. Save as new dataframe.（2行目にデータディクショナリの行を追加して、新しい出たフレームとして保存する）
+linelist_2headers <- rio::import(here::here("data", "case_linelists", "linelist_cleaned.rds")) %>%         
+        mutate(across(everything(), as.character)) %>% 
+        add_row(.before = 1,
+                #row_num = "000",
+                case_id = "case identification number assigned by MOH",
+                generation = "transmission chain generation number",
+                date_infection = "estimated date of infection, mm/dd/yyyy",
+                date_onset = "date of symptom onset, YYYY-MM-DD",
+                date_hospitalisation = "date of initial hospitalization, mm/dd/yyyy",
+                date_outcome = "date of outcome status determination",
+                outcome = "either 'Death' or 'Recovered' or 'Unknown'",
+                gender = "either 'm' or 'f' or 'unknown'",
+                hospital = "Name of hospital of first admission",
+                lon = "longitude of residence, approx",
+                lat = "latitude of residence, approx",
+                infector = "case_id of infector",
+                source = "context of known transmission event",
+                age = "age number",
+                age_unit = "age unit, either 'years' or 'months' or 'days'",
+                fever = "presence of fever on admission, either 'yes' or 'no'",
+                chills = "presence of chills on admission, either 'yes' or 'no'",
+                cough = "presence of cough on admission, either 'yes' or 'no'",
+                aches = "presence of aches on admission, either 'yes' or 'no'",
+                vomit = "presence of vomiting on admission, either 'yes' or 'no'",
+                time_admission = "time of hospital admission HH:MM")
+```
+
+以下は、このようなデータセットの例です（最初の行がデータディクショナリとなっています）。
+
+```{r message=FALSE, echo=F}
+# ラインリストデータをテーブルとして表示する
+DT::datatable(head(linelist_2headers, 5), rownames = FALSE, filter="top", options = list(pageLength = 4, scrollX=T), class = 'white-space: nowrap' )
+```
+
+#### 2番目のヘッダー行の削除 {.unnumbered}
+
+2 番目のヘッダー行を削除するには、データを2回インポートする必要があります。
+
+1)  正しい列名を保存するためにデータをインポートします。\
+2)  最初の2行（ヘッダーと2行目）をスキップして、データを再度インポートします\
+3)  2 回目にインポートされたデータフレームに正しい名前を指定します
+
+正しい列名を指定するために使用される引数は、データファイルのタイプ（.csv、.tsv、.xlsx など ）によって異なります。これは、**rio** がファイルタイプごとに異なる関数を使用しているためです（上記の表を参照）。
+
+**Excel ファイルの場合:** (`col_names =`)
+
+```{r, eval=F}
+# 1回目のインポートでは列名を保存する
+linelist_raw_names <- import("linelist_raw.xlsx") %>% names()  # 本来の列名を保存する
+
+# 2回目のインポートでは、2行目をスキップし、列名を引数col_names = に割り当てる
+linelist_raw <- import("linelist_raw.xlsx",
+                       skip = 2,
+                       col_names = linelist_raw_names
+                       ) 
+```
+
+**CSVファイルの場合:** (`col.names =`)
+
+```{r, eval=F}
+# 1回目のインポートでは列名を保存する
+linelist_raw_names <- import("linelist_raw.csv") %>% names() # 本来の列名を保存する
+
+# csvファイルの引数は 'col.names='であることに注意
+linelist_raw <- import("linelist_raw.csv",
+                       skip = 2,
+                       col.names = linelist_raw_names
+                       ) 
+```
+
+**バックアップオプションとして** - 列名を別のコマンドで変更する
+
+```{r, eval=F}
+# base R の関数の colnames() 関数を使用してヘッダーを割り当てる・上書きする
+colnames(linelist_raw) <- linelist_raw_names
+```
+
+
+#### データディクショナリの作成 {.unnumbered}
+
+おまけ：データディクショナリである 2 行目がある場合は、そこからデータディクショナリを簡単に作成できます。このヒントは、この [投稿](https://alison.rbind.io/post/2018-02-23-read-multiple-header-rows/) を基に作成されました。
+
+
+```{r}
+dict <- linelist_2headers %>%             # はじめに、1行目としてディクショナリを含むラインリスト
+  head(1) %>%                             # 列名とディクショナリの一行目のみを保持する           
+  pivot_longer(cols = everything(),       # すべての列を長い形式に変更する
+               names_to = "Column",       # 新しい列名を割り当てる
+               values_to = "Description")
+```
+
+
+```{r message=FALSE, echo=F}
+DT::datatable(dict, rownames = FALSE, filter="top", options = list(pageLength = 4, scrollX=T), class = 'white-space: nowrap' )
+```
+
+
+
+#### 2つのヘッダー行を組み合わせる {.unnumbered}
+
+元のデータセットにヘッダーが <u>2 行</u>ある場合（特に、データの 2 行目がサブヘッダーである場合）、それらを 「結合」するか、2 番目のヘッダー行の値を最初のヘッダー行に追加することができます。
+
+以下のコマンドは、データフレームの列名を、最初の（本来の）ヘッダーとそのすぐ下（最初の行）の値の組み合わせとして（一緒に貼り付けて）定義します。
+
+```{r, eval=F}
+names(my_data) <- paste(names(my_data), my_data[1, ], sep = "_")
+```
+
+
+
+<!-- ======================================================= -->
+### Google シート {.unnumbered}
+
+**googlesheet4** パッケージを使用して、スプレッドシートへのアクセスを認証することにより、オンラインの Google スプレッドシートからデータをインポートすることができます。
+
+
+```{r, eval=F}
+pacman::p_load("googlesheets4")
+```
+
+以下のように、練習用の Google シートをインポートして保存します。以下のコマンドは、 Google アカウントの認証の確認を求める場合があります。インターネットブラウザのプロンプトとポップアップに従い、Tidyverse API パッケージに、 Google ドライブでスプレッドシートを編集、作成、および削除する権限を付与します。
+
+
+以下のシートは「リンクを持っている人は誰でも閲覧可能」に設定されていますので、誰でもインポートすることができます。
+
+```{r, eval=F}
+Gsheets_demo <- read_sheet("https://docs.google.com/spreadsheets/d/1scgtzkVLLHAe5a6_eFQEwkZcc14yFUx1KgOMZ4AKUfY/edit#gid=0")
+```
+
+このシートは、上のURL の一部分であるシート ID のみを使用してインポートすることもできます。
+
+```{r, eval=F}
+Gsheets_demo <- read_sheet("1scgtzkVLLHAe5a6_eFQEwkZcc14yFUx1KgOMZ4AKUfY")
+```
+
+
+また、別のパッケージである **googledrive** を使用しても、Google スプレッドシートを作成、編集、削除することができます。例えば、このパッケージの `gs4_create()` 関数や `sheet_write()` 関数などです。
+
+その他の参考資料:
+[Google スプレッドシートのインポート 基礎](https://arbor-analytics.com/post/getting-your-data-into-r-from-google-sheets/)\
+[より詳しいチュートリアル](https://googlesheets4.tidyverse.org/articles/googlesheets4.html)\
+[googlesheets4 と tidyverse の間の相互作用](https://googlesheets4.tidyverse.org/articles/articles/drive-and-sheets.html)
+
+
+
+
+## 複数のファイルをインポート、エクスポート、分割、結合する
+
+複数のファイルまたは複数の Excel ファイルをインポートして結合する例については、[ループと反復処理・リストの操作](#iteration) の章を参照してください。データフレームを分割し、それぞれのデータフレームを個別にエクスポートする方法や、それぞれのデータフレームを名前付きのワークシートとして含む一つの Excel ワークブックとしてエクスポートする方法の例も紹介しています。
+
+
+
+
+<!-- ======================================================= -->
+## Github からのインポート {#import_github}
+
+インポートするファイルの種類によって、Github から R にデータを直接インポートするのが非常に簡単な場合もあれば、いくつかの手順が必要な場合もあります。 以下に、いくつかの方法を示します。
+
+### CSV ファイル {.unnumbered}
+
+R コマンドを使用して、.csv ファイルを Github から R に簡単に直接インポートすることができます。
+
+1)  Github リポジトリに移動し、目的のファイルを見つけてクリックします
+2) "Raw" ボタンをクリックします（以下に示すように、 "Raw" の csv データが表示されます）
+3) URL（ウェブアドレス）をコピーします
+4) `import()` コマンド内で URL を引用符で囲みます
+
+```{r, out.width=c('100%', '100%'), fig.align = "left", echo=F}
+knitr::include_graphics(here::here("images", "download_csv_raw.png"))
+```
+
+### XLSX ファイル {.unnumbered}  
+
+一部のファイル（.xlsx、.rds、.nwk、.shp など）では、"Raw" データが表示できない場合があります
+
+1)  Githubリポジトリに移動し、対象のファイルを見つけてクリックします
+2)  以下に示すように、"Download" ボタンをクリックします
+3)  ファイルをコンピュータに保存し、 R にインポートします
+
+
+```{r , out.width=c('100%', '100%'), fig.align = "left", echo=F}
+knitr::include_graphics(here::here("images", "download_xlsx.png"))
+```
+
+### シェープファイル（Shape ファイル） {.unnumbered} 
+
+シェープ（shape）ファイルには多くの従属ファイルがあり、それぞれファイルの拡張子が異なります。ファイル拡張子が ".shp" であるものもあれば、".dbf"、".prj" などのものもあります。Github からシェープファイルをダウンロードするには、各ファイルを個別にダウンロードし、すべてのファイルをコンピュータの<u>同じ</u>フォルダに保存する必要があります。Github で、各ファイルを個別にクリックし、「ダウンロード」（"Download"）ボタンをクリックしてダウンロードします。
+
+コンピュータに保存後、[GIS の基礎](#gis) の章で説明されているように、**sf** パッケージの `st_read()` を使用してシェープファイルをインポートできます。他の関連ファイルがコンピュータの同じフォルダ内にある場合に限り、".shp" ファイルのファイルパスと名前を指定するだけで済みます。
+
+以下の例では、シェープファイル "sle_adm3" が多くのファイルで構成されていることがわかります。各ファイルを Github からダウンロードする必要があります。
+
+```{r , out.width=c('100%', '100%'), fig.align = "left", echo=F}
+knitr::include_graphics(here::here("images", "download_shp.png"))
+```
+
+
+
+
+
+<!-- ======================================================= -->
+## 手動でのデータ入力 {}
+
+### 行ごとの入力 {.unnumbered}  
+
+tidyverse の **tibble** パッケージに含まれている `tribble` 関数を使用します（tribble のオンライン資料は[こちら](https://tibble.tidyverse.org/reference/tribble.html) を参照ください）。
+
+列のヘッダーが<u>チルダ</u>（`~`）で始まることに注意してください。また、各列のデータ型（文字、数値など）は 1 つのみであることに注意してください。タブ、間隔、および新しい行を使用し、データ入力をより直感的で読みやすくすることができます。値の間のスペースの有無はどちらでも問題ありませんが、各行は改行して書かれています。以下に例を示します。
+
+```{r import_manual_row}
+# 行ごとに手動でデータセットを作成する
+manual_entry_rows <- tibble::tribble(
+  ~colA, ~colB,
+  "a",   1,
+  "b",   2,
+  "c",   3
+  )
+```
+
+新しいデータセットは以下のコマンドで表示できます。
+
+```{r, echo=F}
+# 新しいデータセットを表示する
+DT::datatable(manual_entry_rows)
+```
+
+
+### 列ごとの入力 {.unnumbered}
+
+データフレームはベクトル（垂直列）で構成されているため、**base** R で手動でデータフレームを作成するアプローチでは、各列を定義してから結合します。通常、上のセクションで示したように、データは行で考えられるため、列ごとのデータ入力は、疫学では直感に反するかもしれません。
+
+```{r import_manual_col}
+# 各ベクトル（垂直列）を個別に定義し、それぞれに独自の名前を付ける
+PatientID <- c(235, 452, 778, 111)
+Treatment <- c("Yes", "No", "Yes", "Yes")
+Death     <- c(1, 0, 1, 0)
+```
+
+<u>**注意：**</u>すべてのベクトルは同じ長さ（同じ数の値）である必要があります。
+
+次に、関数 `data.frame()` を使用してベクトルを結合します。
+
+```{r}
+# ベクトル名を元に、列をデータフレームに結合する
+manual_entry_cols <- data.frame(PatientID, Treatment, Death)
+```
+
+以下に、作成した新しいデータセットを表示します。
+
+```{r, echo=F}
+# 新しいデータセットを表示する
+DT::datatable(manual_entry_cols)
+```
+
+
+
+
+### クリップボードをインポート {.unnumbered}  
+
+他の場所からデータをコピーしてクリップボードに保存した場合は、次の 2 つの方法のいずれかでインポートすることができます。
+
+**clipr** パッケージから、 `read_clip_tbl()` を使用してデータフレームとしてインポートする、又は単に `read_clip()` を使用して文字ベクトルとしてインポートすることができます。どちらの場合も、括弧は空のままにしておきます。
+
+```{r, eval=F}
+linelist <- clipr::read_clip_tbl()  # 現在のクリップボードをデータフレームとしてインポートする
+linelist <- clipr::read_clip()      # 文字ベクトルとしてインポートする
+```
+また、**clipr** パッケージを使用し、データをクリップボードにエクスポートすることも簡単にできます。 エクスポートについては、後述のエクスポートに関するセクションを参照してください。
+
+
+クリップボードをインポートするもう 1 つの方法として、**base** R の `read.table()` で `file = "clipboard")` を指定し、データフレームとしてインポートすることもできます。
+
+```{r, eval=F}
+df_from_clipboard <- read.table(
+  file = "clipboard",  # "クリップボード"に指定する
+  sep = "t",           # 区切り文字はタブ、またはコンマなどが指定可能
+  header=TRUE)         # ヘッダー行がある場合
+```
+
+
+
+
+
+
+## 最新のファイルをインポート
+
+手持ちのデータセットが毎日更新されることもあり、この場合、最新のファイルをインポートするようにコードを書きたいでしょう。 以下に、複数のファイルから最新のファイルをインポートする方法を 2 つ紹介します。
+
+* ファイル名の日付に基づいてファイルを選択する\
+* ファイルメタデータ（最新の変更）に基づいてファイルを選択する
+
+
+### ファイル名の日付を用いて {.unnumbered}  
+
+この方法は、次の 3 つの前提条件を要します。
+
+1)  ファイル名の日付が信頼できるものであること\
+2)  日付は数値であり、<u>一般的に</u>同じ形式で表示されていること（例：年、月、日）\
+3)  ファイル名に日付以外の番号が書かれていないこと
+
+各ステップについて説明し、最後にそれらを組み合わせて示します。
+
+まず、**base** R から `dir()` を使用して、対象のフォルダ内の各ファイルのファイル名だけを抽出します。`dir()` の詳細については、[ディレクトリの操作](#directories) の章を参照してください。 この例では、対象のフォルダは、R プロジェクトにある "data" 内、そしてその中の "example" フォルダ内の "linelists" フォルダです。
+
+```{r}
+linelist_filenames <- dir(here("data", "example", "linelists")) # フォルダからファイル名を取得
+linelist_filenames                                              # 表示
+```
+
+この名前ベクトルを取得したら、**stringr** パッケージの `str_extract()` で以下の正規表現を使用することにより、名前から日付を抽出できます。ファイル名に含まれているすべての数字（ダッシュやスラッシュなどの中央にある他の文字を含む）を抽出します。 **stringr** の詳細については、[文字型・文字列型データ](#characters-strings) の章をご覧ください。
+
+```{r}
+linelist_dates_raw <- stringr::str_extract(linelist_filenames, "[0-9].*[0-9]") # 数字とその間の文字を抽出
+linelist_dates_raw  # 表示
+```
+
+日付が一般的に同じ日付形式（例えば、年、月、日）で記述され、年が 4 桁であると仮定すると、**lubridate** の柔軟な変換関数（`ymd()`、`dmy()`、または `mdy()`）を使用して、それらを日付に変換できます。こういった関数の場合、ダッシュ、スペース、またはスラッシュは重要ではなく、番号の順序のみが重要です。 詳しくは、[日付型データ](#dates) の章をご覧ください。
+
+```{r}
+linelist_dates_clean <- lubridate::ymd(linelist_dates_raw)
+linelist_dates_clean
+```
+
+
+次に、**base** R 関数 `which.max()` を使用し、最大日付値のインデックス位置（1 番目、2 番目、3 番目など）を取得することができます。以下の例では、最新のファイルは、6 番目のファイル "case_linelist_2020-10-08.xlsx" として正しく識別されています。
+
+```{r}
+index_latest_file <- which.max(linelist_dates_clean)
+index_latest_file
+```
+
+これらすべてのコマンドをまとめたコードは次のようになります。最後の行の `.` は、パイプラインのその時点でのオブジェクトを表すことに注意してください。この時点での値は単純に数字の 6 です。これは二重括弧で囲まれ、 `dir()` によって生成されたファイル名のベクトルの 6 番目の要素を抽出します。
+
+```{r}
+# パッケージを読み込む
+pacman::p_load(
+  tidyverse,         # データ整理
+  stringr,           # 文字列/文字の操作
+  lubridate,         # 日付の処理
+  rio,               # データのインポート・エクスポート
+  here,              # 相対ファイルパス
+  fs)                # ディレクトリの相互作用
+
+# 最新ファイルのファイル名を抽出します
+latest_file <- dir(here("data", "example", "linelists")) %>%  # "linelists" サブフォルダからのファイル名          
+  str_extract("[0-9].*[0-9]") %>%                  # 日付（数字）を抽出
+  ymd() %>%                                        # 数値を日付に変換（年-月-日形式を想定）
+  which.max() %>%                                  # 最大日付のインデックスを取得（最新のファイル）
+  dir(here("data", "example", "linelists"))[[.]]              # 最新のラインリストのファイル名を取得
+
+latest_file  # 最新のファイルの名前を表示する
+```
+
+これで、上で抽出した名前を`here()` で使用して、相対ファイルパスを完成させることができます。
+
+```{r, eval=F}
+here("data", "example", "linelists", latest_file) 
+```
+
+そして、最新のファイルをインポートできます。
+
+```{r, eval=F}
+# インポート
+import(here("data", "example", "linelists", latest_file)) # インポート 
+```
+
+ 
+
+
+
+### ファイル情報を用いて {.unnumbered}  
+
+ファイルの名前に日付が含まれていない場合（またはそれらの日付を信頼できない場合）は、ファイルのメタデータから最終変更日を抽出してみてください。**fs** パッケージの関数を使用し、最終変更時刻とファイルパスを含む各ファイルのメタデータ情報を調べることができます。
+
+以下のように、 **fs** の `dir_info()` に対象のフォルダを指定します。この場合、対象のフォルダは、フォルダ "data"、サブフォルダ "example"、およびそのサブフォルダ "linelists"の R プロジェクトにあります。結果は、ファイルごとに 1 行、 `modification_time`、`path` などの列を持つデータフレームとして返されます。[ディレクトリの操作](#directories) の章では、視覚的な例を確認できます。
+
+このファイルのデータフレームを `modification_time` 列で並べ替えてから、**base** Rの `head()` を使用し、最上位・最新の行（ファイル）のみを保持できます。次に、`path` 列に **dplyr** 関数 `pull()` を使用し、この最新ファイルのファイルパスを抽出します（この機能があるのは、**dplyr** 関数 `pull()` のみです）。最後に、抽出したファイルパスを `import()` 内で指定し、ファイルをインポートします。インポートされたファイルは `latest_file` として保存されます。
+
+```{r, eval=F}
+latest_file <- dir_info(here("data", "example", "linelists")) %>%  # ディレクトリ内の全ファイルのファイル情報を収集
+  arrange(desc(modification_time)) %>%      # 変更時間で並べ替え
+  head(1) %>%                               # 一番上の（最新の）ファイルのみを保持する
+  pull(path) %>%                            # ファイルパスのみを抽出
+  import()                                  # ファイルをインポート
+
+```
+
+
+
+<!-- ======================================================= -->
+## API {#import_api}
+
+「自動プログラミングインターフェース」（Automated Programming Interface; API）を使用して、ウェブサイトからデータを直接インポートできます。API は、あるソフトウェアアプリケーションが別のソフトウェアアプリケーションと対話できるようにする一連のルールです。クライアントである貴方が「リクエスト」（"request"）を送信し、要求したコンテンツを含む「レスポンス」（"response"）を受信します。R の **httr** パッケージおよび **jsonlite** パッケージにより、このプロセスを容易に行うことができます。
+
+API 対応の各ウェブサイトには、知っておくべき独自のドキュメントと詳細があります。一部のサイトは公開されており、誰でもアクセス可能です。ユーザー ID や経歴を備えたプラットフォームなど、その他のデータにアクセスするには認証が必要です。
+
+言うまでもなく、API を介してデータをインポートするにはインターネットに接続する必要があります。以下において、API を使用してデータをインポートする例を簡単に説明し、その他の関連資料を紹介します。
+
+<u>注意</u>：API が必要ない別のウェブサイトに同じ<u>データが投稿されている可能性があり</u>、その場合は API を使用しない方がデータ取得が容易である可能性があります。例えば、[Github からのインポート](#import_github) に関するセクションで説明したように、`import()` にサイトの URL を指定するだけでアクセスできる場合があります。
+
+
+### HTTP リクエスト {.unnumbered}  
+
+API のやり取りは、HTTP リクエストを介して行われるのが最も一般的です。HTTP はハイパーテキスト転送プロトコル（Hypertext Transfer Protocol）であり、クライアントとサーバー間のリクエスト（要求）・レスポンス（応答）の基本的な形式です。入力と出力のフォーマットは、API のタイプによって異なる場合がありますが、プロセスは同じです。ユーザーからの「リクエスト」（多くの場合、HTTP リクエスト）にはクエリ（query）が含まれ、その後に「レスポンス」が続き、レスポンスには、リクエスト及び場合によってはリクエストされた内容についてのステータス情報が含まれます。
+
+<u>HTTP リクエスト</u>のいくつかの構成要素は次のとおりです。
+
+* API エンドポイントの URL
+* 「メソッド」（"Method"）または "Verb"
+* ヘッダー
+* 本文
+
+HTTP リクエストの「メソッド」は、実行したいアクションを指定します。最も一般的な HTTP メソッドの 2 つは `GET` と `POST` ですが、その他にも `PUT`、`DELETE`、`PATCH` などがあります。R にデータをインポートする場合、 `GET` を使用することが多いです。
+
+リクエストを送信した後、コンピュータは、送信したリクエストと同様の形式で「レスポンス」を受け取ります。レスポンスには、URL、HTTP ステータス（ステータス200が必要です！）、ファイルタイプ、サイズ、目的のコンテンツなどが含まれます。次のステップとして、受け取ったレスポンスを解析して、R 環境内で実行可能なデータフレームに変換する必要があります。
+
+
+### パッケージ {.unnumbered}  
+
+**httr** パッケージは、R で HTTP リクエストを処理するのに適しています。ウェブ APIの予備知識はほとんど必要なく、ソフトウェア開発用語にあまり詳しくない方でも利用することができます。また、HTTP レスポンスが .json の場合、**jsonlite** パッケージを使用してレスポンスを解析することができます。
+
+```{r, eval=F}
+# パッケージを読み込む
+pacman::p_load(httr, jsonlite, tidyverse)
+```
+
+
+### 公開されているデータ {.unnumbered}  
+
+以下は、[Trafford Data Lab](https://www.trafforddatalab.io/open_data_companion/#A_quick_introduction_to_APIs) のチュートリアルから借用した HTTP リクエストの例です。このサイトには、他にも学習用の資料や API の演習がいくつかあります。
+
+事例：イギリスの Trafford 市にあるファーストフードの店舗リストをインポートしたい。このデータは、イギリスの食品衛生評価データを提供する Food Standards Agency の API からアクセスすることができる。
+
+今回のリクエストのパラメータは以下の通りです。
+
+* HTTP 動詞：GET
+* API エンドポイント URL：<http://api.ratings.food.gov.uk/Establishments>
+* 選択したパラメーター：name, address, longitude, latitude, businessTypeId, ratingKey, localAuthorityId
+* ヘッダー："x-api-version", 2
+* データフォーマット：JSON, XML
+* ドキュメンテーション：<http://api.ratings.food.gov.uk/help>
+
+使用する R コードは次のようになります。
+
+```{r, eval=F, warning=F, message=F}
+# リクエストの準備
+path <- "http://api.ratings.food.gov.uk/Establishments"
+request <- GET(url = path,
+             query = list(
+               localAuthorityId = 188,
+               BusinessTypeId = 7844,
+               pageNumber = 1,
+               pageSize = 5000),
+             add_headers("x-api-version" = "2"))
+
+# サーバーエラーがないか確認（"200"が望ましい）
+request$status_code
+
+# リクエストを送信し、レスポンスを解析して、データフレームに変換
+response <- content(request, as = "text", encoding = "UTF-8") %>%
+  fromJSON(flatten = TRUE) %>%
+  pluck("establishments") %>%
+  as_tibble()
+```
+
+これで、ファーストフード施設ごとに 1 行を含む `response` データフレームを取得できました。
+
+
+### **認証が必要なデータ** {.unnumbered}  
+
+一部のAPIには認証が必要です。自分が誰であるかを証明することで、制限されたデータにアクセスできます。このようなデータをインポートするには、まず、POST メソッドを使用して、ユーザー名、パスワード、またはコードを提供する必要があります。POST メソッドを使用することで、その後の GET メソッドのリクエストで使用できるアクセストークン（access token）を取得できます。
+
+以下に、アウトブレイク調査ツールである <u>Go.Data</u> からデータをクエリする例を示します。<u>Go.Data</u> は、データ収集に使用される Web フロントエンドとスマートフォンアプリケーション間のすべての交信に API を使用しています。<u>Go.Data</u> は世界中で使用されています。アウトブレイクデータは機密性が高く、<u>自分が担当する</u>アウトブレイクに関するデータにしかアクセスできないようになっているため、認証が必要です。
+
+以下の R コードでは、**httr** と **jsonlite** パッケージを使用して<u>Go.Data</u> APIに接続し、あるアウトブレイクの接触者フォローアップに関するデータをインポートします。
+
+
+```{r, eval=F}
+# 認可のための認証情報を設定
+url <- "https://godatasampleURL.int/"           # 有効な Go.Data URL の例
+username <- "username"                          # 有効な Go.Data ユーザー名 
+password <- "password"                          # 有効な Go,Data パスワード
+outbreak_id <- "xxxxxx-xxxx-xxxx-xxxx-xxxxxxx"  # 有効な Go.Data アウトブレイク ID
+
+# アクセストークンを取得する
+url_request <- paste0(url,"api/oauth/token?access_token=123") # ベース URL リクエストを定義する
+
+# リクエストの準備
+response <- POST(
+  url = url_request,  
+  body = list(
+    username = username,    # 上で保存したユーザー名とパスワードを使用して認証する                               
+    password = password),                                       
+    encode = "json")
+
+# リクエストの実行と応答の解析
+content <-
+  content(response, as = "text") %>%
+  fromJSON(flatten = TRUE) %>%          # ネストした JSON をフラット化する
+  glimpse()
+
+# 応答から得られたアクセストークンを保存する
+access_token <- content$access_token    # アクセストークンを保存して、以下の後続の API 呼び出しを許可します
+
+# アウトブレイクの連絡先をインポートする
+# アクセストークンを使用する 
+response_contacts <- GET(
+  paste0(url,"api/outbreaks/",outbreak_id,"/contacts"),          # GET リクエスト
+  add_headers(
+    Authorization = paste("Bearer", access_token, sep = " ")))
+
+json_contacts <- content(response_contacts, as = "text")         # テキスト JSON に変換
+
+contacts <- as_tibble(fromJSON(json_contacts, flatten = TRUE))   # JSON をフラット化して tibble として保存
+```
+
+<span style="color: orange;"><u>**注意：**</u>認証が必要な API から大量のデータをインポートする場合、タイムアウトになる場合があります。 これを回避するには、各 API GET リクエストの前にアクセストークンを再度取得し、クエリでフィルターまたは制限を使用してみてください。</span> 
+
+<span style="color: darkgreen;"><u>**ヒント：**</u> **jsonlite** パッケージの `fromJSON()` では、最初の実行では完全にネストが解除されないため、tibble にリストアイテムが残っている可能性があります。**.json** がどの程度ネストされているかに応じて、特定の変数のネストをさらに解除する必要があります。詳細は、[`flatten()`](https://rdrr.io/cran/jsonlite/man/flatten.html)などの **jsonlite** パッケージの説明をご覧ください。</span>
+
+
+詳細は、[LoopBack Explorer](https://loopback.io/doc/en/lb4/index.html) のドキュメント、API に関する [Go.Data Github レポジトリ](https://worldhealthorganization.github.io/godata/api-docs) のページ、または [接触者の追跡](#contact-tracing) の章をご覧ください。
+
+**httr** パッケージの詳細は [こちら](https://httr.r-lib.org/articles/quickstart.html) をご覧ください。
+
+このセクションは、[こちらのチュートリアル](https://www.dataquest.io/blog/r-api-tutorial/)と[こちらのチュートリアル](https://medium.com/@traffordDataLab/querying-apis-in-r-39029b73d5f1) を参照して作成されました。
+
+
+
+
+<!-- ======================================================= -->
+## エクスポート {}  
+
+### **rio** パッケージを使って {.unnumbered}
+**rio** パッケージを使用すると、`import()` と同様の方法で `export()` を使用できます。まず、保存する R オブジェクトの名前（`linelist` など）を指定し、保存するファイルの名前、およびそのファイルの拡張子を含むファイルパスを引用符で囲みます。例を以下に示します。
+
+以下のコードを実行すると、データフレーム `linelist` が Excel ワークブックとして作業ディレクトリ（R プロジェクトのルートフォルダ）に保存されます。
+
+```{r, eval=F}
+export(linelist, "my_linelist.xlsx") # 作業ディレクトリに保存する
+```
+
+拡張子を変更すると、同じデータフレームを csv ファイルとして保存できます。 例えば、 `here()` で作成されたファイルパスを使用してもデータを保存することができます。
+
+```{r, eval=F}
+export(linelist, here("data", "clean", "my_linelist.csv"))
+```
+
+
+### クリップボードにエクスポート {.unnumbered}
+
+（Excel、Google スプレッドシートなどの別のソフトウェアに貼り付けるためなど）データフレームをコンピュータの「クリップボード」にエクスポートしたい場合は、**clipr** パッケージの `write_clip()` を使用できます。
+
+```{r, eval=F}
+# ラインリストデータフレームをシステムのクリップボードにエクスポートする
+clipr::write_clip(linelist)
+```
+
+
+
+
+## RDS ファイル {#import_rds}
+
+.csv、.xlsx などに加えて、R データフレームを .rds ファイルとしてエクスポート・保存することもできます。.rds は R に固有のファイル形式であり、エクスポートされたデータを R で再度操作することがわかっている場合に非常に便利です。
+
+.rds では列のデータ型がそのまま保存されるため、インポート時に再度整理する必要はありません（Excel や CSV ファイルでは、これは頭痛の種になります！）。また、.rds は他のファイル形式と比較してファイルサイズが小さいので、大きいデータセットのエクスポートやインポートに便利です。
+
+例えば、R を使用している疫学チームに所属していて、マッピングのために GIS チームにファイルを送る必要がある場合、.rds ファイルを使用すると、すべての列のデータ型が保持されているため、受け取ったチームの負担が少なくなります。
+
+```{r, eval=F}
+export(linelist, here("data", "clean", "my_linelist.rds"))
+```
+
+
+
+<!-- ======================================================= -->
+## Rdata ファイルとリスト {#import_rdata}
+
+`.Rdata` ファイルには、複数の R オブジェクト（複数のデータフレーム、モデリングの結果、リストなど）を保存でき、特定のプロジェクトで多くのデータをまとめたり共有する場合に非常に便利です。
+
+以下の例では、複数の R オブジェクトがエクスポートされたファイル "my_objects.Rdata" 内に保存されています。
+
+```{r, eval=F}
+rio::export(my_list, my_dataframe, my_vector, "my_objects.Rdata")
+```
+
+注意：リストをインポートする場合は、**rio** パッケージの `import_list()` を使用し、元のデータ構造と完全に同じ内容をインポートしてください。
+
+```{r, eval=F}
+rio::import_list("my_list.Rdata")
+```
+
+
+
+
+
+
+
+<!-- ======================================================= -->
+## プロットの保存
+
+`ggplot()` などによって作成されたプロットを保存する方法については、[ggplot の基礎](#ggplot-basics) の章で詳しく説明されています。
+
+簡単に説明すると、プロットを表示した後、 `ggsave("my_plot_filepath_and_name.png")` を実行します。引数 `plot =` には、保存されたプロットオブジェクトを指定する必要がありますが、最も最近表示されたプロットを保存したい場合は、ファイル拡張子付きのファイルパスのみを指定することも可能です。加えて、`width =`、`height =`、`units =`、そして `dpi =` を設定することもできます。
+
+感染連鎖ツリーなど、関連性を表した図を保存する方法については、[感染連鎖の図式化](#transmission-chains) の章をご覧ください。
+
+
+<!-- ======================================================= -->
+## 参考資料
+
+[R データインポート・エクスポートマニュアル](https://cran.r-project.org/doc/manuals/r-release/R-data.html)\
+[R for Data Science のデータインポートについての章](https://r4ds.had.co.nz/data-import.html#data-import)\
+[ggsave() に関するドキュメント](https://ggplot2.tidyverse.org/reference/ggsave.html)
+
+
+以下は、[こちら](https://cran.r-project.org/web/packages/rio/vignettes/rio.html) **rio** パッケージに関するウェブサイトから抜粋した表です。扱うデータの種類ごとに、予想されるファイル拡張子、データのインポートまたはエクスポートに **rio** で使用されるパッケージ、この機能がデフォルトでインストールされたバージョンの **rio** に含まれているかどうかが表示されています。
+
+
+
+フォーマット               | 一般的な拡張子    | インポート用パッケージ | エクスポート用パッケージ | デフォルトでインストールされているかの有無
+---------------------------|-------------------|-------------------|--------------------|---------------------
+カンマ区切りデータ | .csv | data.table`fread()` | data.table | 有
+パイプ区切りデータ | .psv | data.table`fread()` | data.table | 有
+タブ区切りデータ | .tsv | data.table`fread()` | data.table | 有
+SAS | .sas7bdat | haven | haven | 有
+SPSS | .sav | haven | haven | 有
+Stata | .dta | haven | haven | 有
+SAS | XPORT | .xpt | haven | 有
+SPSSポータブル | .por | haven |  | 有
+Excel | .xls | readxl |  | 有
+Excel | .xlsx | readxl | openxlsx | 有
+ Rシンタックス | .R | base | base | 有
+保存されたRオブジェクト | .RData,.rda | base | base | 有
+シリアル化されたRオブジェクト | .rds | base | base | 有
+Epiinfo | .rec | foreign |  | 有
+Minitab | .mtp | foreign |  | 有
+Systat | .syd | foreign |  | 有
+"XBASE" | データベースファイル | .dbf | foreign | 有
+WekaAttribute-Relationファイル形式 | .arff | foreign | foreign | 有
+データ交換フォーマット | .dif | utils |  | 有
+Fortran データ | 認識された拡張子はありません | utils |  | 有
+固定幅フォーマットデータ | .fwf | utils | utils | 有
+gzip コンマ区切りデータ | .csv.gz | utils | utils | 有
+CSVY (CSV+YAMLメタデータヘッダー) | .csvy | csvy | csvy | 無
+EViews | .wf1 | hexView |  | 無
+FeatherR/Python交換フォーマット | .feather | feather | feather | 無
+FastStorage | .fst | fst | fst | 無
+JSON | .json | jsonlite | jsonlite | 無
+Matlab | .mat | rmatio | rmatio | 無
+OpenDocument スプレッドシート | .ods | readODS | readODS | 無
+HTML テーブル | .html | xml2 | xml2 | 無
+Shallow XMLドキュメント | .xml | xml2 | xml2 | 無
+YAML | .yml | yaml | yaml | 無
+クリップボード | tsv | clipr | clipr | 無
+
+
+

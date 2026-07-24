@@ -1,0 +1,1458 @@
+---
+aliases:
+  - /new_pages/shiny_basics.fr.html
+---
+
+# Tableaux de bord avec Shiny {#shiny}  
+
+
+Les tableaux de bord sont souvent une excellente méthode de partager les résultats d'analyses avec d'autres personnes. Produire un tableau de bord avec **shiny** nécessite une connaissance relativement avancée du langage R, mais vous offrez la personnalisation des tableaux et des possibilités incroyables. 
+
+<!-- L'un des plus grands inconvénients de `R` est sa facilité d'utilisation pour les personnes qui sont nouvelles ou qui n'ont aucune expérience des langages de programmation. Bien que ces compétences soient très précieuses, la plupart des gens trouveront que cela représente un obstacle au partage des analyses, en particulier dans les environnements multidisciplinaires. Maintenir une installation `R` demande un certain travail, et tout le monde ne sera pas à l'aise pour exécuter du code partagé, même s'il est bien documenté et facile à lire. Ceci est *surtout* vrai lorsque les utilisateurs doivent modifier les paramètres du code!  -->
+
+<!-- Les tableaux de bord basés sur R sont également avantageux en ce qu'ils centralisent la façon dont le code est exécuté - lorsque le même code est exécuté sur différentes machines, souvent les gens devront faire face à différents chemins de fichiers, différentes versions de R, et différentes installations de packages. Pour cette raison, les tableaux de bord sont un excellent moyen de partager du code avec d'autres personnes de manière facile ! -->
+
+Il est recommandé qu'une personne apprenant les tableaux de bord avec **shiny** ait une bonne connaissance de la transformation et de la visualisation des données, et soit à l'aise pour déboguer du code et écrire des fonctions. Le travail avec les tableaux de bord n'est pas intuitif au début et est parfois difficile à comprendre, mais il s'agit d'une excellente compétence à apprendre qui devient beaucoup plus facile avec la pratique !
+
+Cette page donne un bref aperçu de la façon de créer des tableaux de bord avec **shiny** et ses extensions. 
+Pour une méthode alternative de création de tableaux de bord qui est plus rapide, plus facile, mais peut-être moins personnalisable, voir la page sur **flextable** ([Rapports avec R Markdown](#rmarkdown)).  
+
+
+
+## Préparation  
+
+
+
+### Chargement des packages {.unnumbered}  
+
+
+Dans ce manuel, nous mettons l'accent sur `p_load()` de **pacman**, qui installe le package si nécessaire *et* le charge pour l'utiliser. Vous pouvez aussi charger les packages installés avec `library()` de **base** R. Voir la page sur [bases de R](#rbasics) pour plus d'informations sur les packages R.  
+
+Nous commençons par installer le package R **shiny** :  
+
+
+
+
+```{r, eval = FALSE}
+pacman::p_load("shiny")
+```
+
+
+
+### Importer des données {.unnumbered}  
+
+Si vous souhaitez suivre cette page, consultez la section du [manuel pour le téléchargement des données](#download_book_data). Il y a des liens pour télécharger les scripts R et les fichiers de données qui produisent l'application Shiny finale.  
+
+Si vous essayez de reconstruire l'application à l'aide de ces fichiers, veuillez tenir compte de la structure des dossiers du projet R qui est créée au cours de la démonstration (par exemple, des dossiers pour "data" et pour "funcs").  
+
+
+
+
+
+<!-- ======================================================= -->
+## La structure d'une application shiny { }
+
+### Structures de fichiers de base {.unnumbered}  
+
+
+Pour comprendre `shiny`, nous devons d'abord comprendre comment fonctionne la structure des fichiers d'une application ! Nous devrions créer un tout nouveau répertoire avant de commencer. Cela peut être rendu plus facile en choisissant _New project_ dans _Rstudio_, et en choisissant _Shiny Web Application_. Cela créera la structure de base d'une application shiny pour vous.
+
+En ouvrant ce projet, vous remarquerez qu'il y a déjà un fichier `.R` appelé _app.R_. Il est *essentiel* que nous ayons une des deux structures de fichiers de base :
+
+1. Un seul fichier appelé _app.R_, *ou*
+2. Deux fichiers, l'un appelé _ui.R_ et l'autre _server.R_ 
+
+Dans cette page, nous utiliserons la première approche qui consiste à avoir un seul fichier appelé *app.R*. Voici un exemple de script :  
+
+
+
+
+```{r, eval = FALSE}
+# exemple de un script app.R
+
+library(shiny)
+
+ui <- fluidPage(
+
+    # titre de l'application 
+    titlePanel("My app"),
+
+    # Sidebar avec le widget slider input 
+    sidebarLayout(
+        sidebarPanel(
+            sliderInput("input_1")
+        ),
+
+        # afficher le graphique
+        mainPanel(
+           plotOutput("my_plot")
+        )
+    )
+)
+
+
+# Définir la logique du serveur requise pour dessiner un histogramme
+
+server <- function(input, output) {
+     
+     plot_1 <- reactive({
+          plot_func(param = input_1)
+     })
+     
+    output$my_plot <- renderPlot({
+       plot_1()
+    })
+}
+
+
+# Executer application 
+shinyApp(ui = ui, server = server)
+
+
+```
+
+
+Si vous ouvrez ce fichier, vous remarquerez que deux objets sont définis, un appelé `ui` et l'autre appelé `server`. Ces objets *doivent* être définis dans *toutes* les applications shiny et sont essentiels à la structure de l'application elle-même ! En fait, la seule différence entre les deux structures de fichiers décrites ci-dessus est que dans la structure 1, `ui` et `server` sont définis dans un seul fichier, alors que dans la structure 2, ils sont définis dans des fichiers séparés. Note : nous pouvons aussi (et nous devrions si nous avons une application plus grande) avoir d'autres fichiers .R dans notre structure que nous pouvons sourcer avec `source()` dans notre application.
+
+
+
+### Le serveur et l'interface utilisateur {.unnumbered}
+
+
+Nous devons maintenant comprendre ce que les objets `server` et `ui` font réellement. *Pour faire simple, ce sont deux objets qui interagissent l'un avec l'autre à chaque fois que l'utilisateur interagit avec l'application shiny.*
+
+L'élément UI d'une shiny app est, à la base, le code R qui crée une interface HTML. Cela signifie que tout ce qui est *affiché* dans l'interface utilisateur d'une application. Cela inclut généralement :
+
+* Les "widgets", par exemples les menus déroulants, cases à cocher, curseurs, etc. avec lesquels l'utilisateur peut interagir.
+* Graphiques, tableaux, etc; toutes sorties générées par le code R.
+* Les aspects de navigation d'une application, par exemples les onglets, volets, etc. 
+* Texte générique, liens hypertextes, etc.
+* Éléments HTML et CSS (abordés plus tard)
+
+La chose la plus importante à comprendre au sujet de l'interface utilisateur est qu'elle *reçoit des entrées* de l'utilisateur et *affiche des sorties* du serveur. Aucun code *actif* n'est exécuté dans l'interface utilisateur *à tout moment*. Tous les changements vus dans l'interface utilisateur sont transmis au serveur (plus ou moins). Nous devons donc effectuer tous nos tracés, téléchargements, etc. dans le serveur.
+
+Le serveur de l'application shiny est l'endroit où tout le code est exécuté une fois que l'application démarre. La façon dont cela fonctionne est un peu complique. Le serveur va effectivement _réagir_ à l'interface utilisateur et exécuter des bout de code en réponse. Si les choses changent dans le serveur, elles seront transmises à l'interface utilisateur, où les changements seront visibles. Il est important de noter que le code dans le serveur sera exécuté *non consécutivement* (ou il est préférable d'y penser de cette façon). En gros, chaque fois qu'une entrée de l'interface utilisateur affecte un bout de code dans le serveur, celui-ci s'exécutera automatiquement, et la sortie sera produite et affichée.
+
+Tout cela semble probablement très abstrait pour l'instant, nous allons donc travailler avec quelques exemples pour avoir une idée claire de la façon dont cela fonctionne réellement. 
+
+
+### Avant de commencer à construire une application {.unnumbered}
+
+Avant de commencer à construire une application, il est extrêmement utile de savoir *ce que* vous voulez construire. Puisque votre interface utilisateur sera écrite en code, vous ne pouvez pas vraiment visualiser ce que vous construisez, sauf si vous visez quelque chose de spécifique. Pour cette raison, il est extrêmement utile de regarder de nombreux exemples d'applications shinys pour avoir une idée de ce que vous pouvez faire. Encore mieux, si vous pouvez regarder le code source derrière ces applications ! Voici quelques bonnes ressources pour cela :
+
+* La [galerie d'applications Rstudio](https://shiny.rstudio.com/gallery/)  
+
+Une fois que vous avez une idée de ce qui est possible, il est également utile de dessiner ce à quoi vous voulez que votre application ressemble. Vous pouvez faire un dessin soit sur du papier ou dans un logiciel de dessin (PowerPoint, MS paint, etc.). Il est utile de commencer simplement pour votre première application ! Il n'y a certainment pas d'honte à utiliser le code d'une belle application que vous trouvez en ligne comme modèle pour votre travail. C'est beaucoup plus facile que construire quelque chose à partir de zéro !
+
+
+
+## Construire une interface utilisateur 
+
+
+Lorsque nous construisons notre application, il est plus facile de travailler d'abord sur l'interface utilisateur afin de voir ce que nous faisons, et de ne pas risquer que l'application échoue à cause d'erreurs de serveur. Comme mentionné précédemment, il est souvent bon d'utiliser un modèle pour travailler sur l'interface utilisateur. Il y a un certain nombre de modèles standards qui peuvent être utilisés avec shiny et qui sont disponibles dans le package de base shiny, mais il est intéressant de noter qu'il y a aussi un certain nombre d'extensions du package comme `shinydashboard`. Nous allons utiliser un exemple de la base shiny pour commencer. 
+
+Une interface utilisateur shiny est généralement définie comme une série de fonctions imbriquées, dans l'ordre suivant:
+
+1. Une fonction définissant la mise en page générale (la plus basique est `fluidPage()`, mais d'autres sont disponibles)
+2. Des panneaux à l'intérieur de la mise en page tels que:
+     - une barre latérale (`sidebarPanel()`)
+     - un panneau "principal" (`mainPanel()`)
+     - un onglet (`tabPanel()`)
+     - une "colonne" générique (`column()`)
+3. Widgets et sorties : ils peuvent conférer des entrées au serveur (widgets) ou des sorties du serveur (outputs)
+     - Les widgets sont généralement appelés `xxxInput()`, par exemple `selectInput()`.
+     - Les sorties sont généralement appelées `xxxOutput()`, par exemple `plotOutput()`.
+
+Il est important de préciser que ces éléments ne peuvent pas être visualisés facilement de manière abstraite. Il est donc préférable de regarder un exemple ! Considérons la création d'une application de base qui visualise nos données de denombrement des equipemnts de lutte contre le paludisme par district. Ces données comportent un grand nombre de paramètres différents, et il serait formidable que l'utilisateur final puisse appliquer des filtres pour voir les données par groupe d'âge/district comme il l'entend ! Nous pouvons utiliser une mise en page shiny très simple pour commencer, la mise en page de la barre latérale. Il s'agit d'une mise en page où les widgets sont placés dans une barre latérale sur la gauche, et le graphique est placé sur la droite.
+
+Elaborons notre application: nous pouvons commencer par un sélecteur qui nous permet de choisir le district où nous voulons visualiser les données, et un autre qui nous permet de visualiser le groupe d'âge qui nous intéresse. Nous allons utiliser ces filtres pour afficher une épicurve qui reflète ces paramètres. Pour cela, nous avons besoin de:
+
+1. Deux menus déroulants qui nous permettent de choisir le district que nous voulons et le groupe d'âge qui nous intéresse. 
+2. Une zone où nous pouvons montrer notre épicurve obtenue.
+
+Cela pourrait ressembler à quelque chose comme ceci:
+
+
+
+```{r, eval = FALSE}
+
+library(shiny)
+
+ui <- fluidPage(
+
+  titlePanel("Malaria facility visualisation app"),
+
+  sidebarLayout(
+
+    sidebarPanel(
+         # sélectionneur pour le district
+         selectInput(
+              inputId = "select_district",
+              label = "Select district",
+              choices = c(
+                   "All",
+                   "Spring",
+                   "Bolo",
+                   "Dingo",
+                   "Barnard"
+              ),
+              selected = "All",
+              multiple = TRUE
+         ),
+         # sélecteur pour le groupe d'âge
+         selectInput(
+              inputId = "select_agegroup",
+              label = "Sélectionnez le groupe d'âge",
+              choices = c(
+                   "All ages" = "malaria_tot",
+                   "0-4 yrs" = "malaria_rdt_0-4",
+                   "5-14 yrs" = "malaria_rdt_5-14",
+                   "15+ yrs" = "malaria_rdt_15"
+              ), 
+              selected = "All",
+              multiple = FALSE
+         )
+
+    ),
+
+    mainPanel(
+      # epicurve va ici
+      plotOutput("malaria_epicurve")
+    )
+    
+  )
+)
+
+
+```
+
+
+
+Lorsque app.R est exécuté avec le code d'interface utilisateur ci-dessus (sans code actif dans la partie `server` de app.R) le mise en page apparaît comme ceci. Notez qu'il n'y aura pas de tracé s'il n'y a pas de serveur pour conduire à ce resultat, mais nos entrées fonctionnent !
+
+```{r, out.width = c('100%'), out.height = c('100%'), echo=F}
+knitr::include_graphics(here::here("images", "shiny", "simple_UI_view.png"))
+```
+
+
+C'est une bonne occasion de discuter les fonctionnement des widgets. Notez que chaque widget accepte un `inputId`, un `label`, et une série d'autres options qui sont spécifiques au type de widget. Ce `inputId` est extrêmement important ! Ce sont les IDs qui sont utilisés pour passer les informations de l'IU au serveur. Pour cette raison, ils *doivent être uniques*. Vous devriez faire un effort pour les nommer de manière sensée et spécifique à ce avec quoi ils interagissent dans le cas de grandes applications.
+
+Vous devez lire attentivement la documentation pour obtenir tous les détails sur ce que font chacun de ces widgets. Les widgets transmettront des types de données spécifiques au serveur en fonction du type de widget, et cela doit être bien compris. Par exemple, `selectInput()` transmettra un type de caractère au serveur :
+
+- Si nous sélectionnons _Spring_ pour le premier widget ici, il transmettra l'objet caractère `"Spring"` au serveur. 
+- Si nous sélectionnons deux éléments dans le menu déroulant, ils seront transmis sous forme de vecteur de caractères (par exemple, `c("Spring", "Bolo")`).
+
+D'autres widgets transmettront différents types d'objets au serveur ! Par exemple
+
+- `numericInput()` passera un objet de type numérique au serveur.
+- `checkboxInput()` transmettra un objet de type logique au serveur (`TRUE` ou `FALSE`).
+
+Il est également intéressant de noter le *vecteur nommé* que nous avons utilisé pour les données d'âge ici. Pour de nombreux widgets, l'utilisation d'un vecteur nommé comme choix affichera les *noms* du vecteur comme choix d'affichage, mais passera la *valeur* sélectionnée du vecteur au serveur. Par exemple, ici quelqu'un peut sélectionner "15+" dans le menu déroulant, et l'interface utilisateur transmettra `"malaria_rdt_15"` au serveur - qui se trouve être le nom de la colonne qui nous intéresse !
+
+
+Il y a beaucoup de widgets que vous pouvez utiliser dans votre application. Les widgets vous permettent également de télécharger des fichiers dans votre application, et de télécharger des sorties. Il existe également d'excellentes examples de shiny qui vous donnent accès à plus de widgets que le shiny de base. Le package **shinyWidgets** en est un excellent exemple. Pour voir quelques exemples, vous pouvez consulter les liens suivants :
+
+- [galerie de widgets de la base shiny](https://shiny.rstudio.com/gallery/widget-gallery.html)
+- [galerie de widgets shinyWidgets](https://github.com/dreamRs/shinyWidgets)
+
+
+
+
+## Chargement des données dans notre application
+
+L'étape suivante dans le développement de notre application consiste à mettre en place le serveur et à le faire fonctionner. Pour ce faire, nous devons charger des données dans notre application, et déterminer tous les calculs que nous allons effectuer. Une application shiny n'est pas facile à déboguer, car on ne sait pas toujours d'où viennent les erreurs. Il est donc idéal de faire fonctionner tout le code de traitement et de visualisation des données avant de commencer à créer le serveur lui-même.
+
+Ainsi, étant donné que nous voulons créer une application qui affiche des courbes épi qui changent en fonction de l'entrée de l'utilisateur, nous devons réfléchir au code dont nous aurions besoin pour l'exécuter dans un script R normal. Nous devrons :
+
+1. Charger nos packages
+2. Charger nos données
+3. Transformer nos données
+4. Développer une _fonction_ pour visualiser nos données en fonction des entrées de l'utilisateur.
+
+Cette liste est assez simple, et ne devrait pas être trop difficile à réaliser. Il est maintenant important de réfléchir aux parties de ce processus qui doivent *être faites une seule fois* et à celles qui doivent *être exécutées en réponse aux entrées de l'utilisateur*. En effet, les applications shiny exécutent généralement du code avant de s'exécuter, ce qui n'est fait qu'une seule fois. La performance de notre application sera améliorée si une grande partie de notre code peut être déplacée dans cette section. Pour cet exemple, nous n'avons besoin de charger nos données/packages et d'effectuer des transformations de base qu'une seule fois, nous pouvons donc placer ce code *hors du serveur*. Cela signifie que la seule chose dont nous aurons besoin dans le serveur est le code pour visualiser nos données. Développons d'abord tous ces composants dans un script. Cependant, puisque nous visualisons nos données à l'aide d'une fonction, nous pouvons également placer le code _pour la fonction_ en dehors du serveur afin que notre fonction soit dans l'environnement lorsque l'application s'exécute !
+
+Commençons par charger nos données. Puisque nous travaillons avec un nouveau projet, et que nous voulons le rendre propre, nous pouvons créer un nouveau répertoire appelé data, et y ajouter nos données sur le paludisme. Nous pouvons exécuter ce code ci-dessous dans un script de test que nous supprimerons éventuellement lorsque nous aurons nettoyé la structure de notre application.
+
+```{r, echo = TRUE}
+pacman::p_load("tidyverse", "lubridate")
+
+# read data
+malaria_data <- rio::import(here::here("data", "malaria_facility_count_data.rds")) %>% 
+  as_tibble()
+
+print(malaria_data)
+
+
+```
+
+
+
+Il sera plus facile de travailler avec ces données si nous utilisons des données ordonnées standards, nous devons donc également les transformer en un format de données plus long, où le groupe d'âge est une colonne, et les cas une autre colonne. Nous pouvons le faire facilement en utilisant ce que nous avons appris dans la page [Pivoter les données](#pivoting_data).  
+
+
+```{r, echo = TRUE}
+
+malaria_data <- malaria_data %>%
+  select(-newid) %>%
+  pivot_longer(cols = starts_with("malaria_"), names_to = "age_group", values_to = "cases_reported")
+
+print(malaria_data)
+
+```
+
+
+Et avec cela, nous avons fini de préparer nos données ! Cela raye les points 1, 2 et 3 de notre liste de choses à développer pour notre "script R de test". La dernière tâche, et la plus difficile, sera de construire une fonction pour produire une épicurve basée sur des paramètres définis par l'utilisateur. Comme nous l'avons mentionné précédemment, il est *hautement recommandé* à toute personne apprenant shiny de regarder d'abord la section sur la programmation fonctionnelle ([Écrire les fonctions](#writing_functions)) pour comprendre comment cela fonctionne !
+
+Lorsque nous définissons notre fonction, il peut être difficile de penser aux paramètres que nous voulons inclure. Dans le cadre de la programmation fonctionnelle avec shiny, chaque paramètre pertinent est généralement associé à un widget, ce qui facilite la réflexion ! Par exemple, dans notre application actuelle, nous voulons être en mesure de filtrer par district, et avoir un widget pour cela, donc nous pouvons ajouter un paramètre de district pour refléter cela. Nous n'avons *pas* de fonctionnalité d'application pour filtrer par établissement (pour l'instant), donc nous n'avons pas besoin de l'ajouter comme paramètre. Commençons par créer une fonction avec trois paramètres :
+
+1. L'ensemble de données de base
+2. Le district de choix
+3. Le groupe d'âge choisi
+
+```{r}
+
+plot_epicurve <- function(data, district = "All", agegroup = "malaria_tot") {
+  
+  if (!("All" %in% district)) {
+    data <- data %>%
+      filter(District %in% district)
+    
+    plot_title_district <- stringr::str_glue("{paste0(district, collapse = ', ')} districts")
+    
+  } else {
+    
+    plot_title_district <- "all districts"
+    
+  }
+  
+  # s'il n'y a pas de données restantes, retourne NULL
+  if (nrow(data) == 0) {
+    
+    return(NULL)
+  }
+  
+  data <- data %>%
+    filter(age_group == agegroup)
+  
+  
+  # s'il n'y a pas de données restantes, retourne NULL
+  if (nrow(data) == 0) {
+    
+    return(NULL)
+  }
+  
+  if (agegroup == "malaria_tot") {
+      agegroup_title <- "All ages"
+  } else {
+    agegroup_title <- stringr::str_glue("{str_remove(agegroup, 'malaria_rdt')} years")
+  }
+  
+  
+  ggplot(data, aes(x = data_date, y = cases_reported)) +
+    geom_col(width = 1, fill = "darkred") +
+    theme_minimal() +
+    labs(
+      x = "date",
+      y = "number of cases",
+      title = stringr::str_glue("Malaria cases - {plot_title_district}"),
+      subtitle = agegroup_title
+    )
+  
+  
+  
+}
+
+```
+
+
+
+Nous n'entrerons pas dans les détails de cette fonction, car elle est relativement simple dans son fonctionnement. Une chose à noter cependant, c'est que nous gérons les erreurs en retournant `NULL` alors qu'elle devrait entrainer une erreur. En effet, si le serveur shiny produit un objet `NULL` au lieu d'un objet plot, rien ne sera affiché dans l'interface utilisateur ! C'est important, car sinon les erreurs vont souvent provoquer l'arrêt du fonctionnement de votre application.  
+
+Une autre chose à noter est l'utilisation de l'opérateur `%in%` lors de l'évaluation de l'entrée `district`. Comme mentionné ci-dessus, cela pourrait arriver comme un vecteur de caractères avec plusieurs valeurs, donc l'utilisation de `%in%` est plus flexible que disons, `==`.  
+
+Testons notre fonction !
+
+```{r, echo = TRUE, warning = FALSE}
+
+plot_epicurve(malaria_data, district = "Bolo", agegroup = "malaria_rdt_0-4")
+
+```
+
+
+Maintenant que notre fonction fonctionne, nous devons comprendre comment tout cela va s'intégrer dans notre shiny application. Nous avons déjà mentionné le concept de _startup code_, mais voyons comment l'intégrer dans la structure de notre application. Il y a deux façons de le faire !
+
+1. Placer ce code dans votre fichier _app.R_ au début du script (au-dessus de l'interface utilisateur), ou bien  
+2. Créer un nouveau fichier dans le répertoire de votre application appelé _global.R_, et placer le code de démarrage dans ce fichier.
+
+Il convient de noter à ce stade qu'il est généralement plus facile, en particulier pour les applications plus importantes, d'utiliser la deuxième structure de fichiers, car elle vous permet de séparer votre structure de fichiers d'une manière simple. Développons maintenant complètement ce script global.R. Voici à quoi il pourrait ressembler :
+
+
+```{r, eval = F}
+# global.R script
+
+pacman::p_load("tidyverse", "lubridate", "shiny")
+
+
+# lire les données
+malaria_data <- rio::import(here::here("data", "malaria_facility_count_data.rds")) %>% 
+  as_tibble()
+
+# données nettoyées et  pivotées en longueur
+
+malaria_data <- malaria_data %>%
+  select(-newid) %>%
+  pivot_longer(cols = starts_with("malaria_"), names_to = "age_group", values_to = "cases_reported")
+
+
+# definir la fonction pour la representation graphique
+plot_epicurve <- function(data, district = "All", agegroup = "malaria_tot") {
+  
+  # creer le titre du graphe
+  if (!("All" %in% district)) {            
+    data <- data %>%
+      filter(District %in% district)
+    
+    plot_title_district <- stringr::str_glue("{paste0(district, collapse = ', ')} districts")
+    
+  } else {
+    
+    plot_title_district <- "all districts"
+    
+  }
+  
+  # s'il n'y a pas de données restantes, retourne NULL
+  if (nrow(data) == 0) {
+    
+    return(NULL)
+  }
+  
+  # filtrer par groupe d'âge
+  data <- data %>%
+    filter(age_group == agegroup)
+  
+  
+  # s'il n'y a pas de données restantes, retourne NULL
+  if (nrow(data) == 0) {
+    
+    return(NULL)
+  }
+  
+  if (agegroup == "malaria_tot") {
+      agegroup_title <- "All ages"
+  } else {
+    agegroup_title <- stringr::str_glue("{str_remove(agegroup, 'malaria_rdt')} years")
+  }
+  
+  
+  ggplot(data, aes(x = data_date, y = cases_reported)) +
+    geom_col(width = 1, fill = "darkred") +
+    theme_minimal() +
+    labs(
+      x = "date",
+      y = "number of cases",
+      title = stringr::str_glue("Malaria cases - {plot_title_district}"),
+      subtitle = agegroup_title
+    )
+  
+  
+  
+}
+
+
+
+```
+
+
+
+Facile ! Une des grandes caractéristiques de shiny est qu'il comprend à quoi servent les fichiers nommés _app.R_, _server.R_, _ui.R_ et _global.R_, il n'y a donc pas besoin de les connecter entre eux par un quelconque code. Ainsi, il suffit d'avoir ce code dans _global.R_ dans le répertoire pour qu'il s'exécute avant que nous démarrions notre application.  
+
+Nous devons également noter que l'organisation de notre application serait améliorée si nous déplacions la fonction de traçage dans son propre fichier - cela sera particulièrement utile lorsque les applications deviendront plus grandes. Pour ce faire, nous pourrions créer un autre répertoire appelé _funcs_, et y placer cette fonction dans un fichier appelé _plot_epicurve.R_. Nous pourrions ensuite lire cette fonction via la commande suivante dans _global.R_.
+
+```{r, eval = F}
+
+source(here("funcs", "plot_epicurve.R"), local = TRUE)
+
+```
+
+
+Notez que vous devriez *toujours* spécifier `local = TRUE` dans les applications shiny, car cela affectera le sourcing quand/si l'application est publiée sur un serveur. 
+
+## Développer un serveur d'applications
+
+Maintenant que nous avons la plupart de notre code, il nous reste à développer notre serveur. Il s'agit de la dernière pièce de notre application, et c'est probablement la plus difficile à comprendre. Le serveur est une grande fonction R, mais il est utile de le considérer comme une série de petites fonctions, ou de tâches que l'application peut exécuter. Il est important de comprendre que ces fonctions ne sont pas exécutées dans un ordre linéaire. Il existe un ordre, mais il n'est pas nécessaire de le comprendre lorsqu'on débute avec Shiny. À un niveau très basique, ces tâches ou fonctions s'activent lorsqu'un changement dans les entrées de l'utilisateur les affecte, *à moins que le développeur ne les ait configurées pour qu'elles se comportent différemment*. Encore une fois, tout cela est assez abstrait, mais passons d'abord en revue les trois types _d'objets_ shiny de base
+
+1. Les sources réactives - c'est un autre terme pour les entrées de l'utilisateur. Le serveur shiny a accès aux sorties de l'interface utilisateur par le biais des widgets que nous avons programmés. Chaque fois que les valeurs de ces derniers sont modifiées, elles sont transmises au serveur.
+
+2. Conducteurs réactifs - ce sont des objets qui existent *seulement* à l'intérieur du shiny server. Nous n'en avons pas vraiment besoin pour les applications simples, mais ils produisent des objets qui ne peuvent être vus qu'à l'intérieur du serveur, et utilisés dans d'autres opérations. Ils dépendent généralement de sources réactives.
+
+3. Les points de terminaison - ce sont les sorties qui sont transmises du serveur à l'interface utilisateur. Dans notre exemple, il s'agit de la courbe épi que nous produisons. 
+
+Avec ceci en tête, construisons notre serveur étape par étape. Nous montrons à nouveau le code de l'interface utilisateur à titre de référence :
+
+```{r, eval = FALSE}
+
+ui <- fluidPage(
+
+  titlePanel("Malaria facility visualisation app"),
+
+  sidebarLayout(
+
+    sidebarPanel(
+         # sélectionneur pour le district
+         selectInput(
+              inputId = "select_district",
+              label = "Sélectionnez le district",
+              choices = c(
+                   "All",
+                   "Spring",
+                   "Bolo",
+                   "Dingo",
+                   "Barnard"
+              ),
+              selected = "All",
+              multiple = TRUE
+         ),
+         # sélectionnez le groupe d'âge
+         selectInput(
+              inputId = "select_agegroup",
+              label = "Sélectionnez le groupe d'âge",
+              choices = c(
+                   "All ages" = "malaria_tot",
+                   "0-4 yrs" = "malaria_rdt_0-4",
+                   "5-14 yrs" = "malaria_rdt_5-14",
+                   "15+ yrs" = "malaria_rdt_15"
+              ), 
+              selected = "All",
+              multiple = FALSE
+         )
+
+    ),
+
+    mainPanel(
+      # epicurve va ici
+      plotOutput("malaria_epicurve")
+    )
+    
+  )
+)
+
+
+```
+
+De ce code UI nous avons :
+
+
+- Deux entrées :
+  - Sélecteur de district (avec un inputId de `select_district`)
+  - Un sélecteur de groupe d'âge (avec un inputId de `select_agegroup`)
+- Une sortie :
+  - L'épicurve (avec un outputId de `malaria_epicurve`)
+
+Comme indiqué précédemment, ces noms uniques que nous avons attribués à nos entrées et sorties sont cruciaux. Ils *doivent être uniques* et sont utilisés pour transmettre des informations entre l'interface utilisateur et le serveur. Dans notre serveur, nous accédons à nos entrées via la syntaxe `input$inputID` et les sorties sont transmises à l'interface utilisateur via la syntaxe `output$output_name` Voyons un exemple, car encore une fois, c'est difficile à comprendre autrement !
+
+```{r, eval = FALSE}
+
+server <- function(input, output, session) {
+  
+  output$malaria_epicurve <- renderPlot(
+    plot_epicurve(malaria_data, district = input$select_district, agegroup = input$select_agegroup)
+  )
+  
+}
+
+
+```
+
+
+
+Le serveur pour une application simple comme celle-ci est en fait assez simple ! Vous remarquerez que le serveur est une fonction avec trois paramètres - `input`, `output`, et `session` - ce n'est pas très important à comprendre pour le moment, mais il est important de s'en tenir à cette configuration ! Dans notre serveur, nous n'avons qu'une seule tâche - elle rend un graphique basé sur la fonction que nous avons créée plus tôt, et les entrées du serveur. Remarquez que les noms des objets d'entrée et de sortie correspondent exactement à ceux de l'interface utilisateur.
+
+Pour comprendre les bases de la façon dont le serveur réagit aux entrées de l'utilisateur, vous devez noter que la sortie saura (grâce au package sous-jacent) quand les entrées changent, et réexécutera cette fonction pour créer un graphique à chaque fois qu'elles changent. Notez que nous utilisons également la fonction `renderPlot()` ici - c'est l'une des fonctions d'une famille de classes spécifiques qui passent ces objets à une sortie ui. Il existe un certain nombre de fonctions qui se comportent de manière similaire, mais vous devez vous assurer que la fonction utilisée correspond à la classe de l'objet que vous transmettez à l'interface utilisateur ! Par exemple :
+
+- `renderText()` - envoie du texte à l'interface utilisateur
+- `renderDataTable` - envoie une table interactive à l'interface utilisateur.
+
+Rappelez-vous que ces *fonctions* doivent également correspondre à la fonction de sortie utilisée dans l'interface utilisateur - ainsi, `renderPlot()` est associé à `plotOutput()`, et `renderText()` est associé à `textOutput()`. 
+
+Nous avons enfin créé une application fonctionnelle ! Nous pouvons l'exécuter en appuyant sur le bouton Run App en haut à droite de la fenêtre du script dans Rstudio. Notez que vous pouvez choisir de lancer votre application dans votre navigateur par défaut (plutôt que dans Rstudio), ce qui reflétera plus fidèlement ce à quoi l'application ressemblera pour les autres utilisateurs.  
+
+
+```{r, out.width = c('100%'), out.height = c('100%'), echo=F}
+knitr::include_graphics(here::here("images", "shiny", "app_simple_view.gif"))
+```
+
+
+
+Il est amusant de noter que dans la console R, l'application est "à l'écoute" ! On parle de réactivité !  
+
+```{r, echo=F}
+knitr::include_graphics(here::here("images", "shiny", "listening.png"))
+```
+
+
+
+<!-- À FAIRE: *AJOUTER QUELQUE CHOSE LORS DU TÉLÉCHARGEMENT D'UN FICHIER ZIP DE L'APPLICATION?*  -->
+
+
+
+## Ajout de fonctionnalités supplémentaires
+
+À ce stade, nous avons enfin une application qui fonctionne, mais nous avons très peu de fonctionnalités. De plus, nous n'avons pas encore touché à la surface de ce que shiny peut faire, il y a donc encore beaucoup à apprendre ! Continuons à développer notre application existante en ajoutant quelques fonctionnalités supplémentaires. Voici quelques éléments qu'il serait bon d'ajouter : 
+
+1. Un texte explicatif 
+2. Un bouton de téléchargement pour notre parcelle - cela permettrait à l'utilisateur d'obtenir une version de haute qualité de l'image qu'il génère dans l'application.
+3. Un sélecteur pour des  equipements particuliers
+4. Une autre page de tableau de bord - elle pourrait afficher un tableau de nos données.
+
+Cela fait beaucoup de choses à ajouter, mais nous pouvons l'utiliser pour en apprendre davantage sur un tas de prouesses différentes en cours. Il y a tant à apprendre sur shiny (il peut être *très* avancé, mais il est à espérer qu'une fois que les utilisateurs ont une meilleure idée de la façon de l'utiliser, ils peuvent devenir plus à l'aise en utilisant des sources d'apprentissage externes aussi).
+
+
+
+### Ajouter du texte statique {.unnumbered}  
+
+
+Parlons d'abord de l'ajout de texte statique à notre application shiny. L'ajout de texte à notre application est extrêmement facile, une fois que vous en avez une connaissance de base. Puisque le texte statique ne change pas dans l'application shiny (si vous voulez qu'il change, vous pouvez utiliser les fonctions de *rendu de texte* dans le serveur ! Nous n'allons pas entrer dans les détails, mais vous pouvez ajouter un certain nombre d'éléments différents à votre interface utilisateur (et même des éléments personnalisés) en interfaçant R avec *HTML* et *css*.
+
+HTML et css sont des langages qui sont explicitement impliqués dans la conception de l'interface utilisateur. Nous n'avons pas besoin de trop les comprendre, mais *HTML* crée des objets dans l'IU (comme une boîte de texte, ou un tableau), et *css* est généralement utilisé pour changer le style et l'esthétique de ces objets. Shiny a accès à un large éventail de _balises HTML_ - celles-ci sont présentes pour les objets qui se comportent d'une manière spécifique, comme les en-têtes, les paragraphes de texte, les sauts de ligne, les tableaux, etc. Nous pouvons utiliser certains de ces exemples comme ceci :
+
+- `h1()` - il s'agit d'une balise *header*, qui rendra le texte inclus automatiquement plus grand, et changera les valeurs par défaut en ce qui concerne la police, la couleur, etc (selon le thème général de votre application). Vous pouvez accéder à des sous-titres _plus petits et plus petits_ avec `h2()` jusqu'à `h6()` également. L'utilisation ressemble à :
+  * `h1("mon en-tête - section 1")`
+
+- `p()` - il s'agit d'une balise *paragraphe*, qui rendra le texte inclus similaire à un texte dans un corps de texte. Ce texte sera automatiquement enveloppé, et sera d'une taille relativement petite (les pieds de page pourraient être plus petits par exemple.) Pensez-y comme le corps de texte d'un document Word. L'utilisation ressemble à :  
+
+  * `p("Ceci est un corps de texte plus large où j'explique la fonction de mon application")`
+  
+- `tags$b()` et `tags$i()` - elles sont utilisées pour créer des `tags$b()` en gras et des `tags$i()` en italique avec le texte inclus !
+
+- `tags$ul()`, `tags$ol()` et `tags$li()` - ce sont des balises utilisées pour créer des *listes*. Elles sont toutes utilisées dans la syntaxe ci-dessous, et permettent à l'utilisateur de créer une liste ordonnée (`tags$ol()`, c'est-à-dire numérotée) ou non ordonnée (`tags$ul()`, c'est-à-dire à puces). `tags$li()` est utilisé pour désigner les éléments de la liste, quel que soit le type de liste utilisé. par exemple :
+
+```{r, eval = F}
+
+tags$ol(
+  
+  tags$li("Item 1"),
+  
+  tags$li("Item 2"),
+  
+  tags$li("Item 3")
+  
+)
+
+```
+
+
+- `br()` et `hr()` - ces balises créent respectivement des *sauts de ligne* et des *lignes horizontales* (avec un saut de ligne). Utilisez-les pour séparer les sections de votre application et de votre texte ! Il n'est pas nécessaire de passer des éléments à ces balises (les parenthèses peuvent rester vides).
+
+
+- `div()` - c'est une balise *générique* qui peut *contenir n'importe quoi*, et peut être *nommée n'importe comment*. Une fois que vous aurez progressé dans la conception de l'IU, vous pourrez les utiliser pour compartimenter votre IU, donner des styles spécifiques à certaines sections et créer des interactions entre le serveur et les éléments de l'IU. Nous n'entrerons pas dans les détails, mais il vaut la peine de les connaître !
+
+Notez que chacun de ces objets peut être accédé par `tags$...` ou pour certains, juste la fonction. Ce sont effectivement des synonymes, mais il peut être utile d'utiliser le style `tags$...` si vous préférez être plus explicite et ne pas écraser les fonctions accidentellement. Ceci n'est en aucun cas une liste exhaustive des balises disponibles. Il existe une liste complète de toutes les balises disponibles dans shiny [ici](https://shiny.rstudio.com/articles/tag-glossary.html) et encore plus peuvent être utilisées en insérant du HTML directement dans votre interface !
+
+
+Si vous vous sentez confiant, vous pouvez également ajouter des *éléments de style css* à vos balises HTML avec l'argument `style` dans chacune d'entre elles. Nous n'allons pas entrer dans les détails de ce fonctionnement, mais une astuce pour tester les changements esthétiques d'une interface utilisateur est d'utiliser le mode inspecteur HTML dans chrome (de votre shiny application que vous exécutez dans le navigateur), et de modifier le style des objets vous-même !
+
+Ajoutons du texte à notre application
+
+```{r, eval = F}
+
+ui <- fluidPage(
+
+  titlePanel("Malaria facility visualisation app"),
+
+  sidebarLayout(
+
+    sidebarPanel(
+         h4("Options"),
+         # sélectionneur pour le district
+         selectInput(
+              inputId = "select_district",
+              label = "Select district",
+              choices = c(
+                   "All",
+                   "Spring",
+                   "Bolo",
+                   "Dingo",
+                   "Barnard"
+              ),
+              selected = "All",
+              multiple = TRUE
+         ),
+         # sélecteur pour le groupe d'âge
+         selectInput(
+              inputId = "select_agegroup",
+              label = "Select age group",
+              choices = c(
+                   "All ages" = "malaria_tot",
+                   "0-4 yrs" = "malaria_rdt_0-4",
+                   "5-14 yrs" = "malaria_rdt_5-14",
+                   "15+ yrs" = "malaria_rdt_15"
+              ), 
+              selected = "All",
+              multiple = FALSE
+         ),
+    ),
+
+    mainPanel(
+      # epicurve va ici
+      plotOutput("malaria_epicurve"),
+      br(),
+      hr(),
+      p("Welcome to the malaria facility visualisation app! To use this app, manipulate the widgets on the side to change the epidemic curve according to your preferences! To download a high quality image of the plot you've created, you can also download it with the download button. To see the raw data, use the raw data tab for an interactive form of the table. The data dictionary is as follows:"),
+    tags$ul(
+      tags$li(tags$b("location_name"), " - the facility that the data were collected at"),
+      tags$li(tags$b("data_date"), " - the date the data were collected at"),
+      tags$li(tags$b("submitted_daate"), " - the date the data were submitted at"),
+      tags$li(tags$b("Province"), " - the province the data were collected at (all 'North' for this dataset)"),
+      tags$li(tags$b("District"), " - the district the data were collected at"),
+      tags$li(tags$b("age_group"), " - the age group the data were collected for (0-5, 5-14, 15+, and all ages)"),
+      tags$li(tags$b("cases_reported"), " - the number of cases reported for the facility/age group on the given date")
+    )
+    
+  )
+)
+)
+
+
+
+```
+
+```{r, echo=F}
+knitr::include_graphics(here::here("images", "shiny", "app_text_view.png"))
+```
+
+
+### Ajouter un lien {.unnumbered}
+
+
+Pour ajouter un lien à un site Web, utilisez `tags$a()` avec le lien et le texte à afficher comme indiqué ci-dessous. Pour avoir un paragraphe autonome, mettez-le dans `p()`. Pour que seuls quelques mots d'une phrase soient liés, divisez la phrase en plusieurs parties et utilisez `tags$a()` pour la partie hyperliée. Pour que le lien s'ouvre dans une *nouvelle* fenêtre du navigateur, ajoutez `target = "_blank"` comme argument.  
+
+```{r, eval=F}
+tags$a(href = "www.epiRhandbook.com", "Visit our website!")
+```
+
+
+
+
+### Ajout d'un bouton de téléchargement {.unnumbered}
+
+Passons à la deuxième des trois fonctions. Un bouton de téléchargement est une chose assez courante à ajouter à une application et est assez facile à réaliser. Nous devons ajouter un autre Widget à notre interface, et nous devons ajouter une autre sortie à notre serveur pour l'attacher. Nous pouvons également introduire des *conducteurs réactifs* dans cet exemple !
+
+
+Mettons d'abord à jour notre interface utilisateur - c'est facile car shiny est livré avec un widget appelé `downloadButton()` - donnons-lui un inputId et un label.
+
+```{r, eval = FALSE}
+
+ui <- fluidPage(
+
+  titlePanel("Malaria facility visualisation app"),
+
+  sidebarLayout(
+
+    sidebarPanel(
+         # sélectionneur pour le district
+         selectInput(
+              inputId = "select_district",
+              label = "Select district",
+              choices = c(
+                   "All",
+                   "Spring",
+                   "Bolo",
+                   "Dingo",
+                   "Barnard"
+              ),
+              selected = "All",
+              multiple = FALSE
+         ),
+         # sélecteur pour le groupe d'âge
+         selectInput(
+              inputId = "select_agegroup",
+              label = "Select age group",
+              choices = c(
+                   "All ages" = "malaria_tot",
+                   "0-4 yrs" = "malaria_rdt_0-4",
+                   "5-14 yrs" = "malaria_rdt_5-14",
+                   "15+ yrs" = "malaria_rdt_15"
+              ), 
+              selected = "All",
+              multiple = FALSE
+         ),
+         # ligne horizontale
+         hr(),
+         downloadButton(
+           outputId = "download_epicurve",
+           label = "Download plot"
+         )
+
+    ),
+
+    mainPanel(
+      # epicurve va ici
+      plotOutput("malaria_epicurve"),
+      br(),
+      hr(),
+      p("Welcome to the malaria facility visualisation app! To use this app, manipulate the widgets on the side to change the epidemic curve according to your preferences! To download a high quality image of the plot you've created, you can also download it with the download button. To see the raw data, use the raw data tab for an interactive form of the table. The data dictionary is as follows:"),
+      tags$ul(
+        tags$li(tags$b("location_name"), " - the facility that the data were collected at"),
+        tags$li(tags$b("data_date"), " - the date the data were collected at"),
+        tags$li(tags$b("submitted_daate"), " - the date the data were submitted at"),
+        tags$li(tags$b("Province"), " - the province the data were collected at (all 'North' for this dataset)"),
+        tags$li(tags$b("District"), " - the district the data were collected at"),
+        tags$li(tags$b("age_group"), " - the age group the data were collected for (0-5, 5-14, 15+, and all ages)"),
+        tags$li(tags$b("cases_reported"), " - the number of cases reported for the facility/age group on the given date")
+      )
+      
+    )
+    
+  )
+)
+
+
+```
+ 
+
+Notez que nous avons également ajouté une balise `hr()` - celle-ci ajoute une ligne horizontale séparant nos widgets de contrôle de nos widgets de téléchargement. C'est une autre des balises HTML dont nous avons parlé précédemment.
+
+Maintenant que notre interface utilisateur est prête, nous devons ajouter le composant serveur. Les téléchargements sont effectués dans le serveur avec la fonction `downloadHandler()`. Comme pour notre plot, nous devons l'attacher à une sortie qui a le même inputId que le bouton de téléchargement. Cette fonction prend deux arguments - `filename` et `content` - ce sont tous deux des fonctions. Comme vous pouvez le deviner, `filename` est utilisé pour spécifier le nom du fichier à télécharger, et `content` est utilisé pour spécifier ce qui doit être téléchargé. `content` contient une fonction que vous utiliserez pour sauvegarder des données localement - donc si vous téléchargez un fichier csv, vous pourrez utiliser `rio::export()`. Comme nous téléchargeons un graphique, nous utiliserons `ggplot2::ggsave()`. Voyons comment nous allons programmer ceci (nous ne l'ajouterons pas encore au serveur). 
+
+```{r, eval = FALSE}
+
+server <- function(input, output, session) {
+  
+  output$malaria_epicurve <- renderPlot(
+    plot_epicurve(malaria_data, district = input$select_district, agegroup = input$select_agegroup)
+  )
+  
+  output$download_epicurve <- downloadHandler(
+    filename = function() {
+      stringr::str_glue("malaria_epicurve_{input$select_district}.png")
+    },
+    
+    content = function(file) {
+      ggsave(file, 
+             plot_epicurve(malaria_data, district = input$select_district, agegroup = input$select_agegroup),
+             width = 8, height = 5, dpi = 300)
+    }
+    
+  )
+  
+}
+
+
+```
+
+
+
+Notez que la fonction `content` prend toujours un argument `file`, que nous mettons là où le nom du fichier de sortie est spécifié. Vous pouvez également remarquer que nous répétons du code ici - nous utilisons notre fonction `plot_epicurve()` deux fois dans ce serveur, une fois pour le téléchargement et une fois pour l'image affichée dans l'application. Bien que cela n'affecte pas massivement les performances, cela signifie que le code pour générer ce tracé devra être exécuté lorsque l'utilisateur change les widgets spécifiant le district et le groupe d'âge, *et* à nouveau lorsque vous voulez télécharger le tracé. Dans les grandes applications, les décisions sous-optimales comme celle-ci ralentiront de plus en plus les choses, il est donc bon d'apprendre comment rendre notre application plus efficace dans ce sens. Ce qui serait plus logique, c'est d'avoir un moyen d'exécuter le code epicurve lorsque les districts/groupes d'âge sont modifiés, *et de laisser ce code être utilisé par* les fonctions renderPlot() et downloadHandler(). C'est là que les conducteurs réactifs entrent en jeu ! 
+
+Les conducteurs réactifs sont des objets qui sont créés dans le serveur shiny de manière *réactive*, mais qui ne sont pas édités - ils peuvent simplement être utilisés par d'autres parties du serveur. Il existe un certain nombre de types différents de *conducteurs réactifs*, mais nous allons passer en revue les deux principaux.
+
+1.`reactive()` - c'est le conducteur réactif le plus basique - il réagira à chaque fois que les entrées utilisées à l'intérieur changeront (comme nos widgets de district/groupe d'âge).  
+2. `eventReactive()` - ce conducteur réactif fonctionne de la même manière que `reactive()`, sauf que l'utilisateur peut spécifier les entrées qui le font réexécuter. Ceci est utile si votre conducteur réactif prend beaucoup de temps à traiter, mais ceci sera expliqué plus tard.  
+
+Regardons les deux exemples :
+
+```{r, eval = FALSE}
+
+malaria_plot_r <- reactive({
+  
+  plot_epicurve(malaria_data, district = input$select_district, agegroup = input$select_agegroup)
+  
+})
+
+
+# ne s'exécute que lorsque le sélecteur de district change !
+malaria_plot_er <- eventReactive(input$select_district, {
+  
+  plot_epicurve(malaria_data, district = input$select_district, agegroup = input$select_agegroup)
+  
+})
+
+
+
+```
+
+
+Lorsque nous utilisons la configuration `eventReactive()`, nous pouvons spécifier quelles entrées provoquent l'exécution de ce morceau de code - ce n'est pas très utile pour nous pour le moment, donc nous pouvons le laisser pour l'instant. Notez que vous pouvez inclure plusieurs entrées avec `c()`.
+
+Voyons comment nous pouvons intégrer cela dans notre code serveur :
+
+
+```{r, eval = FALSE}
+
+server <- function(input, output, session) {
+  
+  malaria_plot <- reactive({
+    plot_epicurve(malaria_data, district = input$select_district, agegroup = input$select_agegroup)
+  })
+  
+  
+  
+  output$malaria_epicurve <- renderPlot(
+    malaria_plot()
+  )
+  
+  output$download_epicurve <- downloadHandler(
+    
+    filename = function() {
+      stringr::str_glue("malaria_epicurve_{input$select_district}.png")
+    },
+    
+    content = function(file) {
+      ggsave(file, 
+             malaria_plot(),
+             width = 8, height = 5, dpi = 300)
+    }
+    
+  )
+  
+}
+
+
+```
+
+
+Vous pouvez voir que nous faisons simplement appel à la sortie de notre réactif que nous avons défini dans nos fonctions de téléchargement et de rendu de tracé. Une chose à noter qui fait souvent trébucher les gens est que vous devez utiliser les sorties des réactifs comme s'il s'agissait de fonctions - vous devez donc *ajouter des parenthèses vides à la fin de celles-ci* (par exemple, `malaria_plot()` est correct, et `malaria_plot` ne l'est pas). Maintenant que nous avons ajouté cette solution, notre application est un peu plus ordonnée, plus rapide et plus facile à modifier puisque tout le code qui exécute la fonction epicurve se trouve à un seul endroit.
+
+
+```{r, echo=F}
+knitr::include_graphics(here::here("images", "shiny", "download_button_view.png"))
+```
+
+
+
+### Ajout d'un sélecteur d'equipements {.unnumbered}  
+
+Passons à la fonctionnalité suivante : un sélecteur d'equipements spécifiques. Nous allons implémenter un autre paramètre dans notre fonction afin de pouvoir le passer comme argument dans notre code. Voyons d'abord ce qu'il en est - il fonctionne sur les mêmes principes que les autres paramètres que nous avons mis en place. Mettons à jour et testons notre fonction.
+
+
+```{r, echo = TRUE}
+
+plot_epicurve <- function(data, district = "All", agegroup = "malaria_tot", facility = "All") {
+  
+  if (!("All" %in% district)) {
+    data <- data %>%
+      filter(District %in% district)
+    
+    plot_title_district <- stringr::str_glue("{paste0(district, collapse = ', ')} districts")
+    
+  } else {
+    
+    plot_title_district <- "all districts"
+    
+  }
+  
+
+  # si il n ya pas de données restantes, retourner NULL
+  if (nrow(data) == 0) {
+    
+    return(NULL)
+  }
+  
+  data <- data %>%
+    filter(age_group == agegroup)
+  
+  
+
+  # si il n ya pas de données restantes, retourner NULL
+  if (nrow(data) == 0) {
+    
+    return(NULL)
+  }
+  
+  if (agegroup == "malaria_tot") {
+      agegroup_title <- "All ages"
+  } else {
+    agegroup_title <- stringr::str_glue("{str_remove(agegroup, 'malaria_rdt')} years")
+  }
+  
+    if (!("All" %in% facility)) {
+    data <- data %>%
+      filter(location_name == facility)
+    
+    plot_title_facility <- facility
+    
+  } else {
+    
+    plot_title_facility <- "all facilities"
+    
+  }
+  
+  # s'il n'y a pas de données restantes, retourne NULL
+  if (nrow(data) == 0) {
+    
+    return(NULL)
+  }
+
+  
+  
+  ggplot(data, aes(x = data_date, y = cases_reported)) +
+    geom_col(width = 1, fill = "darkred") +
+    theme_minimal() +
+    labs(
+      x = "date",
+      y = "number of cases",
+      title = stringr::str_glue("Malaria cases - {plot_title_district}; {plot_title_facility}"),
+      subtitle = agegroup_title
+    )
+  
+  
+  
+}
+```
+
+Testons ca:  
+
+```{r, warning=F, message=F}
+
+plot_epicurve(malaria_data, district = "Spring", agegroup = "malaria_rdt_0-4", facility = "Facility 1")
+
+```
+
+
+
+Avec tous les equipements présentes dans nos données, il n'est pas très clair quels equipements correspondent à quels districts - et l'utilisateur final ne le saura pas non plus. Cela pourrait rendre l'utilisation de l'application assez peu intuitive. Pour cette raison, nous devrions faire en sorte que les options des equipements dans l'interface utilisateur changent dynamiquement lorsque l'utilisateur change de district - de sorte que l'une filtre l'autre ! Puisque nous utilisons un grand nombre de variables dans les options, nous pourrions également vouloir générer certaines de nos options pour l'interface utilisateur dans notre fichier _global.R_ _à partir des données_. Par exemple, nous pouvons ajouter ce morceau de code à _global.R_ après avoir lu nos données :
+
+
+```{r, , message =  FALSE}
+
+all_districts <- c("All", unique(malaria_data$District))
+
+# base de données des noms de lieux par district
+facility_list <- malaria_data %>%
+  group_by(location_name, District) %>%
+  summarise() %>% 
+  ungroup()
+
+```
+
+Let's look at them:  
+
+```{r}
+all_districts
+```
+
+
+```{r}
+facility_list
+```
+
+
+
+Nous pouvons passer ces nouvelles variables à l'interface utilisateur sans aucun problème, puisqu'elles sont globalement visibles à la fois par le serveur et l'interface utilisateur ! Mettons à jour notre interface utilisateur :
+
+
+```{r, eval = FALSE}
+
+
+ui <- fluidPage(
+
+  titlePanel("Malaria facility visualisation app"),
+
+  sidebarLayout(
+
+    sidebarPanel(
+         # selecteur pour district
+         selectInput(
+              inputId = "select_district",
+              label = "Select dsitrict",
+              choices = all_districts,
+              selected = "All",
+              multiple = FALSE
+         ),
+         # selecteur pour age group
+         selectInput(
+              inputId = "select_agegroup",
+              label = "Select age group",
+              choices = c(
+                   "All ages" = "malaria_tot",
+                   "0-4 yrs" = "malaria_rdt_0-4",
+                   "5-14 yrs" = "malaria_rdt_5-14",
+                   "15+ yrs" = "malaria_rdt_15"
+              ), 
+              selected = "All",
+              multiple = FALSE
+         ),
+         # selecteur poiur facility
+         selectInput(
+           inputId = "select_facility",
+           label = "Select Facility",
+           choices = c("All", facility_list$location_name),
+           selected = "All"
+         ),
+         
+         # ligne horizontale
+         hr(),
+         downloadButton(
+           outputId = "download_epicurve",
+           label = "Download plot"
+         )
+
+    ),
+
+    mainPanel(
+      # epicurve va ici
+      plotOutput("malaria_epicurve"),
+      br(),
+      hr(),
+      p("Welcome to the malaria facility visualisation app! To use this app, manipulate the widgets on the side to change the epidemic curve according to your preferences! To download a high quality image of the plot you've created, you can also download it with the download button. To see the raw data, use the raw data tab for an interactive form of the table. The data dictionary is as follows:"),
+      tags$ul(
+        tags$li(tags$b("location_name"), " - the facility that the data were collected at"),
+        tags$li(tags$b("data_date"), " - the date the data were collected at"),
+        tags$li(tags$b("submitted_daate"), " - the date the data were submitted at"),
+        tags$li(tags$b("Province"), " - the province the data were collected at (all 'North' for this dataset)"),
+        tags$li(tags$b("District"), " - the district the data were collected at"),
+        tags$li(tags$b("age_group"), " - the age group the data were collected for (0-5, 5-14, 15+, and all ages)"),
+        tags$li(tags$b("cases_reported"), " - the number of cases reported for the facility/age group on the given date")
+      )
+      
+    )
+    
+  )
+)
+
+
+```
+
+
+
+Remarquez comment nous passons maintenant des variables pour nos choix au lieu de les coder en dur dans l'interface utilisateur ! Cela pourrait également rendre notre code plus compact ! Enfin, nous devrons mettre à jour le serveur. Il sera facile de mettre à jour notre fonction pour incorporer notre nouvelle entrée (nous devons juste la passer comme argument à notre nouveau paramètre), mais nous devons nous rappeler que nous voulons aussi que l'interface utilisateur soit mise à jour dynamiquement lorsque l'utilisateur change le district sélectionné. Il est important de comprendre ici que nous *pouvons modifier les paramètres et le comportement des widgets* pendant l'exécution de l'application, mais que cela doit être fait *dans le serveur*. Nous devons comprendre une nouvelle façon d'envoyer des données au serveur pour apprendre à le faire.
+
+Les fonctions dont nous avons besoin pour comprendre comment faire cela sont connues sous le nom de fonctions *observatrices*, et sont similaires aux fonctions *réactives* dans leur comportement. Elles présentent toutefois une différence essentielle :
+
+- Les fonctions réactives n'affectent pas directement les sorties et produisent des objets qui peuvent être vus à d'autres endroits du serveur.
+- Les fonctions d'observation *peuvent* affecter les sorties du serveur, mais le font via des effets secondaires d'autres fonctions. (Elles peuvent aussi faire d'autres choses, mais c'est leur principale fonction en pratique).
+
+Comme pour les fonctions réactives, il existe deux types de fonctions d'observation, qui sont divisées par la même logique que les fonctions réactives :
+
+1. `observe()` - cette fonction s'exécute à chaque fois que les entrées qu'elle contient changent.
+2. `observeEvent()` - cette fonction s'exécute lorsqu'une entrée *spécifiée par l'utilisateur* change.
+
+Nous devons également comprendre les fonctions fournies par Shiny qui mettent à jour les widgets. Elles sont assez simples à exécuter - elles prennent d'abord l'objet `session` de la fonction serveur (il n'est pas nécessaire de le comprendre pour l'instant), puis le `inputId` de la fonction à modifier. Nous passons ensuite de nouvelles versions de tous les paramètres qui sont déjà pris par `selectInput()` - ceux-ci seront automatiquement mis à jour dans le widget. 
+
+Regardons un exemple isolé de la façon dont nous pourrions utiliser ceci dans notre serveur. Lorsque l'utilisateur change de district, nous voulons filtrer notre tableau d'installations par district, et mettre à jour les choix pour *seulement refléter ceux qui sont disponibles dans ce district* (et une option pour toutes les installations).
+
+```{r, eval = FALSE}
+
+observe({
+  
+  if (input$select_district == "All") {
+    new_choices <- facility_list$location_name
+  } else {
+    new_choices <- facility_list %>%
+      filter(District == input$select_district) %>%
+      pull(location_name)
+  }
+  
+  new_choices <- c("All", new_choices)
+  
+  updateSelectInput(session, inputId = "select_facility",
+                    choices = new_choices)
+  
+})
+
+
+```
+
+
+Et voilà ! nous pouvons l'ajouter dans notre serveur, et ce comportement fonctionnera désormais. Voici à quoi devrait ressembler notre nouveau serveur :
+
+```{r, eval = FALSE}
+server <- function(input, output, session) {
+  
+  malaria_plot <- reactive({
+    plot_epicurve(malaria_data, district = input$select_district, agegroup = input$select_agegroup, facility = input$select_facility)
+  })
+  
+  
+  
+  observe({
+    
+    if (input$select_district == "All") {
+      new_choices <- facility_list$location_name
+    } else {
+      new_choices <- facility_list %>%
+        filter(District == input$select_district) %>%
+        pull(location_name)
+    }
+    
+    new_choices <- c("All", new_choices)
+    
+    updateSelectInput(session, inputId = "select_facility",
+                      choices = new_choices)
+    
+  })
+  
+  
+  output$malaria_epicurve <- renderPlot(
+    malaria_plot()
+  )
+  
+  output$download_epicurve <- downloadHandler(
+    
+    filename = function() {
+      stringr::str_glue("malaria_epicurve_{input$select_district}.png")
+    },
+    
+    content = function(file) {
+      ggsave(file, 
+             malaria_plot(),
+             width = 8, height = 5, dpi = 300)
+    }
+    
+  )
+  
+  
+  
+}
+
+```
+
+
+```{r, out.width=c('100%', '100%'), echo=F, fig.show='hold', fig.width = 12, fig.height = 9, message=F, warning=F}
+knitr::include_graphics(here::here("images", "shiny", "app_menu_view.gif"))
+```
+
+
+
+
+
+
+
+### Ajout d'un autre onglet avec une table {.unnumbered}
+
+
+Nous allons maintenant passer au dernier composant que nous voulons ajouter à notre application. Nous voulons séparer notre interface utilisateur en deux onglets, dont l'un comportera un tableau interactif où l'utilisateur pourra voir les données avec lesquelles il réalise la courbe épidémique. Pour ce faire, nous pouvons utiliser les éléments d'interface intégrés qui sont fournis avec Shiny pour les onglets. À un niveau de base, nous pouvons enfermer la plupart de notre panneau principal dans cette structure générale :
+
+```{r, eval = FALSE}
+
+
+# ... le reste de l'ui
+
+mainPanel(
+  
+  tabsetPanel(
+    type = "tabs",
+    tabPanel(
+      "Epidemic Curves",
+      ...
+    ),
+    tabPanel(
+      "Data",
+      ...
+    )
+  )
+)
+
+
+```
+
+
+Appliquons cela à notre interface utilisateur. Nous voudrons également utiliser le package **DT** ici - c'est un excellent package pour créer des tableaux interactifs à partir de données préexistantes. Nous pouvons voir qu'il est utilisé pour `DT::datatableOutput()` dans cet exemple.
+
+```{r, echo = FALSE}
+library(DT)
+```
+
+```{r, eval = FALSE}
+ui <- fluidPage(
+     
+     titlePanel("Malaria facility visualisation app"),
+     
+     sidebarLayout(
+          
+          sidebarPanel(
+               # sélectionneur pour le district
+               selectInput(
+                    inputId = "select_district",
+                    label = "Select district",
+                    choices = all_districts,
+                    selected = "All",
+                    multiple = FALSE
+               ),
+               # selector for age group
+               selectInput(
+                    inputId = "select_agegroup",
+                    label = "Select age group",
+                    choices = c(
+                         "All ages" = "malaria_tot",
+                         "0-4 yrs" = "malaria_rdt_0-4",
+                         "5-14 yrs" = "malaria_rdt_5-14",
+                         "15+ yrs" = "malaria_rdt_15"
+                    ), 
+                    selected = "All",
+                    multiple = FALSE
+               ),
+               # selector for facility
+               selectInput(
+                    inputId = "select_facility",
+                    label = "Select Facility",
+                    choices = c("All", facility_list$location_name),
+                    selected = "All"
+               ),
+               
+               # horizontal line
+               hr(),
+               downloadButton(
+                    outputId = "download_epicurve",
+                    label = "Download plot"
+               )
+               
+          ),
+          
+          mainPanel(
+               tabsetPanel(
+                    type = "tabs",
+                    tabPanel(
+                         "Epidemic Curves",
+                         plotOutput("malaria_epicurve")
+                    ),
+                    tabPanel(
+                         "Data",
+                         DT::dataTableOutput("raw_data")
+                    )
+               ),
+               br(),
+               hr(),
+               p("Welcome to the malaria facility visualisation app! To use this app, manipulate the widgets on the side to change the epidemic curve according to your preferences! To download a high quality image of the plot you've created, you can also download it with the download button. To see the raw data, use the raw data tab for an interactive form of the table. The data dictionary is as follows:"),
+               tags$ul(
+                    tags$li(tags$b("location_name"), " - the facility that the data were collected at"),
+                    tags$li(tags$b("data_date"), " - the date the data were collected at"),
+                    tags$li(tags$b("submitted_daate"), " - the date the data were submitted at"),
+                    tags$li(tags$b("Province"), " - the province the data were collected at (all 'North' for this dataset)"),
+                    tags$li(tags$b("District"), " - the district the data were collected at"),
+                    tags$li(tags$b("age_group"), " - the age group the data were collected for (0-5, 5-14, 15+, and all ages)"),
+                    tags$li(tags$b("cases_reported"), " - the number of cases reported for the facility/age group on the given date")
+               )
+               
+               
+          )
+     )
+)
+
+
+```
+
+
+
+Maintenant notre application est organisée en onglets ! Faisons également les modifications nécessaires sur le serveur. Puisque nous n'avons pas besoin de manipuler notre jeu de données avant de le rendre, c'est en fait très simple - nous rendons simplement le jeu de données malaria_data via DT::renderDT() à l'interface utilisateur !
+
+
+```{r, eval = FALSE}
+server <- function(input, output, session) {
+  
+  malaria_plot <- reactive({
+    plot_epicurve(malaria_data, district = input$select_district, agegroup = input$select_agegroup, facility = input$select_facility)
+  })
+  
+  
+  
+  observe({
+    
+    if (input$select_district == "All") {
+      new_choices <- facility_list$location_name
+    } else {
+      new_choices <- facility_list %>%
+        filter(District == input$select_district) %>%
+        pull(location_name)
+    }
+    
+    new_choices <- c("All", new_choices)
+    
+    updateSelectInput(session, inputId = "select_facility",
+                      choices = new_choices)
+    
+  })
+  
+  
+  output$malaria_epicurve <- renderPlot(
+    malaria_plot()
+  )
+  
+  output$download_epicurve <- downloadHandler(
+    
+    filename = function() {
+      stringr::str_glue("malaria_epicurve_{input$select_district}.png")
+    },
+    
+    content = function(file) {
+      ggsave(file, 
+             malaria_plot(),
+             width = 8, height = 5, dpi = 300)
+    }
+    
+  )
+  
+  # rendre le tableau de données à ui
+  output$raw_data <- DT::renderDT(
+    malaria_data
+  )
+  
+  
+}
+
+
+```
+
+
+```{r, out.width=c('100%', '100%'), fig.show='hold', echo = F, fig.width = 12, fig.height = 9, message=F, warning=F}
+knitr::include_graphics(here::here("images", "shiny", "app_table_view.gif"))
+```
+
+
+## Partager les applications shiny
+
+
+Maintenant que vous avez développé votre application, vous voulez probablement la partager avec d'autres - c'est le principal avantage de shiny après tout ! Nous pouvons le faire en partageant le code directement, ou nous pouvons le publier sur un serveur. Si nous partageons le code, d'autres personnes pourront voir ce que vous avez fait et s'en inspirer, mais cela annulera l'un des principaux avantages de shiny - *il peut éliminer le besoin pour les utilisateurs finaux de maintenir une installation R*. Pour cette raison, si vous partagez votre application avec des utilisateurs qui ne sont pas à l'aise avec R, il est beaucoup plus facile de partager une application qui a été publiée sur un serveur. 
+
+Si vous préférez partager le code, vous pouvez créer un fichier .zip de l'application ou, mieux encore, *publier votre application sur github et ajouter des collaborateurs*.
+
+Cependant, si nous publions l'application en ligne, nous devons faire un peu plus de travail. En fin de compte, nous voulons que votre application soit accessible via une URL Web afin que d'autres puissent y accéder rapidement et facilement. Malheureusement, pour publier votre application sur un serveur, vous devez avoir accès à un serveur sur lequel la publier ! Il existe un certain nombre d'options d'hébergement à cet égard :
+
+- _shinyapps.io_ : c'est l'endroit le plus facile pour publier des applications shinys, car il nécessite le moins de travail de configuration possible et offre des licences gratuites, mais limitées.
+
+- _RStudio Connect_ : il s'agit d'une version beaucoup plus puissante d'un serveur R, qui peut effectuer de nombreuses opérations, y compris la publication de shiny apps. Elle est cependant plus difficile à utiliser et moins recommandée pour les utilisateurs débutants.
+
+Pour les besoins de ce document, nous utiliserons _shinyapps.io_, car il est plus facile pour les premiers utilisateurs. Vous pouvez créer un compte gratuit ici pour commencer - il y a également différents plans de prix pour les licesnses de serveur si nécessaire. Plus vous prévoyez d'avoir d'utilisateurs, plus votre plan tarifaire devra être cher, alors tenez-en compte. Si vous cherchez à créer quelque chose à l'usage d'un petit groupe d'individus, une licence gratuite peut convenir parfaitement, mais une application destinée au public peut nécessiter plus de licences.
+
+Tout d'abord, nous devons nous assurer que notre application est adaptée à la publication sur un serveur. Dans votre application, vous devez redémarrer votre session R et vous assurer qu'elle fonctionne sans exécuter de code supplémentaire. C'est important, car une application qui nécessite le chargement de packages ou la lecture de données non définis dans le code de votre application ne fonctionnera pas sur un serveur. Notez également que vous ne pouvez pas avoir de chemins de fichiers *explicites* dans votre application - ceux-ci seront invalides dans le paramétrage du serveur - l'utilisation du package `here` résout très bien ce problème. Enfin, si vous lisez des données à partir d'une source qui nécessite une authentification de l'utilisateur, comme les serveurs de votre organisation, cela ne fonctionnera généralement pas sur un serveur. Vous devrez vous mettre en relation avec votre service informatique pour savoir comment mettre le serveur shiny  sur la whitelist.
+
+*Création d'un compte*
+
+Une fois que vous avez votre compte, vous pouvez naviguer vers la page des jetons sous _Accounts_. Ici, vous devriez ajouter un nouveau jeton - il sera utilisé pour déployer votre application. 
+
+A partir de là, vous devez noter que l'url de votre compte reflétera le nom de votre application - donc si votre application s'appelle _mon_app_, l'url sera ajouté comme _xxx.io/mon_app/_. Choisissez judicieusement le nom de votre application ! Maintenant que vous êtes prêt, cliquez sur deploy - si vous réussissez, votre application sera lancée sur l'url que vous avez choisi !
+
+*Quelque chose sur la création d'applications dans des documents ?*
+
+## Lecture complémentaire
+
+Jusqu'à présent, nous avons couvert beaucoup d'aspects de shiny, et nous avons à peine effleuré la surface de ce qui est offert pour shiny. Bien que ce guide serve d'introduction, il y a beaucoup plus à apprendre pour comprendre pleinement shiny. Vous devriez commencer à créer des applications et ajouter progressivement de plus en plus de fonctionnalités.
+
+
+## packages d'extension recommandés
+
+Ce qui suit représente une sélection d'extensions de haute qualité pour shiny qui peuvent vous aider à obtenir beaucoup plus de shiny. Sans ordre particulier :
+
+- **shinyWidgets** - ce package vous donne beaucoup plus de widgets qui peuvent être utilisés dans votre application. Lancez `shinyWidgets::shinyWidgetsGallery()` pour voir une sélection des widgets disponibles avec ce package. Voir des exemples [ici](https://github.com/dreamRs/shinyWidgets)  
+
+- **shinyjs** - c'est un excellent package qui donne à l'utilisateur la possibilité d'étendre considérablement l'utilité de shiny via une série de javascript. Les applications de ce package vont de très simples à très avancées, mais vous voudrez peut-être l'utiliser d'abord pour manipuler l'interface utilisateur de manière simple, comme cacher/afficher des éléments, ou activer/désactiver des boutons. En savoir plus [ici](https://deanattali.com/shinyjs/basic)
+
+- **shinydashboard** - ce package étend massivement l'interface utilisateur disponible qui peut être utilisée dans shiny, en particulier en permettant à l'utilisateur de créer un tableau de bord complexe avec une variété de mises en page complexes. Voir plus [ici](https://rstudio.github.io/shinydashboard/)
+
+- **shinydashboardPlus** - Obtenez encore plus de fonctionnalités du framework **shinydashboard** ! En savoir plus [ici](https://rinterface.github.io/shinydashboardPlus/articles/shinydashboardPlus.html)
+
+- **shinythemes** - changez le thème css par défaut de votre application shiny avec une large gamme de modèles prédéfinis ! En savoir plus [ici](https://rstudio.github.io/shinythemes/)
+
+
+Il existe également un certain nombre de packages qui peuvent être utilisés pour créer des sorties interactives compatibles avec shiny. 
+
+- **DT** est semi-incorporé dans base-shiny, mais fournit un grand ensemble de fonctions pour créer des tableaux interactifs.
+
+- **plotly** est un package pour créer des graphiques interactifs que l'utilisateur peut manipuler dans l'application. Vous pouvez également convertir vos graphiques en versions interactives via `plotly::ggplotly()` ! Comme alternatives, **dygraphs** et **highcharter** sont également excellents.
+
+
+## Ressources recommandées
+
+
+
+

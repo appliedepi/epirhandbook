@@ -1,0 +1,391 @@
+---
+aliases:
+  - /new_pages/moving_average.de.html
+---
+
+# Gleitende Durchschnitte { }
+
+```{r, out.width=c("100%"), echo=F}
+knitr::include_graphics(here::here("images", "moving_avg_epicurve.png"))
+```
+
+Auf dieser Seite werden zwei Methoden zur Berechnung und Visualisierung gleitender Durchschnitte vorgestellt:
+
+1) Berechnen mit der **Schieber** Paket
+2) Berechne *innerhalb von* a `ggplot()` Befehls mit der **tidyquant** Paket
+
+<!-- ======================================================= -->
+
+## Vorbereitung {  }
+
+### Pakete laden {.unnumbered}
+
+Dieser Codechunk zeigt das Laden der Pakete, die für die Analysen benötigt werden. In diesem Handbuch betonen wir `p_load()` von **pacman**, der das Paket bei Bedarf installiert *und* lädt es zur Verwendung. Du kannst installierte Pakete auch laden mit `library()` von **base**R. Siehe die Seite über [R-Grundlagen] für weitere Informationen über R-Pakete.
+
+```{r}
+pacman::p_load(
+  tidyverse,      # for data management and viz
+  slider,         # for calculating moving averages
+  tidyquant       # for calculating moving averages within ggplot
+)
+```
+
+### Daten importieren {.unnumbered}
+
+Wir importieren den Datensatz der Fälle aus einer simulierten Ebola-Epidemie. Wenn du mitmachen willst, <a href='https://github.com/appliedepi/epirhandbook_eng/raw/master/data/case_linelists/linelist_cleaned.rds' class='download-button'>klicke, um die "saubere" Linienliste herunterzuladen</a> (als .rds-Datei). Importiere Daten mit dem `import()` Funktion aus der **rio**Paket (sie verarbeitet viele Dateitypen wie .xlsx, .csv, .rds - siehe die [Import und Export] Seite für Details).
+
+```{r, echo=F}
+# import the linelist into R
+linelist <- rio::import(here::here("data", "case_linelists", "linelist_cleaned.rds"))
+```
+
+```{r, eval=F}
+# import the linelist
+linelist <- import("linelist_cleaned.xlsx")
+```
+
+Die ersten 50 Zeilen der Linienliste werden unten angezeigt.
+
+```{r, message=FALSE, echo=F}
+# display the linelist data as a table
+DT::datatable(head(linelist, 50), rownames = FALSE, filter="top", options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+<!-- ======================================================= -->
+
+## Berechne mit **Schieberegler** {  }
+
+**Mit dieser Methode kannst du einen gleitenden Durchschnitt in einem Datenrahmen berechnen, bevor du ihn zeichnest.**
+
+Die **Schieber** Paket bietet mehrere "Schiebefenster"-Funktionen zur Berechnung von gleitenden Durchschnitten, kumulativen Summen, gleitenden Regressionen usw. Es behandelt einen Datenrahmen als einen Vektor von Zeilen und ermöglicht so eine zeilenweise Iteration über einen Datenrahmen.
+
+Hier sind einige der gängigen Funktionen:
+
+- `slide_dbl()` - iteriert durch eine *numerische* (daher "\_dbl") Spalte und führt eine Operation mit einem gleitenden Fenster durch
+  - `slide_sum()` - Rolling Sum Shortcut-Funktion für `slide_dbl()`
+  - `slide_mean()` - gleitender Durchschnitt Abkürzungsfunktion für `slide_dbl()`
+- `slide_index_dbl()` - wendet das gleitende Fenster auf eine numerische Spalte an und verwendet eine separate Spalte, um *Index* den Verlauf des Fensters (nützlich, wenn das Rolling Window nach Datum erfolgt und einige Daten nicht vorhanden sind)
+  - `slide_index_sum()` - Rollierende Summen-Verknüpfungsfunktion mit Indizierung
+  - `slide_index_mean()` - Rollierender Mittelwert Verknüpfungsfunktion mit Indizierung
+
+Die **Schieberegler** Paket hat viele weitere Funktionen, die im Abschnitt Ressourcen auf dieser Seite behandelt werden. Wir gehen kurz auf die gängigsten ein.
+
+**Kernargumente**
+
+- `.x` Das erste Argument ist standardmäßig der Vektor, über den iteriert wird und auf den die Funktion angewendet wird.
+
+- `.i = ` für die "Index"-Versionen der **Slider** Funktionen - eine Spalte für den "Index" der Rolle bereitstellen (siehe Abschnitt [unten](#roll_index))
+
+- `.f = `, das zweite Argument standardmäßig, entweder:
+  
+  - Eine Funktion, die ohne Klammern geschrieben wird, wie `mean`, oder
+  - Eine Formel, die in eine Funktion umgewandelt wird. Zum Beispiel `~ .x - mean(.x)` gibt das Ergebnis des aktuellen Wertes minus dem Mittelwert des Fensters zurück
+
+- Für weitere Details siehe dies [Referenzmaterial](https://davisvaughan.github.io/slider/reference/slide.html)
+
+**Fenstergröße**
+
+Legen Sie die Größe des Fensters fest, indem Sie entweder `.before`, `.after`, oder beide Argumente:
+
+- `.before = ` - Gib eine ganze Zahl an
+- `.after = ` - Eine ganze Zahl bereitstellen
+- `.complete = ` - Setzen Sie diese auf `TRUE` wenn du die Berechnung nur für komplette Fenster durchführen willst
+
+Um zum Beispiel ein 7-Tage-Fenster zu erhalten, das den aktuellen Wert und die sechs vorangegangenen einschließt, verwende `.before = 6`. Um ein "zentriertes" Fenster zu erhalten, gibst du für beide Werte die gleiche Zahl ein `.before = ` und `.after = `.
+
+Standardmäßig, `.complete = ` ist FALSE, d. h., wenn nicht das gesamte Fenster mit Zeilen vorhanden ist, verwenden die Funktionen die verfügbaren Zeilen für die Berechnung. Wenn du TRUE einstellst, werden die Berechnungen nur für vollständige Fenster durchgeführt.
+
+**Erweitern des Fensters**
+
+Um zu erreichen *kumulativ* Operationen zu erreichen, setze die `.before = ` Argument auf `Inf`. Dadurch wird die Operation mit dem aktuellen Wert und allen davor liegenden Werten durchgeführt.
+
+### Rollieren nach Datum {#roll\_index .unnumbered}
+
+Der wahrscheinlichste Anwendungsfall für eine rollierende Berechnung in der angewandten Epidemiologie ist die Untersuchung einer Kennzahl *im Laufe der Zeit*. Zum Beispiel eine rollierende Messung der Fallzahl, die auf täglichen Fallzahlen basiert.
+
+Wenn du über saubere Zeitreihendaten mit Werten für jedes Datum verfügst, ist es vielleicht in Ordnung, wenn du `slide_dbl()` zu verwenden, wie es hier in der [Zeitreihen und Ausbruchserkennung](#timeseries_moving) Seite.
+
+In vielen Fällen der angewandten Epidemiologie kann es jedoch vorkommen, dass in deinen Daten Daten Daten fehlen, in denen keine Ereignisse aufgezeichnet sind. In diesen Fällen ist es am besten, die "Index"-Versionen der **Schieberegler** Funktionen.
+
+### Indizierte Daten {.unnumbered}
+
+Im Folgenden zeigen wir ein Beispiel mit `slide_index_dbl()` auf der Fall-Liste. Nehmen wir an, unser Ziel ist es, eine rollierende 7-Tage-Inzidenz zu berechnen - die Summe der Fälle in einem rollierenden 7-Tage-Fenster. Wenn du ein Beispiel für einen gleitenden Durchschnitt suchst, findest du es weiter unten im Abschnitt über [gruppiertes Rollen](#roll_slider_group).
+
+Zu Beginn wird der Datensatz `daily_counts` erstellt, der die täglichen Fallzahlen aus dem `linelist` berechnet mit `count()` von **dplyr**.
+
+```{r}
+# make dataset of daily counts
+daily_counts <- linelist %>% 
+  count(date_hospitalisation, name = "new_cases")
+```
+
+Hier ist die `daily_counts` Datenrahmen - es gibt ` nrow(daily_counts)` Zeilen, jeder Tag wird durch eine Zeile repräsentiert, aber besonders früh in der Epidemie *einige Tage sind nicht vorhanden (an diesen Tagen wurden keine Fälle aufgenommen)*.
+
+```{r, echo=F}
+DT::datatable(daily_counts, rownames = FALSE, options = list(pageLength = 6, scrollX=T) )
+```
+
+Es ist wichtig zu wissen, dass eine Standard-Rolling-Funktion (wie `slide_dbl()` ein Fenster von 7 % verwenden würde *Zeilen*, nicht 7 *Tage*. Wenn also irgendwelche Termine fehlen, verlängern sich manche Fenster tatsächlich um mehr als 7 Kalendertage!
+
+Ein "intelligentes" rollendes Fenster kann erreicht werden mit `slide_index_dbl()`. Der "Index" bedeutet, dass die Funktion einen *separate Spalte* als "Index" für das rollierende Fenster verwendet. Das Fenster basiert nicht einfach auf den Zeilen des Datenrahmens.
+
+Wenn es sich bei der Indexspalte um ein Datum handelt, kannst du zusätzlich die Ausdehnung des Fensters auf `.before = ` und/oder `.after = ` in Einheiten von **lubridate** `days()` oder `months()`. Wenn du diese Dinge tust, fügt die Funktion abwesende Tage in die Fenster ein, als ob sie da wären (als `NA` Werte).
+
+Lass uns einen Vergleich anstellen. Im Folgenden berechnen wir die rollierende 7-Tage-Fallinzidenz mit regulären und indizierten Fenstern.
+
+```{r}
+rolling <- daily_counts %>% 
+  mutate(                                # create new columns
+    # Using slide_dbl()
+    ###################
+    reg_7day = slide_dbl(
+      new_cases,                         # calculate on new_cases
+      .f = ~sum(.x, na.rm = T),          # function is sum() with missing values removed
+      .before = 6),                      # window is the ROW and 6 prior ROWS
+    
+    # Using slide_index_dbl()
+    #########################
+    indexed_7day = slide_index_dbl(
+        new_cases,                       # calculate on new_cases
+        .i = date_hospitalisation,       # indexed with date_onset 
+        .f = ~sum(.x, na.rm = TRUE),     # function is sum() with missing values removed
+        .before = days(6))               # window is the DAY and 6 prior DAYS
+    )
+
+```
+
+Beobachte, wie in der regulären Spalte für die ersten 7 Zeilen die Anzahl stetig steigt *obwohl die Zeilen nicht im Abstand von 7 Tagen zueinander liegen*! Die benachbarte "indizierte" Spalte berücksichtigt diese fehlenden Kalendertage, so dass ihre 7-Tage-Summen viel niedriger sind, zumindest in diesem Zeitraum der Epidemie, als die Fälle weiter auseinander lagen.
+
+```{r, echo=F}
+DT::datatable(rolling, rownames = FALSE, options = list(pageLength = 12, scrollX=T) )
+```
+
+Jetzt kannst du diese Daten mit folgenden Methoden darstellen `ggplot()`:
+
+```{r}
+ggplot(data = rolling)+
+  geom_line(mapping = aes(x = date_hospitalisation, y = indexed_7day), size = 1)
+```
+
+<!-- ### Rolling by month {.unnumbered} -->
+
+<!-- Wenn du jedoch eine rollierende Statistik über mehrere Monate (z.B. ein rollierendes 2-Monats-Fenster) berechnen willst, kannst du die Funktion `slide_period()` von **slider** verwenden.   -->
+
+<!-- ```{r} -->
+
+<!-- monthly_mean = function(data){ -->
+
+<!-- summarise(data, mean = mean(new_cases, na.rm=T)) -->
+
+<!-- } -->
+
+<!-- linelist %>% -->
+
+<!-- count(date_hospitalisation, name = "new_cases") %>% --> -->
+
+<!-- mutate( -->
+
+<!-- slide_period_dfr( -->
+
+<!-- new_cases, -->
+
+<!-- .i = date_hospitalisation, -->
+
+<!-- .period = "month", -->
+
+<!-- .f = monthly_mean))  #~mean(.x, na.rm=T))) -->
+
+<!-- #values_col = new_cases, -->
+
+<!-- #index_col = Datum_Hospitalisierung -->
+
+<!-- )) -->
+
+<!-- ``` -->
+
+### Walzen nach Gruppen {#roll\_slider\_group .unnumbered}
+
+Wenn du deine Daten gruppierst, bevor du eine **Schieberegler** Funktion gruppierst, werden die Schiebefenster gruppenweise angewendet. Achte darauf, dass du deine Zeilen in der gewünschten Reihenfolge anordnest *nach Gruppe*.
+
+Jedes Mal, wenn eine neue Gruppe beginnt, wird das gleitende Fenster neu gestartet. Wenn deine Daten gruppiert sind, musst du also Folgendes beachten *und* du eingestellt hast `.complete = TRUE` gesetzt hast, wirst du bei jedem Übergang zwischen den Gruppen leere Werte haben. Wenn sich die Funktion von oben nach unten durch die Zeilen bewegt, wird bei jedem Übergang in der Gruppierungsspalte die Mindestgröße des Fensters neu festgelegt, um eine Berechnung zu ermöglichen.
+
+Siehe Handbuchseite über [Daten gruppieren] für Details zur Gruppierung von Daten.
+
+Nachfolgend zählen wir die Fälle der Linienliste nach Datum *und* nach Krankenhaus. Dann ordnen wir die Zeilen in aufsteigender Reihenfolge an, zuerst nach dem Krankenhaus und dann innerhalb dieser Reihenfolge nach dem Datum. Als nächstes setzen wir `group_by()`. Dann können wir unseren neuen gleitenden Durchschnitt erstellen.
+
+```{r}
+grouped_roll <- linelist %>%
+
+  count(hospital, date_hospitalisation, name = "new_cases") %>% 
+
+  arrange(hospital, date_hospitalisation) %>%   # arrange rows by hospital and then by date
+  
+  group_by(hospital) %>%              # group by hospital 
+    
+  mutate(                             # rolling average  
+    mean_7day_hosp = slide_index_dbl(
+      .x = new_cases,                 # the count of cases per hospital-day
+      .i = date_hospitalisation,      # index on date of admission
+      .f = mean,                      # use mean()                   
+      .before = days(6)               # use the day and the 6 days prior
+      )
+  )
+
+```
+
+Hier ist der neue Datensatz:
+
+```{r, echo=F}
+DT::datatable(grouped_roll, rownames = FALSE, options = list(pageLength = 12, scrollX=T) )
+```
+
+Wir können nun die gleitenden Durchschnitte darstellen, indem wir die Daten nach Gruppen aufschlüsseln, indem wir angeben `~ hospital` an `facet_wrap()` in `ggplot()`. Zum Spaß stellen wir zwei Geometrien dar - a `geom_col()` zeigt die täglichen Fallzahlen und eine `geom_line()` zeigt den gleitenden 7-Tage-Durchschnitt.
+
+```{r, warning=F, message=F}
+ggplot(data = grouped_roll)+
+  geom_col(                       # plot daly case counts as grey bars
+    mapping = aes(
+      x = date_hospitalisation,
+      y = new_cases),
+    fill = "grey",
+    width = 1)+
+  geom_line(                      # plot rolling average as line colored by hospital
+    mapping = aes(
+      x = date_hospitalisation,
+      y = mean_7day_hosp,
+      color = hospital),
+    size = 1)+
+  facet_wrap(~hospital, ncol = 2)+ # create mini-plots per hospital
+  theme_classic()+                 # simplify background  
+  theme(legend.position = "none")+ # remove legend
+  labs(                            # add plot labels
+    title = "7-day rolling average of daily case incidence",
+    x = "Date of admission",
+    y = "Case incidence")
+```
+
+<span style="color: red;">***GEFAHR!*** Wenn du eine Fehlermeldung erhältst *"slide() wurde in tsibble 0.9.0 veraltet und ist jetzt nicht mehr verfügbar. Bitte verwende stattdessen slider::slide()."* bedeutet das, dass die `slide()` Funktion aus dem **tsibble** Paket maskiert die `slide()` Funktion von **Schieber** Paket. Behebe dies, indem du das Paket im Befehl angibst, z. B. `slider::slide_dbl()`.</span>
+
+<!-- Du kannst die Daten gruppieren, bevor du eine **Schiebereglerfunktion** verwendest. Wenn du z.B. die gleiche rollierende 7-Tage-Summe wie oben berechnen willst, aber nach Krankenhaus. oben rollierender Mittelwert der Verzögerung vom Auftreten der Symptome bis zur Krankenhausaufnahme (Spalte `days_onset_hosp`).   -->
+
+<!-- Wenn du einen gleitenden Durchschnitt nach *Monaten* haben willst, kannst du **lubridate** verwenden, um die Daten nach Monaten zu gruppieren, und dann `slide_index_dbl()` anwenden, wie unten für einen gleitenden Dreimonatsdurchschnitt gezeigt: -->
+
+<!-- ```{r} -->
+
+<!-- Monate_Verzögerung <- linelist %>% -->
+
+<!-- arrange(date_onset) %>% # drop rows missing date of onset -->
+
+<!-- group_by(Krankenhaus) %>% -->
+
+<!-- #group_by(month_onset = floor_date(date_onset, "month")) %>% # erstellen und gruppieren nach Monat des Auftretens -->
+
+<!-- mutate( -->
+
+<!-- delay_7d = slide_index_dbl( -->
+
+<!-- days_onset_hosp, # berechne den Durchschnittswert basierend auf dem Wert in der Spalte new_cases -->
+
+<!-- .i = date_onset, # index column is date_onset, so non-present dates are included in 7day window -->
+
+<!-- .f = ~mean(.x, na.rm = TRUE), # Funktion ist mean(), wobei fehlende Werte entfernt werden -->
+
+<!-- .before = days(7)), -->
+
+<!-- delay_month = slide_index_dbl( -->
+
+<!-- days_onset_hosp, # berechne den Durchschnittswert basierend auf dem Wert in der Spalte new_cases -->
+
+<!-- .i = date_onset, # index column is date_onset, so non-present dates are included in 7day window -->
+
+<!-- .f = ~mean(.x, na.rm = TRUE), # Funktion ist mean(), wobei fehlende Werte entfernt werden -->
+
+<!-- .before = Monate(1)))               # Fenster ist der Monat und der Vormonat -->
+
+<!-- # Fenster ist der Monat und der Vormonat -->
+
+<!-- ``` -->
+
+<!-- ```{r} -->
+
+<!-- ggplot(data = months_delay, mapping = aes(x = month_onset))+ -->
+
+<!-- geom_line(mapping = aes(y = )) -->
+
+<!-- ``` -->
+
+<!-- ======================================================= -->
+
+## Berechne mit **tidyquant** innerhalb von `ggplot()` {  }
+
+Das Paket **tidyquant** bietet einen weiteren Ansatz zur Berechnung von gleitenden Durchschnitten - diesmal aus *innerhalb von* a `ggplot()` Befehls selbst.
+
+Unterhalb des `linelist` werden die Daten nach Datum des Auftretens gezählt und als verblassende Linie dargestellt (`alpha` \< 1). Darüber wird eine Linie eingeblendet, die mit `geom_ma()` aus dem Paket **tidyquant** mit einem festgelegten Fenster von 7 Tagen (`n = 7`) mit bestimmter Farbe und Dicke.
+
+Standardmäßig `geom_ma()` einen einfachen gleitenden Durchschnitt (`ma_fun = "SMA"`), aber es können auch andere Typen angegeben werden, wie z. B.:
+
+- "EMA" - exponentiell gleitender Durchschnitt (mehr Gewicht für die jüngsten Beobachtungen)
+- "WMA" - gewichteter gleitender Durchschnitt (`wts` werden zur Gewichtung der Beobachtungen im gleitenden Durchschnitt verwendet)
+- Andere können in der Funktionsdokumentation gefunden werden
+
+```{r}
+linelist %>% 
+  count(date_onset) %>%                 # count cases per day
+  drop_na(date_onset) %>%               # remove cases missing onset date
+  ggplot(aes(x = date_onset, y = n))+   # start ggplot
+    geom_line(                          # plot raw values
+      size = 1,
+      alpha = 0.2                       # semi-transparent line
+      )+             
+    tidyquant::geom_ma(                 # plot moving average
+      n = 7,           
+      size = 1,
+      color = "blue")+ 
+  theme_minimal()                       # simple background
+```
+
+Siehe dies [Vignette](https://cran.r-project.org/web/packages/tidyquant/vignettes/TQ04-charting-with-tidyquant.html) für weitere Details zu den Optionen, die in **tidyquant**.
+
+<!-- ## Rollende Regression -->
+
+<!-- ```{r} -->
+
+<!-- a <- linelist %>% -->
+
+<!-- separate(time_admission, into = c("hour", "minute"), sep = ":") %>% -->
+
+<!-- count(days_onset_hosp, hour) %>% -->
+
+<!-- mutate(reg_admit_hour = slide(., ~lm(days_onset_hosp ~ hour), .before = 3, .complete = T)) %>% -->
+
+<!-- ggplot()+ -->
+
+<!-- geom_point(aes(x = hour, y = days_onset_hosp)) -->
+
+<!-- ``` -->
+
+<!-- ```{r} -->
+
+<!-- linelist %>% -->
+
+<!-- mutate( -->
+
+<!-- ) -->
+
+<!-- ``` -->
+
+<!-- ======================================================= -->
+
+## Ressourcen {  }
+
+Siehe das hilfreiche Online [Vignette für die **Slider** Paket](https://cran.r-project.org/web/packages/slider/vignettes/slider.html)
+
+Die **Schieber** [Github-Seite](https://github.com/DavisVaughan/slider)
+
+A **Schieber** [Vignette](https://davisvaughan.github.io/slider/articles/slider.html)
+
+[tidyquant Vignette](https://cran.r-project.org/web/packages/tidyquant/vignettes/TQ04-charting-with-tidyquant.html)
+
+Wenn dein Anwendungsfall erfordert, dass du Wochenenden und sogar Feiertage "überspringst", könnte dir das gefallen **almanac** Paket.
+
+

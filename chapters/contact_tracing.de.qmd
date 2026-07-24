@@ -1,0 +1,592 @@
+---
+aliases:
+  - /new_pages/contact_tracing.de.html
+---
+
+# Ermittlung von Kontaktpersonen { }
+
+Auf dieser Seite wird die deskriptive Analyse von Daten zur Ermittlung von Kontaktpersonen vorgestellt, wobei einige wichtige Überlegungen und Ansätze, die für diese Art von Daten typisch sind, erläutert werden.
+
+Diese Seite bezieht sich auf viele der Kernkompetenzen der R-Datenverwaltung und -Visualisierung, die auf anderen Seiten behandelt werden (z. B. Datenbereinigung, Pivotierung, Tabellen, Zeitreihenanalysen), aber wir werden auch Beispiele hervorheben, die sich speziell auf die Ermittlung von Kontaktpersonen beziehen und für die operative Entscheidungsfindung nützlich waren. Dazu gehört zum Beispiel die Visualisierung von Daten zur Nachverfolgung von Kontaktpersonen im Zeitverlauf oder über geografische Gebiete hinweg oder die Erstellung von sauberen Tabellen mit Leistungskennzahlen (KPI) für die Betreuer von Kontaktpersonen.
+
+Zur Veranschaulichung werden wir Beispiel-Daten aus der Kontaktverfolgung der [Go.Data](https://www.who.int/tools/godata) Plattform. Die hier behandelten Grundsätze gelten auch für Daten von anderen Plattformen - je nach Struktur deiner Daten musst du nur andere Schritte zur Datenvorverarbeitung durchführen.
+
+Mehr über das Go.Data-Projekt kannst du auf der [Github-Dokumentationsseite](https://worldhealthorganization.github.io/godata/) oder [Gemeinschaft der Praxis](https://community-godata.who.int/).
+
+## Vorbereitung
+
+### Pakete laden {.unnumbered}
+
+Dieser Codeabschnitt zeigt das Laden von Paketen, die für die Analysen benötigt werden. In diesem Handbuch betonen wir `p_load()` von **pacman**, der das Paket bei Bedarf installiert *und* lädt es zur Verwendung. Du kannst installierte Pakete auch laden mit `library()` von **base**R. Siehe die Seite über [R-Grundlagen] für weitere Informationen über R-Pakete.
+
+```{r, message=F}
+pacman::p_load(
+  rio,          # importing data  
+  here,         # relative file pathways  
+  janitor,      # data cleaning and tables
+  lubridate,    # working with dates
+  epikit,       # age_categories() function
+  apyramid,     # age pyramids
+  tidyverse,    # data manipulation and visualization
+  RColorBrewer, # color palettes
+  formattable,  # fancy tables
+  kableExtra    # table formatting
+)
+```
+
+### Daten importieren {.unnumbered}
+
+Wir werden Beispieldatensätze von Kontakten und deren "Follow-up" importieren. Diese Daten wurden von der Go.Data API abgerufen und unverschachtelt als ".rds"-Dateien gespeichert.
+
+Du kannst alle Beispieldaten für dieses Handbuch auf der Seite [Handbuch und Daten herunterladen] Seite herunterladen.
+
+Wenn du die Beispiel-Daten zur Ermittlung von Kontaktpersonen speziell für diese Seite herunterladen möchtest, benutze die drei Download-Links unten:
+
+<a href='https://github.com/WorldHealthOrganization/godata/blob/master/analytics/r-reporting/data/cases_clean.rds?raw=true' class='download-button'>
+	Klicke zum Herunterladen
+	<span>die Fallermittlungsdaten (.rds-Datei)</span>
+</a>
+
+<a href='https://github.com/WorldHealthOrganization/godata/blob/master/analytics/r-reporting/data/contacts_clean.rds?raw=true' class='download-button'>
+	Klicken Sie zum Herunterladen
+	<span>die Daten der Kontaktregistrierung (.rds-Datei)</span>
+</a>
+
+<a href='https://github.com/WorldHealthOrganization/godata/blob/master/analytics/r-reporting/data/followups_clean.rds?raw=true' class='download-button'>
+	Klick zum Herunterladen
+	<span>die Daten zur Kontaktverfolgung (.rds-Datei)</span>
+</a>
+
+<!-- ```{r out.width = "100%", fig.align = "center", echo=F} -->
+
+<!-- knitr::include_graphics(hier::hier("images", "godata_api_github.png")) -->
+
+<!-- ``` -->
+
+In ihrer ursprünglichen Form in den herunterladbaren Dateien spiegeln die Daten die Daten wider, die von der Go.Data API bereitgestellt werden (erfahre mehr über [APIs hier](#import_api)). Für das Beispiel hier werden wir die Daten bereinigen, damit sie auf dieser Seite leichter zu lesen sind. Wenn du eine Go.Data-Instanz verwendest, findest du eine vollständige Anleitung, wie du deine Daten abrufen kannst [hier](https://github.com/WorldHealthOrganization/godata/tree/master/analytics/r-reporting).
+
+Im Folgenden werden die Datensätze mit der Methode `import()` Funktion aus der **rio**Paket. Siehe die Seite über [Import und Export] für verschiedene Möglichkeiten, Daten zu importieren. Wir verwenden`here()` um den Dateipfad anzugeben - du solltest den spezifischen Dateipfad für deinen Computer angeben. Wir verwenden dann `select()` um nur bestimmte Spalten der Daten auszuwählen, um sie für die Demonstration zu vereinfachen.
+
+#### Falldaten {.unnumbered}
+
+Diese Daten sind eine Tabelle mit den Fällen und Informationen über sie.
+
+```{r}
+cases <- import(here("data", "godata", "cases_clean.rds")) %>% 
+  select(case_id, firstName, lastName, gender, age, age_class,
+         occupation, classification, was_contact, hospitalization_typeid)
+```
+
+Hier sind die ` nrow(cases)` Fälle:
+
+```{r, message=FALSE, echo=F}
+DT::datatable(cases, rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+#### Daten der Kontakte {.unnumbered}
+
+Diese Daten sind eine Tabelle mit allen Kontakten und Informationen über sie. Auch hier kannst du deinen eigenen Dateipfad angeben. Nach dem Import führen wir ein paar Schritte zur Datenbereinigung durch:
+
+- Altersklasse als Faktor festlegen und die Reihenfolge der Ebenen umkehren, so dass die jüngeren Altersklassen an erster Stelle stehen
+- Nur bestimmte Spalten auswählen und eine davon umbenennen
+- Zeilen mit fehlender Admin-Ebene 2 künstlich "Djembe" zuordnen, um die Übersichtlichkeit einiger Beispielvisualisierungen zu verbessern
+
+```{r}
+contacts <- import(here("data", "godata", "contacts_clean.rds")) %>% 
+  mutate(age_class = forcats::fct_rev(age_class)) %>% 
+  select(contact_id, contact_status, firstName, lastName, gender, age,
+         age_class, occupation, date_of_reporting, date_of_data_entry,
+         date_of_last_exposure = date_of_last_contact,
+         date_of_followup_start, date_of_followup_end, risk_level, was_case, admin_2_name) %>% 
+  mutate(admin_2_name = replace_na(admin_2_name, "Djembe"))
+```
+
+Hier sind die ` nrow(contacts)` Zeilen des `contacts` Datensatzes:
+
+```{r, message=FALSE, echo=F}
+DT::datatable(contacts, rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+#### Follow-up Daten {.unnumbered}
+
+Bei diesen Daten handelt es sich um Aufzeichnungen über die "Follow-up"-Interaktionen mit den Kontaktpersonen. Jeder Kontakt sollte 14 Tage lang jeden Tag eine Begegnung haben.
+
+Wir importieren die Daten und führen ein paar Bereinigungsschritte durch. Wir wählen bestimmte Spalten aus und konvertieren außerdem eine Zeichenspalte in Kleinbuchstaben.
+
+```{r}
+followups <- rio::import(here::here("data", "godata", "followups_clean.rds")) %>% 
+  select(contact_id, followup_status, followup_number,
+         date_of_followup, admin_2_name, admin_1_name) %>% 
+  mutate(followup_status = str_to_lower(followup_status))
+```
+
+Hier sind die ersten 50 Zeilen der ` nrow(followups)`\-Zeile `followups` Datensatzes (jede Zeile ist eine Folgeinteraktion, wobei der Ergebnisstatus in der `followup_status` Spalte):
+
+```{r, message=FALSE, echo=F}
+DT::datatable(head(followups, 50), rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+#### Beziehungsdaten {.unnumbered}
+
+Hier importieren wir Daten, die die Beziehung zwischen Fällen und Kontakten zeigen. Wir wählen bestimmte Spalten aus, die angezeigt werden sollen.
+
+```{r}
+relationships <- rio::import(here::here("data", "godata", "relationships_clean.rds")) %>% 
+  select(source_visualid, source_gender, source_age, date_of_last_contact,
+         date_of_data_entry, target_visualid, target_gender,
+         target_age, exposure_type)
+```
+
+Nachfolgend sind die ersten 50 Zeilen der `relationships` Datensatzes, der alle Beziehungen zwischen Fällen und Kontakten aufzeichnet.
+
+```{r, message=FALSE, echo=F}
+DT::datatable(head(relationships, 50), rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+## Deskriptive Analysen
+
+Du kannst die Techniken, die auf anderen Seiten dieses Handbuchs behandelt werden, nutzen, um beschreibende Analysen deiner Fälle, Kontakte und ihrer Beziehungen durchzuführen. Im Folgenden findest du einige Beispiele.
+
+### Demografische Daten {.unnumbered}
+
+Wie auf der Seite über [Demografische Pyramiden][Demografische Pyramiden und Likert-Skalen] beschrieben, kannst du die Alters- und Geschlechtsverteilung visualisieren (hier verwenden wir die**apyramide** Paket).
+
+#### Alter und Geschlecht der Kontakte {.unnumbered}
+
+In der folgenden Pyramide wird die Altersverteilung der Kontakte nach Geschlecht verglichen. Beachte, dass Kontakte, denen das Alter fehlt, in einem eigenen Balken oben aufgeführt werden. Du kannst dieses Standardverhalten ändern, aber dann solltest du die Anzahl der fehlenden Kontakte in einer Überschrift aufführen.
+
+```{r, warning=F, message=F}
+apyramid::age_pyramid(
+  data = contacts,                                   # use contacts dataset
+  age_group = "age_class",                           # categorical age column
+  split_by = "gender") +                             # gender for halfs of pyramid
+  labs(
+    fill = "Gender",                                 # title of legend
+    title = "Age/Sex Pyramid of COVID-19 contacts")+ # title of the plot
+  theme_minimal()                                    # simple background
+```
+
+Mit der Go.Data-Datenstruktur kann die `relationships` Datensatz die Altersangaben von Fällen und Kontakten. Du könntest also diesen Datensatz verwenden und eine Alterspyramide erstellen, die die Unterschiede zwischen diesen beiden Personengruppen zeigt. Die `relationships`Datenrahmen wird mutiert, um die numerischen Altersspalten in Kategorien umzuwandeln (siehe die [Datenbereinigung und Kernfunktionen] Seite). Wir pivotieren den Datenrahmen auch länger, um das Plotten mit**ggplot2**(siehe [Pivotieren von Daten]).
+
+```{r}
+relation_age <- relationships %>% 
+  select(source_age, target_age) %>% 
+  transmute(                              # transmute is like mutate() but removes all other columns not mentioned
+    source_age_class = epikit::age_categories(source_age, breakers = seq(0, 80, 5)),
+    target_age_class = epikit::age_categories(target_age, breakers = seq(0, 80, 5)),
+    ) %>% 
+  pivot_longer(cols = contains("class"), names_to = "category", values_to = "age_class")  # pivot longer
+
+
+relation_age
+```
+
+Jetzt können wir diesen transformierten Datensatz mit `age_pyramid()` wie zuvor zeichnen, aber anstelle von `gender` durch `category` (Kontakt, oder Fall).
+
+```{r, warning=F, message=F}
+apyramid::age_pyramid(
+  data = relation_age,                               # use modified relationship dataset
+  age_group = "age_class",                           # categorical age column
+  split_by = "category") +                           # by cases and contacts
+  scale_fill_manual(
+    values = c("orange", "purple"),                  # to specify colors AND labels
+    labels = c("Case", "Contact"))+
+  labs(
+    fill = "Legend",                                           # title of legend
+    title = "Age/Sex Pyramid of COVID-19 contacts and cases")+ # title of the plot
+  theme_minimal()                                              # simple background
+```
+
+Wir können uns auch andere Merkmale wie die berufliche Aufteilung ansehen (z. B. in Form eines Kreisdiagramms).
+
+```{r, warning=F, message=F}
+# Clean dataset and get counts by occupation
+occ_plot_data <- cases %>% 
+  mutate(occupation = forcats::fct_explicit_na(occupation),  # make NA missing values a category
+         occupation = forcats::fct_infreq(occupation)) %>%   # order factor levels in order of frequency
+  count(occupation)                                          # get counts by occupation
+  
+# Make pie chart
+ggplot(data = occ_plot_data, mapping = aes(x = "", y = n, fill = occupation))+
+  geom_bar(width = 1, stat = "identity") +
+  coord_polar("y", start = 0) +
+  labs(
+    fill = "Occupation",
+    title = "Known occupations of COVID-19 cases")+
+  theme_minimal() +                    
+  theme(axis.line = element_blank(),
+        axis.title = element_blank(),
+        axis.text = element_blank())
+```
+
+### Kontakte pro Fall {.unnumbered}
+
+Die Anzahl der Kontakte pro Fall kann eine wichtige Kennzahl sein, um die Qualität der Kontaktzählung und die Bereitschaft der Bevölkerung, auf die Maßnahmen der öffentlichen Gesundheit zu reagieren, zu beurteilen.
+
+Je nach deiner Datenstruktur kann dies mit einem Datensatz bewertet werden, der alle Fälle und Kontakte enthält. In den Go.Data-Datensätzen werden die Verbindungen zwischen Fällen ("Quellen") und Kontakten ("Ziele") in den `relationships` Dataset gespeichert.
+
+In diesem Datensatz ist jede Zeile ein Kontakt, und der Quellfall ist in der Zeile aufgeführt. Es gibt keine Kontakte, die Beziehungen zu mehreren Fällen haben, aber wenn es sie gibt, musst du sie vor dem Plotten berücksichtigen (und sie auch untersuchen!).
+
+Wir beginnen damit, die Anzahl der Zeilen (Kontakte) pro Ausgangsfall zu zählen. Dies wird als Datenrahmen gespeichert.
+
+```{r}
+contacts_per_case <- relationships %>% 
+  count(source_visualid)
+
+contacts_per_case
+```
+
+Wir verwenden `geom_histogram()` um diese Daten als Histogramm darzustellen.
+
+```{r, warning=F, message=F}
+ggplot(data = contacts_per_case)+        # begin with count data frame created above
+  geom_histogram(mapping = aes(x = n))+  # print histogram of number of contacts per case
+  scale_y_continuous(expand = c(0,0))+   # remove excess space below 0 on y-axis
+  theme_light()+                         # simplify background
+  labs(
+    title = "Number of contacts per case",
+    y = "Cases",
+    x = "Contacts per case"
+  )
+  
+
+```
+
+## Kontaktverfolgung
+
+Daten zur Ermittlung von Kontaktpersonen enthalten oft "Follow-up"-Daten, die die Ergebnisse der täglichen Symptomkontrollen von Personen in Quarantäne aufzeichnen. Die Analyse dieser Daten kann Aufschluss über die Reaktionsstrategie geben und Kontaktpersonen identifizieren, bei denen das Risiko besteht, dass sie nicht mehr weiterverfolgt werden können oder dass sie erkranken.
+
+### Datenbereinigung {.unnumbered}
+
+Diese Daten können in einer Vielzahl von Formaten vorliegen. Sie können als Excel-Tabelle im "Breitformat" mit einer Zeile pro Kontakt und einer Spalte pro Follow-up-Tag vorliegen. Siehe [Pivotierung von Daten] findest du eine Beschreibung von "langen" und "breiten" Daten und wie du Daten breiter oder länger machen kannst.
+
+In unserem Go.Data-Beispiel werden diese Daten in der Datei `followups` Datenrahmen gespeichert, der in einem "langen" Format mit einer Zeile pro Folgeinteraktion vorliegt. Die ersten 50 Zeilen sehen wie folgt aus:
+
+```{r, message=FALSE, echo=FALSE}
+# display the first 50 rows of contact linelist data as a table
+DT::datatable(head(followups, 50), rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+<span style="color: orange;">***VORSICHT!*** Hüte dich vor Duplikaten, wenn du mit Nachverfolgungsdaten arbeitest, denn es könnte mehrere fehlerhafte Nachverfolgungen am selben Tag für einen bestimmten Kontakt geben. Vielleicht scheint es ein Fehler zu sein, aber es spiegelt die Realität wider - z.B. könnte ein Kontaktverfolger früh am Tag ein Nachverfolgungsformular einreichen, wenn er den Kontakt nicht erreichen konnte, und ein zweites Formular einreichen, wenn er ihn später erreicht hat. Es hängt vom betrieblichen Kontext ab, wie du mit Duplikaten umgehen willst - achte nur darauf, dass du deine Vorgehensweise klar dokumentierst. </span>
+
+Los geht's *siehe* wie viele "doppelte" Zeilen wir haben:
+
+```{r}
+followups %>% 
+  count(contact_id, date_of_followup) %>%   # get unique contact_days
+  filter(n > 1)                             # view records where count is more than 1  
+```
+
+In unseren Beispieldaten sind die einzigen Datensätze, auf die dies zutrifft, diejenigen, denen eine ID fehlt! Diese können wir entfernen. Zur Veranschaulichung zeigen wir dir die Schritte zum Entfernen der Duplikation, damit es nur einen Nachverfolger pro Person und Tag gibt. Siehe die Seite über [De-Duplizierung] für weitere Details. Wir gehen davon aus, dass der letzte Datensatz der richtige ist. Wir nutzen auch die Gelegenheit, die`followup_number` Spalte (der "Tag" der Nachuntersuchung, der zwischen 1 und 14 liegen sollte) zu bereinigen.
+
+```{r, warning=F, message=F}
+followups_clean <- followups %>%
+  
+  # De-duplicate
+  group_by(contact_id, date_of_followup) %>%        # group rows per contact-day
+  arrange(contact_id, desc(date_of_followup)) %>%   # arrange rows, per contact-day, by date of follow-up (most recent at top)
+  slice_head() %>%                                  # keep only the first row per unique contact id  
+  ungroup() %>% 
+  
+  # Other cleaning
+  mutate(followup_number = replace(followup_number, followup_number > 14, NA)) %>% # clean erroneous data
+  drop_na(contact_id)                               # remove rows with missing contact_id
+```
+
+Für jede Nachuntersuchung haben wir einen Nachuntersuchungsstatus (z. B. ob die Untersuchung stattgefunden hat und wenn ja, ob der Kontakt Symptome hatte oder nicht). Um alle Werte zu sehen, können wir eine schnelle `tabyl()` (von **Hausmeister**) oder `table()` (von **Basis**R) (siehe [Beschreibende Tabellen]) durch`followup_status` um die Häufigkeit der einzelnen Ergebnisse zu sehen.
+
+In diesem Datensatz bedeutet "seen\_not\_ok" "mit Symptomen gesehen", und "seen\_ok" bedeutet "ohne Symptome gesehen".
+
+```{r}
+followups_clean %>% 
+  tabyl(followup_status)
+```
+
+### Plotten über die Zeit {.unnumbered}
+
+Da die Daten kontinuierlich sind, werden wir ein Histogramm verwenden, um sie mit `date_of_followup` der x-Achse zugewiesen. Wir können ein "gestapeltes" Histogramm erstellen, indem wir eine `fill = ` Argument innerhalb `aes()` angeben, das wir der Spalte `followup_status`. Folglich kannst du den Titel der Legende mit der Option `fill = ` Argument von `labs()`.
+
+Wir sehen, dass die Kontaktpersonen in Wellen identifiziert wurden (die vermutlich mit den Epidemiewellen der Fälle übereinstimmen) und dass sich die Nachverfolgung im Laufe der Epidemie nicht verbessert zu haben scheint.
+
+```{r, warning=F, message=F}
+ggplot(data = followups_clean)+
+  geom_histogram(mapping = aes(x = date_of_followup, fill = followup_status)) +
+  scale_fill_discrete(drop = FALSE)+   # show all factor levels (followup_status) in the legend, even those not used
+  theme_classic() +
+  labs(
+    x = "",
+    y = "Number of contacts",
+    title = "Daily Contact Followup Status",
+    fill = "Followup Status",
+    subtitle = str_glue("Data as of {max(followups$date_of_followup, na.rm=T)}"))   # dynamic subtitle
+  
+```
+
+<span style="color: orange;">***VORSICHT!*** Wenn du viele Diagramme vorbereitest (z. B. für mehrere Gerichtsbarkeiten), solltest du darauf achten, dass die Legenden auch bei unterschiedlichem Grad der Datenvervollständigung oder Datenzusammensetzung gleich aussehen. Es kann vorkommen, dass nicht alle Nachverfolgungsstatus in den Daten vorhanden sind, aber du möchtest trotzdem, dass diese Kategorien in den Legenden erscheinen. In ggplots (wie oben) kannst du die `drop = FALSE` Argument der `scale_fill_discrete()`. In Tabellen verwendest du `tabyl()` die die Anzahl für alle Faktorstufen anzeigt, oder wenn du `count()` von **dplyr** füge das Argument `.drop = FALSE` um die Zählungen für alle Faktorstufen einzubeziehen.</span>
+
+### Tägliches individuelles Tracking {.unnumbered}
+
+Wenn dein Ausbruch klein genug ist, möchtest du vielleicht jeden Kontakt einzeln betrachten und seinen Status im Verlauf der Nachverfolgung sehen. Zum Glück ist dies `followups` Datensatz bereits eine Spalte mit der Tages-"Nummer" der Nachuntersuchung (1-14). Wenn diese Spalte in deinen Daten nicht vorhanden ist, kannst du sie erstellen, indem du die Differenz zwischen dem Datum der Begegnung und dem Datum, an dem die Nachsorge für den Kontakt beginnen sollte, berechnest.
+
+Ein praktischer Visualisierungsmechanismus (wenn die Zahl der Fälle nicht zu groß ist) kann ein Heatplot sein, der mit `geom_tile()`. Weitere Details findest du in der [Wärmebilddarstellung] Seite.
+
+```{r, warning=F, message=F}
+ggplot(data = followups_clean)+
+  geom_tile(mapping = aes(x = followup_number, y = contact_id, fill = followup_status),
+            color = "grey")+       # grey gridlines
+  scale_fill_manual( values = c("yellow", "grey", "orange", "darkred", "darkgreen"))+
+  theme_minimal()+
+  scale_x_continuous(breaks = seq(from = 1, to = 14, by = 1))
+```
+
+### Analyse nach Gruppe {.unnumbered}
+
+Vielleicht werden diese Nachverfolgungsdaten auf täglicher oder wöchentlicher Basis für betriebliche Entscheidungen betrachtet. Vielleicht möchtest du eine aussagekräftigere Untergliederung nach geografischen Gebieten oder nach Kontaktverfolgungsteams. Wir können dies erreichen, indem wir die Spalten folgendermaßen anpassen `group_by()`.
+
+```{r, warning=F, message=F}
+
+plot_by_region <- followups_clean %>%                                        # begin with follow-up dataset
+  count(admin_1_name, admin_2_name, followup_status) %>%   # get counts by unique region-status (creates column 'n' with counts)
+  
+  # begin ggplot()
+  ggplot(                                         # begin ggplot
+    mapping = aes(x = reorder(admin_2_name, n),     # reorder admin factor levels by the numeric values in column 'n'
+                  y = n,                            # heights of bar from column 'n'
+                  fill = followup_status,           # color stacked bars by their status
+                  label = n))+                      # to pass to geom_label()              
+  geom_col()+                                     # stacked bars, mapping inherited from above 
+  geom_text(                                      # add text, mapping inherited from above
+    size = 3,                                         
+    position = position_stack(vjust = 0.5), 
+    color = "white",           
+    check_overlap = TRUE,
+    fontface = "bold")+
+  coord_flip()+
+  labs(
+    x = "",
+    y = "Number of contacts",
+    title = "Contact Followup Status, by Region",
+    fill = "Followup Status",
+    subtitle = str_glue("Data as of {max(followups_clean$date_of_followup, na.rm=T)}")) +
+  theme_classic()+                                                                      # Simplify background
+  facet_wrap(~admin_1_name, strip.position = "right", scales = "free_y", ncol = 1)      # introduce facets 
+
+plot_by_region
+```
+
+<!-- Wenn dies nach Kontaktverfolgern aufgeschlüsselt wäre, würden wir vielleicht eine Schwellenwertlinie hinzufügen wollen, um die Gesamtzahl der Kontakte anzuzeigen, die eine Person oder ein Bereich/Team normalerweise bearbeiten kann, und wie die aktuelle Arbeitsbelastung im Vergleich dazu aussieht. Das geht ganz einfach mit der Funktion `geom_hline()`. -->
+
+<!-- ```{r, warning=F, message=F} -->
+
+<!-- plot_by_region + -->
+
+<!-- geom_hline(aes(yintercept=25), color="#C70039", linetype = "dashed") # fiktive Schwelle bei 25 Kontakten -->
+
+<!-- ``` -->
+
+## KPI-Tabellen
+
+Es gibt eine Reihe verschiedener Leistungsindikatoren (Key Performance Indicators, KPIs), die auf verschiedenen Untergliederungsebenen und über verschiedene Zeiträume hinweg berechnet und verfolgt werden können, um die Leistung der Kontaktverfolgung zu überwachen. Wenn du dir die Berechnungen und das grundlegende Tabellenformat einmal zurechtgelegt hast, ist es relativ einfach, die verschiedenen KPIs auszutauschen.
+
+Es gibt zahlreiche Quellen für KPIs zur Ermittlung von Kontaktpersonen, wie zum Beispiel diese von [ResolveToSaveLives.org](https://contacttracingplaybook.resolvetosavelives.org/checklists/metrics). Der größte Teil der Arbeit besteht darin, deine Datenstruktur durchzugehen und alle Einschluss- und Ausschlusskriterien zu durchdenken. Im Folgenden zeigen wir ein paar Beispiele, die die Go.Data-Metadatenstruktur verwenden:
+
+| Kategorie                                                | Indikator                                                                                                                 | Go.Data Zähler                        | Go.Data Nenner | 
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- | -------------- |
+| Prozessindikator - Geschwindigkeit der Kontaktverfolgung | % der Fälle, die innerhalb von 24 Stunden nach der Fallmeldung befragt und isoliert wurden                                | ANZAHL DER `case_id` WO (`date_of_reporting` - 
+ `date_of_data_entry`) \< 1 Tag AND (`isolation_startdate` - 
+ `date_of_data_entry`) \< 1 Tag                           | ZAEHLUNG VON `case_id`  | 
+| Prozessindikator - Geschwindigkeit der Kontaktverfolgung | % der Kontakte, die innerhalb von 24 Stunden nach der Kontaktaufnahme benachrichtigt und unter Quarantäne gestellt wurden | ANZAHL DER `contact_id` WO `followup_status` == "SEEN\_NOT\_OK" ODER "SEEN\_OK" UND `date_of_followup` - 
+ `date_of_reporting` \< 1 Tag                           | ZAEHLUNG VON `contact_id`  | 
+| Prozessindikator - Vollständigkeit der Tests             | % neue symptomatische Fälle, die innerhalb von 3 Tagen nach Auftreten der Symptome getestet und befragt werden            | ANZAHL DER `case_id` WO (`date_of_reporting` - 
+ `date_of_onset`) \< =3 Tage                           | ZAEHLUNG VON `case_id`  | 
+| Ergebnisindikator - Insgesamt                            | % neue Fälle in der bestehenden Kontaktliste                                                                              | ANZAHL DER `case_id` WO `was_contact` == "TRUE"                           | ZAEHLUNG VON `case_id`  | 
+
+Im Folgenden werden wir ein Beispiel für die Erstellung einer schönen Tabelle zur Anzeige der Kontaktverfolgung in den Verwaltungsbereichen durchgehen. Am Ende werden wir die Tabelle für die Präsentation mit dem **formattable** Paket (du kannst aber auch andere Pakete verwenden wie **flextable**- siehe [Tabellen für die Präsentation]).
+
+Wie du eine solche Tabelle erstellst, hängt von der Struktur deiner Begleitpersonendaten ab. Verwende die [Beschreibende Tabellen] Seite, um zu erfahren, wie du Daten zusammenfassen kannst, indem du**dplyr** Funktionen.
+
+Wir werden eine Tabelle erstellen, die dynamisch ist und sich ändert, wenn sich die Daten ändern. Um die Ergebnisse interessant zu machen, werden wir eine `report_date` ein, damit wir die Tabelle an einem bestimmten Tag simulieren können (wir wählen den 10. Juni 2020). Die Daten werden auf dieses Datum gefiltert.
+
+```{r, warning=F, message=F}
+# Set "Report date" to simulate running the report with data "as of" this date
+report_date <- as.Date("2020-06-10")
+
+# Create follow-up data to reflect the report date.
+table_data <- followups_clean %>% 
+  filter(date_of_followup <= report_date)
+```
+
+Basierend auf unserer Datenstruktur machen wir nun Folgendes:
+
+1) Beginnen wir mit der `followups` Daten und fassen sie so zusammen, dass sie für jeden einzelnen Kontakt enthalten:
+
+- Das Datum der letzten Aufzeichnung (unabhängig vom Status der Begegnung)
+- Das Datum der letzten Begegnung, bei der der Kontakt "gesehen" wurde
+- Der Status der letzten Begegnung, bei der der Kontakt "gesehen" wurde (z. B. mit Symptomen, ohne Symptome)
+
+2) Verbinde diese Daten mit den Kontaktdaten, die weitere Informationen enthalten, wie z. B. den allgemeinen Kontaktstatus, das Datum der letzten Exposition gegenüber einem Fall usw. Außerdem werden wir für jeden Kontakt interessante Kennzahlen berechnen, z. B. die Tage seit der letzten Exposition.
+3) Wir gruppieren die erweiterten Kontaktdaten nach geografischen Regionen (`admin_2_name`) und berechnen zusammenfassende Statistiken pro Region
+4) Zum Schluss formatieren wir die Tabelle für die Präsentation schön
+
+Zuerst fassen wir die Folgedaten zusammen, um die Informationen zu erhalten, die uns interessieren:
+
+```{r, warning=F, message=F}
+followup_info <- table_data %>% 
+  group_by(contact_id) %>% 
+  summarise(
+    date_last_record   = max(date_of_followup, na.rm=T),
+    date_last_seen     = max(date_of_followup[followup_status %in% c("seen_ok", "seen_not_ok")], na.rm=T),
+    status_last_record = followup_status[which(date_of_followup == date_last_record)]) %>% 
+  ungroup()
+```
+
+So sehen diese Daten aus:
+
+```{r, echo=F}
+DT::datatable(followup_info, rownames = FALSE, options = list(pageLength = 12, scrollX=T), class = 'white-space: nowrap' )
+```
+
+Jetzt fügen wir diese Informationen der `contacts` Datensatz hinzufügen und einige zusätzliche Spalten berechnen.
+
+```{r}
+contacts_info <- followup_info %>% 
+  right_join(contacts, by = "contact_id") %>% 
+  mutate(
+    database_date       = max(date_last_record, na.rm=T),
+    days_since_seen     = database_date - date_last_seen,
+    days_since_exposure = database_date - date_of_last_exposure
+    )
+```
+
+So sehen diese Daten aus. Hinweis `contacts` Spalte auf der rechten Seite und die neue berechnete Spalte ganz rechts.
+
+```{r, echo=F}
+DT::datatable(contacts_info, rownames = FALSE, options = list(pageLength = 12, scrollX=T), class = 'white-space: nowrap' )
+```
+
+Als Nächstes fassen wir die Kontaktdaten nach Regionen zusammen, um einen übersichtlichen Datenrahmen mit zusammenfassenden statistischen Spalten zu erhalten.
+
+```{r}
+contacts_table <- contacts_info %>% 
+  
+  group_by(`Admin 2` = admin_2_name) %>%
+  
+  summarise(
+    `Registered contacts` = n(),
+    `Active contacts`     = sum(contact_status == "UNDER_FOLLOW_UP", na.rm=T),
+    `In first week`       = sum(days_since_exposure < 8, na.rm=T),
+    `In second week`      = sum(days_since_exposure >= 8 & days_since_exposure < 15, na.rm=T),
+    `Became case`         = sum(contact_status == "BECAME_CASE", na.rm=T),
+    `Lost to follow up`   = sum(days_since_seen >= 3, na.rm=T),
+    `Never seen`          = sum(is.na(date_last_seen)),
+    `Followed up - signs` = sum(status_last_record == "Seen_not_ok" & date_last_record == database_date, na.rm=T),
+    `Followed up - no signs` = sum(status_last_record == "Seen_ok" & date_last_record == database_date, na.rm=T),
+    `Not Followed up`     = sum(
+      (status_last_record == "NOT_ATTEMPTED" | status_last_record == "NOT_PERFORMED") &
+        date_last_record == database_date, na.rm=T)) %>% 
+    
+  arrange(desc(`Registered contacts`))
+
+```
+
+```{r, echo=F}
+DT::datatable(contacts_table, rownames = FALSE, options = list(pageLength = 12, scrollX=T), class = 'white-space: nowrap' )
+```
+
+Und jetzt wenden wir das Styling der **formattable** und **knitr** Pakete, einschließlich einer Fußnote, die das "As of"-Datum anzeigt.
+
+```{r}
+contacts_table %>%
+  mutate(
+    `Admin 2` = formatter("span", style = ~ formattable::style(
+      color = ifelse(`Admin 2` == NA, "red", "grey"),
+      font.weight = "bold",font.style = "italic"))(`Admin 2`),
+    `Followed up - signs`= color_tile("white", "orange")(`Followed up - signs`),
+    `Followed up - no signs`= color_tile("white", "#A0E2BD")(`Followed up - no signs`),
+    `Became case`= color_tile("white", "grey")(`Became case`),
+    `Lost to follow up`= color_tile("white", "grey")(`Lost to follow up`), 
+    `Never seen`= color_tile("white", "red")(`Never seen`),
+    `Active contacts` = color_tile("white", "#81A4CE")(`Active contacts`)
+  ) %>%
+  kable("html", escape = F, align =c("l","c","c","c","c","c","c","c","c","c","c")) %>%
+  kable_styling("hover", full_width = FALSE) %>%
+  add_header_above(c(" " = 3, 
+                     "Of contacts currently under follow up" = 5,
+                     "Status of last visit" = 3)) %>% 
+  kableExtra::footnote(general = str_glue("Data are current to {format(report_date, '%b %d %Y')}"))
+
+```
+
+## Übertragungsmatrizen
+
+Wie im Abschnitt [Wärmediagramme] beschrieben, kannst du eine Matrix erstellen, die zeigt, wer wen infiziert hat, indem du`geom_tile()`.
+
+Wenn neue Kontakte erstellt werden, speichert Go.Data diese Beziehungsinformationen in der `relationships` API-Endpunkt. Wir sehen die ersten 50 Zeilen dieses Datensatzes unten. Das bedeutet, dass wir mit relativ wenigen Schritten ein Wärmebild erstellen können, da jeder Kontakt bereits mit seinem Ausgangsfall verknüpft ist.
+
+```{r, warning=F, message=F, echo=F}
+# display the first 50 rows of relationships data as a table
+DT::datatable(head(relationships, 50), rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+Wie oben bei der Alterspyramide, die Fälle und Kontakte vergleicht, können wir die wenigen Variablen auswählen, die wir brauchen, und Spalten mit kategorischen Altersgruppen sowohl für die Quellen (Fälle) als auch für die Ziele (Kontakte) erstellen.
+
+```{r}
+heatmap_ages <- relationships %>% 
+  select(source_age, target_age) %>% 
+  mutate(                              # transmute is like mutate() but removes all other columns
+    source_age_class = epikit::age_categories(source_age, breakers = seq(0, 80, 5)),
+    target_age_class = epikit::age_categories(target_age, breakers = seq(0, 80, 5))) 
+```
+
+Wie zuvor beschrieben, erstellen wir Kreuztabellen;
+
+```{r, warning=F, message=FALSE}
+
+cross_tab <- table(
+  source_cases = heatmap_ages$source_age_class,
+  target_cases = heatmap_ages$target_age_class)
+
+cross_tab
+```
+
+in ein Langformat mit Proportionen umwandeln;
+
+```{r, warning=FALSE, message=FALSE}
+
+long_prop <- data.frame(prop.table(cross_tab))
+
+```
+
+und erstelle eine Heatmap für das Alter.
+
+```{r, warning=F, message=F}
+
+ggplot(data = long_prop)+       # use long data, with proportions as Freq
+  geom_tile(                    # visualize it in tiles
+    aes(
+      x = target_cases,         # x-axis is case age
+      y = source_cases,     # y-axis is infector age
+      fill = Freq))+            # color of the tile is the Freq column in the data
+  scale_fill_gradient(          # adjust the fill color of the tiles
+    low = "blue",
+    high = "orange")+
+  theme(axis.text.x = element_text(angle = 90))+
+  labs(                         # labels
+    x = "Target case age",
+    y = "Source case age",
+    title = "Who infected whom",
+    subtitle = "Frequency matrix of transmission events",
+    fill = "Proportion of all\ntranmsission events"     # legend title
+  )
+
+```
+
+## Ressourcen
+
+[https://github.com/WorldHealthOrganization/godata/tree/master/analytics/r-reporting](https://github.com/WorldHealthOrganization/godata/tree/master/analytics/r-reporting)
+
+[https://worldhealthorganization.github.io/godata/](https://worldhealthorganization.github.io/godata/)
+
+[https://community-godata.who.int/](https://community-godata.who.int/)
+
+

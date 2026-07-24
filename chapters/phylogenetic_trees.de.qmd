@@ -1,0 +1,673 @@
+---
+aliases:
+  - /new_pages/phylogenetic_trees.de.html
+---
+
+# Phylogenetische Bäume {}
+
+<!-- ======================================================= -->
+
+## Übersicht {}
+
+**Phylogenetische Bäume** werden verwendet, um die Verwandtschaft und Evolution von Organismen anhand der Sequenz ihres genetischen Codes zu visualisieren und zu beschreiben.
+
+Sie können aus genetischen Sequenzen mit Hilfe von entfernungsbasierten Methoden (z. B. der neighbor-joining-Methode) oder charakterbasierten Methoden (z. B. der Maximum-Likelihood- und der Bayes'schen Markov-Chain-Monte-Carlo-Methode) erstellt werden. Die Sequenzierung der nächsten Generation (Next Generation Sequencing, NGS) ist erschwinglicher geworden und wird im öffentlichen Gesundheitswesen immer häufiger eingesetzt, um Erreger von Infektionskrankheiten zu beschreiben. Tragbare Sequenziergeräte verkürzen die Durchlaufzeit und versprechen, Daten zur Unterstützung der Untersuchung von Krankheitsausbrüchen in Echtzeit zur Verfügung zu stellen. NGS-Daten können verwendet werden, um den Ursprung oder die Quelle eines Erregerstammes und seine Ausbreitung zu identifizieren und das Vorhandensein von Genen für antimikrobielle Resistenz zu bestimmen. Um die genetische Verwandtschaft zwischen Proben zu visualisieren, wird ein phylogenetischer Baum erstellt.
+
+Auf dieser Seite lernen wir, wie man den **ggtree** Paket, das eine kombinierte Visualisierung von phylogenetischen Bäumen mit zusätzlichen Beispieldaten in Form eines Datenrahmens ermöglicht. So können wir Muster beobachten und die Ausbruchsdynamik besser verstehen.
+
+```{r, out.width=c("80%"), fig.align="center", fig.show="hold", echo=FALSE}
+
+pacman::p_load(here, ggplot2, dplyr, ape, ggtree, treeio, ggnewscale, tidytree)
+
+tree <- ape::read.tree(here::here("data", "phylo", "Shigella_tree.txt"))
+
+sample_data <- read.csv(here::here("data","phylo", "sample_data_Shigella_tree.csv"),sep=",", na.strings=c("NA"), head = TRUE, stringsAsFactors=F)
+
+
+ggtree(tree, layout="circular", branch.length='none') %<+% sample_data + # the %<+% is used to add your dataframe with sample data to the tree
+  aes(color=Belgium)+ # color the branches according to a variable in your dataframe
+  scale_color_manual(name = "Sample Origin", # name of your color scheme (will show up in the legend like this)
+                    breaks = c("Yes", "No"), # the different options in your variable
+                   labels = c("NRCSS Belgium", "Other"), # how you want the different options named in your legend, allows for formatting
+                 values= c("blue", "black"), # the color you want to assign to the variable 
+                 na.value = "black") + # color NA values in black as well
+  new_scale_color()+ # allows to add an additional color scheme for another variable
+     geom_tippoint(aes(color=Continent), size=1.5)+ # color the tip point by continent, you may change shape adding "shape = "
+scale_color_brewer(name = "Continent",  # name of your color scheme (will show up in the legend like this)
+                       palette="Set1", # we choose a set of colors coming with the brewer package
+                   na.value="grey")+ # for the NA values we choose the color grey
+  theme(legend.position= "bottom")
+
+```
+
+<!-- ======================================================= -->
+
+## Vorbereitung {}
+
+### Pakete laden {.unnumbered}
+
+Dieser Codeausschnitt zeigt das Laden der benötigten Pakete. In diesem Handbuch betonen wir `p_load()` von **pacman**, der das Paket bei Bedarf installiert *und* lädt es zur Verwendung. Du kannst installierte Pakete auch laden mit `library()` von **base**R. Siehe die Seite über [R-Grundlagen] für weitere Informationen über R-Pakete.
+
+```{r}
+pacman::p_load(
+  rio,             # import/export
+  here,            # relative file paths
+  tidyverse,       # general data management and visualization
+  ape,             # to import and export phylogenetic files
+  ggtree,          # to visualize phylogenetic files
+  treeio,          # to visualize phylogenetic files
+  ggnewscale)      # to add additional layers of color schemes
+
+```
+
+### Daten importieren {.unnumbered}
+
+Die Daten für diese Seite können mit den Anweisungen auf der Seite [Handbuch und Daten herunterladen] Seite herunterladen.
+
+Es gibt verschiedene Formate, in denen ein phylogenetischer Baum gespeichert werden kann (z. B. Newick, NEXUS, Phylip). Ein gängiges Format ist das Newick-Dateiformat (.nwk), das der Standard für die Darstellung von Bäumen in computerlesbarer Form ist. Das bedeutet, dass ein ganzer Baum in einem String-Format wie "((t2:0.04,t1:0.34):0.89,(t5:0.37,(t4:0.03,t3:0.67):0.9):0.59); " ausgedrückt werden kann, in dem alle Knoten und Spitzen und ihre Beziehung (Zweiglänge) zueinander aufgeführt sind.
+
+Hinweis: Es ist wichtig zu verstehen, dass die phylogenetische Baumdatei an sich keine Sequenzierungsdaten enthält, sondern lediglich das Ergebnis der genetischen Abstände zwischen den Sequenzen ist. Wir können daher keine Sequenzierungsdaten aus einer Baumdatei extrahieren.
+
+Zunächst verwenden wir die `read.tree()` Funktion von **ape** Paket, um eine Newick-Baumdatei im .txt-Format zu importieren und sie in einem Listenobjekt der Klasse "phylo" zu speichern. Falls nötig, verwende die `here()` Funktion aus dem **hier** Paket, um den relativen Dateipfad anzugeben.
+
+Hinweis: In diesem Fall wird der newick-Baum zur einfacheren Handhabung und zum Herunterladen von Github als .txt-Datei gespeichert.
+
+```{r, echo=F}
+tree <- ape::read.tree(here::here("data", "phylo", "Shigella_tree.txt"))
+```
+
+```{r, echo=T, eval=F}
+tree <- ape::read.tree("Shigella_tree.txt")
+```
+
+Wir untersuchen unser Baumobjekt und sehen, dass es 299 Spitzen (oder Proben) und 236 Knoten enthält.
+
+```{r}
+tree
+```
+
+Zweitens importieren wir eine Tabelle, die als .csv-Datei gespeichert ist, mit zusätzlichen Informationen für jede sequenzierte Probe, wie z. B. Geschlecht, Herkunftsland und Attribute für antimikrobielle Resistenz, indem wir die `import()` Funktion aus der **rio** Paket:
+
+```{r, echo=F}
+sample_data <- import(here("data", "phylo", "sample_data_Shigella_tree.csv"))
+```
+
+```{r, echo=T, eval=F}
+sample_data <- import("sample_data_Shigella_tree.csv")
+```
+
+Unten sind die ersten 50 Zeilen der Daten:
+
+```{r, message=FALSE, echo=F}
+DT::datatable(head(sample_data,50), rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+### Bereinigen und prüfen {.unnumbered}
+
+Wir bereinigen und prüfen unsere Daten: Um die richtigen Beispieldaten dem phylogenetischen Baum zuzuordnen, müssen die Werte in der Spalte `Sample_ID` in der `sample_data` Datenrahmen mit den `tip.labels` Werte in der `tree` Datei übereinstimmen:
+
+Wir überprüfen die Formatierung der `tip.labels` in der `tree` Datei, indem wir uns die ersten 6 Einträge ansehen, indem wir mit `head()` von **Basis** R.
+
+```{r}
+head(tree$tip.label) 
+```
+
+Wir stellen auch sicher, dass die erste Spalte in unserer `sample_data` Datenrahmen ist `Sample_ID`. Wir sehen uns die Spaltennamen unseres Datenrahmens mit `colnames()` von **Basis** R.
+
+```{r}
+colnames(sample_data)   
+```
+
+Wir schauen uns die `Sample_IDs` im Datenrahmen an, um sicherzustellen, dass die Formatierung die gleiche ist wie in der `tip.label` (z. B. Buchstaben in Großbuchstaben, keine zusätzlichen Unterstriche `_` zwischen Buchstaben und Zahlen, usw.)
+
+```{r}
+head(sample_data$Sample_ID) # we again inspect only the first 6 using head()
+```
+
+Wir können auch vergleichen, ob alle Muster in der `tree` Datei enthalten sind und umgekehrt, indem wir einen logischen Vektor von TRUE oder FALSE erzeugen, wenn sie übereinstimmen oder nicht. Diese werden hier der Einfachheit halber nicht ausgedruckt.
+
+```{r, eval=F}
+sample_data$Sample_ID %in% tree$tip.label
+
+tree$tip.label %in% sample_data$Sample_ID
+```
+
+Wir können diese Vektoren verwenden, um alle Proben-IDs anzuzeigen, die sich nicht im Baum befinden (es gibt keine).
+
+```{r}
+sample_data$Sample_ID[!tree$tip.label %in% sample_data$Sample_ID]
+```
+
+Bei näherer Betrachtung können wir feststellen, dass das Format der `Sample_ID` im Datenrahmen dem Format der Probennamen in der `tip.labels`. Diese müssen nicht in der gleichen Reihenfolge sortiert sein, um übereinstimmen zu können.
+
+Wir sind bereit zu gehen!
+
+<!-- ======================================================= -->
+
+## Einfache Baumvisualisierung {}
+
+### Verschiedene Baum-Layouts {.unnumbered}
+
+**ggtree** bietet viele verschiedene Layout-Formate an, von denen einige für deinen speziellen Zweck besser geeignet sind als andere. Unten findest du ein paar Beispiele. Für andere Optionen siehe dies [Online-Buch](http://yulab-smu.top/treedata-book/chapter4.html).
+
+Hier sind einige Beispiele für die Gestaltung von Bäumen:
+
+```{r, out.width=c("50%"), fig.show="hold"}
+
+ggtree(tree)                                            # simple linear tree
+ggtree(tree,  branch.length = "none")                   # simple linear tree with all tips aligned
+ggtree(tree, layout="circular")                         # simple circular tree
+ggtree(tree, layout="circular", branch.length = "none") # simple circular tree with all tips aligned
+
+```
+
+### Einfacher Baum plus Beispieldaten {.unnumbered}
+
+Die **%\<+%** Operator wird verwendet, um die `sample_data` Datenrahmen mit dem `tree` Datei zu verbinden.
+Die einfachste Annotation deines Baums ist das Hinzufügen der Probennamen an den Spitzen sowie das Einfärben der Spitzenpunkte und, falls gewünscht, der Äste:
+
+Hier ist ein Beispiel für einen kreisförmigen Baum:
+
+```{r, fig.align="center", warning=F, message=F}
+
+ggtree(tree, layout = "circular", branch.length = 'none') %<+% sample_data + # %<+% adds dataframe with sample data to tree
+  aes(color = Belgium)+                       # color the branches according to a variable in your dataframe
+  scale_color_manual(
+    name = "Sample Origin",                      # name of your color scheme (will show up in the legend like this)
+    breaks = c("Yes", "No"),                     # the different options in your variable
+    labels = c("NRCSS Belgium", "Other"),        # how you want the different options named in your legend, allows for formatting
+    values = c("blue", "black"),                  # the color you want to assign to the variable 
+    na.value = "black") +                        # color NA values in black as well
+  new_scale_color()+                             # allows to add an additional color scheme for another variable
+    geom_tippoint(
+      mapping = aes(color = Continent),          # tip color by continent. You may change shape adding "shape = "
+      size = 1.5)+                               # define the size of the point at the tip
+  scale_color_brewer(
+    name = "Continent",                    # name of your color scheme (will show up in the legend like this)
+    palette = "Set1",                      # we choose a set of colors coming with the brewer package
+    na.value = "grey") +                    # for the NA values we choose the color grey
+  geom_tiplab(                             # adds name of sample to tip of its branch 
+    color = 'black',                       # (add as many text lines as you wish with + , but you may need to adjust offset value to place them next to each other)
+    offset = 1,
+    size = 1,
+    geom = "text",
+    align = TRUE)+    
+  ggtitle("Phylogenetic tree of Shigella sonnei")+       # title of your graph
+  theme(
+    axis.title.x = element_blank(), # removes x-axis title
+    axis.title.y = element_blank(), # removes y-axis title
+    legend.title = element_text(    # defines font size and format of the legend title
+      face = "bold",
+      size = 12),   
+    legend.text=element_text(       # defines font size and format of the legend text
+      face = "bold",
+      size = 10),  
+    plot.title = element_text(      # defines font size and format of the plot title
+      size = 12,
+      face = "bold"),  
+    legend.position = "bottom",     # defines placement of the legend
+    legend.box = "vertical",        # defines placement of the legend
+    legend.margin = margin())   
+```
+
+Du kannst deinen Baumplot exportieren mit `ggsave()` wie jedes andere ggplot-Objekt exportieren. Auf diese Weise geschrieben, `ggsave()` speichert das zuletzt erzeugte Bild in dem von dir angegebenen Dateipfad. Vergiss nicht, dass du die `here()` und relative Dateipfade verwenden kannst, um einfach in Unterordnern etc. zu speichern.
+
+```{r, eval=F}
+ggsave("example_tree_circular_1.png", width = 12, height = 14)
+
+```
+
+<!-- ======================================================= -->
+
+## Baummanipulation {}
+
+Manchmal hast du einen sehr großen phylogenetischen Baum und bist nur an einem Teil des Baums interessiert. Zum Beispiel, wenn du einen Baum mit historischen oder internationalen Proben erstellt hast, um einen Überblick darüber zu bekommen, wo dein Datensatz in das Gesamtbild passt. Um deine Daten näher zu betrachten, möchtest du aber nur diesen Teil des großen Baums untersuchen.
+
+Da die phylogenetische Baumdatei nur das Ergebnis der Sequenzierdatenanalyse ist, können wir die Reihenfolge der Knoten und Äste in der Datei selbst nicht verändern. Diese wurden bereits in früheren Analysen aus den NGS-Rohdaten bestimmt. Wir können jedoch in Teile hineinzoomen, Teile ausblenden und sogar Teile des Baums unterteilen.
+
+### Heranzoomen {.unnumbered}
+
+Wenn du deinen Baum nicht "zerschneiden", sondern nur einen Teil davon genauer untersuchen willst, kannst du einen bestimmten Teil heranzoomen, um ihn zu betrachten.
+
+Zunächst zeichnen wir den gesamten Baum linear auf und fügen jedem Knoten im Baum numerische Beschriftungen hinzu.
+
+```{r, out.width=c("50%"), fig.show="hold", fig.align="center"}
+
+p <- ggtree(tree,) %<+% sample_data +
+  geom_tiplab(size = 1.5) +                # labels the tips of all branches with the sample name in the tree file
+  geom_text2(
+    mapping = aes(subset = !isTip,
+                  label = node),
+    size = 5,
+    color = "darkred",
+    hjust = 1,
+    vjust = 1)                            # labels all the nodes in the tree
+
+p  # print
+
+```
+
+Um auf einen bestimmten Zweig (der nach rechts herausragt) zu zoomen, benutze `viewClade()` auf das ggtree-Objekt `p` und gib die Knotennummer an, um einen genaueren Blick darauf zu werfen:
+
+```{r phylogenetic_trees_zoom_in_452, out.width=c("50%"), fig.show="hold", fig.align="center"}
+
+viewClade(p, node = 452)
+
+```
+
+### Zusammenbrechende Zweige {.unnumbered}
+
+Wenn wir diesen Zweig jedoch ignorieren wollen, können wir ihn an demselben Knoten (Knoten Nr. 452) zusammenbrechen, indem wir `collapse()`. Dieser Baum ist definiert als `p_collapsed`.
+
+```{r phylogenetic_trees_collapse_452, out.width=c("50%"), fig.show="hold", fig.align="center"}
+
+p_collapsed <- collapse(p, node = 452)
+p_collapsed
+```
+
+Zur Verdeutlichung: Wenn wir drucken `p_collapsed` drucken, fügen wir ein `geom_point2()` (eine blaue Raute) an den Knoten des zusammengebrochenen Zweigs.
+
+```{r}
+p_collapsed + 
+geom_point2(aes(subset = (node == 452)),  # we assign a symbol to the collapsed node
+            size = 5,                     # define the size of the symbol
+            shape = 23,                   # define the shape of the symbol
+            fill = "steelblue")           # define the color of the symbol
+```
+
+### Einen Baum unterteilen {.unnumbered}
+
+Wenn wir eine dauerhafte Änderung vornehmen und einen neuen, reduzierten Baum erstellen wollen, können wir einen Teil des Baums mit `tree_subset()`. Dann kannst du ihn als neue Baumdatei oder .txt-Datei speichern.
+
+Zuerst inspizieren wir die Baumknoten und Tip-Labels, um zu entscheiden, was wir unterteilen wollen.
+
+```{r, out.width=c("50%"), fig.show="hold", fig.align="center"}
+ggtree(
+  tree,
+  branch.length = 'none',
+  layout = 'circular') %<+% sample_data +               # we add the asmple data using the %<+% operator
+  geom_tiplab(size = 1)+                                # label tips of all branches with sample name in tree file
+  geom_text2(
+    mapping = aes(subset = !isTip, label = node),
+    size = 3,
+    color = "darkred") +                                # labels all the nodes in the tree
+ theme(
+   legend.position = "none",                            # removes the legend all together
+   axis.title.x = element_blank(),
+   axis.title.y = element_blank(),
+   plot.title = element_text(size = 12, face="bold"))
+```
+
+Angenommen, wir haben uns entschieden, den Baum am Knoten 528 zu unterteilen (nur die Spitzen innerhalb dieses Zweigs nach dem Knoten 528 zu behalten) und speichern dies als neue `sub_tree1` Objekt:
+
+```{r}
+sub_tree1 <- tree_subset(
+  tree,
+  node = 528)                                            # we subset the tree at node 528
+```
+
+Werfen wir einen Blick auf den untergeordneten Baum 1:
+
+```{r}
+ggtree(sub_tree1) +
+  geom_tiplab(size = 3) +
+  ggtitle("Subset tree 1")
+```
+
+Du kannst auch auf der Grundlage einer bestimmten Stichprobe ein Subset erstellen, indem du angibst, wie viele Knoten du "rückwärts" einbeziehen möchtest. Wir unterteilen denselben Teil des Baums auf der Grundlage einer Stichprobe, in diesem Fall S17BD07692, und gehen 9 Knoten zurück. `sub_tree2` Objekt:
+
+```{r}
+sub_tree2 <- tree_subset(
+  tree,
+  "S17BD07692",
+  levels_back = 9) # levels back defines how many nodes backwards from the sample tip you want to go
+```
+
+Werfen wir einen Blick auf den Untergruppenbaum 2:
+
+```{r}
+ggtree(sub_tree2) +
+  geom_tiplab(size =3)  +
+  ggtitle("Subset tree 2")
+
+```
+
+Du kannst deinen neuen Baum auch entweder als Newick-Typ oder sogar als Textdatei speichern, indem du die `write.tree()` Funktion von **ape** Paket:
+
+```{r, eval=F}
+# to save in .nwk format
+ape::write.tree(sub_tree2, file='data/phylo/Shigella_subtree_2.nwk')
+
+# to save in .txt format
+ape::write.tree(sub_tree2, file='data/phylo/Shigella_subtree_2.txt')
+
+```
+
+### Rotierende Knoten in einem Baum {.unnumbered}
+
+Wie bereits erwähnt, können wir die Reihenfolge der Spitzen oder Knoten im Baum nicht ändern, da diese auf ihrer genetischen Verwandtschaft basiert und nicht visuell manipuliert werden kann. Aber wir können Zweige um die Knoten herum ausrotten, wenn das die Visualisierung erleichtert.
+
+Zunächst zeichnen wir unseren neuen Teilbaum 2 mit Knotenbeschriftungen, um den Knoten auszuwählen, den wir bearbeiten wollen, und speichern ihn in einem ggtree-Plotobjekt `p`.
+
+```{r, out.width=c("50%"), fig.show="hold", fig.align="center"}
+
+p <- ggtree(sub_tree2) +  
+  geom_tiplab(size = 4) +
+  geom_text2(aes(subset=!isTip, label=node), # labels all the nodes in the tree
+             size = 5,
+             color = "darkred", 
+             hjust = 1, 
+             vjust = 1) 
+p
+```
+
+Dann können wir die Knoten bearbeiten, indem wir **ggtree::rotate()** oder **ggtree::flip()**:
+Hinweis: Um zu verdeutlichen, welche Knoten wir manipulieren, wenden wir zunächst die **geom\_hilight()** Funktion aus **ggtree** um die Stichproben in den Knoten zu markieren, an denen wir interessiert sind, und das ggtree-Plot-Objekt in einem neuen Objekt zu speichern `p1`.
+
+```{r, out.width=c("50%"), fig.show="hold", fig.align="center"}
+
+p1 <- p + geom_hilight(  # highlights node 39 in blue, "extend =" allows us to define the length of the color block
+  node = 39,
+  fill = "steelblue",
+  extend = 0.0017) +  
+geom_hilight(            # highlights the node 37 in yellow
+  node = 37,
+  fill = "yellow",
+  extend = 0.0017) +               
+ggtitle("Original tree")
+
+
+p1 # print
+```
+
+Jetzt können wir den Knoten 37 im Objekt drehen `p1` drehen, so dass die Proben am Knoten 38 nach oben wandern. Wir speichern den gedrehten Baum in einem neuen Objekt `p2`.
+
+```{r}
+p2 <- ggtree::rotate(p1, 37) + 
+      ggtitle("Rotated Node 37")
+
+
+p2   # print
+```
+
+Oder wir können den Befehl flip verwenden, um den Knoten 36 im Objekt zu drehen `p1` und den Knoten 37 nach oben und den Knoten 39 nach unten verschieben. Wir speichern den umgedrehten Baum in einem neuen Objekt `p3`.
+
+```{r}
+
+p3 <-  flip(p1, 39, 37) +
+      ggtitle("Rotated Node 36")
+
+
+p3   # print
+```
+
+### Beispiel Teilbaum mit Beispieldaten-Anmerkung {.unnumbered}
+
+Nehmen wir an, wir untersuchen den Cluster von Fällen mit klonaler Expansion, die 2017 und 2018 bei Knoten 39 in unserem Teilbaum aufgetreten sind. Wir fügen das Jahr der Stammisolierung sowie die Reisegeschichte hinzu und färben nach Land, um die Herkunft anderer eng verwandter Stämme zu sehen:
+
+```{r, out.width=c("80%"), fig.show="hold", fig.align="center", warning=F, message=F}
+
+ggtree(sub_tree2) %<+% sample_data +     # we use th %<+% operator to link to the sample_data
+  geom_tiplab(                          # labels the tips of all branches with the sample name in the tree file
+    size = 2.5,
+    offset = 0.001,
+    align = TRUE) + 
+  theme_tree2()+
+  xlim(0, 0.015)+                       # set the x-axis limits of our tree
+  geom_tippoint(aes(color=Country),     # color the tip point by continent
+                size = 1.5)+ 
+  scale_color_brewer(
+    name = "Country", 
+    palette = "Set1", 
+    na.value = "grey")+
+  geom_tiplab(                          # add isolation year as a text label at the tips
+    aes(label = Year),
+    color = 'blue',
+    offset = 0.0045,
+    size = 3,
+    linetype = "blank" ,
+    geom = "text",
+    align = TRUE)+ 
+  geom_tiplab(                          # add travel history as a text label at the tips, in red color
+    aes(label = Travel_history),
+    color = 'red',
+    offset = 0.006,
+    size = 3,
+    linetype = "blank",
+    geom = "text",
+    align = TRUE)+ 
+  ggtitle("Phylogenetic tree of Belgian S. sonnei strains with travel history")+  # add plot title
+  xlab("genetic distance (0.001 = 4 nucleotides difference)")+                    # add a label to the x-axis 
+  theme(
+    axis.title.x = element_text(size = 10),
+    axis.title.y = element_blank(),
+    legend.title = element_text(face = "bold", size = 12),
+    legend.text = element_text(face = "bold", size = 10),
+    plot.title = element_text(size = 12, face = "bold"))
+
+```
+
+Unsere Beobachtung deutet auf ein Importereignis von Stämmen aus Asien hin, die dann im Laufe der Jahre in Belgien zirkulierten und unseren jüngsten Ausbruch verursacht zu haben scheinen.
+
+<!-- ======================================================= -->
+
+## Komplexere Bäume: Hinzufügen von Heatmaps der Beispieldaten {.unnumbered}
+
+Wir können komplexere Informationen wie das kategorische Vorhandensein antimikrobieller Resistenzgene und numerische Werte für die tatsächlich gemessene Resistenz gegen antimikrobielle Mittel in Form einer Heatmap hinzufügen, indem wir die **ggtree::gheatmap()** Funktion.
+
+Zuerst müssen wir unseren Baum plotten (dies kann entweder linear oder kreisförmig sein) und ihn in einem neuen ggtree-Plot-Objekt speichern `p`: Wir werden den sub\_tree aus Teil 3 verwenden).
+
+```{r, out.width=c("60%"), fig.align="center", fig.show="hold"}
+
+p <- ggtree(sub_tree2, branch.length='none', layout='circular') %<+% sample_data +
+  geom_tiplab(size =3) + 
+ theme(
+   legend.position = "none",
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    plot.title = element_text(
+      size = 12,
+      face = "bold",
+      hjust = 0.5,
+      vjust = -15))
+p
+
+```
+
+Zweitens bereiten wir unsere Daten vor. Um verschiedene Variablen mit neuen Farbschemata zu visualisieren, unterteilen wir unseren Datenrahmen auf die gewünschte Variable. Es ist wichtig, die `Sample_ID` als Rownamen hinzufügen, sonst können die Daten nicht dem Baum zugeordnet werden. `tip.labels`:
+
+In unserem Beispiel wollen wir uns das Geschlecht und die Mutationen ansehen, die eine Resistenz gegen Ciprofloxacin, ein wichtiges Antibiotikum der ersten Wahl zur Behandlung von Shigella-Infektionen, verleihen könnten.
+
+Wir erstellen einen Datenrahmen für das Geschlecht:
+
+```{r}
+gender <- data.frame("gender" = sample_data[,c("Gender")])
+rownames(gender) <- sample_data$Sample_ID
+```
+
+Wir erstellen einen Datenrahmen für Mutationen im gyrA-Gen, die eine Ciprofloxacin-Resistenz verleihen:
+
+```{r}
+cipR <- data.frame("cipR" = sample_data[,c("gyrA_mutations")])
+rownames(cipR) <- sample_data$Sample_ID
+
+```
+
+Wir erstellen einen Datenrahmen für die gemessene minimale Hemmkonzentration (MIC) für Ciprofloxacin aus dem Labor:
+
+```{r}
+MIC_Cip <- data.frame("mic_cip" = sample_data[,c("MIC_CIP")])
+rownames(MIC_Cip) <- sample_data$Sample_ID
+```
+
+Wir erstellen einen ersten Plot, indem wir eine binäre Heatmap für das Geschlecht zum phylogenetischen Baum hinzufügen und in einem neuen ggtree-Plot-Objekt speichern `h1`:
+
+```{r, out.width=c("70%"), fig.show="hold", fig.align="center"}
+
+h1 <-  gheatmap(p, gender,                                 # we add a heatmap layer of the gender dataframe to our tree plot
+                offset = 10,                               # offset shifts the heatmap to the right,
+                width = 0.10,                              # width defines the width of the heatmap column,
+                color = NULL,                              # color defines the boarder of the heatmap columns
+         colnames = FALSE) +                               # hides column names for the heatmap
+  scale_fill_manual(name = "Gender",                       # define the coloring scheme and legend for gender
+                    values = c("#00d1b1", "purple"),
+                    breaks = c("Male", "Female"),
+                    labels = c("Male", "Female")) +
+   theme(legend.position = "bottom",
+        legend.title = element_text(size = 12),
+        legend.text = element_text(size = 10),
+        legend.box = "vertical", legend.margin = margin())
+h1
+
+```
+
+Dann fügen wir Informationen über Mutationen im gyrA-Gen hinzu, die eine Resistenz gegen Ciprofloxacin verleihen:
+
+Hinweis: Das Vorhandensein von chromosomalen Punktmutationen in WGS-Daten wurde zuvor mit dem von Zankari et al. entwickelten PointFinder-Tool bestimmt (siehe Referenz im Abschnitt "Zusätzliche Referenzen").
+
+Zunächst weisen wir unserem bestehenden Plot-Objekt ein neues Farbschema zu `h1` zu und speichern es in einem neuen Objekt `h2`. So können wir die Farben für unsere zweite Variable in der Heatmap festlegen und ändern.
+
+```{r}
+h2 <- h1 + new_scale_fill() 
+```
+
+Dann fügen wir die zweite Heatmap-Ebene zu `h2` und speichern die kombinierten Diagramme in einem neuen Objekt `h3`:
+
+```{r, out.width=c("80%"), fig.show="hold", fig.align="center"}
+
+h3 <- gheatmap(h2, cipR,         # adds the second row of heatmap describing Ciprofloxacin resistance mutations
+               offset = 12, 
+               width = 0.10, 
+               colnames = FALSE) +
+  scale_fill_manual(name = "Ciprofloxacin resistance \n conferring mutation",
+                    values = c("#fe9698","#ea0c92"),
+                    breaks = c( "gyrA D87Y", "gyrA S83L"),
+                    labels = c( "gyrA d87y", "gyrA s83l")) +
+   theme(legend.position = "bottom",
+        legend.title = element_text(size = 12),
+        legend.text = element_text(size = 10),
+        legend.box = "vertical", legend.margin = margin())+
+  guides(fill = guide_legend(nrow = 2,byrow = TRUE))
+h3
+```
+
+Wir wiederholen den obigen Vorgang, indem wir zunächst eine neue Farbskala-Ebene zu unserem bestehenden Objekt hinzufügen `h3` und fügen dann die kontinuierlichen Daten über die minimale Hemmkonzentration (MHK) von Ciprofloxacin für jeden Stamm zu dem resultierenden Objekt hinzu `h4` um das endgültige Objekt zu erstellen `h5`:
+
+```{r, out.width=c("90%"), fig.show="hold", fig.align="center"}
+# First we add the new coloring scheme:
+h4 <- h3 + new_scale_fill()
+
+# then we combine the two into a new plot:
+h5 <- gheatmap(h4, MIC_Cip,  
+               offset = 14, 
+               width = 0.10,
+                colnames = FALSE)+
+  scale_fill_continuous(name = "MIC for Ciprofloxacin",  # here we define a gradient color scheme for the continuous variable of MIC
+                      low = "yellow", high = "red",
+                      breaks = c(0, 0.50, 1.00),
+                      na.value = "white") +
+   guides(fill = guide_colourbar(barwidth = 5, barheight = 1))+
+   theme(legend.position = "bottom",
+        legend.title = element_text(size = 12),
+        legend.text = element_text(size = 10),
+        legend.box = "vertical", legend.margin = margin())
+h5
+
+```
+
+Wir können die gleiche Übung für einen linearen Baum machen:
+
+```{r, out.width=c("80%"), fig.show="hold", fig.align="center"}
+
+p <- ggtree(sub_tree2) %<+% sample_data +
+  geom_tiplab(size = 3) + # labels the tips
+  theme_tree2()+
+  xlab("genetic distance (0.001 = 4 nucleotides difference)")+
+  xlim(0, 0.015)+
+ theme(legend.position = "none",
+      axis.title.y = element_blank(),
+      plot.title = element_text(size = 12, 
+                                face = "bold",
+                                hjust = 0.5,
+                                vjust = -15))
+p
+```
+
+Zuerst fügen wir das Geschlecht hinzu:
+
+```{r, out.width=c("80%"), fig.show="hold", fig.align="center"}
+
+h1 <-  gheatmap(p, gender, 
+                offset = 0.003,
+                width = 0.1, 
+                color="black", 
+         colnames = FALSE)+
+  scale_fill_manual(name = "Gender",
+                    values = c("#00d1b1", "purple"),
+                    breaks = c("Male", "Female"),
+                    labels = c("Male", "Female"))+
+   theme(legend.position = "bottom",
+        legend.title = element_text(size = 12),
+        legend.text = element_text(size = 10),
+        legend.box = "vertical", legend.margin = margin())
+h1
+```
+
+Dann fügen wir Ciprofloxacin-Resistenzmutationen hinzu, nachdem wir eine weitere Farbschema-Ebene hinzugefügt haben:
+
+```{r, out.width=c("80%"), fig.show="hold", fig.align="center"}
+
+h2 <- h1 + new_scale_fill()
+h3 <- gheatmap(h2, cipR,   
+               offset = 0.004, 
+               width = 0.1,
+               color = "black",
+                colnames = FALSE)+
+  scale_fill_manual(name = "Ciprofloxacin resistance \n conferring mutation",
+                    values = c("#fe9698","#ea0c92"),
+                    breaks = c( "gyrA D87Y", "gyrA S83L"),
+                    labels = c( "gyrA d87y", "gyrA s83l"))+
+   theme(legend.position = "bottom",
+        legend.title = element_text(size = 12),
+        legend.text = element_text(size = 10),
+        legend.box = "vertical", legend.margin = margin())+
+  guides(fill = guide_legend(nrow = 2,byrow = TRUE))
+ h3
+```
+
+Dann fügen wir die vom Labor ermittelte minimale Hemmstoffkonzentration (MIC) hinzu:
+
+```{r, out.width=c("80%"), fig.show="hold", fig.align="center"}
+
+h4 <- h3 + new_scale_fill()
+h5 <- gheatmap(h4, MIC_Cip, 
+               offset = 0.005,  
+               width = 0.1,
+               color = "black", 
+                colnames = FALSE)+
+  scale_fill_continuous(name = "MIC for Ciprofloxacin",
+                      low = "yellow", high = "red",
+                      breaks = c(0,0.50,1.00),
+                      na.value = "white")+
+   guides(fill = guide_colourbar(barwidth = 5, barheight = 1))+
+   theme(legend.position = "bottom",
+        legend.title = element_text(size = 10),
+        legend.text = element_text(size = 8),
+        legend.box = "horizontal", legend.margin = margin())+
+  guides(shape = guide_legend(override.aes = list(size = 2)))
+h5
+
+```
+
+<!-- ======================================================= -->
+
+## Ressourcen {}
+
+[http://hydrodictyon.eeb.uconn.edu/eebedia/index.php/Ggtree#](http://hydrodictyon.eeb.uconn.edu/eebedia/index.php/Ggtree#) Klade\_Farben
+[https://bioconductor.riken.jp/packages/3.2/bioc/vignettes/ggtree/inst/doc/treeManipulation.html](https://bioconductor.riken.jp/packages/3.2/bioc/vignettes/ggtree/inst/doc/treeManipulation.html)
+[https://guangchuangyu.github.io/ggtree-book/chapter-ggtree.html](https://guangchuangyu.github.io/ggtree-book/chapter-ggtree.html)
+[https://bioconductor.riken.jp/packages/3.8/bioc/vignettes/ggtree/inst/doc/treeManipulation.html](https://bioconductor.riken.jp/packages/3.8/bioc/vignettes/ggtree/inst/doc/treeManipulation.html)
+
+Ea Zankari, Rosa Allesøe, Katrine G Joensen, Lina M Cavaco, Ole Lund, Frank M Aarestrup, PointFinder: a novel web tool for WGS-based detection of antimicrobial resistance associated with chromosomal point mutations in bacterial pathogens, Journal of Antimicrobial Chemotherapy, Volume 72, Issue 10, October 2017, Pages 2764-2768, [https://doi.org/10.1093/jac/dkx217](https://doi.org/10.1093/jac/dkx217)
+
+

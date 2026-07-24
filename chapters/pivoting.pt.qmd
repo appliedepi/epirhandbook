@@ -1,0 +1,542 @@
+---
+aliases:
+  - /new_pages/pivoting.pt.html
+---
+
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+<!-- ======================================================= -->
+# Pivoteando dados {#pivoting}
+
+
+```{r, warning=F, message=F, out.height = c('50%'), fig.align="center", fig.show='hold', echo=F}
+knitr::include_graphics(here::here("images", "pivoting", "Pivoting_500x500.png"))
+
+#knitr::include_graphics(here::here("images", "pivoting", "pivot_longer_new.png"))
+#knitr::include_graphics(here::here("images", "pivoting", "pivot_bar.png"))
+#knitr::include_graphics(here::here("images", "pivoting", "pivot_wider_new.png"))
+```
+
+
+
+Ao lidar com dados, *pivotar* (pivoting) pode ser entendido como um dos dois processos abaixo:
+
+1. A criação de *tabelas dinâmicas* (pivot tables), que são tabelas com estatísticas que resumem os dados de um tabela maior.
+2. A conversão de uma tabela do formato **longo** (long) para o formato **largo** (wide), ou vice-versa.
+
+**Nessa página, iremos nos focar na segunda definição**. A primeira é um passo crucial em análise de dados que está coberto em outras partes do livro, nos capítulos de [Agrupamento de Dados](#grouping) e [Tabelas Descritivas](#tables-descriptive).
+
+Essa página discute os formatos dos dados. É importante estar atento à ideia de "dados tidy" (tidy data), na qual cada varíavel tem sua própria coluna, cada observação tem sua própria linha e cada valor tem sua própria célula. Você pode ler mais sobre esse tópico online [em seu capítulo do livro R para Ciência de Dados (em inglês)](https://r4ds.had.co.nz/tidy-data.html). 
+
+
+
+
+
+## Preparação 
+
+### Carregue os pacotes R {.unnumbered}  
+
+O código abaixo realiza o carregamento dos pacotes necessários para a análise dos dados. Neste manual, enfatizamos o uso da função `p_load()`, do **pacman**, que instala os pacotes, caso não estejam instalados, *e* os carrega no R para utilização. Também é possível carregar pacotes instalados utilizando a função `library()`, do R **base**. Para mais informações sobre os pacotes do R, veja a página [Introdução ao R](#basics).  
+
+```{r}
+pacman::p_load(
+  rio,          # File import
+  here,         # File locator
+  kableExtra,   # Build and manipulate complex tables
+  tidyverse)    # data management + ggplot2 graphics
+```
+
+
+
+### Importe os dados {.unnumbered}
+
+
+### Dados de Malária {-}  
+
+Nesta página, iremos utilizar um banco fictício de casos diários de malária, divididos por local e grupos de idade. Se você quiser acompanhar a análise, <a href='https://github.com/appliedepi/epirhandbook_eng/raw/master/data/malaria_facility_count_data.rds' class='download-button'>clique aqui para baixar (como arquivo `.rds` )<span></a>. Importe os dados com a função `import()` do pacote **rio**  (a função suporta vários tipos de arquivo como .xlsx, .csv, .rds - cheque a página [Importar e exportar](#importing) para mais detalhes).  
+
+```{r, echo=F}
+count_data <- rio::import(here::here("data", "malaria_facility_count_data.rds")) %>%
+  as_tibble()
+```
+
+```{r, eval=F}
+# Import data
+count_data <- import("malaria_facility_count_data.rds")
+```
+
+As primeras 50 linhas são mostradas abaixo.
+
+```{r, message=FALSE, echo=F}
+# display the linelist data as a table
+DT::datatable(head(count_data, 50), rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+
+### Casos da Linelist {-}  
+
+Nas seções finais dessa página também iremos utilizar dados de uma epidemia simulada de Ebola. Se você quiser acompanhar, <a href='https://github.com/appliedepi/epirhandbook_eng/raw/master/data/case_linelists/linelist_cleaned.rds' class='download-button'>clique para baixar a linelist "limpa"</a> (como um arquivo .rds). Importe os dados com a função `import()` do pacote **rio**  (a função suporta vários tipos de arquivo como .xlsx, .csv, .rds - cheque a página [Importar e exportar](#importing) para mais detalhes).  
+```{r, echo=F}
+# import the linelist into R
+linelist <- rio::import(here::here("data", "case_linelists", "linelist_cleaned.rds"))
+```
+
+
+```{r, eval=F}
+# import your dataset
+linelist <- import("linelist_cleaned.xlsx")
+```
+
+
+
+
+
+
+
+<!-- ======================================================= -->
+## Largo-para-longo {}
+
+```{r, warning=F, message=F, echo=F}
+knitr::include_graphics(here::here("images", "pivoting", "pivot_longer_new.png"))
+```
+
+
+<!-- ======================================================= -->
+### Formato "Largo" (wide) {.unnumbered}
+
+Os dados são normalmente inseridos e armazenados no formato "largo" (*wide*) - em que as características ou respostas dos sujeitos são acondicionadas em apenas uma linha. Embora possa ser útil para apresentação, esse formato não é ideal para alguns tipos de análises.
+
+Vamos pegar como exemplo o banco `count_data` importado na seção de Preparação acima. Você pode ver que cada linha representa um "dia-local" (*facility-day*). As contagens propriamente ditas dos casos (colunas mais à direita) estão armazenadas em um formato "largo", de forma que as informações para todos os grupos de idade em cada "dia-local" estão armazenadas em apenas uma coluna. 
+
+```{r, echo=F}
+DT::datatable(count_data, rownames = FALSE, options = list(pageLength = 5, scrollX=T) )
+```
+
+Cada observação nesse banco refere-se às contagens dos casos de malária em um dos 65 locais, em uma referida data, que vai desde ` count_data$data_date %>% min()` até ` count_data$data_date %>% max()`. Esse locais estão divididos em uma Província - `Province` (North) e quatro Distritos - `District` (Spring, Bolo, Dingo, e Barnard). O banco disponibiliza as contagens gerais de malária, bem como contagens específicas por idade em cada um dos quatro grupos = <4 anos, 5-14 anos, e 15 anos ou mais.
+
+Dados em formato "largo" (*wide*) como esse não aderem aos padrões de dados "tidy", pois os cabeçalhos das colunas não representam, de fato, "variáveis" - eles representam *valores* de uma varíavel hipotética "grupo de idade" (*age group*). 
+
+
+Esse formato pode ser útil para apresentar informações em uma tabela, ou para inserção de dados provenientes de formulários (no Excel, por exemplo). No entanto, na fase de análise, os dados devem ser transformados para um formato mais "longo", alinhado com os padrões de dados "tidy". O pacote de gráficos **ggplot2**, inclusive, funciona melhor quando os dados estão no formato "longo". 
+
+No formato atual, não há dificuldade alguma em visualizar o *total* de casos versus tempo:
+
+```{r, warning=F, message=F}
+ggplot(count_data) +
+  geom_col(aes(x = data_date, y = malaria_tot), width = 1)
+```
+
+No entanto, e se quiséssemos mostrar as contribuições relativas de cada grupo de idade a esse total? Neste caso, precisaríamos nos assegurar de que as varíaveis de interesse (grupos de idade - *age group*) aparecessem no banco em apenas uma coluna que possa ser passada ao `{ggplot2}` através do argumento `aes()`.
+
+
+
+
+<!-- ======================================================= -->
+### `pivot_longer()` {.unnumbered}
+
+A função `pivot_longer()` do **tidyr** torna os dados mais "longos" ("longer"). O pacote **tidyr** faz parte dos pacotes da família **tidyverse**.  
+
+Essa função recebe como argumento um intervalo de colunas que serão transformadas (especificado no argumento `cols = `). Assim, ela pode operar em apenas um parte do banco. Isso é útil para os dados de malária, pois queremos pivotar apenas as colunas com a contagem dos casos.
+
+Executando esse processo, você vai obter duas "novas" colunas - uma com as categorias (que antes eram os nomes das colunas), e uma outra com os valores correspondentes (os números de casos). Você pode aceitar os nomes padrão para essas novas colunas ou você pode especificar seus próprios nomes através dos argumentos `names_to = ` e `values_to = ` respectivamente.  
+
+vamos ver `pivot_longer()` em ação... 
+
+
+
+### Pivot padrão {.unnumbered}  
+
+Queremos usar a função `pivot_longer()` do **tidyr** para converter os dados do formato "largo" (wide) para o formato "longo" (long). Especificamente, converter as quatro colunas numéricas com as contagens dos casos de malária em duas novas colunas: uma com os grupos de idade (*age groups*) e uma com os *valores* correspondentes.  
+
+```{r, eval=F}
+df_long <- count_data %>% 
+  pivot_longer(
+    cols = c(`malaria_rdt_0-4`, `malaria_rdt_5-14`, `malaria_rdt_15`, `malaria_tot`)
+  )
+
+df_long
+```
+
+perceba que o data frame recém criado (`df_long`) possui mais linhas (12,152 vs 3,038); ele tornou-se mais longo - *longer*. De fato, ele está precisamente quatro vezes mais longo, pois cada linha do banco original agora representa quatro linhas em df_long, uma para cada contagem das observações (<4 anos, 5-14 anos, 15 anos+ e total).
+
+Além de mais longo, o novo banco também tem menos colunas (8 vs 10), uma vez que os dados que estavam armazenados nas quatro colunas (aquelas que começavam com o prefixo `malaria_`) passaram a ser armazenados em apenas duas.
+
+Uma vez que os nomes de todas essas quatro colunas começam com o prefixo `malaria_`, poderíamos ter utilizado uma função muito útil para fazer "tidyselect" - com `starts_with()` poderíamos chegar no mesmo resultado (veja a página [Limpeza de dados e principais funções](#cleaning) para conhecer mais dessas funções de auxílio).  
+
+```{r}
+# provide column with a tidyselect helper function
+count_data %>% 
+  pivot_longer(
+    cols = starts_with("malaria_")
+  )
+```
+
+ou por posição: 
+
+```{r, eval=F}
+# provide columns by position
+count_data %>% 
+  pivot_longer(
+    cols = 6:9
+  )
+```
+
+ou por intervalo nomeado:
+
+```{r, eval=F}
+# provide range of consecutive columns
+count_data %>% 
+  pivot_longer(
+    cols = `malaria_rdt_0-4`:malaria_tot
+  )
+```
+
+
+
+As novas colunas recebem os nomes padrão de `name` e `value`, mas podemos sobrescrever esses padrões para fornecer nomes mais semânticos, que vão ajudar a lembrar o que representam, utilizando os argumentos `names_to` e `values_to`. Vamos utilizar os nomes `age_group` e `counts`:
+
+```{r}
+df_long <- 
+  count_data %>% 
+  pivot_longer(
+    cols = starts_with("malaria_"),
+    names_to = "age_group",
+    values_to = "counts"
+  )
+
+df_long
+```
+
+Agora podemos passar essa nova base para o `{ggplot2}`, e mapear a nova coluna `count` para o eixo y e a nova coluna `age_group` para o argumento `fill = ` (a cor de preenchimento da barra). Isso vai mostrar as contagens em um gráfico de barras empilhadas, por grupo de idade:
+
+```{r, warning=F, message=F}
+ggplot(data = df_long) +
+  geom_col(
+    mapping = aes(x = data_date, y = counts, fill = age_group),
+    width = 1
+  )
+```
+
+Veja esse novo gráfico, e compare com o gráfico criado anteriormento - *o que deu errado?*
+
+Encontramos um problema comum ao manipular dados de vigilância - acabamos incluindo também o número total de casos da coluna `malaria_tot`, o que fez com que a altura de cada barra no gráfico fosse o dobro do que deveria.
+
+Podemos lidar com isso de algumas formas. Podemos simplesmente filtrar esses totais da base antes de passá-la para o `ggplot()`:
+
+```{r, warning=F, message=F}
+df_long %>% 
+  filter(age_group != "malaria_tot") %>% 
+  ggplot() +
+  geom_col(
+    aes(x = data_date, y = counts, fill = age_group),
+    width = 1
+  )
+```
+
+Ou então, poderíamos ter excluído essa variável quando rodamos `pivot_longer()`, mantendo-na assim como uma variável separada na base de dados. Veja como os valores dela se "expandem" para preencher as novas linhas.
+
+```{r, warning=F, message=F}
+count_data %>% 
+  pivot_longer(
+    cols = `malaria_rdt_0-4`:malaria_rdt_15,   # does not include the totals column
+    names_to = "age_group",
+    values_to = "counts"
+  )
+```
+
+
+
+
+
+### Pivoteando dados de múltiplas classes {.unnumbered}
+
+O exemplo acima funciona bem em situações em que todas as colunas que você quer pivotar para o formato "longo" são da mesma classe (caracter, numérico, lógico, etc...) 
+
+Porém, haverá muitos casos em que, como epidemiologista de campo, você estará trabalhando com dados que foram preparados por não-especialistas e que seguem suas próprias lógicas não padronizadas - como Hadley Wickham citou (em referência a Tolstoy) em seu [artigo seminal](https://vita.had.co.nz/papers/tidy-data.pdf) sobre os princípios de **Tidy Data**: *"Like families, tidy datasets are all alike but every messy dataset is messy in its own way."* (Como famílias, bases de dados tidy são todas parecidas mas todas as bases bagunçadas são bagunçadas à sua maneira.)
+
+Um problema particularmente comum que você vai encontrar será a necessidade de pivotar colunas que possuem diferentes classes de dados. Essa pivotagem vai resultar no armazenamento desses diferentes tipos em uma única coluna, o que não é uma situação ideal. Existem várias abordagens possíveis para separar a bagunça que isso gera, mas existe um passo importante que você pode dar utilizando `pivot_longer()` para evitar cair nessa situação.
+
+Vamos analisar a situação em que há uma série de observações em diferentes intervalos de tempo para cada um dos itens A, B e C. Exemplos desses itens podem ser indivíduos (ex: contatos de caso de Ebola sendo monitorados por 21 dias) ou postos de saúde de vilarejos remotos sendo monitorados uma vez por ano para assegurar que ainda funcionam. Vamos utilizar o exemplo do contato com o caso de Ebola. Imagine os dados armazenados da seguinte forma:
+
+
+```{r, message=FALSE, echo=F}
+
+df <- 
+  tibble::tribble(
+     ~id,   ~obs1_date, ~obs1_status,   ~obs2_date, ~obs2_status,   ~obs3_date, ~obs3_status,
+     "A", "2021-04-23",    "Healthy", "2021-04-24",    "Healthy", "2021-04-25",     "Unwell",
+     "B", "2021-04-23",    "Healthy", "2021-04-24",    "Healthy", "2021-04-25",    "Healthy",
+     "C", "2021-04-23",    "Missing", "2021-04-24",    "Healthy", "2021-04-25",    "Healthy"
+     ) 
+
+DT::datatable(df, rownames = FALSE)
+
+```
+
+Como pode ser observado, os dados são um pouco complicados. Cada linha armazena informação sobre um item, mas com a série temporal avançando mais e mais para a direita à medida que o tempo passa. Além disso, a classe das colunas alternam entre valores de data e caracteres.
+
+Um exemplo particularmente ruim encontrado por este autor envolvia dados de vigilância do cólera, no qual 8 novas colunas de observação eram adicionadas à base *por dia* ao longo de __4 anos__. Só para abrir o arquivo de Excel em que esses dados estavam levava mais de 10 minutos no meu laptop!
+
+Para trabalhar com esses dados, precisamos transformar o data frame para o formato longo, mas mantendo a separação entre as colunas no formato `date` e `character` (status), para cada observação e cada item. Se não o fizermos, podemos acabar com uma mistura de tipos de variáveis na mesma coluna (um "sacrilégio" quando se trata de gerenciamento de dados e dados "tidy"):
+
+```{r}
+df %>% 
+  pivot_longer(
+    cols = -id,
+    names_to = c("observation")
+  )
+
+```
+
+Acima, nosso pivot mesclou *datas* e *caracteres* em apenas uma coluna `value`. R reagirá convertendo a coluna inteira para a classe de caracteres e assim, a utilidade das datas será perdida.
+
+Para evitar essa situação, podemos aproveitar a sintaxe da estrutura original do nome das colunas. Existe uma estrutura comum nos nomes, com o número da observação, um underline e depois a palavra "status" ou "date". Podemos utilizar essa sintaxe para manter esses dois tipos de dados em colunas separadas após o pivot. 
+
+Fazemos isso através de: 
+
+* Fornecimento de um vetor de caracteres para o argumento `names_to = `, com o segundo item sendo (`".value"` ). Esse termo especial indica que as colunas pivotadas vão ser divididas baseadas em um caracter presente em seus nomes...  
+* Você também precisa fornecer o caracter "separador" para o argumento `names_sep = `. Nesse caso, é o underline "_".  
+
+Assim, o nome e a separação das novas colunas são baseados nos termos "em volta" do underline nos nomes das variáveis existentes. 
+
+```{r}
+
+df_long <- df %>% 
+  pivot_longer(
+    cols = -id,
+    names_to = c("observation", ".value"),
+    names_sep = "_"
+  )
+
+df_long
+
+```
+
+__Toques finais__:
+
+Note que a coluna `date` está atualmente com a classe *caractere* - nós podemos convertê-la facilmente em sua classe apropriada utilizando as funções `mutate()` e `as_date()` descritas na página [Trabalhando com datas](#dates).  
+
+Também podemos converter a coluna `observation` para o formato `numeric` removendo o prefixo "obs" e convertendo para numérico. Podemos fazer isso com a função `str_remove_all()` do pacote **stringr** (veja a página [Caracteres and strings](#characters-strings)).  
+
+```{r}
+
+df_long <- df_long %>% 
+  mutate(
+    date = date %>% lubridate::as_date(),
+    observation = 
+      observation %>% 
+      str_remove_all("obs") %>% 
+      as.numeric()
+  )
+
+df_long
+
+```
+
+E agora, podemos começar a trabalhar com os dados nesse formato. Ex: criando um de mapa de calor descritivo:
+
+```{r}
+ggplot(data = df_long, mapping = aes(x = date, y = id, fill = status)) +
+  geom_tile(colour = "black") +
+  scale_fill_manual(
+    values = 
+      c("Healthy" = "lightgreen", 
+        "Unwell" = "red", 
+        "Missing" = "orange")
+  )
+
+```
+
+
+
+
+
+<!-- ======================================================= -->
+## Longo-para-largo {}
+
+```{r, warning=F, message=F, echo=F}
+knitr::include_graphics(here::here("images", "pivoting", "pivot_wider_new.png"))
+```
+
+
+Em algumas instâncias, pode ser necessário converter uma base para o formato mais largo (wide) utilizando a função `pivot_wider()`.
+
+Um caso de uso típico é quando queremos transformar o resultado de uma análise em um formato mais "palatável" ao leitor (tal como em [Tabelas para apresentação](#tables-presentation)). Normalmente, isso envolve transformar uma base em que a informação para um sujeito está espalhada em múltiplas linhas em um formato em que aquela informação esteja armazenada em apenas uma.
+
+### Dados {.unnumbered}
+
+Para essa seção da página, vamos utilizar o caso da linelist (veja a seção de [Preparação](#pivot_prep)), que contém uma linha por caso.  
+
+Aqui estão as primeiras 50 linhas:
+
+```{r, message=FALSE, echo=F}
+# display the linelist data as a table
+DT::datatable(head(linelist, 50), rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+
+Suponha que a gente queira saber a contagem dos indivíduos nos diferentes grupos de idade, por gênero:
+
+```{r}
+df_wide <- 
+  linelist %>% 
+  count(age_cat, gender)
+
+df_wide
+```
+
+Isso vai produzir uma base longa que é ótima para fazer visualizações no **ggplot2**, mas não é ideal para apresentar em uma tabela:
+
+```{r}
+ggplot(df_wide) +
+  geom_col(aes(x = age_cat, y = n, fill = gender))
+```
+
+### Pivot wider {.unnumbered}  
+
+Desta forma, podemos utilizar `pivot_wider()` para transformar os dados em um formato melhor para inclusão nas tabelas de nossos relatórios.
+
+O argumento `names_from` especifica a coluna *a partir da qual* serão gerados os nomes da nova coluna *names*, enquanto o argumento `values_from` especifica a coluna *a partir da qual* serão retirados os valores da coluna *values* que vão popular as células. O argumento `id_cols = ` é opcional, mas pode ser utilizado passando um vetor de nomes de colunas que não deverão ser pivotadas, e assim irá identificar cada linha.
+
+```{r}
+table_wide <- 
+  df_wide %>% 
+  pivot_wider(
+    id_cols = age_cat,
+    names_from = gender,
+    values_from = n
+  )
+
+table_wide
+```
+
+Essa tabela é muito mais legível e assim, melhor para utilização em relatórios. Você pode convertê-la em tabelas elegantes e bonitas utilizando vários pacotes, incluindo **flextable** e **knitr**. Esse processo é elaborado na página [Tabelas para apresentação](#tables-presentation).  
+
+```{r}
+table_wide %>% 
+  janitor::adorn_totals(c("row", "col")) %>% # adds row and column totals
+  knitr::kable() %>% 
+  kableExtra::row_spec(row = 10, bold = TRUE) %>% 
+  kableExtra::column_spec(column = 5, bold = TRUE) 
+```
+
+---
+
+
+<!-- ======================================================= -->
+## Preenchimento
+
+Em algumas situações após um `pivot`, e mais frequentemente após um `bind`, acabamos ficando com algumas células vazias que gostaríamos de preencher.  
+
+<!-- ======================================================= -->
+### Dados {.unnumbered}
+
+Por exemplo, pegue duas bases, cada uma com observações para o número da medição, o nome do local e a contagem de casos naquele momento. No entanto, a segunda base também possui a variável `Year`. 
+
+
+```{r}
+df1 <- 
+  tibble::tribble(
+       ~Measurement, ~Facility, ~Cases,
+                  1,  "Hosp 1",     66,
+                  2,  "Hosp 1",     26,
+                  3,  "Hosp 1",      8,
+                  1,  "Hosp 2",     71,
+                  2,  "Hosp 2",     62,
+                  3,  "Hosp 2",     70,
+                  1,  "Hosp 3",     47,
+                  2,  "Hosp 3",     70,
+                  3,  "Hosp 3",     38,
+       )
+
+df1 
+
+df2 <- 
+  tibble::tribble(
+    ~Year, ~Measurement, ~Facility, ~Cases,
+     2000,            1,  "Hosp 4",     82,
+     2001,            2,  "Hosp 4",     87,
+     2002,            3,  "Hosp 4",     46
+  )
+
+df2
+```
+
+
+Quando fazemos um `bind_rows()` para mesclar as bases, a variável `Year` será preenchida com `NA` para aquelas linhas em que não existia nenhuma informação prévia (ex: na primeira base):
+
+
+```{r}
+df_combined <- 
+  bind_rows(df1, df2) %>% 
+  arrange(Measurement, Facility)
+
+df_combined
+
+```
+
+<!-- ======================================================= -->
+### `fill()` {.unnumbered}
+
+Nesse caso, `Year` é uma variável útil para ser incluída, particularmente se quisermos explorar as tendências ao longo do tempo. Por isso, utilizamos `fill()` para *preencher* as células vazias, especificando a coluna a ser preenchida e a direção (nesse caso, **acima**):
+
+```{r}
+df_combined %>% 
+  fill(Year, .direction = "up")
+```
+
+Ou então, podemos rearranjar os dados para que possamos preencher na direção descendente:
+
+```{r}
+df_combined <- 
+  df_combined %>% 
+  arrange(Measurement, desc(Facility))
+
+df_combined
+
+df_combined <- 
+  df_combined %>% 
+  fill(Year, .direction = "down")
+
+df_combined
+```
+
+Agora temos uma base útil para fazer um gráfico:
+
+```{r}
+ggplot(df_combined) +
+  aes(Year, Cases, fill = Facility) +
+  geom_col()
+```
+
+Mas menos útil para apresentar em uma tabela, então vamos praticar e converter esse dataframe longo e não "tidy" em um dataframe largo (wide) e "tidy":
+
+```{r}
+df_combined %>% 
+  pivot_wider(
+    id_cols = c(Measurement, Facility),
+    names_from = "Year",
+    values_from = "Cases"
+  ) %>% 
+  arrange(Facility) %>% 
+  janitor::adorn_totals(c("row", "col")) %>% 
+  knitr::kable() %>% 
+  kableExtra::row_spec(row = 5, bold = TRUE) %>% 
+  kableExtra::column_spec(column = 5, bold = TRUE) 
+```
+
+Obs: Nesse caso, foi necessário especificar para incluir apenas as três variáveis `Facility`, `Year`, e `Cases` pois a outra variável `Measurement` iria interferir com a criação da tabela:
+
+```{r}
+df_combined %>% 
+  pivot_wider(
+    names_from = "Year",
+    values_from = "Cases"
+  ) %>% 
+  knitr::kable()
+```
+
+## Recursos  
+
+Aqui tem um [tutorial](https://datacarpentry.org/r-socialsci/03-dplyr-tidyr/index.html) útil.  
+

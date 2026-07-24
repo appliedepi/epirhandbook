@@ -1,0 +1,1095 @@
+---
+aliases:
+  - /new_pages/ggplot_basics.de.html
+---
+
+# ggplot Grundlagen {}
+
+```{r, out.width=c("100%", "100%"), fig.align="center", echo=F}
+knitr::include_graphics(here::here("images", "ggplot_basics_top.png"))
+```
+
+**ggplot2** ist das beliebteste R-Paket zur Datenvisualisierung. Sein `ggplot()` Funktion ist das Herzstück dieses Pakets, und dieser ganze Ansatz ist umgangssprachlich bekannt als *"ggplot"* und die daraus resultierenden Abbildungen werden manchmal liebevoll "ggplots" genannt. Das "gg" in diesen Namen spiegelt die "**g**rammar von **g**raphik", die für die Konstruktion der Figuren verwendet wird. **ggplot2** profitiert von einer Vielzahl von zusätzlichen R-Paketen, die seine Funktionalität weiter verbessern.
+
+Die Syntax unterscheidet sich deutlich von **Basis** `R` Plotten und ist mit einer Lernkurve verbunden. verwenden **ggplot2** erfordert in der Regel, dass der Nutzer seine Daten auf eine Art und Weise formatiert, die sehr **tidyverse** kompatibel sind, was die Verwendung dieser Pakete zusammen sehr effektiv macht.
+
+Auf dieser Seite werden wir die Grundlagen des Plottens mit **ggplot2**. Siehe die Seite [ggplot-Tipps] für Vorschläge und fortgeschrittene Techniken, damit deine Plots wirklich gut aussehen.
+
+Es gibt mehrere umfangreiche **ggplot2** Tutorials, die im Abschnitt Ressourcen verlinkt sind. Du kannst auch das hier herunterladen [Datenvisualisierung mit ggplot Cheatsheet](https://github.com/rstudio/cheatsheets/raw/master/data-visualization-2.1.pdf) von der RStudio-Website herunterladen. Wenn du dich inspirieren lassen möchtest, wie du deine Daten kreativ visualisieren kannst, empfehlen wir dir Websites wie die [R-Grafik-Galerie](https://www.r-graph-gallery.com/) und [Data-to-viz](https://www.data-to-viz.com/caveats.html).
+
+<!-- ======================================================= -->
+
+## Vorbereitung {}
+
+### Pakete laden {.unnumbered}
+
+Dieser Codeabschnitt zeigt das Laden von Paketen, die für die Analysen benötigt werden. In diesem Handbuch betonen wir `p_load()` von **pacman**, der das Paket bei Bedarf installiert *und* lädt es zur Verwendung. Du kannst installierte Pakete auch laden mit `library()` von **base**R. Siehe die Seite über [R-Grundlagen] für weitere Informationen über R-Pakete.
+
+```{r}
+pacman::p_load(
+  tidyverse,      # includes ggplot2 and other data management tools
+  janitor,        # cleaning and summary tables
+  ggforce,        # ggplot extras
+  rio,            # import/export
+  here,           # file locator
+  stringr         # working with characters   
+)
+```
+
+### Daten importieren {.unnumbered}
+
+Wir importieren den Datensatz der Fälle aus einer simulierten Ebola-Epidemie. Wenn du mitmachen willst, <a href='https://github.com/appliedepi/epirhandbook_eng/raw/master/data/case_linelists/linelist_cleaned.rds' class='download-button'>klicke, um die "saubere" Linienliste herunterzuladen</a> (als .rds-Datei). Importiere deine Daten mit der `import()` Funktion aus der **rio**Paket (sie akzeptiert viele Dateitypen wie .xlsx, .rds, .csv - siehe die [Import und Export] Seite für Details).
+
+```{r, echo=F}
+linelist <- rio::import(here::here("data", "case_linelists", "linelist_cleaned.rds"))
+
+```
+
+```{r, eval=F}
+linelist <- rio::import("linelist_cleaned.rds")
+```
+
+Die ersten 50 Zeilen der Linienliste werden unten angezeigt. Wir werden uns auf die kontinuierlichen Variablen konzentrieren `age`, `wt_kg` (Gewicht in Kilo), `ct_blood` (CT-Werte), und `days_onset_hosp` (Differenz zwischen Eintrittsdatum und Krankenhausaufenthalt).
+
+```{r, message=FALSE, echo=F}
+# display the linelist data as a table
+DT::datatable(head(linelist, 50), rownames = FALSE, filter="top", options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+### Allgemeine Reinigung {.unnumbered}
+
+Bei der Aufbereitung der Daten für das Plotten ist es am besten, die Daten an die ["ordentliche" Datenstandards](https://r4ds.had.co.nz/tidy-data.html)so gut wie möglich einhalten. Wie du das erreichen kannst, wird auf den Seiten zum Datenmanagement in diesem Handbuch näher erläutert, z. B. [Daten und Kernfunktionen bereinigen].
+
+Einige einfache Möglichkeiten, wie wir unsere Daten aufbereiten können, um sie für die Darstellung besser zu machen, können darin bestehen, den Inhalt der Daten für die Anzeige zu verbessern - was nicht unbedingt gleichbedeutend mit einer besseren Datenmanipulation ist. Ein Beispiel:
+
+- Ersetze `NA` Werte in einer Zeichenspalte durch die Zeichenkette "Unbekannt"
+- Konvertierung der Spalte in eine Klasse erwägen *Faktor* damit ihre Werte vorgeschriebene Ordnungsstufen haben
+- Bereinigen Sie einige Spalten, so dass ihre "datenfreundlichen" Werte mit Unterstrichen usw. in normalen Text oder Großbuchstaben geändert werden (siehe [Zeichen und Zeichenketten])
+
+Hier sind einige Beispiele für diese Funktion:
+
+```{r}
+# make display version of columns with more friendly names
+linelist <- linelist %>%
+  mutate(
+    gender_disp = case_when(gender == "m" ~ "Male",        # m to Male 
+                            gender == "f" ~ "Female",      # f to Female,
+                            is.na(gender) ~ "Unknown"),    # NA to Unknown
+    
+    outcome_disp = replace_na(outcome, "Unknown")          # replace NA outcome with "unknown"
+  )
+```
+
+### Länger schwenken {.unnumbered}
+
+In Bezug auf die Datenstruktur ist es für **ggplot2** wollen wir unsere Daten oft auch in *längere*Formate. Mehr dazu findest du auf der Seite über [Pivotierung von Daten].
+
+```{r, out.width="100%", fig.align="center", echo=F}
+knitr::include_graphics(here::here("images", "pivoting", "pivot_longer_new.png"))
+```
+
+Nehmen wir zum Beispiel an, dass wir Daten in einem "breiten" Format darstellen wollen, wie zum Beispiel für jeden Fall in der `linelist` und ihre Symptome. Im Folgenden erstellen wir eine Mini-Liste namens `symptoms_data` die nur die `case_id` und Symptome enthält.
+
+```{r}
+symptoms_data <- linelist %>% 
+  select(c(case_id, fever, chills, cough, aches, vomit))
+```
+
+So sehen die ersten 50 Zeilen dieser Mini-Liste aus - du siehst, dass sie "breit" formatiert sind und jedes Symptom eine Spalte ist:
+
+```{r, message=FALSE, echo=F}
+# display the linelist data as a table
+DT::datatable(head(symptoms_data, 50), rownames = FALSE, filter="top", options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+Wenn wir die Anzahl der Fälle mit bestimmten Symptomen darstellen wollen, sind wir dadurch eingeschränkt, dass jedes Symptom eine eigene Spalte ist. Wir können jedoch *drehen* die Spalten mit den Symptomen in ein längeres Format umwandeln, wie hier:
+
+```{r}
+symptoms_data_long <- symptoms_data %>%    # begin with "mini" linelist called symptoms_data
+  
+  pivot_longer(
+    cols = -case_id,                       # pivot all columns except case_id (all the symptoms columns)
+    names_to = "symptom_name",             # assign name for new column that holds the symptoms
+    values_to = "symptom_is_present") %>%  # assign name for new column that holds the values (yes/no)
+  
+  mutate(symptom_is_present = replace_na(symptom_is_present, "unknown")) # convert NA to "unknown"
+
+```
+
+Hier sind die ersten 50 Zeilen. Beachte, dass der Fall 5 Zeilen hat - eine für jedes mögliche Symptom. Die neuen Spalten `symptom_name` und `symptom_is_present` sind das Ergebnis des Pivots. Beachte, dass dieses Format für andere Operationen vielleicht nicht sehr nützlich ist, aber für das Plotten ist es nützlich.
+
+```{r, message=FALSE, echo=F}
+DT::datatable(head(symptoms_data_long, 50), rownames = FALSE, filter="top", options = list(pageLength = 10, scrollX=T), class = 'white-space: nowrap' )
+```
+
+<!-- ======================================================= -->
+
+## Grundlagen von ggplot {}
+
+**"Grammatik der Grafik" - ggplot2**
+
+Plotten mit **ggplot2** basiert auf dem "Hinzufügen" von Plot-Ebenen und Gestaltungselementen übereinander, wobei jeder Befehl mit einem Plus-Symbol zu den vorherigen hinzugefügt wird (`+`). Das Ergebnis ist ein mehrschichtiges Plotobjekt, das gespeichert, geändert, gedruckt, exportiert usw. werden kann.
+
+ggplot-Objekte können sehr komplex sein, aber die grundlegende Reihenfolge der Ebenen sieht normalerweise so aus:
+
+1. Beginne mit der Grundlinie `ggplot()` Befehl - dieser "öffnet" den ggplot und ermöglicht das Hinzufügen weiterer Funktionen mit `+`. Normalerweise wird in diesem Befehl auch der Datensatz angegeben
+2. Hinzufügen von "geom"-Layern - diese Funktionen visualisieren die Daten als *Geometrien* (*Formen*), z. B. als Balkendiagramm, Liniendiagramm, Streudiagramm, Histogramm (oder eine Kombination!). Diese Funktionen beginnen alle mit `geom_` als Präfix.
+3. Hinzufügen von Designelementen zum Diagramm wie Achsenbeschriftungen, Titel, Schriftarten, Größen, Farbschemata, Legenden oder Achsendrehung
+
+Im Folgenden findest du ein einfaches Beispiel für einen Skelettcode. Die einzelnen Komponenten werden in den folgenden Abschnitten erklärt.
+
+```{r, eval=F}
+# plot data from my_data columns as red points
+ggplot(data = my_data)+                   # use the dataset "my_data"
+  geom_point(                             # add a layer of points (dots)
+    mapping = aes(x = col1, y = col2),    # "map" data column to axes
+    color = "red")+                       # other specification for the geom
+  labs()+                                 # here you add titles, axes labels, etc.
+  theme()                                 # here you adjust color, font, size etc of non-data plot elements (axes, title, etc.) 
+```
+
+## `ggplot()`
+
+Der Eröffnungsbefehl eines jeden ggplot2-Plots lautet `ggplot()`. Mit diesem Befehl wird einfach eine leere Leinwand erstellt, auf der du Ebenen hinzufügen kannst. Er "öffnet" den Weg für weitere Ebenen, die mit einem `+` Symbol.
+
+Normalerweise wird der Befehl `ggplot()` enthält die `data = ` Argument für den Plot. Damit wird der Standarddatensatz festgelegt, der für die nachfolgenden Ebenen des Plots verwendet wird.
+
+Dieser Befehl endet mit einem `+` nach der schließenden Klammer. Dadurch bleibt der Befehl "offen". Der ggplot wird nur ausgeführt/erscheinen, wenn der vollständige Befehl eine letzte Ebene enthält *ohne* a `+` am Ende.
+
+```{r, eval=F}
+# This will create plot that is a blank canvas
+ggplot(data = linelist)
+```
+
+## Geoms
+
+Eine leere Leinwand reicht nicht aus - wir müssen aus unseren Daten Geometrien (Formen) erstellen (z. B. Balkendiagramme, Histogramme, Streudiagramme, Boxplots).
+
+Dazu fügen wir Ebenen "Geoms" zu den ursprünglichen `ggplot()` Befehl. Es gibt viele **ggplot2** Funktionen, die "geoms" erstellen. Jede dieser Funktionen beginnt mit "geom\_", daher bezeichnen wir sie im Folgenden allgemein als `geom_XXXX()`. Es gibt über 40 Geoms in **ggplot2** und viele andere, die von Fans erstellt wurden. Schau sie dir auf der [ggplot2-Galerie](https://exts.ggplot2.tidyverse.org/gallery/). Einige gängige Geoms sind unten aufgeführt:
+
+- Histogramme - `geom_histogram()`
+- Balkendiagramme - `geom_bar()` oder `geom_col()` (siehe [ Abschnitt "Balkendiagramm"](#ggplot_basics_bars))
+- Box Plots - `geom_boxplot()`
+- Punkte (z. B. Streudiagramme) - `geom_point()`
+- Liniendiagramme - `geom_line()` oder `geom_path()`
+- Trendlinien - `geom_smooth()`
+
+In einem Diagramm kannst du ein oder mehrere Geoms anzeigen. Jede wird zur vorherigen hinzugefügt **ggplot2** Befehlen mit einem `+` und sie werden nacheinander geplottet, sodass spätere Geoms über den vorherigen geplottet werden.
+
+## Daten auf den Plot abbilden {#ggplot\_basics\_mapping}
+
+Den meisten Geom-Funktionen muss mitgeteilt werden *was verwendet werden soll* um ihre Formen zu erstellen - du musst ihnen also sagen, wie sie *Spalten in deinen Daten abbilden (zuordnen)* den Komponenten des Plots wie Achsen, Formfarben, Formgrößen usw. zuordnen sollen. Für die meisten Geoms ist die *wesentliche* Komponenten, die auf Spalten in den Daten abgebildet werden müssen, die x-Achse und (falls nötig) die y-Achse.
+
+Dieses "Mapping" erfolgt mit der `mapping = ` Argument. Die Mappings, die du für `mapping` übergibst, müssen in die `aes()` Funktion eingeschlossen werden, du würdest also etwas schreiben wie `mapping = aes(x = col1, y = col2)` schreiben, wie unten gezeigt.
+
+Unten, in der `ggplot()` Befehl werden die Daten als Fall gesetzt `linelist`. Im `mapping = aes()` Argument wird die Spalte `age` auf die x-Achse abgebildet, und die Spalte `wt_kg` wird auf die y-Achse abgebildet.
+
+Nach einer `+` werden die Plotting-Befehle fortgesetzt. Eine Form wird mit der Funktion "geom" erstellt `geom_point()`. Dieses Geom *erbt* die Mappings aus dem `ggplot()` Befehl - er kennt die Achsen-Spalten-Zuordnungen und visualisiert diese Beziehungen als *Punkte* auf der Leinwand.
+
+```{r, warning=F, message=F}
+ggplot(data = linelist, mapping = aes(x = age, y = wt_kg))+
+  geom_point()
+```
+
+Als weiteres Beispiel verwenden die folgenden Befehle dieselben Daten, eine etwas andere Zuordnung und ein anderes Geom. Die `geom_histogram()` Funktion benötigt nur eine Spalte, die der x-Achse zugeordnet ist, da die y-Achse automatisch erzeugt wird.
+
+```{r, warning=F, message=F}
+ggplot(data = linelist, mapping = aes(x = age))+
+  geom_histogram()
+```
+
+### Ästhetik des Plots {.unnumbered}
+
+In der ggplot-Terminologie hat die "Ästhetik" eines Plots eine bestimmte Bedeutung. Sie bezieht sich auf eine visuelle Eigenschaft von *geplotteten Daten*. Beachte, dass "ästhetisch" sich hier auf die *Daten in Geometrien/Formen gezeichnet werden* - und nicht auf die umgebende Darstellung wie Titel, Achsenbeschriftung oder Hintergrundfarbe, die du vielleicht mit dem Wort "Ästhetik" in Verbindung bringst. In ggplot werden diese Details "Themen" genannt und innerhalb einer `theme()` Befehl angepasst (siehe [diesen Abschnitt](#ggplot_basics_themes)).
+
+Daher ist das Plot-Objekt *Ästhetik* können Farben, Größen, Transparenzen, Platzierungen usw. sein. *der gezeichneten Daten*. Nicht alle Geoms haben die gleichen ästhetischen Optionen, aber viele können von den meisten Geoms verwendet werden. Hier sind einige Beispiele:
+
+- `shape =` Einen Punkt anzeigen mit `geom_point()` als Punkt, Stern, Dreieck oder Quadrat...
+- `fill = ` Die Innenfarbe (z. B. eines Balkens oder Boxplots)
+- `color =` Die äußere Linie eines Balkens, Boxplots usw. oder die Punktfarbe, wenn du `geom_point()`
+- `size = ` Größe (z. B. Liniendicke, Punktgröße)
+- `alpha = ` Transparenz (1 = undurchsichtig, 0 = unsichtbar)
+- `binwidth = ` Breite der Histogramm-Bins
+- `width = ` Breite der "Barplot"-Spalten
+- `linetype =` Linientyp (z. B. durchgezogen, gestrichelt, gepunktet)
+
+Diese Ästhetik des Plotobjekts kann auf zwei Arten zugewiesen werden:
+
+1) Zuweisung eines statischen Wertes (z. B. `color = "blue"`), der für alle gezeichneten Beobachtungen gilt
+2) einer Spalte der Daten zugewiesen (z. B. `color = hospital`), so dass die Anzeige jeder Beobachtung von ihrem Wert in dieser Spalte abhängt
+
+<!-- *Diese achsenunabhängigen Ästhetiken können statischen Werten zugewiesen werden (z.B. `Größe = 1`) oder einer Spalte zugeordnet werden (z.B. `Größe = Alter`).* Wenn du möchtest, dass der Ästhetik ein statischer Wert zugewiesen wird, wird die Zuordnung *außerhalb* der `Zuordnung = aes()` platziert. Wenn du möchtest, dass die Ästhetik skaliert wird/vom Wert in jeder Datenzeile abhängt, wird die Zuweisung *innerhalb* der `Zuordnung = aes()` vorgenommen.   -->
+
+### Auf einen statischen Wert setzen {.unnumbered}
+
+Wenn du möchtest, dass die Ästhetik des Plot-Objekts statisch ist, d.h. für jede Beobachtung in den Daten gleich ist, schreibst du seine Zuweisung innerhalb des geom aber *außerhalb von* jeder `mapping = aes()` Anweisung. Diese Zuweisungen könnten wie folgt aussehen `size = 1` oder `color = "blue"`. Hier sind zwei Beispiele:
+
+- Im ersten Beispiel wird die `mapping = aes()` ist in der `ggplot()` Befehl und die Achsen werden den Spalten Alter und Gewicht in den Daten zugeordnet. Die Ästhetik der Darstellung `color = `, `size = `, und `alpha = ` (Transparenz) werden statische Werte zugewiesen. Der Übersichtlichkeit halber wird dies in der `geom_point()` Funktion, da du später andere Geomodelle hinzufügen kannst, die für die Ästhetik ihrer Darstellung andere Werte benötigen.
+- Im zweiten Beispiel muss für das Histogramm nur die x-Achse einer Spalte zugeordnet werden. Das Histogramm `binwidth = `, `color = `, `fill = ` (interne Farbe), und `alpha = ` werden im Geom wieder auf statische Werte gesetzt.
+
+```{r, out.width=c("50%", "50%"), fig.show="hold", warning=F, message=F}
+# scatterplot
+ggplot(data = linelist, mapping = aes(x = age, y = wt_kg))+  # set data and axes mapping
+  geom_point(color = "darkgreen", size = 0.5, alpha = 0.2)         # set static point aesthetics
+
+# histogram
+ggplot(data = linelist, mapping = aes(x = age))+       # set data and axes
+  geom_histogram(              # display histogram
+    binwidth = 7,                # width of bins
+    color = "red",               # bin line color
+    fill = "blue",               # bin interior color
+    alpha = 0.1)                 # bin transparency
+```
+
+### Skaliert auf Spaltenwerte {.unnumbered}
+
+Die Alternative ist, die Ästhetik des Diagrammobjekts anhand der Werte in einer Spalte zu skalieren. Bei diesem Ansatz hängt die Darstellung der Ästhetik vom Wert der Beobachtung in der jeweiligen Datenspalte ab. Wenn die Spaltenwerte kontinuierlich sind, ist auch die Anzeigeskala (Legende) für diese Ästhetik kontinuierlich. Wenn die Spaltenwerte diskret sind, zeigt die Legende jeden Wert an und die gezeichneten Daten erscheinen deutlich "gruppiert" (mehr dazu im Abschnitt [Gruppierung](#ggplotgroups) Abschnitt auf dieser Seite).
+
+Um dies zu erreichen, ordnest du die ästhetische Darstellung einem *Spaltennamen* (nicht in Anführungszeichen). Das muss getan werden *innerhalb einer `mapping = aes()` Funktion* (Hinweis: Es gibt mehrere Stellen im Code, an denen du diese Zuordnungen vornehmen kannst, wie besprochen [unten](##ggplot_basics_map_loc)).
+
+Zwei Beispiele findest du unten.
+
+- Im ersten Beispiel wird die `color = ` Ästhetik (jedes Punktes) auf die Spalte `age` - und eine Skala ist in einer Legende erschienen! Nimm vorerst nur zur Kenntnis, dass die Skala existiert - wir werden in späteren Abschnitten zeigen, wie du sie ändern kannst.
+- Im zweiten Beispiel werden auch zwei neue Plot-Ästhetiken auf Spalten abgebildet (`color = ` und `size = `), während die Plotästhetik `shape = ` und `alpha = ` auf statische Werte außerhalb der `mapping = aes()` Funktion.
+
+```{r, out.width=c("50%", "50%"), fig.show="hold", warning=F, message=F}
+# scatterplot
+ggplot(data = linelist,   # set data
+       mapping = aes(     # map aesthetics to column values
+         x = age,           # map x-axis to age            
+         y = wt_kg,         # map y-axis to weight
+         color = age)
+       )+     # map color to age
+  geom_point()         # display data as points 
+
+# scatterplot
+ggplot(data = linelist,   # set data
+       mapping = aes(     # map aesthetics to column values
+         x = age,           # map x-axis to age            
+         y = wt_kg,         # map y-axis to weight
+         color = age,       # map color to age
+         size = age))+      # map size to age
+  geom_point(             # display data as points
+    shape = "diamond",      # points display as diamonds
+    alpha = 0.3)            # point transparency at 30%
+
+
+```
+
+Hinweis: Achsenzuweisungen werden immer den Spalten in den Daten zugewiesen (nicht den statischen Werten), und dies geschieht immer innerhalb der `mapping = aes()`.
+
+Es ist wichtig, den Überblick über deine Plot-Ebenen und die Ästhetik zu behalten, wenn du komplexere Plots erstellst - zum Beispiel Plots mit mehreren Geomen. Im folgenden Beispiel wird die `size = ` Ästhetik zweimal zugewiesen - einmal für `geom_point()` und einmal für `geom_smooth()` - beide Male als statischer Wert.
+
+```{r, warning=F, message=F}
+ggplot(data = linelist,
+       mapping = aes(           # map aesthetics to columns
+         x = age,
+         y = wt_kg,
+         color = age_years)
+       ) + 
+  geom_point(                   # add points for each row of data
+    size = 1,
+    alpha = 0.5) +  
+  geom_smooth(                  # add a trend line 
+    method = "lm",              # with linear method
+    size = 2)                   # size (width of line) of 2
+```
+
+### Wo du Kartierungen vornehmen kannst {#ggplot\_basics\_map\_loc .unnumbered}
+
+Ästhetische Kartierung innerhalb `mapping = aes()` kann an mehreren Stellen in deinen Plot-Befehlen geschrieben werden und kann sogar mehr als einmal geschrieben werden. Dies kann im oberen Bereich geschrieben werden `ggplot()` Befehl und/oder für jedes einzelne darunter liegende Geom geschrieben werden. Zu den Feinheiten gehören:
+
+- Kartierungszuweisungen, die in der oberen `ggplot()` Befehl vorgenommenen Zuordnungen werden als Standardwerte an alle darunter liegenden Geometrien vererbt, so wie `x = ` und `y = ` vererbt werden
+- Mapping-Zuweisungen, die innerhalb eines Geoms vorgenommen werden, gelten nur für dieses Geom
+
+Gleiches gilt, `data = ` die in der obersten `ggplot()` werden standardmäßig auf alle darunter liegenden Geom angewendet, aber du könntest auch Daten für jedes Geom angeben (das ist aber schwieriger).
+
+So erstellt jeder der folgenden Befehle denselben Plot:
+
+```{r, eval=F, warning=F, message=F}
+# These commands will produce the exact same plot
+ggplot(data = linelist, mapping = aes(x = age))+
+  geom_histogram()
+
+ggplot(data = linelist)+
+  geom_histogram(mapping = aes(x = age))
+
+ggplot()+
+  geom_histogram(data = linelist, mapping = aes(x = age))
+```
+
+### Gruppen {#ggplotgroups .unnumbered}
+
+Du kannst die Daten ganz einfach gruppieren und "nach Gruppen plotten". Tatsächlich hast du das bereits getan!
+
+Weisen Sie die Spalte "Gruppierung" der entsprechenden Plot-Ästhetik zu, innerhalb einer `mapping = aes()`. Oben haben wir dies mit kontinuierlichen Werten demonstriert, als wir den Punkt `size = ` der Spalte `age`. Das funktioniert aber genauso bei diskreten/kategorialen Spalten.
+
+Wenn du zum Beispiel möchtest, dass die Punkte nach Geschlecht angezeigt werden, musst du `mapping = aes(color = gender)`. Es erscheint automatisch eine Legende. Diese Zuordnung kann innerhalb der `mapping = aes()` im oberen `ggplot()` Befehl erfolgen (und an das Geom vererbt werden), oder sie kann in einem separaten `mapping = aes()` innerhalb des geom. Beide Ansätze werden unten gezeigt:
+
+```{r, warning=F, message=F}
+ggplot(data = linelist,
+       mapping = aes(x = age, y = wt_kg, color = gender))+
+  geom_point(alpha = 0.5)
+```
+
+```{r, eval=F}
+# This alternative code produces the same plot
+ggplot(data = linelist,
+       mapping = aes(x = age, y = wt_kg))+
+  geom_point(
+    mapping = aes(color = gender),
+    alpha = 0.5)
+
+```
+
+Beachte, dass du je nach Geom unterschiedliche Argumente verwenden musst, um die Daten zu gruppieren. Für `geom_point()` wirst du höchstwahrscheinlich verwenden `color =`, `shape = ` oder `size = `. Für `geom_bar()` ist es wahrscheinlicher, dass du `fill = `. Das hängt von der Geometrie ab und davon, wie du die Gruppierungen darstellen willst.
+
+Zu deiner Information: Die grundlegendste Art, die Daten zu gruppieren, ist die Verwendung der `group = ` Argument innerhalb `mapping = aes()`. Dadurch werden jedoch weder die Farben noch die Füllung oder die Formen geändert. Es wird auch keine Legende erstellt. Die Daten werden jedoch gruppiert, sodass statistische Darstellungen davon betroffen sein können.
+
+Um die Reihenfolge der Gruppen in einem Diagramm anzupassen, siehe die [ggplot-Tipps] Seite oder die Seite über [Faktoren]. In den folgenden Abschnitten über das Plotten von kontinuierlichen und kategorialen Daten findest du viele Beispiele für gruppierte Diagramme.
+
+## Facetten / Kleine Vielfache {#ggplot\_basics\_facet}
+
+Facetten oder "Small-Multiples" werden verwendet, um eine Darstellung in eine Abbildung mit mehreren Feldern aufzuteilen, mit einem Feld ("Facette") pro Datengruppe. Dieselbe Art von Diagramm wird mehrmals erstellt, wobei jedes Mal eine Untergruppe desselben Datensatzes verwendet wird.
+
+Die Facettierung ist eine Funktion, die mit **ggplot2**enthalten ist, sodass die Legenden und Achsen der Facetten-"Panels" automatisch ausgerichtet werden. Es gibt noch weitere Pakete, die in den [ggplot-Tipps] beschriebenen Pakete, die dazu dienen, völlig unterschiedliche Plots zu kombinieren (**cowplot** und **Patchwork**) zu einer Figur.
+
+Die Facettierung wird mit einer der folgenden Methoden durchgeführt **ggplot2** Funktionen:
+
+1. `facet_wrap()` Um für jede Ebene eines Projekts ein anderes Panel anzuzeigen *einzelnen* Variable. Ein Beispiel hierfür wäre die Darstellung einer anderen Epidemiekurve für jedes Krankenhaus in einer Region. Die Facetten sind alphabetisch geordnet, es sei denn, die Variable ist ein Faktor, für den eine andere Reihenfolge festgelegt wurde.
+
+- Du kannst bestimmte Optionen aufrufen, um das Layout der Facetten zu bestimmen, z.B. `nrow = 1` oder `ncol = 1` um die Anzahl der Zeilen oder Spalten festzulegen, in denen die Facettenplots angeordnet werden.
+
+2. `facet_grid()` Dies wird verwendet, wenn du eine zweite Variable in die Facettenanordnung einbeziehen möchtest. Hier zeigt jedes Feld eines Rasters die Schnittmenge zwischen Werten in *zwei Spalten*. Zum Beispiel Epidemiekurven für jede Krankenhaus-Altersgruppen-Kombination mit Krankenhäusern an der Spitze (Spalten) und Altersgruppen an den Seiten (Zeilen).
+
+- `nrow` und `ncol` sind nicht relevant, da die Untergruppen in einem Raster dargestellt werden
+
+Jede dieser Funktionen akzeptiert eine Formelsyntax, um die Spalte(n) für die Facettierung anzugeben. Beide akzeptieren bis zu zwei Spalten, eine auf jeder Seite einer Tilde `~`.
+
+- Für `facet_wrap()` Meistens wirst du nur eine Spalte schreiben, der eine Tilde vorangestellt ist `~` wie `facet_wrap(~hospital)`. Du kannst aber auch zwei Spalten schreiben `facet_wrap(outcome ~ hospital)` - jede einzigartige Kombination wird in einem separaten Feld angezeigt, aber sie werden nicht in einem Raster angeordnet. In den Überschriften werden kombinierte Begriffe angezeigt, die keiner spezifischen Logik für die Spalten oder Zeilen unterliegen.  Wenn du nur eine Facettenvariable angibst, wird ein Punkt `.` als Platzhalter auf der anderen Seite der Formel verwendet - siehe die Codebeispiele.
+
+- Für `facet_grid()` kannst du auch eine oder zwei Spalten in der Formel angeben (Gitter `rows ~ columns`). Wenn du nur eine Spalte angeben willst, kannst du einen Punkt setzen `.` auf die andere Seite der Tilde setzen, wie `facet_grid(. ~ hospital)` oder `facet_grid(hospital ~ .)`.
+
+Facetten können schnell eine überwältigende Menge an Informationen enthalten - daher solltest du sicherstellen, dass du nicht zu viele Ebenen für jede Variable hast, nach der du facettieren willst. Hier sind einige schnelle Beispiele mit dem Malaria-Datensatz (siehe [Handbuch und Daten herunterladen]), der die täglichen Malariafälle in den Einrichtungen nach Altersgruppen enthält.
+
+Im Folgenden importieren wir die Daten und nehmen der Einfachheit halber ein paar schnelle Änderungen vor:
+
+```{r, warning=F, message=F}
+# These data are daily counts of malaria cases, by facility-day
+malaria_data <- import(here("data", "malaria_facility_count_data.rds")) %>%  # import
+  select(-submitted_date, -Province, -newid)                                 # remove unneeded columns
+
+```
+
+Die ersten 50 Zeilen der Malaria-Daten sind unten zu sehen. Beachte, dass es eine Spalte `malaria_tot` aber auch Spalten für die Zählungen nach Altersgruppen (diese werden im zweiten Abschnitt verwendet, `facet_grid()` Beispiel verwendet).
+
+```{r, message=FALSE, echo=F}
+DT::datatable(head(malaria_data, 50), rownames = FALSE, filter="top", options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+### `facet_wrap()` {.unnumbered}
+
+Konzentrieren wir uns erst einmal auf die Spalten `malaria_tot` und `District`. Ignoriere die altersspezifischen Zählspalten vorerst. Wir werden die Epidemiekurven mit `geom_col()` die für jeden Tag eine Spalte in der angegebenen y-Achsenhöhe erzeugt, die in der Spalte `malaria_tot` (die Daten sind bereits tägliche Zählungen, also verwenden wir `geom_col()` - siehe [den Abschnitt "Balkendiagramm" unten](#ggplot_basics_bars)).
+
+Wenn wir den Befehl `facet_wrap()` hinzufügen, geben wir eine Tilde und dann die Spalte an, die wir facettieren wollen (`District` in diesem Fall). Du kannst eine weitere Spalte auf der linken Seite der Tilde platzieren - dann wird eine Facette für jede Kombination erstellt - aber wir empfehlen, dies mit `facet_grid()` stattdessen. In diesem Anwendungsfall wird eine Facette für jeden eindeutigen Wert von `District`.
+
+```{r, warning=F, message=F}
+# A plot with facets by district
+ggplot(malaria_data, aes(x = data_date, y = malaria_tot)) +
+  geom_col(width = 1, fill = "darkred") +       # plot the count data as columns
+  theme_minimal()+                              # simplify the background panels
+  labs(                                         # add plot labels, title, etc.
+    x = "Date of report",
+    y = "Malaria cases",
+    title = "Malaria cases by district") +
+  facet_wrap(~District)                       # the facets are created
+```
+
+### `facet_grid()` {.unnumbered}
+
+Wir können eine `facet_grid()` Ansatz verwenden, um zwei Variablen zu kreuzen. Nehmen wir an, wir wollen Folgendes kreuzen `District` und Alter. Wir müssen einige Datentransformationen an den Altersspalten vornehmen, um diese Daten in das von ggplot bevorzugte "lange" Format zu bringen. Die Altersgruppen haben alle ihre eigenen Spalten - wir wollen sie in einer einzigen Spalte namens `age_group` und eine weitere namens `num_cases`. Siehe die Seite über [Pivotierung von Daten] für weitere Informationen zu diesem Prozess.
+
+```{r, message=F, warning=F}
+malaria_age <- malaria_data %>%
+  select(-malaria_tot) %>% 
+  pivot_longer(
+    cols = c(starts_with("malaria_rdt_")),  # choose columns to pivot longer
+    names_to = "age_group",      # column names become age group
+    values_to = "num_cases"      # values to a single column (num_cases)
+  ) %>%
+  mutate(
+    age_group = str_replace(age_group, "malaria_rdt_", ""),
+    age_group = forcats::fct_relevel(age_group, "5-14", after = 1))
+```
+
+Jetzt sehen die ersten 50 Datenzeilen so aus:
+
+```{r, message=FALSE, echo=F}
+DT::datatable(head(malaria_age, 50), rownames = FALSE, filter="top", options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+Wenn du die beiden Variablen an `facet_grid()` übergibst, ist es am einfachsten, die Formelschreibweise zu verwenden (z. B. `x ~ y`), wobei x für Zeilen und y für Spalten steht. Hier ist die Darstellung, die `facet_grid()` um die Diagramme für jede Kombination der Spalten anzuzeigen `age_group` und `District`.
+
+```{r, message=F, warning=F}
+ggplot(malaria_age, aes(x = data_date, y = num_cases)) +
+  geom_col(fill = "darkred", width = 1) +
+  theme_minimal()+
+  labs(
+    x = "Date of report",
+    y = "Malaria cases",
+    title = "Malaria cases by district and age group"
+  ) +
+  facet_grid(District ~ age_group)
+```
+
+### Freie oder feste Achsen {.unnumbered}
+
+Die Achsenskalen, die beim Facettieren angezeigt werden, sind standardmäßig für alle Facetten gleich (fest). Das ist hilfreich für Quervergleiche, aber nicht immer sinnvoll.
+
+Wenn du `facet_wrap()` oder `facet_grid()` können wir hinzufügen `scales = "free_y"` hinzufügen, um die Y-Achsen der Panels zu "befreien" oder freizugeben, damit sie entsprechend ihrer Datenuntermenge skalieren. Das ist besonders nützlich, wenn die tatsächlichen Zählungen für eine der Unterkategorien klein sind und Trends sonst schwer zu erkennen sind. Anstelle von "free\_y" können wir auch "free\_x" schreiben, um dasselbe für die x-Achse (z. B. für Daten) oder "free" für beide Achsen zu tun. Beachte, dass in `facet_grid` die y-Skalen für die Facetten in derselben Zeile und die x-Skalen für die Facetten in derselben Spalte gleich sind.
+
+Wenn du `facet_grid` verwenden, können wir hinzufügen `space = "free_y"` oder `space = "free_x"` hinzufügen, so dass die tatsächliche Höhe oder Breite der Facette mit den Werten der Figur darin gewichtet wird. Das funktioniert nur, wenn `scales = "free"` (y oder x) bereits angewendet wird.
+
+```{r, message=FALSE, warning=FALSE}
+
+# Free y-axis
+ggplot(malaria_data, aes(x = data_date, y = malaria_tot)) +
+  geom_col(width = 1, fill = "darkred") +       # plot the count data as columns
+  theme_minimal()+                              # simplify the background panels
+  labs(                                         # add plot labels, title, etc.
+    x = "Date of report",
+    y = "Malaria cases",
+    title = "Malaria cases by district - 'free' x and y axes") +
+  facet_wrap(~District, scales = "free")        # the facets are created
+```
+
+<!-- ```{r fig.show='hold', message=FALSE, warning=FALSE, out.width=c('50%', '50%')} -->
+
+<!-- # A) Facette Krankenhaus Entlassungsdatum nach Krankenhaus, freie y-Achse -->
+
+<!-- ggplot(data = linelist %>% filter(hospital != "Missing"), # filtert unbekanntes Krankenhaus heraus -->
+
+<!-- aes(x = date_hospitalisation ))+ -->
+
+<!-- geom_histogram(binwidth=7) + # Bindwidth = 7 days -->
+
+<!-- labs(title = "A) Histogramm mit freien y-Achsenskalen")+ -->
+
+<!-- facet_grid(hospital~., # Facet mit Krankenhaus als Zeile -->
+
+<!-- scales = "free_y") # Gib die y-Skala jeder Facette frei -->
+
+<!-- # B) Facette Hospitalisierungsdatum nach Krankenhaus, freie y-Achse und vertikale Abstände -->
+
+<!-- ggplot(data = linelist %>% filter(hospital != "Missing"), # Filter entfernt unbekanntes Krankenhaus -->
+
+<!-- aes(x = date_hospitalisation ))+ -->
+
+<!-- geom_histogram(binwidth=7) + # Bindwidth = 7 Tage -->
+
+<!-- labs(title = "B) Histogramm mit freien y-Achsenskalen und Abständen")+ -->
+
+<!-- facet_grid(hospital~., # Facet mit Krankenhaus als Zeile -->
+
+<!-- scales = "free_y", # Free the y scale of each facet -->
+
+<!-- space = "free_y") # Gib den vertikalen Abstand der einzelnen Facetten frei, um den Platz zu optimieren -->
+
+<!-- ``` -->
+
+### Reihenfolge der Faktorebenen in den Facetten {.unnumbered}
+
+Siehe dies [Beitrag](https://juliasilge.com/blog/reorder-within/) wie du die Faktorstufen neu anordnen kannst *innerhalb von* Facetten.
+
+## Speichern von Plots
+
+### Speichern von Plots {.unnumbered}
+
+Standardmäßig werden beim Ausführen einer `ggplot()` Befehl ausführst, wird der Plot standardmäßig in das RStudio-Fenster "Plots" gedruckt. Du kannst den Plot aber auch als Objekt speichern, indem du den Zuweisungsoperator `<-` verwendest und ihm einen Namen gibst. Dann wird er nur gedruckt, wenn der Objektname selbst ausgeführt wird. Du kannst ihn auch drucken, indem du den Plotnamen mit `print()` einschließt, aber das ist nur unter bestimmten Umständen notwendig, z. B. wenn der Plot innerhalb eines anderen Objekts erstellt wird. *for-Schleife*verwendet wird, um mehrere Plots auf einmal zu drucken (siehe [Iteration, Schleifen und Listen] Seite).
+
+```{r, warning=F, message=F}
+# define plot
+age_by_wt <- ggplot(data = linelist, mapping = aes(x = age_years, y = wt_kg, color = age_years))+
+  geom_point(alpha = 0.1)
+
+# print
+age_by_wt    
+```
+
+### Gespeicherte Diagramme ändern {.unnumbered}
+
+Eine schöne Sache über **ggplot2** ist, dass du einen Plot (wie oben) definieren und ihm dann Ebenen hinzufügen kannst, beginnend mit seinem Namen. Du musst nicht alle Befehle wiederholen, mit denen der ursprüngliche Plot erstellt wurde!
+
+Um zum Beispiel den Plot zu ändern `age_by_wt` zu ändern, um eine vertikale Linie bei Alter 50 einzufügen, fügen wir einfach einen `+` ein und fügen weitere Ebenen zum Diagramm hinzu.
+
+```{r, warning=F, message=F}
+age_by_wt+
+  geom_vline(xintercept = 50)
+```
+
+### Plots exportieren {.unnumbered}
+
+Das Exportieren von ggplots wird mit der Funktion `ggsave()` Funktion von **ggplot2**. Sie kann auf zwei Arten funktionieren, entweder:
+
+- Du gibst den Namen des Plot-Objekts an, dann den Dateipfad und den Namen mit der Erweiterung
+  - Zum Beispiel: `ggsave(my_plot, here("plots", "my_plot.png"))`
+- Führe den Befehl nur mit einem Dateipfad aus, um den zuletzt gedruckten Plot zu speichern
+  - Zum Beispiel: `ggsave(here("plots", "my_plot.png"))`
+
+Du kannst als png, pdf, jpeg, tiff, bmp, svg oder verschiedene andere Dateitypen exportieren, indem du die Dateierweiterung im Dateipfad angibst.
+
+Du kannst auch die folgenden Argumente angeben `width = `, `height = `, und `units = ` (entweder "in", "cm", oder "mm"). Du kannst auch angeben `dpi = ` mit einer Zahl für die Plotauflösung angeben (z. B. 300). Sieh dir die Details der Funktion an, indem du `?ggsave` eingibst oder die [Dokumentation online](https://ggplot2.tidyverse.org/reference/ggsave.html).
+
+Denken Sie daran, dass Sie `here()`Syntax verwenden kannst, um den gewünschten Dateipfad anzugeben. Siehe die [Importieren und Exportieren] Seite für weitere Informationen.
+
+## Etiketten
+
+Sicherlich möchtest du die Beschriftungen des Plots hinzufügen oder anpassen. Das kannst du am einfachsten in der `labs()` Funktion, die dem Plot mit `+` genauso wie die Geoms.
+
+Innerhalb von `labs()` kannst du Zeichenketten für diese Argumente angeben:
+
+- `x = ` und `y = ` Die Titel der x- und y-Achse (Beschriftungen)
+- `title = ` Der Haupttitel der Grafik
+- `subtitle = ` Der Untertitel der Handlung, in kleinerem Text unterhalb des Titels
+- `caption = ` Die Beschriftung des Plots, standardmäßig unten rechts
+
+Hier ist ein Diagramm, das wir zuvor erstellt haben, aber mit schöneren Beschriftungen:
+
+```{r, warning=F, message=F}
+age_by_wt <- ggplot(
+  data = linelist,   # set data
+  mapping = aes(     # map aesthetics to column values
+         x = age,           # map x-axis to age            
+         y = wt_kg,         # map y-axis to weight
+         color = age))+     # map color to age
+  geom_point()+           # display data as points
+  labs(
+    title = "Age and weight distribution",
+    subtitle = "Fictional Ebola outbreak, 2014",
+    x = "Age in years",
+    y = "Weight in kilos",
+    color = "Age",
+    caption = stringr::str_glue("Data as of {max(linelist$date_hospitalisation, na.rm=T)}"))
+
+age_by_wt
+```
+
+Beachte, dass wir in der Beschriftungszuweisung Folgendes verwendet haben `str_glue()` aus dem **stringr**Paket, um dynamischen R-Code in den String-Text einzubauen. Die Überschrift zeigt das "Daten vom: " an, das das maximale Datum des Krankenhausaufenthalts in der Zeilenliste widerspiegelt. Mehr dazu findest du auf der Seite über [Zeichen und Zeichenketten].
+
+Ein Hinweis zum Festlegen der *Legende* titel: Es gibt nicht das eine Argument "Legendentitel", da du mehrere Skalen in deiner Legende haben kannst. Innerhalb von `labs()` kannst du das Argument für die Plot-Ästhetik schreiben, mit der du die Legende erstellst, und den Titel auf diese Weise angeben. Zum Beispiel haben wir oben `color = age` um die Legende zu erstellen. Daher geben wir `color = ` an `labs()` an und vergeben den gewünschten Legendentitel ("Alter" mit großem A). Wenn du die Legende mit `aes(fill = COLUMN)`, dann in `labs()` würdest du schreiben `fill = `um den Titel der Legende anzupassen. Der Abschnitt über Farbskalen in den [ggplot-Tipps] Seite enthält weitere Details zur Bearbeitung von Legenden und einen alternativen Ansatz mit`scales_()` Funktionen.
+
+## Themen {#ggplot\_basics\_themes}
+
+Eine der besten Seiten von **ggplot2** ist die große Kontrolle, die du über den Plot hast - du kannst alles definieren! Wie bereits erwähnt, ist das Design des Plots, das *nicht* nicht mit den Daten zusammenhängt, wird innerhalb der `theme()` Funktion angepasst. Zum Beispiel die Hintergrundfarbe des Plots, das Vorhandensein/Fehlen von Gitternetzlinien und die Schriftart/Größe/Farbe/Ausrichtung von Text (Titel, Untertitel, Beschriftungen, Achsentext...). Diese Anpassungen können auf zwei Arten vorgenommen werden:
+
+- Hinzufügen eines [*komplettes Thema*](https://ggplot2.tidyverse.org/reference/ggtheme.html) `theme_()` Funktion, um weitreichende Anpassungen vorzunehmen - dazu gehören `theme_classic()`, `theme_minimal()`, `theme_dark()`, `theme_light()` `theme_grey()`, `theme_bw()` u.a.
+- Passe jeden winzigen Aspekt des Plots individuell innerhalb `theme()`
+
+### Vollständige Themen {.unnumbered}
+
+Da sie recht einfach sind, werden wir im Folgenden die Funktionen der vollständigen Themen demonstrieren und sie hier nicht weiter beschreiben. Beachte, dass alle Mikroanpassungen mit `theme()` vorgenommen werden sollten *nach* der Verwendung eines vollständigen Themas.
+
+Schreibe sie mit leeren Klammern.
+
+```{r, out.width=c("50%", "50%"), fig.show="hold", warning=F, message=F}
+
+ggplot(data = linelist, mapping = aes(x = age, y = wt_kg))+  
+  geom_point(color = "darkgreen", size = 0.5, alpha = 0.2)+
+  labs(title = "Theme classic")+
+  theme_classic()
+
+ggplot(data = linelist, mapping = aes(x = age, y = wt_kg))+  
+  geom_point(color = "darkgreen", size = 0.5, alpha = 0.2)+
+  labs(title = "Theme bw")+
+  theme_bw()
+
+ggplot(data = linelist, mapping = aes(x = age, y = wt_kg))+  
+  geom_point(color = "darkgreen", size = 0.5, alpha = 0.2)+
+  labs(title = "Theme minimal")+
+  theme_minimal()
+
+ggplot(data = linelist, mapping = aes(x = age, y = wt_kg))+  
+  geom_point(color = "darkgreen", size = 0.5, alpha = 0.2)+
+  labs(title = "Theme gray")+
+  theme_gray()
+  
+
+
+```
+
+### Thema ändern {.unnumbered}
+
+Die `theme()` Funktion kann eine große Anzahl von Argumenten annehmen, von denen jedes einen ganz bestimmten Aspekt des Plots bearbeitet. Wir können unmöglich alle Argumente behandeln, aber wir werden das allgemeine Muster für sie beschreiben und dir zeigen, wie du den Namen des Arguments findest, das du brauchst. Die grundlegende Syntax lautet wie folgt:
+
+1. Innerhalb von `theme()` schreibst du den Argumentnamen für das Plot-Element, das du bearbeiten willst, z.B. `plot.title = `
+2. Erstelle ein `element_()` Funktion für das Argument
+
+- Am häufigsten verwenden Sie `element_text()`, aber auch andere Funktionen wie `element_rect()` für Leinwand-Hintergrundfarben oder `element_blank()` zum Entfernen von Plot-Elementen
+
+4. Innerhalb der `element_()` Funktion schreibst du die Argumente, um die gewünschten Feineinstellungen vorzunehmen
+
+Diese Beschreibung war ziemlich abstrakt, deshalb sind hier ein paar Beispiele.
+
+Das folgende Diagramm sieht ziemlich albern aus, aber es soll dir zeigen, wie du dein Diagramm anpassen kannst.
+
+- Wir beginnen mit dem Plot `age_by_wt` der gerade oben definiert wurde und fügen `theme_classic()`
+- Für feinere Anpassungen fügen wir hinzu `theme()` und fügen ein Argument für jedes Plot-Element hinzu, das angepasst werden soll
+
+Es kann sinnvoll sein, die Argumente in logischen Abschnitten zu organisieren. Im Folgenden werden nur einige davon beschrieben:
+
+- `legend.position = ` ist einzigartig, weil es einfache Werte wie "unten", "oben", "links" und "rechts" akzeptiert. Aber im Allgemeinen erfordern textbezogene Argumente, dass du die Details *innerhalb von* `element_text()`.
+- Titelgröße mit `element_text(size = 30)`
+- Die horizontale Ausrichtung der Überschrift mit `element_text(hjust = 0)` (von rechts nach links)
+- Der Untertitel wird kursiv dargestellt mit `element_text(face = "italic")`
+
+```{r, warning=F, message=F}
+age_by_wt + 
+  theme_classic()+                                 # pre-defined theme adjustments
+  theme(
+    legend.position = "bottom",                    # move legend to bottom
+    
+    plot.title = element_text(size = 30),          # size of title to 30
+    plot.caption = element_text(hjust = 0),        # left-align caption
+    plot.subtitle = element_text(face = "italic"), # italicize subtitle
+    
+    axis.text.x = element_text(color = "red", size = 15, angle = 90), # adjusts only x-axis text
+    axis.text.y = element_text(size = 15),         # adjusts only y-axis text
+    
+    axis.title = element_text(size = 20)           # adjusts both axes titles
+    )     
+```
+
+Hier sind einige besonders häufige `theme()` Argumente. Du wirst einige Muster erkennen, wie zum Beispiel das Anhängen von `.x` oder `.y` um die Änderung nur auf eine Achse anzuwenden.
+
+| `theme()` Argument | Was es anpasst                                                                  | 
+| --------- | ------------------------------------------------------------------------------- |
+| `plot.title = element_text()`          | Der Titel                                                                       | 
+| `plot.subtitle = element_text()`          | Der Untertitel                                                                  | 
+| `plot.caption = element_text()`          | Die Überschrift (Familie, Schriftart, Farbe, Größe, Winkel, vjust, hjust...)    | 
+| `axis.title = element_text()`          | Achsentitel (sowohl x als auch y) (Größe, Fläche, Winkel, Farbe...)             | 
+| `axis.title.x = element_text()`          | Achsentitel nur x-Achse (verwende `.y` nur für die y-Achse)                                              | 
+| `axis.text = element_text()`          | Achsentext (sowohl x als auch y)                                                | 
+| `axis.text.x = element_text()`          | Achsentext nur x-Achse (verwenden Sie `.y` nur für die y-Achse)                                          | 
+| `axis.ticks = element_blank()`          | Achsenhäkchen entfernen                                                         | 
+| `axis.line = element_line()`          | Achsenlinien (Farbe, Größe, Linientyp: durchgezogen gestrichelt gepunktet usw.) | 
+| `strip.text = element_text()`          | Facettenstreifentext (Farbe, Fläche, Größe, Winkel...)                          | 
+| `strip.background = element_rect()`          | Facettenstreifen (Füllung, Farbe, Größe...)                                     | 
+
+Aber es gibt so viele thematische Argumente! Wie soll ich sie mir alle merken? Keine Sorge - es ist unmöglich, sie sich alle zu merken. Zum Glück gibt es ein paar Hilfsmittel, die dir helfen:
+
+Die **tidyverse** Dokumentation auf [Ändern des Themas](https://ggplot2.tidyverse.org/reference/theme.html) die eine vollständige Liste enthält.
+
+<span style="color: darkgreen;">***TIPP:*** Führe  aus. `theme_get()` von **ggplot2** um eine Liste mit allen 90+ `theme()` Argumente auf der Konsole aus.</span>
+
+<span style="color: darkgreen;">***TIPP:*** Wenn du einmal ein Element eines Plots entfernen möchtest, kannst du das auch über `theme()`. Gib einfach `element_blank()` an ein Argument, damit es komplett verschwindet. Für Legenden, setze `legend.position = "none".`</span>
+
+## Farben
+
+Bitte siehe dies [Abschnitt über Farbskalen auf der ggplot Tipps Seite](#ggplot_tips_colors).
+
+## Piping in **ggplot2**
+
+Wenn du deine Daten mithilfe von Pipes bereinigst und transformierst, ist es einfach, die transformierten Daten in `ggplot()`.
+
+Die Pipes, die den Datensatz von Funktion zu Funktion weiterleiten, gehen in `+` sobald die `ggplot()` Funktion aufgerufen wird. Beachte, dass es in diesem Fall nicht nötig ist, die `data = ` Argument nicht angegeben werden muss, da es automatisch als Piped-in-Datensatz definiert wird.
+
+So könnte das aussehen:
+
+```{r, warning=F, message=F}
+linelist %>%                                                     # begin with linelist
+  select(c(case_id, fever, chills, cough, aches, vomit)) %>%     # select columns
+  pivot_longer(                                                  # pivot longer
+    cols = -case_id,                                  
+    names_to = "symptom_name",
+    values_to = "symptom_is_present") %>%
+  mutate(                                                        # replace missing values
+    symptom_is_present = replace_na(symptom_is_present, "unknown")) %>% 
+  
+  ggplot(                                                        # begin ggplot!
+    mapping = aes(x = symptom_name, fill = symptom_is_present))+
+  geom_bar(position = "fill", col = "black") +                    
+  theme_classic() +
+  labs(
+    x = "Symptom",
+    y = "Symptom status (proportion)"
+  )
+```
+
+## Kontinuierliche Daten aufzeichnen
+
+Auf dieser Seite hast du bereits viele Beispiele für das Plotten von kontinuierlichen Daten gesehen. Hier fassen wir sie kurz zusammen und stellen ein paar Varianten vor.  
+Zu den hier behandelten Visualisierungen gehören:
+
+- Diagramme für eine kontinuierliche Variable:
+  - **Histogramm** Ein Histogramm ist ein klassisches Diagramm zur Darstellung der Verteilung einer kontinuierlichen Variable.
+  - **Boxplot** (auch Box und Whisker genannt), um die 25., 50. und 75. Perzentile, die Schwanzenden der Verteilung und Ausreißer zu zeigen ([wichtige Einschränkungen](https://www.data-to-viz.com/caveat/boxplot.html)).
+  - **Jitter-Plot**, um alle Werte als Punkte darzustellen, die "gejittert" sind, damit sie (meistens) alle zu sehen sind, auch wenn zwei denselben Wert haben.
+  - **Geigenplot** zeigen die Verteilung einer kontinuierlichen Variable anhand der symmetrischen Breite der "Geige".
+  - **Sina-Plot** sind eine Kombination aus Jitter- und Violinplots, bei denen einzelne Punkte dargestellt werden, aber in der symmetrischen Form der Verteilung (über **ggforce** Paket).
+- **Streudiagramm** für zwei kontinuierliche Variablen.
+- **Heat Plots**für drei kontinuierliche Variablen (verlinkt mit [Wärmebildern] Seite)
+
+### Histogramme {.unnumbered}
+
+Histogramme sehen zwar aus wie Balkendiagramme, unterscheiden sich aber dadurch, dass sie die Verteilung eines *kontinuierlichen* Variable messen. Es gibt keine Leerzeichen zwischen den "Balken", und es wird nur eine Spalte für `geom_histogram()`.
+
+Nachfolgend der Code für die Erstellung **Histogramme** die kontinuierliche Daten in Bereiche gruppieren und in nebeneinander liegenden Balken mit unterschiedlicher Höhe anzeigen. Dies geschieht mit `geom_histogram()`. Siehe die ["Abschnitt "Balkendiagramm](#ggplot_basics_bars) der ggplot-Grundlagen-Seite, um den Unterschied zwischen `geom_histogram()`, `geom_bar()`, und `geom_col()`.
+
+Wir zeigen die Verteilung des Alters der Fälle. Innerhalb von `mapping = aes()` gibst du an, für welche Spalte du die Verteilung sehen willst. Du kannst diese Spalte entweder der x- oder der y-Achse zuordnen.
+
+Die Zeilen werden auf der Grundlage ihres numerischen Alters "Bins" zugewiesen, und diese Bins werden grafisch durch Balken dargestellt. Wenn du eine Anzahl von Bins mit der Option `bins = ` Plot-Ästhetik angibst, werden die Haltepunkte gleichmäßig zwischen den Minimal- und Maximalwerten des Histogramms verteilt. Wenn `bins = ` nicht angegeben ist, wird eine entsprechende Anzahl von Bins geschätzt und diese Meldung nach der Darstellung angezeigt:
+
+```
+## `stat_bin()` using `bins = 30`. Pick better value with `binwidth`.
+```
+
+Wenn du keine Anzahl von Bins angeben möchtest, um `bins = ` angeben möchtest, kannst du alternativ angeben `binwidth = ` in den Einheiten der Achse angeben. Wir geben ein paar Beispiele für verschiedene Bins und Bin-Breiten:
+
+```{r, fig.show="hold", message=FALSE, warning=FALSE, out.width=c("50%", "50%")}
+# A) Regular histogram
+ggplot(data = linelist, aes(x = age))+  # provide x variable
+  geom_histogram()+
+  labs(title = "A) Default histogram (30 bins)")
+
+# B) More bins
+ggplot(data = linelist, aes(x = age))+  # provide x variable
+  geom_histogram(bins = 50)+
+  labs(title = "B) Set to 50 bins")
+
+# C) Fewer bins
+ggplot(data = linelist, aes(x = age))+  # provide x variable
+  geom_histogram(bins = 5)+
+  labs(title = "C) Set to 5 bins")
+
+
+# D) More bins
+ggplot(data = linelist, aes(x = age))+  # provide x variable
+  geom_histogram(binwidth = 1)+
+  labs(title = "D) binwidth of 1")
+
+```
+
+Um geglättete Proportionen zu erhalten, kannst du Folgendes verwenden `geom_density()`:
+
+```{r, fig.show="hold", message=FALSE, warning=FALSE, out.width=c("50%", "50%")}
+# Frequency with proportion axis, smoothed
+ggplot(data = linelist, mapping = aes(x = age)) +
+  geom_density(size = 2, alpha = 0.2)+
+  labs(title = "Proportional density")
+
+# Stacked frequency with proportion axis, smoothed
+ggplot(data = linelist, mapping = aes(x = age, fill = gender)) +
+  geom_density(size = 2, alpha = 0.2, position = "stack")+
+  labs(title = "'Stacked' proportional densities")
+```
+
+Um ein "gestapeltes" Histogramm (einer kontinuierlichen Datenspalte) zu erhalten, kannst du eine der folgenden Möglichkeiten nutzen:
+
+1) Verwende `geom_histogram()` mit dem `fill = ` Argument innerhalb `aes()` und der Gruppierungsspalte zugewiesen, oder
+2) verwenden. `geom_freqpoly()` was wahrscheinlich einfacher zu lesen ist (du kannst immer noch die `binwidth = `)
+3) Um die Proportionen aller Werte zu sehen, setzt du die `y = after_stat(density)` (verwende genau diese Syntax - nicht für deine Daten geändert). Hinweis: Diese Proportionen werden angezeigt *pro Gruppe*.
+
+Jede Gruppe ist unten abgebildet (\*beachte die Verwendung von `color = ` vs. `fill = ` in jedem):
+
+```{r, fig.show="hold", message=FALSE, warning=FALSE, out.width=c("50%", "50%")}
+# "Stacked" histogram
+ggplot(data = linelist, mapping = aes(x = age, fill = gender)) +
+  geom_histogram(binwidth = 2)+
+  labs(title = "'Stacked' histogram")
+
+# Frequency 
+ggplot(data = linelist, mapping = aes(x = age, color = gender)) +
+  geom_freqpoly(binwidth = 2, size = 2)+
+  labs(title = "Freqpoly")
+
+# Frequency with proportion axis
+ggplot(data = linelist, mapping = aes(x = age, y = after_stat(density), color = gender)) +
+  geom_freqpoly(binwidth = 5, size = 2)+
+  labs(title = "Proportional freqpoly")
+
+# Frequency with proportion axis, smoothed
+ggplot(data = linelist, mapping = aes(x = age, y = after_stat(density), fill = gender)) +
+  geom_density(size = 2, alpha = 0.2)+
+  labs(title = "Proportional, smoothed with geom_density()")
+```
+
+Wenn du etwas Spaß haben willst, versuche `geom_density_ridges` von der **ggridges** Paket ([Vignette hier](https://cran.r-project.org/web/packages/ggridges/vignettes/introduction.html).
+
+Mehr über Histogramme erfährst du im Detail auf der **tidyverse** [Seite zu geom\_histogram()](https://ggplot2.tidyverse.org/reference/geom_histogram.html).
+
+### Boxplots {.unnumbered}
+
+Boxplots sind weit verbreitet, haben aber wichtige Einschränkungen. Sie können die tatsächliche Verteilung verschleiern - z. B. eine bimodale Verteilung. Siehe dies [R-Grafik-Galerie](https://www.r-graph-gallery.com/boxplot.html) und diese [data-to-viz Artikel](https://www.data-to-viz.com/caveat/boxplot.html) für weitere Details. Sie zeigen jedoch sehr schön den Interquartilsbereich und die Ausreißer an, sodass sie über andere Arten von Diagrammen gelegt werden können, die die Verteilung detaillierter darstellen.
+
+Im Folgenden werden die verschiedenen Bestandteile eines Boxplots erläutert:
+
+```{r, out.width="100%", fig.align="center", echo=F}
+knitr::include_graphics(here::here("images", "boxplot.png"))
+```
+
+Bei der Verwendung von `geom_boxplot()` um ein Boxplot zu erstellen, wird normalerweise nur eine Achse (x oder y) innerhalb `aes()`. Die angegebene Achse bestimmt, ob die Diagramme horizontal oder vertikal sind.
+
+In den meisten Geoms erstellst du einen Plot pro Gruppe, indem du eine Ästhetik wie `color = ` oder `fill = ` auf eine Spalte innerhalb `aes()`. Bei Boxplots erreichst du dies jedoch, indem du die Gruppierungsspalte der nicht zugewiesenen Achse (x oder y) zuordnest. Nachfolgend der Code für einen Boxplot von *allen* Alterswerte im Datensatz und ein Boxplot für jedes (nicht fehlende) Geschlecht im Datensatz. Beachte, dass `NA` (fehlende) Werte als separates Boxplot angezeigt werden, wenn sie nicht entfernt werden. In diesem Beispiel setzen wir auch die `fill` auf die Spalte `outcome` ein, damit jedes Diagramm eine andere Farbe hat - das ist aber nicht notwendig.
+
+```{r, fig.show="hold", message=FALSE, warning=FALSE, out.width=c("50%", "50%")}
+# A) Overall boxplot
+ggplot(data = linelist)+  
+  geom_boxplot(mapping = aes(y = age))+   # only y axis mapped (not x)
+  labs(title = "A) Overall boxplot")
+
+# B) Box plot by group
+ggplot(data = linelist, mapping = aes(y = age, x = gender, fill = gender)) + 
+  geom_boxplot()+                     
+  theme(legend.position = "none")+   # remove legend (redundant)
+  labs(title = "B) Boxplot by gender")      
+```
+
+Den Code zum Hinzufügen eines Box-Plots an den Rändern eines Scatter-Plots ("marginal" Plots) findest du auf der Seite [ggplot-Tipps].
+
+### Geigen-, Jitter- und Sina-Plots {.unnumbered}
+
+Nachfolgend findest du den Code zum Erstellen von **Geigenplots** (`geom_violin`) und **Jitter-Plots** (`geom_jitter`), um Verteilungen darzustellen. Du kannst festlegen, dass die Füllung oder Farbe auch von den Daten bestimmt wird, indem du diese Optionen innerhalb von `aes()`.
+
+```{r, fig.show="hold", message=FALSE, warning=FALSE, out.width=c("50%", "50%")}
+
+
+# A) Jitter plot by group
+ggplot(data = linelist %>% drop_na(outcome),      # remove missing values
+       mapping = aes(y = age,                     # Continuous variable
+           x = outcome,                           # Grouping variable
+           color = outcome))+                     # Color variable
+  geom_jitter()+                                  # Create the violin plot
+  labs(title = "A) jitter plot by gender")     
+
+
+
+# B) Violin plot by group
+ggplot(data = linelist %>% drop_na(outcome),       # remove missing values
+       mapping = aes(y = age,                      # Continuous variable
+           x = outcome,                            # Grouping variable
+           fill = outcome))+                       # fill variable (color)
+  geom_violin()+                                   # create the violin plot
+  labs(title = "B) violin plot by gender")    
+```
+
+Du kannst beides kombinieren, indem du die `geom_sina()` Funktion aus dem **ggforce** Paket. Die Sina zeichnet die Jitter-Punkte in der Form des Violin-Plots auf. Wenn du den Violinplot überlagerst (indem du die Transparenzen anpasst), lässt sich das visuell besser interpretieren.
+
+```{r, warning=F, message=F}
+
+# A) Sina plot by group
+ggplot(
+  data = linelist %>% drop_na(outcome), 
+  aes(y = age,           # numeric variable
+      x = outcome)) +    # group variable
+  geom_violin(
+    aes(fill = outcome), # fill (color of violin background)
+    color = "white",     # white outline
+    alpha = 0.2)+        # transparency
+  geom_sina(
+    size=1,                # Change the size of the jitter
+    aes(color = outcome))+ # color (color of dots)
+  scale_fill_manual(       # Define fill for violin background by death/recover
+    values = c("Death" = "#bf5300", 
+              "Recover" = "#11118c")) + 
+  scale_color_manual(      # Define colours for points by death/recover
+    values = c("Death" = "#bf5300", 
+              "Recover" = "#11118c")) + 
+  theme_minimal() +                                # Remove the gray background
+  theme(legend.position = "none") +                # Remove unnecessary legend
+  labs(title = "B) violin and sina plot by gender, with extra formatting")      
+
+
+```
+
+### Zwei kontinuierliche Variablen {.unnumbered}
+
+Nach einer ähnlichen Syntax, `geom_point()` können Sie zwei kontinuierliche Variablen gegeneinander in einer **Streudiagramm**. Dies ist nützlich, um die tatsächlichen Werte und nicht ihre Verteilungen darzustellen. Ein einfaches Streudiagramm von Alter und Gewicht ist in (A) dargestellt. In (B) verwenden wir wieder `facet_grid()` um die Beziehung zwischen zwei kontinuierlichen Variablen in der Lineliste darzustellen.
+
+```{r, fig.show="hold", message=FALSE, warning=FALSE, out.width=c("50%", "50%")}
+# Basic scatter plot of weight and age
+ggplot(data = linelist, 
+       mapping = aes(y = wt_kg, x = age))+
+  geom_point() +
+  labs(title = "A) Scatter plot of weight and age")
+
+# Scatter plot of weight and age by gender and Ebola outcome
+ggplot(data = linelist %>% drop_na(gender, outcome), # filter retains non-missing gender/outcome
+       mapping = aes(y = wt_kg, x = age))+
+  geom_point() +
+  labs(title = "B) Scatter plot of weight and age faceted by gender and outcome")+
+  facet_grid(gender ~ outcome) 
+
+```
+
+### Drei kontinuierliche Variablen {.unnumbered}
+
+Du kannst drei kontinuierliche Variablen anzeigen, indem du die `fill = ` Argument verwenden, um eine *Wärmediagramm*. Die Farbe jeder "Zelle" spiegelt den Wert der dritten kontinuierlichen Datenspalte wider. Siehe die [ggplot-Tipps] Seite und die Seite über [Wärmeplots] für weitere Details und einige Beispiele.
+
+Es gibt Möglichkeiten, 3D-Diagramme in R zu erstellen, aber für die angewandte Epidemiologie sind diese oft schwer zu interpretieren und daher weniger nützlich für die Entscheidungsfindung.
+
+## Kategoriale Daten plotten
+
+Kategoriale Daten können Zeichenwerte, logische Werte (TRUE/FALSE) oder Faktoren sein (siehe die [Faktoren] Seite).
+
+### Vorbereitung {.unnumbered}
+
+#### Datenstruktur {.unnumbered}
+
+Als Erstes musst du wissen, ob deine kategorialen Daten in Form von Rohbeobachtungen (z. B. einer Liste von Fällen) oder in Form einer Zusammenfassung oder eines aggregierten Datenrahmens mit Zählungen oder Proportionen vorliegen. Der Zustand deiner Daten wirkt sich darauf aus, welche Diagrammfunktion du verwendest:
+
+- Wenn es sich bei deinen Daten um Rohbeobachtungen mit einer Zeile pro Beobachtung handelt, wirst du wahrscheinlich die Funktion `geom_bar()`
+- Wenn deine Daten bereits zu Zählungen oder Proportionen aggregiert sind, wirst du wahrscheinlich `geom_col()`
+
+#### Spaltenklasse und Reihenfolge der Werte {.unnumbered}
+
+Als Nächstes untersuchst du die Klasse der Spalten, die du darstellen willst. Wir sehen uns `hospital` zuerst mit `class()` von **Basis** R, und mit `tabyl()` von **Hausmeister**.
+
+```{r}
+# View class of hospital column - we can see it is a character
+class(linelist$hospital)
+
+# Look at values and proportions within hospital column
+linelist %>% 
+  tabyl(hospital)
+```
+
+Wir können sehen, dass die Werte darin aus Buchstaben bestehen, da es sich um Krankenhausnamen handelt, und sie sind standardmäßig alphabetisch geordnet. Es gibt auch "andere" und "fehlende" Werte, die wir bei der Darstellung von Aufschlüsselungen lieber als letzte Unterkategorie sehen würden. Deshalb ändern wir diese Spalte in einen Faktor und ordnen sie neu an. Näheres dazu findest du im Abschnitt [Faktoren] Seite.
+
+```{r}
+# Convert to factor and define level order so "Other" and "Missing" are last
+linelist <- linelist %>% 
+  mutate(
+    hospital = fct_relevel(hospital, 
+      "St. Mark's Maternity Hospital (SMMH)",
+      "Port Hospital", 
+      "Central Hospital",
+      "Military Hospital",
+      "Other",
+      "Missing"))
+
+```
+
+```{r}
+levels(linelist$hospital)
+```
+
+### `geom_bar()` {#ggplot\_basics\_bars .unnumbered}
+
+verwenden `geom_bar()` wenn du möchtest, dass die Balkenhöhe (oder die Höhe der gestapelten Balkenkomponenten) die *die Anzahl der relevanten Zeilen in den Daten*. Diese Balken haben Lücken zwischen ihnen, es sei denn, die `width = ` Ästhetik der Darstellung angepasst wird.
+
+- Gib nur eine Achsenspaltenzuordnung an (normalerweise die x-Achse). Wenn du x und y angibst, erhältst du `Error: stat_count() can only have an x or y aesthetic.`
+- Du kannst gestapelte Balken erstellen, indem du eine `fill = ` Spaltenzuordnung innerhalb `mapping = aes()`
+- Die gegenüberliegende Achse wird standardmäßig mit "Anzahl" betitelt, weil sie die Anzahl der Zeilen darstellt
+
+Unten haben wir das Ergebnis der y-Achse zugewiesen, aber es könnte genauso gut auf der x-Achse stehen. Wenn du längere Zeichenwerte hast, kann es manchmal besser aussehen, wenn du die Balken zur Seite drehst und die Legende unten anbringst. Das kann Auswirkungen darauf haben, wie deine Faktorstufen angeordnet sind - in diesem Fall kehren wir sie mit `fct_rev()` um fehlende und andere unten anzuordnen.
+
+```{r, out.width=c("50%", "50%"), fig.show="hold"}
+# A) Outcomes in all cases
+ggplot(linelist %>% drop_na(outcome)) + 
+  geom_bar(aes(y = fct_rev(hospital)), width = 0.7) +
+  theme_minimal()+
+  labs(title = "A) Number of cases by hospital",
+       y = "Hospital")
+
+
+# B) Outcomes in all cases by hosptial
+ggplot(linelist %>% drop_na(outcome)) + 
+  geom_bar(aes(y = fct_rev(hospital), fill = outcome), width = 0.7) +
+  theme_minimal()+
+  theme(legend.position = "bottom") +
+  labs(title = "B) Number of recovered and dead Ebola cases, by hospital",
+       y = "Hospital")
+
+```
+
+### `geom_col()` {.unnumbered}
+
+Verwende `geom_col()` wenn du möchtest, dass die Balkenhöhe (oder die Höhe der gestapelten Balkenkomponenten) die vorberechnete *Werte* die in den Daten vorhanden sind. Oft handelt es sich dabei um zusammengefasste oder "aggregierte" Zählungen oder Proportionen.
+
+Gib Spaltenzuordnungen an für *beide* Achsen an `geom_col()`. Normalerweise ist die Spalte der x-Achse diskret und die Spalte der y-Achse ist numerisch.
+
+Nehmen wir an, wir haben diesen Datensatz `outcomes`:
+
+```{r, echo=F}
+outcomes <- linelist %>% 
+  drop_na() %>% 
+  group_by(outcome) %>% 
+  count %>% 
+  ungroup() %>% # Ungroup so proportion is out of total
+  mutate(proportion = n/sum(n)*100) # Caculate percentage
+  
+outcomes #View full table
+```
+
+Nachfolgend der Code mit `geom_col` um einfache Balkendiagramme zu erstellen, die die Verteilung der Ergebnisse von Ebola-Patienten zeigen. Bei geom\_col müssen sowohl x als auch y angegeben werden. Hier ist x die kategoriale Variable auf der x-Achse und y die Spalte mit den generierten Proportionen `proportion`.
+
+```{r, fig.height=3, fig.width=4.5}
+# Outcomes in all cases
+ggplot(outcomes) + 
+  geom_col(aes(x=outcome, y = proportion)) +
+  labs(subtitle = "Number of recovered and dead Ebola cases")
+
+```
+
+Um eine Aufschlüsselung nach Krankenhaus vorzunehmen, müsste unsere Tabelle mehr Informationen enthalten und ein "langes" Format haben. Wir erstellen diese Tabelle mit den Häufigkeiten der kombinierten Kategorien `outcome` und `hospital`(siehe [Daten gruppieren] Seite für Tipps zur Gruppierung).
+
+```{r, fig.height=4, fig.width=6}
+outcomes2 <- linelist %>% 
+  drop_na(outcome) %>% 
+  count(hospital, outcome) %>%  # get counts by hospital and outcome
+  group_by(hospital) %>%        # Group so proportions are out of hospital total
+  mutate(proportion = n/sum(n)*100) # calculate proportions of hospital total
+
+head(outcomes2) # Preview data
+```
+
+Dann erstellen wir den ggplot mit einigen zusätzlichen Formatierungen:
+
+- **Achsenumkehr**: Vertausche die Achse mit `coord_flip()` so dass wir die Namen der Krankenhäuser lesen können.
+- **Spalten nebeneinander**: Hinzugefügt wurde ein `position = "dodge"` hinzugefügt, damit die Balken für Tod und Genesung nebeneinander und nicht gestapelt dargestellt werden. Beachte, dass gestapelte Balken die Standardeinstellung sind.
+- **Spaltenbreite** Spaltenbreite: Festgelegte 'Breite', damit die Spalten halb so dünn sind wie die volle mögliche Breite.
+- **Reihenfolge der Spalten** Die Reihenfolge der Kategorien auf der y-Achse wurde umgedreht, so dass "Sonstige" und "Fehlende" ganz unten stehen, mit `scale_x_discrete(limits=rev)`. Beachte, dass wir das anstelle von `scale_y_discrete` weil das Krankenhaus in der `x` Argument von `aes()` steht, auch wenn es visuell auf der y-Achse liegt. Wir tun dies, weil Ggplot die Kategorien scheinbar rückwärts darstellt, es sei denn, wir weisen es an, dies nicht zu tun.
+- **Andere Details**: Etiketten/Titel und Farben hinzugefügt `labs` und `scale_fill_color` beziehungsweise.
+
+```{r, fig.height=4, fig.width=8}
+
+# Outcomes in all cases by hospital
+ggplot(outcomes2) +  
+  geom_col(
+    mapping = aes(
+      x = proportion,                 # show pre-calculated proportion values
+      y = fct_rev(hospital),          # reverse level order so missing/other at bottom
+      fill = outcome),                # stacked by outcome
+    width = 0.5)+                    # thinner bars (out of 1)
+  theme_minimal() +                  # Minimal theme 
+  theme(legend.position = "bottom")+
+  labs(subtitle = "Number of recovered and dead Ebola cases, by hospital",
+       fill = "Outcome",             # legend title
+       y = "Count",                  # y axis title
+       x = "Hospital of admission")+ # x axis title
+  scale_fill_manual(                 # adding colors manually
+    values = c("Death"= "#3B1c8C",
+               "Recover" = "#21908D" )) 
+
+```
+
+Beachte, dass die Proportionen binär sind, also können wir "erholen" weglassen und nur den Anteil der Verstorbenen angeben. Dies dient nur zur Veranschaulichung.
+
+Wenn du `geom_col()` mit Datumsdaten (z. B. eine Epikurve aus aggregierten Daten) verwendest, musst du die `width = ` Argument anpassen, um die "Lücken" zwischen den Balken zu entfernen. Wenn du einen täglichen Datensatz verwendest `width = 1`. Wenn wöchentlich, `width = 7`. Monate sind nicht möglich, da jeder Monat eine andere Anzahl von Tagen hat.
+
+### `geom_histogram()` {.unnumbered}
+
+Histogramme sehen zwar wie Balkendiagramme aus, unterscheiden sich aber von diesen, weil sie die Verteilung einer *kontinuierlichen* Variable messen. Es gibt keine Leerzeichen zwischen den "Balken", und es wird nur eine Spalte für `geom_histogram()`. Es gibt spezielle Argumente für Histogramme wie `bin_width = ` und `breaks = `um anzugeben, wie die Daten gebinnt werden sollen. Im obigen Abschnitt über kontinuierliche Daten und auf der Seite über [Epidemische Kurven] bieten zusätzliche Details.
+
+## Ressourcen
+
+Es gibt eine große Menge an Hilfe im Internet, vor allem zu ggplot. Siehe:
+
+- [ggplot2 Spickzettel](http://r-statistics.co/ggplot2-cheatsheet.html)
+- [ein weiterer Spickzettel](https://biostats.w.uib.no/the-ggplot2-cheat-sheet-by-rstudio/)
+- [tidyverse ggplot Grundlagen Seite](https://ggplot2.tidyverse.org/reference/)
+- [Plotten von kontinuierlichen Variablen](http://www.sthda.com/english/articles/32-r-graphics-essentials/131-plot-two-continuous-variables-scatter-graph-and-alternatives/)
+- R für Data Science Seiten auf [Datenvisualisierung](https://r4ds.had.co.nz/data-visualisation.html)
+- [Grafiken für die Kommunikation](https://r4ds.had.co.nz/graphics-for-communication.html)
+
+

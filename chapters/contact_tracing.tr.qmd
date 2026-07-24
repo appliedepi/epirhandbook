@@ -1,0 +1,612 @@
+---
+aliases:
+  - /new_pages/contact_tracing.tr.html
+---
+
+# Temaslı izlemi { }
+
+
+Bu sayfa, bu tür verilere özgü bazı önemli hususları ve yaklaşımları ekleyerek, kişi izleme verilerinin açıklayıcı analizini gösterir.
+
+Bu sayfa, diğer sayfalarda kapsanan temel R veri yönetimi ve görselleştirme yetkinliklerinin çoğuna atıfta bulunur (ör. veri temizleme, özet oluşturma, tablolar, zaman serisi analizleri), ancak operasyonel karar verme için yararlı olan kişi izlemeye özgü örnekleri yine de vurgulayacağız. Örneğin, zaman içinde veya coğrafi alanlar arasında temaslı izleme takip verilerinin görselleştirilmesini veya ilgili temaslı izleme yöneticileri için temiz Temel Performans Göstergesi (KPI) tablolarının oluşturulmasını içerir.
+
+Gösteri amacıyla [Veriye.Git](https://www.who.int/tools/godata) platformundan örnek temaslı izleme verilerini kullanacağız. Burada kapsanan ilkeler, diğer platformlardan gelen temaslı izleme verileri için geçerli olacaktır - verilerinizin yapısına bağlı olarak yalnızca farklı veri ön işleme adımlarından geçmeniz gerekebilir.
+
+Go.Data projesi hakkında daha fazla bilgiyi [Github Documentation sitesinde](https://worldhealthorganization.github.io/godata/) veya [Community of Practice](https://community-godata.who.int/) sitesinden okuyabilirsiniz.
+
+## Hazırlık
+
+
+### Paketleri yükleyin {.unnumbered}
+
+Bu kod parçası, analizler için gerekli olan paketlerin yüklenmesini gösterir. Bu el kitabında, gerekirse paketi kuran *ve* kullanım için yükleyen **pacman**'dan `p_load()` vurgusunu yapıyoruz. **base** R'dan `library()` ile kurulu paketleri de yükleyebilirsiniz. R paketleri hakkında daha fazla bilgi için [R basics] sayfasına bakın.
+
+```{r, message = F}
+pacman::p_load(
+  rio,          # veriyi içe aktar  
+  here,         # göreli dosya yolları  
+  janitor,      # veri temizleme ve tablolar
+  lubridate,    # tarihlerle çalışmak
+  epikit,       # age_categories() fonksiyonu
+  apyramid,     # yal piramitleri
+  tidyverse,    # veri işleme ve görselleştirme
+  RColorBrewer, # renk paletleri
+  formattable,  # süslü tablolar
+  kableExtra    # tablo biçimlendirme
+)
+```
+
+
+### Verileri içe aktarma {.unnumbered}
+
+Kişilerin ve "takiplerinin" örnek veri kümelerini içe aktaracağız. Bu veriler Go.Data API'sinden alınmış, yuvalanmamış ve ".rds" dosyaları olarak depolanmıştır.
+
+Bu el kitabı için tüm örnek verileri [El kitabını ve verileri indir] sayfasından indirebilirsiniz.
+
+Bu sayfaya özel örnek temaslı izleme verilerini indirmek istiyorsanız, aşağıdaki üç indirme bağlantısını kullanın:
+
+<a href='https://github.com/WorldHealthOrganization/godata/blob/master/analytics/r-reporting/data/cases_clean.rds?raw=true' class='download-button'>
+	İndire tıklayınız
+	<span>vaka inceleme verileri (.rds file)</span>
+</a>
+
+<a href='https://github.com/WorldHealthOrganization/godata/blob/master/analytics/r-reporting/data/contacts_clean.rds?raw=true' class='download-button'>
+	İndire tıklayınız
+	<span>iletişim kayıt verileri (.rds file)</span>
+</a>
+
+<a href='https://github.com/WorldHealthOrganization/godata/blob/master/analytics/r-reporting/data/followups_clean.rds?raw=true' class='download-button'>
+	İndire tıklayınız
+	<span>temaslı izlem verileri (.rds file)</span>
+</a>
+
+<!-- ```{r out.width = "100%", fig.align = "center", echo=F} -->
+<!-- knitr::include_graphics(here::here("images", "godata_api_github.png")) -->
+<!-- ``` -->
+
+
+İndirilebilir dosyalardaki orijinal formlarında, veriler Go.Data API'si tarafından sağlanan verileri yansıtır ([API'ler hakkında bilgi edinin](#import_api)). Örneğin, buradaki amaçlar için, bu sayfada okumayı kolaylaştıracak verileri temizleyeceğiz. Bir Go.Data örneği kullanıyorsanız, verilerinizi nasıl alacağınıza ilişkin talimatların tamamını [buradan](https://github.com/WorldHealthOrganization/godata/tree/master/analytics/r-reporting) görüntüleyebilirsiniz.
+
+Aşağıda, veri kümeleri **rio** paketinden `import()` fonksiyonu kullanılarak içe aktarılır. Verileri içe aktarmanın çeşitli yolları için [İçe ve dışa aktar] hakkındaki sayfaya bakın. Dosya yolunu belirtmek için `burada()` kullanıyoruz - bilgisayarınıza özel dosya yolunu sağlamalısınız. Daha sonra gösterim amacıyla basitleştirmek için verilerin yalnızca belirli sütunlarını seçmek için `select()` kullanırız.
+
+#### Vaka verileri {.unnumbered}
+
+Bu veriler, vakaların bir tablosu ve bunlarla ilgili bilgilerdir.
+
+```{r}
+cases <- import(here("data", "godata", "cases_clean.rds")) %>% 
+  select(case_id, firstName, lastName, gender, age, age_class,
+         occupation, classification, was_contact, hospitalization_typeid)
+```
+
+` nrow(cases)` vakaları :  
+
+```{r, message=FALSE, echo=F}
+DT::datatable(cases, rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+#### Kişi verileri {.unnumbered}
+
+Bu veriler, tüm kişilerin ve bunlarla ilgili bilgilerin bir tablosudur. Yine, kendi dosya yolunuzu sağlayın. İçe aktardıktan sonra, aşağıdakileri içeren birkaç ön veri temizleme adımı gerçekleştiririz:
+
+* Age_class'ı bir faktör olarak ayarlayın ve seviye sırasını tersine çevirin, böylece daha genç yaşlar ilk sırada yer alır.
+* Birini yeniden adlandırırken yalnızca belirli sütunu seçin
+* Bazı örnek görselleştirmelerin netliğini artırmak için, yönetici düzeyi 2 eksik olan satırları "Djembe"ye yapay olarak atayın
+
+
+```{r}
+contacts <- import(here("data", "godata", "contacts_clean.rds")) %>% 
+  mutate(age_class = forcats::fct_rev(age_class)) %>% 
+  select(contact_id, contact_status, firstName, lastName, gender, age,
+         age_class, occupation, date_of_reporting, date_of_data_entry,
+         date_of_last_exposure = date_of_last_contact,
+         date_of_followup_start, date_of_followup_end, risk_level, was_case, admin_2_name) %>% 
+  mutate(admin_2_name = replace_na(admin_2_name, "Djembe"))
+```
+
+` nrow(contacts)`, `contacts` verisetinin satırları:  
+
+```{r, message=FALSE, echo=F}
+DT::datatable(contacts, rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+#### Takip verileri {.unnumbered}
+
+Bu veriler, ilgili kişilerle "takip" etkileşimlerinin kayıtlarıdır. Her temasın, maruz kaldıktan sonra 14 gün boyunca her gün bir karşılaşma yapması gerekiyor.
+
+Birkaç temizleme adımını içe aktarıp gerçekleştiriyoruz. Belirli sütunları seçiyoruz ve ayrıca bir karakter sütununu tüm küçük harf değerlerine dönüştürüyoruz.  
+
+```{r}
+followups <- rio::import(here::here("data", "godata", "followups_clean.rds")) %>% 
+  select(contact_id, followup_status, followup_number,
+         date_of_followup, admin_2_name, admin_1_name) %>% 
+  mutate(followup_status = str_to_lower(followup_status))
+```
+
+" nrow(followups)"-row "followups" veri kümesinin ilk 50 satırı (her satır bir takip etkileşimidir ve sonuç durumu "followup_status" sütunundadır):
+
+```{r, message=FALSE, echo=F}
+DT::datatable(head(followups, 50), rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+#### İlişki verileri {.unnumbered}
+
+Burada vakalar ve kişiler arasındaki ilişkiyi gösteren verileri içe aktarıyoruz. Gösterilecek belirli bir sütunu seçiyoruz. 
+
+```{r}
+relationships <- rio::import(here::here("data", "godata", "relationships_clean.rds")) %>% 
+  select(source_visualid, source_gender, source_age, date_of_last_contact,
+         date_of_data_entry, target_visualid, target_gender,
+         target_age, exposure_type)
+```
+
+Aşağıda, vakalar ve ilgili kişiler arasındaki tüm ilişkileri kaydeden "ilişkiler" veri kümesinin ilk 50 satırı verilmiştir.
+
+```{r, message=FALSE, echo=F}
+DT::datatable(head(relationships, 50), rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+
+
+## Tanımlayıcı analizler
+
+Vakalarınız, temaslılarınız ve ilişkileri hakkında tanımlayıcı analizler yapmak için bu el kitabının diğer sayfalarında kapsanan teknikleri kullanabilirsiniz. Aşağıda bazı örnekler verilmiştir.
+
+
+### Demografi {.unnumbered}
+
+[Demografik piramitler][Demografik piramitler ve Likert ölçekleri] ile ilgili sayfada gösterildiği gibi, yaş ve cinsiyet dağılımını görselleştirebilirsiniz (burada **apyramid** paketini kullanıyoruz).
+
+
+#### Temaslıların yaşı ve cinsiyeti {.unnumbered}
+
+Aşağıdaki piramit, temaslıların yaş dağılımını cinsiyete göre karşılaştırmaktadır. Yaşı eksik olan kişilerin en üstteki bilinmeyen çubuklarına dahil edildiğini unutmayın. Bu varsayılan davranışı değiştirebilirsiniz, ancak daha sonra bir başlıkta eksik olan numarayı listelemeyi düşünebilirsiniz.
+
+```{r, warning=F, message=F}
+apyramid::age_pyramid(
+  data = contacts,                                   # temaslı verisetini kullanma
+  age_group = "age_class",                           # kategorik yaş sütunu
+  split_by = "gender") +                             # piramidin yarısının cinsiyeti
+  labs(
+    fill = "Gender",                                 # göstergenin başlığı
+    title = "Age/Sex Pyramid of COVID-19 contacts")+ # grafiğin başlığı
+  theme_minimal()                                    # basit arkaplan
+```
+
+
+Go.Data veri yapısıyla, 'ilişkiler' veri kümesi hem vakaların hem de ilgili kişilerin yaşlarını içerir, böylece bu veri kümesini kullanabilir ve bu iki insan grubu arasındaki farkları gösteren bir yaş piramidi oluşturabilirsiniz. "İlişkiler" veri çerçevesi, sayısal yaş sütunlarını kategorilere dönüştürmek için değiştirilecektir (bkz. [Temizleme verileri ve temel işlevler] sayfası). Ayrıca, **ggplot2** ile çizimi kolaylaştırmak için veri çerçevesini daha uzun süre döndürürüz (bkz. [Özetleme verileri]).
+
+```{r}
+relation_age <- relationships %>% 
+  select(source_age, target_age) %>% 
+  transmute(                              # transmute, mutate() gibidir ancak bahsedilmeyen tüm diğer sütunları kaldırır
+    source_age_class = epikit::age_categories(source_age, breakers = seq(0, 80, 5)),
+    target_age_class = epikit::age_categories(target_age, breakers = seq(0, 80, 5)),
+    ) %>% 
+  pivot_longer(cols = contains("class"), names_to = "category", values_to = "age_class")  
+
+
+relation_age
+```
+
+
+Şimdi bu dönüştürülmüş veri setini daha önce olduğu gibi 'age_pyramid()' ile çizebiliriz, ancak 'gender' yerine 'category' (temaslı veya vaka) koyabiliriz.
+
+```{r, warning=F, message=F}
+apyramid::age_pyramid(
+  data = relation_age,                               # değiştirilmiş ilişki veri kümesini kullan
+  age_group = "age_class",                           # kategorik yaş sütunu
+  split_by = "category") +                           # vakalar ve temaslılar tarafından
+  scale_fill_manual(
+    values = c("orange", "purple"),                  # renkleri VE etiketleri belirtmek için
+    labels = c("Case", "Contact"))+
+  labs(
+    fill = "Legend",                                           # göstergenin başlığı
+    title = "Age/Sex Pyramid of COVID-19 contacts and cases")+ # grafiğin başlığı
+  theme_minimal()                                              # basit arkaplan
+```
+
+Mesleki dağılım gibi diğer özellikleri de görebiliriz (örneğin pasta grafiği şeklinde).
+
+```{r, warning=F, message=F}
+# Veri kümesini temizleyin ve mesleğe göre sayıları alın
+occ_plot_data <- cases %>% 
+  mutate(occupation = forcats::fct_explicit_na(occupation),  # NA eksik değerleri bir kategori yapın
+         occupation = forcats::fct_infreq(occupation)) %>%   # sıklık sırasına göre sıra faktörü seviyeleri
+  count(occupation)                                          # mesleğe göre sayıları alın
+  
+# pasta grafiği yapın
+ggplot(data = occ_plot_data, mapping = aes(x = "", y = n, fill = occupation))+
+  geom_bar(width = 1, stat = "identity") +
+  coord_polar("y", start = 0) +
+  labs(
+    fill = "Occupation",
+    title = "Known occupations of COVID-19 cases")+
+  theme_minimal() +                    
+  theme(axis.line = element_blank(),
+        axis.title = element_blank(),
+        axis.text = element_blank())
+```
+
+
+### Vaka başına kişi sayısı {.unnumbered}
+
+Vaka başına temaslı sayısı, temaslı numaralandırmanın kalitesini ve nüfusun halk sağlığı müdahalesine uygunluğunu değerlendirmek için önemli bir ölçü olabilir.
+
+Veri yapınıza bağlı olarak bu, tüm vakaları ve ilgili kişileri içeren bir veri seti ile değerlendirilebilir. Go.Data veri kümelerinde, vakalar ("kaynaklar") ve kişiler ("hedefler") arasındaki bağlantılar "ilişkiler" veri kümesinde depolanır.
+
+Bu veri kümesinde her satır bir ilgili kişidir ve kaynak vaka satırda listelenir. Birden fazla vakayla ilişkisi olan hiç kimse yok, ancak bu varsa, planlamadan önce olanları hesaba katmanız gerekebilir (ve onları da keşfedin!).
+
+Kaynak vaka başına satır (kişi) sayısını sayarak başlarız. Bu bir veri çerçevesi olarak kaydedilir.  
+
+```{r}
+contacts_per_case <- relationships %>% 
+  count(source_visualid)
+
+contacts_per_case
+```
+
+Bu verileri bir histogram olarak çizmek için `geom_histogram()`  kullanıyoruz. 
+
+```{r, warning=F, message=F}
+ggplot(data = contacts_per_case)+        # yukarıda oluşturulan sayım veri çerçevesiyle başlayın
+  geom_histogram(mapping = aes(x = n))+  # vaka başına kişi sayısının histogramını yazdırın
+  scale_y_continuous(expand = c(0,0))+   # y ekseninde 0'ın altındaki fazla boşluğu kaldırın
+  theme_light()+                         # arka planı basitleştirin
+  labs(
+    title = "Number of contacts per case",
+    y = "Cases",
+    x = "Contacts per case"
+  )
+  
+
+```
+
+
+
+## Temaslı Takibi
+
+
+Temaslı izleme verileri genellikle karantinadaki kişilerin günlük semptom kontrollerinin sonuçlarını kaydeden "takip" verilerini içerir. Bu verilerin analizi, yanıt stratejisini bilgilendirebilir, takip kaybı riski altındaki veya hastalık geliştirme riski altındaki temaslıları belirleyebilir.
+
+
+
+### Veri temizleme {.unnumbered}
+
+Bu veriler çeşitli biçimlerde bulunabilir. Kişi başına bir satır ve takip eden "gün" başına bir sütun içeren "geniş" formatlı bir Excel sayfası olarak bulunabilirler. "Uzun" ve "geniş" verilerin açıklamaları ve verilerin nasıl daha geniş veya daha uzun döndürüleceği için [Pivoting data] bölümüne bakabilirsiniz.
+
+Go.Data örneğimizde, bu veriler, takip etkileşimi başına bir satır ile "uzun" bir formatta olan "takipler" veri çerçevesinde depolanır. İlk 50 satır şöyle görünür:
+
+```{r, message=FALSE, echo=FALSE}
+#ilk 50 kişi satır listesi verilerini tablo olarak gösterin
+DT::datatable(head(followups, 50), rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+
+<span style="color: orange;">**_UYARI:_** Takip verileriyle uğraşırken mükerrerlere dikkat edin; çünkü belirli bir temaslı için aynı gün içinde birkaç hatalı takip olabilir. Belki bir hata gibi görünüyor ama gerçeği yansıtıyor olabilir - ör. bir iletişim izleyicisi, ilgili kişiye ulaşamadıkları günün erken saatlerinde bir takip formu gönderebilir ve kendilerine daha sonra ulaşıldığında ikinci bir form gönderebilir. Yinelenenleri nasıl ele almak istediğinize ilişkin operasyonel bağlama göre değişecektir. - yalnızca yaklaşımınızı net bir şekilde belgelediğinizden emin olun. </span>
+
+Kaç tane "mükerrer" satır örneğimiz olduğunu *görelim*:
+
+```{r}
+followups %>% 
+  count(contact_id, date_of_followup) %>%   # benzersiz contact_days alın
+  filter(n > 1)                             # sayının 1'den fazla olduğu kayıtları görüntüleyin  
+```
+
+Örnek verilerimizde, bunun geçerli olduğu tek kayıt, kimliği eksik olanlardır! Bunları kaldırabiliriz. Ancak, öğretmek amacıyla, tekilleştirme adımlarını göstereceğiz. Böylece kişi başına günde yalnızca bir izlemi yapılan ile muhatap olunur. Daha fazla ayrıntı için [Tekilleştirme] ile ilgili sayfaya bakabilirsiniz. En son karşılaşma kaydının doğru olduğunu varsayacağız. Ayrıca 'followup_number' sütununu (1 - 14 aralığında olması gereken takip "günü") temizleme fırsatını da kullanıyoruz.
+
+```{r, warning=F, message=F}
+followups_clean <- followups %>%
+  
+  # yinelenenleri kaldırın
+  group_by(contact_id, date_of_followup) %>%        # temaslı günü başına grup satırları
+  arrange(contact_id, desc(date_of_followup)) %>%   # takip tarihine göre her temas günü için satırlar düzenleyin (en son en üstte)
+  slice_head() %>%                                  # benzersiz kişi kimliği başına yalnızca ilk satırı tutun  
+  ungroup() %>% 
+  
+  # diğer temizlemeler
+  mutate(followup_number = replace(followup_number, followup_number > 14, NA)) %>% # hatalı verileri temizle
+  drop_na(contact_id)                               # eksik contact_id olan satırları kaldırın
+```
+
+Her takip eden karşılaşma için, bir takip durumumuz var (örneğin, karşılaşmanın olup olmadığı ve olduysa, temasta belirti olup olmadığı gibi). Tüm değerleri görmek için 'followup_status' ile hızlı bir 'tabyl()' (**janitor**'dan) veya 'table()' (R **tabanı**ndan) (bkz. [Tanımlayıcı tablolar]) sonuçların her birinin sıklığını görebilmek için çalıştırabiliriz. 
+
+Bu veri setinde "seen_not_ok", "semptomlarla görülen" ve "seen_ok", "semptomsuz görülen" anlamına gelir.
+
+```{r}
+followups_clean %>% 
+  tabyl(followup_status)
+```
+
+
+### Zaman içinde grafik {.unnumbered}
+
+Tarih verileri sürekli olduğundan, x eksenine atanan 'date_of_followup' ile bunları çizmek için bir histogram kullanacağız. 'followup_status' sütununa atadığımız 'aes()' içinde bir 'fill = 'değişkenleri belirleyerek "yığınlanmış" bir histogram elde edebiliriz. Sonuç olarak, 'labs()' öğesinin 'fill = ' değişkenini kullanarak gösterge başlığını ayarlayabilirsiniz.
+
+Temaslıların dalgalar halinde tanımlandığını (muhtemelen salgın vaka dalgalarına karşılık gelen) ve takip tamamlamanın salgın boyunca görünüşte iyileşmediğini görebiliriz.
+
+```{r, warning=F, message=F}
+ggplot(data = followups_clean)+
+  geom_histogram(mapping = aes(x = date_of_followup, fill = followup_status)) +
+  scale_fill_discrete(drop = FALSE)+   # göstergedeki tüm faktör seviyelerini (followup_status), kullanılmayanları bile gösterin
+  theme_classic() +
+  labs(
+    x = "",
+    y = "Number of contacts",
+    title = "Daily Contact Followup Status",
+    fill = "Followup Status",
+    subtitle = str_glue("Data as of {max(followups$date_of_followup, na.rm=T)}"))   # dinamik altyazı
+  
+```
+
+
+<span style="color: orange;">**_UYARI:_** Çok sayıda çizim hazırlıyorsanız (örneğin, birden fazla konu için), göstergelerin değişen seviyelerde veri tamamlama veya veri birleştirme ile bile aynı görünmesini isteyeceksiniz. Verilerde tüm takip durumlarının bulunmadığı grafikler olabilir, ancak yine de bu kategorilerin göstergelerde standart olarak görünmesini istiyorsunuz. Ggplot'larda (yukarıdaki gibi), 'scale_fill_discrete()' için 'drop = FALSE' değişkenini belirtebilirsiniz. Tablolarda, tüm faktör düzeyleri için sayıları gösteren 'tabyl()' kullanın veya **dplyr**'den 'count()' kullanıyorsanız, tüm faktör düzeyleri için sayıları dahil etmek için '.drop = FALSE' bağımsız değişkenini ekleyin.</span>  
+
+### Günlük bireysel izleme {.unnumbered}
+
+Salgınınız yeterince küçükse, her bir kişiye ayrı ayrı bakmak ve takipleri boyunca durumlarını görmek isteyebilirsiniz. Neyse ki, bu "izlemeler" veri kümesi halihazırda takip "sayısı" (1-14) sütununu içeriyor. Verilerinizde bu yoksa, karşılaşma tarihi ile ilgili kişi için takibin başlaması amaçlanan tarih arasındaki farkı hesaplayarak oluşturabilirsiniz.
+
+Uygun bir görselleştirme mekanizması (eğer vaka sayısı çok büyük değilse), `geom_tile()` ile yapılmış bir ısı grafiği olabilir. [Isı grafiği] sayfasında daha fazla ayrıntıya bakın.
+
+```{r, warning=F, message=F}
+ggplot(data = followups_clean)+
+  geom_tile(mapping = aes(x = followup_number, y = contact_id, fill = followup_status),
+            color = "grey")+       # gri kılavuz çizgileri
+  scale_fill_manual( values = c("yellow", "grey", "orange", "darkred", "darkgreen"))+
+  theme_minimal()+
+  scale_x_continuous(breaks = seq(from = 1, to = 14, by = 1))
+```
+
+
+###  Grubuna göre analiz et {.unnumbered}
+
+Belki de bu takip verileri, operasyonel karar verme için günlük veya haftalık olarak görüntülenmektedir. Coğrafi alana veya kişi izleme ekibine göre daha anlamlı ayrıştırmalar isteyebilirsiniz. Bunu `group_by()` için sağlanan sütunları ayarlayarak yapabiliriz.
+
+```{r, warning=F, message=F}
+
+plot_by_region <- followups_clean %>%                                        # takip veri seti ile başlayın
+  count(admin_1_name, admin_2_name, followup_status) %>%   # benzersiz bölge durumuna göre sayıları al (sayılarla 'n' sütununu oluşturur)
+  
+  
+  ggplot(                                         # ggplot() başlatın
+    mapping = aes(x = reorder(admin_2_name, n),     # 'n' sütunundaki sayısal değerlere göre yönetici faktör düzeylerini yeniden sıralayın
+                  y = n,                            # 'n' sütunundan çubuğun yükseklikleri
+                  fill = followup_status,           # durumlarına göre renk yığılmış çubuklar
+                  label = n))+                      # geom_label()'e geçmek için              
+  geom_col()+                                     # yığılmış çubuklar, yukarıdan devredilen haritalama
+  geom_text(                                      # metin ekleme, yukarıdan devredilen haritalama
+    size = 3,                                         
+    position = position_stack(vjust = 0.5), 
+    color = "white",           
+    check_overlap = TRUE,
+    fontface = "bold")+
+  coord_flip()+
+  labs(
+    x = "",
+    y = "Number of contacts",
+    title = "Contact Followup Status, by Region",
+    fill = "Followup Status",
+    subtitle = str_glue("Data as of {max(followups_clean$date_of_followup, na.rm=T)}")) +
+  theme_classic()+                                                                      # Arka planı basitleştirin
+  facet_wrap(~admin_1_name, strip.position = "right", scales = "free_y", ncol = 1)      # yönleri tanıtın
+
+plot_by_region
+```
+
+<!-- If this was disaggregated by contact tracer, perhaps we would want to add a threshold line to display total # contacts that normally one person or area/team can handle, and how the current workload compares. We just do this by using `geom_hline()` function. -->
+
+<!-- ```{r, warning=F, message=F} -->
+
+<!-- plot_by_region +  -->
+<!--      geom_hline(aes(yintercept=25), color="#C70039", linetype = "dashed") # fictitious threshold at 25 contacts -->
+
+<!-- ``` -->
+
+
+
+## KPI Tabloları
+
+Kişi takibi performansını izlemek için farklı ayrıştırma seviyelerinde ve farklı zaman dilimlerinde hesaplanabilen ve izlenebilen bir dizi farklı Temel Performans Göstergesi (KPI) vardır. Hesaplamaları yapıp ve temel tablo formatına sahip olduğunuzda; farklı KPI'ları değiştirmek oldukça kolaydır.
+
+[ResolveToSaveLives.org](https://contacttracingplaybook.resolvetosavelives.org/checklists/metrics) kaynağındaki bu gibi çok sayıda kişi izleme KPI'sı kaynağı vardır. Çalışmanın çoğu, veri yapınızı gözden geçirecek ve tüm dahil etme/hariç tutma kriterlerini düşünecektir. Aşağıda birkaç örnek gösteriyoruz; Go.Data meta veri yapısını kullanarak:
+
+Kategori          | Gösterge                 | Go.Data Numeratör         | Go.Data paydası
+------------------|--------------------------|---------------------------|--------------------
+Süreç Göstergesi - Temaslı İzleme Hızı|Vaka raporundan sonraki 24 saat içinde görüşülen ve izole edilen vakaların yüzdesi | (``date_of_reporting` - `date_of_data_entry`) < 1 gün VE (`isolation_startdate` - `date_of_data_entry`) < 1 gün OLDUĞU YERDE "case_id" SAYIMI | "case_id" SAYIMI
+İşlem Göstergesi - Kişi İzleme Hızı|Alındıktan sonraki 24 saat içinde bildirilen ve karantinaya alınan kişilerin yüzdesi| 'followup_status' == "SEEN_NOT_OK" VEYA "SEEN_OK" VE 'date_of_followup' - 'date_of_reporting' < 1 gün OLDUĞU YERDE 'contact_id' SAYIMI| "contact_id" SAYIMI
+Süreç Göstergesi - Testin Tamlığı|Semptomların başlamasından sonraki 3 gün içinde test edilen ve görüşülen yeni semptomatik vakaların yüzdesi|  (`date_of_reporting` - `date_of_onset`) < =3 gün OLDUĞU YERDE "vaka_kimliği" SAYIMI| "vaka_kimliği" SAYIMI
+Sonuç Göstergesi - Genel|mevcut kişi listesindeki yeni vakaların yüzdesi| `was_contact` OLDUĞU YERDE `case_id` SAYIMI== "TRUE"| `case_id` SAYIMI
+
+Aşağıda, yönetici alanlarındaki iletişim takibini göstermek için güzel bir tablo görseli oluşturmaya yönelik örnek bir alıştırmayı inceleyeceğiz. Sonunda, **formattable** paketi ile sunuma uygun hale getireceğiz (ancak **flextable** gibi başka paketleri de kullanabilirsiniz - bkz. [Sunum için tablolar]).
+
+Bunun gibi bir tabloyu nasıl oluşturacağınız, temaslı izleme verilerinizin yapısına bağlı olacaktır. **dplyr** fonksiyonlarını kullanarak verileri nasıl özetleyeceğinizi öğrenmek için [Açıklayıcı tablolar] sayfasını kullanın.
+
+Dinamik olacak ve veriler değiştikçe değişecek bir tablo oluşturacağız. Sonuçları ilginç hale getirmek için, tabloyu belirli bir günde çalıştırmayı simüle etmemize izin verecek bir "rapor_tarihi" ayarlayacağız (10 Haziran 2020'yi seçiyoruz). Veriler o tarihe kadar filtrelenir.
+
+```{r, warning=F, message=F}
+# Raporun bu tarihten itibaren verilerle çalıştırılmasını simüle etmek için "Rapor tarihi"ni ayarlayın
+report_date <- as.Date("2020-06-10")
+
+# Rapor tarihini yansıtacak takip verileri oluşturun.
+table_data <- followups_clean %>% 
+  filter(date_of_followup <= report_date)
+```
+
+
+Şimdi, veri yapımıza dayanarak aşağıdakileri yapacağız:
+
+1) "Takip" verileriyle başlayın ve her benzersiz kişi için içerecek şekilde özetleyin:
+   * En son kayıt tarihi (karşılaşmanın durumu ne olursa olsun)
+   * Temaslının "görüldüğü" en son karşılaşma tarihi
+   * Nihai "görülen" karşılaşmadaki karşılaşma durumu (örneğin semptomlu, semptomlar olmadan)
+2) Bu verileri genel iletişim durumu, bir temaslıya son maruz kalma tarihi vb. gibi diğer bilgileri içeren temaslı verileriyle birleştirin. Ayrıca, son temastan bu yana geçen gün sayısı gibi her bir ilgili temaslı için ilgilenilen metrikleri hesaplayacağız.
+3) Gelişmiş iletişim verilerini coğrafi bölgeye (`admin_2_name`) göre gruplandırıyoruz ve bölge başına özet istatistikleri hesaplıyoruz
+4) Son olarak, sunum için tabloyu güzelce biçimlendiriyoruz.
+
+
+İlk olarak, ilgilenilen bilgileri almak için takip verilerini özetliyoruz:
+
+```{r, warning=F, message=F}
+followup_info <- table_data %>% 
+  group_by(contact_id) %>% 
+  summarise(
+    date_last_record   = max(date_of_followup, na.rm=T),
+    date_last_seen     = max(date_of_followup[followup_status %in% c("seen_ok", "seen_not_ok")], na.rm=T),
+    status_last_record = followup_status[which(date_of_followup == date_last_record)]) %>% 
+  ungroup()
+```
+
+İşte veriler böyle görünüyor: 
+
+```{r, echo=F}
+DT::datatable(followup_info, rownames = FALSE, options = list(pageLength = 12, scrollX=T), class = 'white-space: nowrap' )
+```
+
+
+Şimdi bu bilgiyi "kişiler" veri kümesine ekleyeceğiz ve bazı ek sütunları hesaplayacağız.
+
+```{r}
+contacts_info <- followup_info %>% 
+  right_join(contacts, by = "contact_id") %>% 
+  mutate(
+    database_date       = max(date_last_record, na.rm=T),
+    days_since_seen     = database_date - date_last_seen,
+    days_since_exposure = database_date - date_of_last_exposure
+    )
+```
+
+İşte veriler böyle görünüyor. Sağdaki "kişiler" sütununu ve en sağdaki yeni hesaplanmış sütunu not edin.
+
+```{r, echo=F}
+DT::datatable(contacts_info, rownames = FALSE, options = list(pageLength = 12, scrollX=T), class = 'white-space: nowrap' )
+```
+
+
+Ardından, özet istatistik sütunlarından oluşan kısa bir veri çerçevesi elde etmek için kişi verilerini bölgeye göre özetleyeceğiz.
+
+```{r}
+contacts_table <- contacts_info %>% 
+  
+  group_by(`Admin 2` = admin_2_name) %>%
+  
+  summarise(
+    `Registered contacts` = n(),
+    `Active contacts`     = sum(contact_status == "UNDER_FOLLOW_UP", na.rm=T),
+    `In first week`       = sum(days_since_exposure < 8, na.rm=T),
+    `In second week`      = sum(days_since_exposure >= 8 & days_since_exposure < 15, na.rm=T),
+    `Became case`         = sum(contact_status == "BECAME_CASE", na.rm=T),
+    `Lost to follow up`   = sum(days_since_seen >= 3, na.rm=T),
+    `Never seen`          = sum(is.na(date_last_seen)),
+    `Followed up - signs` = sum(status_last_record == "Seen_not_ok" & date_last_record == database_date, na.rm=T),
+    `Followed up - no signs` = sum(status_last_record == "Seen_ok" & date_last_record == database_date, na.rm=T),
+    `Not Followed up`     = sum(
+      (status_last_record == "NOT_ATTEMPTED" | status_last_record == "NOT_PERFORMED") &
+        date_last_record == database_date, na.rm=T)) %>% 
+    
+  arrange(desc(`Registered contacts`))
+
+```
+
+
+```{r, echo=F}
+DT::datatable(contacts_table, rownames = FALSE, options = list(pageLength = 12, scrollX=T), class = 'white-space: nowrap' )
+```
+
+Ve şimdi, "başlangıç" tarihini gösteren bir dipnot da dahil olmak üzere **biçimlendirilebilir** ve **knitr** paketlerinden stil uyguluyoruz.
+
+```{r}
+contacts_table %>%
+  mutate(
+    `Admin 2` = formatter("span", style = ~ formattable::style(
+      color = ifelse(`Admin 2` == NA, "red", "grey"),
+      font.weight = "bold",font.style = "italic"))(`Admin 2`),
+    `Followed up - signs`= color_tile("white", "orange")(`Followed up - signs`),
+    `Followed up - no signs`= color_tile("white", "#A0E2BD")(`Followed up - no signs`),
+    `Became case`= color_tile("white", "grey")(`Became case`),
+    `Lost to follow up`= color_tile("white", "grey")(`Lost to follow up`), 
+    `Never seen`= color_tile("white", "red")(`Never seen`),
+    `Active contacts` = color_tile("white", "#81A4CE")(`Active contacts`)
+  ) %>%
+  kable("html", escape = F, align =c("l","c","c","c","c","c","c","c","c","c","c")) %>%
+  kable_styling("hover", full_width = FALSE) %>%
+  add_header_above(c(" " = 3, 
+                     "Of contacts currently under follow up" = 5,
+                     "Status of last visit" = 3)) %>% 
+  kableExtra::footnote(general = str_glue("Data are current to {format(report_date, '%b %d %Y')}"))
+
+```
+
+
+## Bulaş Matrisleri
+
+[Isı grafikleri] sayfasında tartışıldığı gibi, "geom_tile()" kullanarak "kimin kime bulaştırdığını" gösteren bir matris oluşturabilirsiniz.
+
+Yeni kişiler oluşturulduğunda, Go.Data bu ilişki bilgilerini "ilişkiler" API uç noktasında saklar ve bu veri setinin ilk 50 satırını aşağıda görebiliriz. Bu, her bir temasın kendi kaynak durumuna zaten katılmış olduğu göz önüne alındığında, nispeten az adımla bir ısı grafiği oluşturabileceğimiz anlamına gelir.
+
+```{r, warning=F, message=F, echo=F}
+# ilişki verilerinin ilk 50 satırını tablo olarak göster
+DT::datatable(head(relationships, 50), rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+Yukarıda vakaları ve ilgili kişileri karşılaştıran yaş piramidi için yapıldığı gibi, ihtiyacımız olan birkaç değişkeni seçebilir ve hem kaynaklar (vakalar) hem de hedefler (temaslılar) için kategorik yaş gruplamaları içeren sütunlar oluşturabiliriz.
+
+```{r}
+heatmap_ages <- relationships %>% 
+  select(source_age, target_age) %>% 
+  mutate(                              # transmute fonksiyonu, mutate() gibidir ancak diğer tüm sütunları kaldırır
+    source_age_class = epikit::age_categories(source_age, breakers = seq(0, 80, 5)),
+    target_age_class = epikit::age_categories(target_age, breakers = seq(0, 80, 5))) 
+```
+
+Daha önce açıklandığı gibi, çapraz tablo oluşturuyoruz;
+
+```{r, warning=F, message=FALSE}
+
+cross_tab <- table(
+  source_cases = heatmap_ages$source_age_class,
+  target_cases = heatmap_ages$target_age_class)
+
+cross_tab
+```
+
+orantılarla uzun biçime dönüştürün;
+
+```{r, warning=FALSE, message=FALSE}
+
+long_prop <- data.frame(prop.table(cross_tab))
+
+```
+
+ve yaşa göre bir ısı haritası oluşturun.
+
+
+```{r, warning=F, message=F}
+
+ggplot(data = long_prop)+       # oranlarda sıklık olarak uzun veriler kullanın
+  geom_tile(                    # görselleştirin
+    aes(
+      x = target_cases,         # vaka yaşı x ekseninde
+      y = source_cases,         # kaynak yaşı y ekseninde
+      fill = Freq))+            # arkaplan rengi verilerdeki Sıklık sütunudur
+  scale_fill_gradient(          # dolgu rengini ayarlayın
+    low = "blue",
+    high = "orange")+
+  theme(axis.text.x = element_text(angle = 90))+
+  labs(                         # etiketler
+    x = "Target case age",
+    y = "Source case age",
+    title = "Who infected whom",
+    subtitle = "Frequency matrix of transmission events",
+    fill = "Proportion of all\ntranmsission events"     # göstergenin başlığı
+  )
+
+```
+
+
+## Kaynaklar  
+
+https://github.com/WorldHealthOrganization/godata/tree/master/analytics/r-reporting
+
+https://worldhealthorganization.github.io/godata/
+
+https://community-godata.who.int/

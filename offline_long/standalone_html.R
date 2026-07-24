@@ -3,7 +3,7 @@ library(withr)
 # Add list of chapters to index files --------------------------------------------------------
 
 # Define the list of chapters
-chapter_list <- c("editorial_style.qmd", "data_used.qmd", "basics.qmd", "transition_to_R.qmd", "packages_suggested.qmd", "r_projects.qmd", "importing.qmd", "cleaning.qmd",
+chapter_list <- c("editorial_style.qmd", "data_used.qmd", "basics.qmd", "transition_to_r.qmd", "packages_suggested.qmd", "r_projects.qmd", "importing.qmd", "cleaning.qmd",
                  "dates.qmd", "characters_strings.qmd", "factors.qmd", "pivoting.qmd", "grouping.qmd", "joining_matching.qmd", "deduplication.qmd", "iteration.qmd", "tables_descriptive.qmd", "stat_tests.qmd", "regression.qmd", "missing_data.qmd",
                  "standardization.qmd", "moving_average.qmd", "time_series.qmd", "epidemic_models.qmd", "contact_tracing.qmd", "survey_analysis.qmd", "survival_analysis.qmd", "gis.qmd", "tables_presentation.qmd", "ggplot_basics.qmd", "ggplot_tips.qmd", "epicurves.qmd", "age_pyramid.qmd", "heatmaps.qmd", "diagrams.qmd", "combination_analysis.qmd", "transmission_chains.qmd", "phylogenetic_trees.qmd", "interactive_plots.qmd", "rmarkdown.qmd", "reportfactory.qmd", "flexdashboard.qmd", "shiny_basics.qmd", "writing_functions.qmd", "directories.qmd", "collaboration.qmd", "errors.qmd", "help.qmd", "network_drives.qmd", "data_table.qmd")
 
@@ -21,7 +21,7 @@ titles <- c(
 
 # Define the folder path
 subfolder <- "offline_long"
-new_pages_folder <- "new_pages"
+chapters_folder <- "chapters"
 
 #! Adding content to file is dangerous, check carefully. 
 # Loop through each language
@@ -185,7 +185,7 @@ handle_language <- function(lang) {
 
   # Loop through each chapter and copy the chapter file to the temporary directory
   for (chapter in chapter_list) {
-    chapter_file <- file.path("new_pages", sub(".qmd", paste0(suffix, ".qmd"), chapter))
+    chapter_file <- file.path("chapters", sub(".qmd", paste0(suffix, ".qmd"), chapter))
     if (file_exists(chapter_file)) {
       file_copy(chapter_file, temporary_directory)
     }
@@ -282,7 +282,7 @@ render_and_copy("ru")
 
 #   # Loop through each chapter and copy the chapter file to the temporary directory
 #   for (chapter in chapter_list) {
-#     chapter_file <- file.path("new_pages", sub(".qmd", paste0(".", lang, ".qmd"), chapter))
+#     chapter_file <- file.path("chapters", sub(".qmd", paste0(".", lang, ".qmd"), chapter))
 #     if (file_exists(chapter_file)) {
 #       file_copy(chapter_file, temporary_directory)
 #     }
@@ -421,7 +421,7 @@ render_and_copy("ru")
 
 # # Loop through each chapter and copy the chapter file to the temporary directory
 # for (chapter in chapter_list) {
-#   chapter_file <- file.path("new_pages", chapter)
+#   chapter_file <- file.path("chapters", chapter)
 #   if (file_exists(chapter_file)) {
 #     file_copy(chapter_file, temporary_directory)
 #   }

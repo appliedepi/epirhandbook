@@ -1,0 +1,720 @@
+---
+aliases:
+  - /new_pages/dates.vn.html
+---
+
+# Làm việc với ngày tháng {#dates}
+
+
+```{r, out.width=c('50%'), fig.align='center', echo=F, message=F}
+knitr::include_graphics(here::here("images", "Dates_500x500.png"))
+```
+
+
+
+Làm việc với trường ngày trên R cần nhiều sự tỉ mỉ hơn là làm việc với các lớp đối tượng khác. Dưới đây, chúng tôi giới thiệu một số công cụ và ví dụ để các thao tác trở nên dễ dàng hơn. Thật may mắn, trường ngày có thể biến đổi một cách dễ dàng với một bộ packages như **lubridate**.  
+
+Khi nhập dữ liệu thô, R thường diễn giải trường ngày dưới dạng các ký tự - điều này có nghĩa là chúng không thể được sử dụng cho các thao tác chung như tạo chuỗi thời gian và tính toán khoảng thời gian. Để làm cho vấn đề trở nên khó hơn một chút, có nhiều cách để định dạng ngày và bạn cần thao tác để R nhận biết từng phần của biến ngày mô tả cái gì (tháng, ngày, giờ, v.v.). 
+
+Ngày trong R có kiểu đối tượng riêng - kiểu `Date`. Nên lưu ý rằng cũng có một kiểu khác lưu trữ đối tượng với định dạng ngày *và* giờ. Đối tượng ngày giờ được chính thức định dạng ở kiểu `POSIXt`, `POSIXct`, và/hoặc `POSIXlt` sự khác biệt không quá quan trọng). Các đối tượng này được định dạng một cách không chính thức là kiểu *datetime*.
+
+* Điều quan trọng là giúp R nhận ra khi một cột chứa thông tin ngày tháng.  
+* Ngày là một kiểu đối tượng và khó để có thể làm việc.  
+* Ở đây chúng tôi trình bày một số cách để chuyển đổi các cột ngày thành kiểu dữ liệu Ngày tiêu chuẩn.  
+
+
+<!-- ======================================================= -->
+## Chuẩn bị
+
+### Gọi packages {.unnumbered}  
+
+Đoạn code này hiển thị tải các package cần thiết để sử dụng. Trong tài liệu này, chúng tôi nhấn mạnh đến hàm `p_load()` từ package **pacman**, mà có thể cài đặt package nếu cần thiết *và* gọi package để sử dụng. Bạn cũng có thể gọi và cài đặt package với hàm `library()` từ **base** R. Xem chương [R cơ bản](basics.vn.qmd) để biết thêm thông tin về các package trong R.  
+
+```{r dates_packages, warning=F, message=F}
+# Checks if package is installed, installs if necessary, and loads package for current session
+
+pacman::p_load(
+  lubridate,  # general package for handling and converting dates  
+  parsedate,   # has function to "guess" messy dates
+  aweek,      # another option for converting dates to weeks, and weeks to dates
+  zoo,        # additional date/time functions
+  tidyverse,  # data management and visualization  
+  here,       # file management
+  rio)        # data import/export
+```
+
+### Nhập dữ liệu {.unnumbered}  
+
+Chúng ta sẽ nhập bộ dữ liệu với các ca bệnh từ một vụ dịch Ebola mô phỏng. Nếu bạn muốn tải xuống dữ liệu để thực hành theo từng bước, hãy xem hướng dẫn ở chương [Tải sách và dữ liệu](data_used.vn.qmd). Chúng ta giả định rằng tệp dữ liệu đã nằm trong thư mục làm việc của bạn nên bạn không cần chỉ định thư mục con trong đường dẫn này.  
+
+```{r,  echo=F}
+linelist <- rio::import(here::here("data", "case_linelists", "linelist_cleaned.rds"))
+
+```
+
+```{r, eval=F}
+linelist <- import("linelist_cleaned.xlsx")
+
+```
+
+
+
+<!-- ======================================================= -->
+## Ngày hiện tại  
+
+Bạn có thể lấy ngày “hệ thống” hiện tại hoặc ngày giờ hệ thống của máy tính bằng cách thực hiện như sau với **base** R.  
+
+```{r}
+# get the system date - this is a DATE class
+Sys.Date()
+
+# get the system time - this is a DATETIME class
+Sys.time()
+```
+
+
+Với package **lubridate**, chúng cũng có thể trả về giá trị tương ứng với hàm `today()` và `now()`. Hàm `date()` sẽ trả về giá trị ngày và giờ hiện tại với ngày trong tuần và tháng.  
+  
+  
+
+<!-- ======================================================= -->
+## Chuyển đổi sang Ngày  
+
+Sau khi nạp tập dữ liệu vào R, giá trị cột ngày có thể trông giống như “1989/12/30”, “05/06/2014” hoặc “13 Jan 2020”. Trong những trường hợp này, R có thể vẫn coi các giá trị trong cột có định dạng ký tự. R cần được *hướng dẫn* rằng các giá trị này là ngày… và định dạng của ngày là gì (phần nào là Ngày, phần nào là tháng, phần nào là Năm, v.v.).  
+
+Sau khi hướng dẫn, R chuyển đổi các giá trị này thành kiểu Ngày. Trong nền, R sẽ lưu trữ ngày tháng dưới dạng số (số ngày tính từ ngày "gốc" ngày 1 tháng 1 năm 1970). Bạn sẽ không phải làm việc với định dạng ngày-số thường xuyên, tuy nhiên điều này cho phép R coi ngày là các biến liên tục và cho phép các hoạt động đặc biệt như tính toán khoảng cách giữa các ngày.  
+
+Mặc định, các giá trị của phân lớp Ngày trong R được hiển thị là YYYY-MM-DD. Sau chương này chúng ta sẽ thảo luận về cách thay đổi cách hiển thị giá trị ngày tháng.  
+
+Dưới đây, chúng tôi trình bày hai cách để chuyển đổi một cột từ dạng ký tự sang kiểu Ngày tiêu chuẩn.  
+
+
+<span style="color: darkgreen;">**_MẸO:_** Bạn có thể kiểm tra kiểu ngày hiện tại của cột bằng hàm `class()` trong **base** R, ví dụ như `class(linelist$date_onset)`.</span>  
+
+  
+
+### **base** R {.unnumbered}  
+
+`as.Date()` là hàm chuẩn của **base** R để chuyển đổi một đối tượng hoặc cột thành kiểu Ngày (lưu ý viết hoa chữ "D").  
+
+Sử dụng hàm `as.Date()` yêu cầu:  
+
+* Bạn *làm rõ định dạng **hiện tại** của ngày ở dạng văn bản gốc* hoặc ngày gốc nếu biến ngày được cung cấp dưới dạng số (xem mục ngày tháng trong Excel)  
+* Nếu hàm được áp dụng trên cột dạng văn bản, tất cả các giá trị ngày phải có cùng một định dạng chính xác (nếu không như vậy, hãy thử hàm `parse_date()` từ package **parsedate**)  
+
+**Trước tiên**, hãy kiểm tra kiểu của cột với hàm `class()` trong **base** R. Nếu bạn không chắc chắn hoặc phân vân về kiểu dữ liệu của cột (vd: bạn thấy "POSIXct", v.v.) dễ dàng nhất là chuyển đổi cột thành kiểu văn bản với hàm `as.character()`, và sau đó chuyển đổi nó thành kiểu Ngày.  
+
+**Thứ hai**, trong hàm `as.Date()`, sử dụng đối số `format =` để cho R biết định dạng *hiện tại* của các cấu phần trong biến ngày - những ký tự nào đề cập đến tháng, ngày và năm và cách chúng được phân tách. Nếu các giá trị của bạn đã ở một trong các định dạng ngày chuẩn của R ("YYYY-MM-DD" hoặc "YYYY/MM/DD") thì đối số `format =` là không cần thiết.  
+
+Để `format = `, hãy cung cấp một chuỗi ký tự (trong dấu ngoặc kép) đại diện cho định dạng ngày *hiện tại* bằng cách sử dụng các chữ viết tắt đặc biệt "strptime" dưới đây. Ví dụ: nếu ngày ký tự của bạn hiện ở định dạng “DD / MM / YYYY”, như “24/04/1968”, bạn hãy sử dụng đối số `format = "%d/%m/%Y"` để chuyển đổi các giá trị này. **Đặt định dạng trong dấu ngoặc kép là cần thiết. Và đừng quên bất kỳ dấu gạch chéo hoặc dấu gạch ngang nào!**  
+
+```{r eval=F}
+# Convert to class date
+linelist <- linelist %>% 
+  mutate(date_onset = as.Date(date_of_onset, format = "%d/%m/%Y"))
+```
+
+Hầu hết các từ viết tắt của “strptime” được liệt kê dưới đây. Bạn có thể xem danh sách đầy đủ bằng cách chạy lệnh `?strptime`.  
+
+%d = Thứ tự ngày trong tháng (5, 17, 28, v.v.)  
+%j = Thứ tự ngày trong năm (theo lịch Julian, ngày từ 001-366)  
+%a = Ngày trong tuần viết tắt (Mon, Tue, Wed, v.v.)  
+%A = Ngày trong tuần viết đầy đủ (Monday, Tuesday, v.v.)
+%w = Thứ tự ngày trong tuần (0-6, Chủ Nhật là 0)  
+%u = Thứ tự ngày trong tuần (1-7, Thứ hai là 1)  
+%W = Thứ tự của tuần trong năm (00-53, Thứ Hai là đầu tuần)  
+%U = Thứ tự của tuần trong năm (01-53, Chủ Nhật là ngày bắt đầu tuần)  
+%m = Thứ tự của tháng trong năm (vd: 01, 02, 03, 04)  
+%b = Tháng viết tắt (Jan, Feb, v.v.)  
+%B = Tháng viết đầy đủ (January, February, v.v.)  
+%y = năm 2 chữ số  (vd: 89)  
+%Y = năm 4 chữ số  (vd: 1989)  
+%H = giờ (đồng hồ 24h)  
+%M = phút  
+%S = giây
+%z = offset from GMT  
+%Z = Múi giờ (dạng ký tự)  
+
+<span style="color: darkgreen;">**_MẸO:_** Đối số `format =` của hàm `as.Date()` sẽ *không* cho R biết định dạng ngày theo cách bạn muốn, nhưng hơn hết nó giúp xác định thành phần ngày trong cột *trước khi* bạn chạy dòng lệnh.</span>  
+
+<span style="color: darkgreen;">**_MẸO:_** Hãy chắc chắn rằng đối số `format =` bạn có sử dụng *các ký tự ngăn cách ngày tháng* (vd: /, -, hoặc khoảng trắng) trong cột ngày hiện tại của bạn.</span>  
+
+Khi các giá trị nằm trong phân lớp Ngày tiêu chuẩn, R sẽ mặc định hiển thị chúng ở định dạng chuẩn, đó là YYYY-MM-DD.
+
+
+
+### **lubridate** {.unnumbered}  
+
+Việc chuyển đổi các đối tượng dạng tự thành Ngày tháng có thể được thực hiện dễ dàng hơn bằng cách sử dụng package **lubridate**. Đây là một package thuộc hệ sinh thái **tidyverse** được thiết kế để giúp làm việc với ngày và giờ đơn giản và nhất quán hơn so với **base** R. Vì những lý do này, package **lubridate** thường được coi là package tiêu chuẩn vàng cho ngày và giờ và được khuyến khích sử dụng bất cứ khi nào làm việc với chúng.
+
+Package **lubridate** cung cấp một số hàm trợ giúp khác nhau được thiết kế để chuyển đổi các đối tượng dạng ký tự thành ngày tháng một cách trực quan và dễ dàng hơn là định dạng bằng hàm `as.Date()`. Các hàm này dành riêng cho định dạng ngày tháng, nhưng cho phép nhiều kiểu dấu phân tách và từ đồng nghĩa của ngày tháng (vd: 01 so với Jan so với January) - chúng được đặt tên theo chữ viết tắt của các định dạng ngày. 
+
+
+```{r, }
+# install/load lubridate 
+pacman::p_load(lubridate)
+```
+
+Hàm `ymd()` có thể chuyển đổi linh hoạt các giá trị ngày được cung cấp dưới dạng **năm, sau đó là tháng, và ngày**.  
+
+```{r}
+# read date in year-month-day format
+ymd("2020-10-11")
+ymd("20201011")
+```
+
+Hàm `mdy()` có thể chuyển đổi linh hoạt các giá trị ngày được cung cấp dưới dạng **tháng, ngày, và năm**.  
+
+```{r}
+# read date in month-day-year format
+mdy("10/11/2020")
+mdy("Oct 11 20")
+```
+
+Hàm `dmy()` có thể chuyển đổi linh hoạt các giá trị ngày được cung cấp dưới dạng **ngày, tháng, và năm**.  
+
+```{r}
+# read date in day-month-year format
+dmy("11 10 2020")
+dmy("11 October 2020")
+```
+
+<!-- The `as.character()` and `as.Date()` commands can optionally be combined as:   -->
+
+<!-- ```{r eval=F} -->
+<!-- linelist_cleaned$date_of_onset <- as.Date(as.character(linelist_cleaned$date_of_onset), format = "%d/%m/%Y") -->
+<!-- ``` -->
+
+Nếu sử dụng piping, việc chuyển đổi cột dạng ký tự thành ngày tháng với **lubridate** có thể trông như thế này:  
+
+```{r, eval=F}
+linelist <- linelist %>%
+  mutate(date_onset = lubridate::dmy(date_onset))
+```
+
+Sau khi hoàn tất, bạn có thể chạy hàm `class()` để xác minh lại kiểu dữ liệu của cột  
+
+```{r, eval=F}
+# Check the class of the column
+class(linelist$date_onset)  
+```
+
+
+Khi các giá trị nằm trong phân lớp Ngày tiêu chuẩn, R sẽ mặc định hiển thị chúng ở định dạng chuẩn, đó là YYYY-MM-DD.  
+
+Lưu ý rằng các hàm trên sử dụng tốt nhất với thông tin về năm có 4 chữ số. Thông tin về năm có 2 chữ số có thể tạo ra các kết quả không mong muốn, bởi vì lubridate sẽ cố gắng đoán và lấy thông tin về thế kỷ.  
+
+Để chuyển đổi thông tin về năm 2 chữ số thành 4 chữ số (tất cả trong cùng một thế kỷ), bạn có thể chuyển thành dạng ký tự và sau đó kết hợp các chữ số hiện có với một tiền tố sử dụng hàm `str_glue()` từ package **stringr** (xem chương [Ký tự và chuỗi](characters_strings.vn.qmd)). Sau đó chuyển đổi sang dạng ngày.  
+
+```{r}
+two_digit_years <- c("15", "15", "16", "17")
+str_glue("20{two_digit_years}")
+```
+
+
+
+### Kết hợp các cột {.unnumbered}  
+
+Bạn có thể sử dụng các hàm `make_date()` và `make_datetime()` trong package **lubridate** để kết hợp nhiều cột dạng số thành một cột ngày. Ví dụ: nếu bạn có các cột kiểu số như `onset_day`, `onset_month`, và `onset_year` trong data frame `linelist`:  
+
+```{r, eval=F}
+linelist <- linelist %>% 
+  mutate(onset_date = make_date(year = onset_year, month = onset_month, day = onset_day))
+```
+
+
+
+
+<!-- ======================================================= -->
+## Ngày tháng trong Excel
+
+Về cơ bản, hầu hết phần mềm lưu trữ thông tin ngày tháng dưới dạng số. R lưu trữ ngày bắt đầu từ ngày 1 tháng 1 năm 1970. Do đó, nếu bạn chạy hàm `as.numeric(as.Date("1970-01-01))`, bạn sẽ nhận được kết quả là `0`. 
+
+Microsoft Excel lưu trữ ngày tháng có nguồn gốc là ngày 30 tháng 12 năm 1899 (hệ điều hành Windows) hoặc ngày 1 tháng 1 năm 1904 (hệ điều hành Mac), tùy thuộc vào hệ điều hành của bạn. Xem [hướng dẫn của Microsoft](https://docs.microsoft.com/en-us/office/troubleshoot/excel/1900-and-1904-date-system) để biết thêm thông tin.  
+
+Ngày trong Excel thường nạp vào R dưới dạng các giá trị số thay vì dưới dạng ký tự. Nếu tập dữ liệu bạn đã nhập từ Excel hiển thị ngày tháng dưới dạng số hoặc ký tự như “41369”… hãy sử dụng hàm `as.Date()` (hoặc hàm `as_date()` của **lubridate**) để chuyển đổi, nhưng **thay vì cung cấp một "định dạng" như trên, hãy cung cấp ngày gốc trên Excel** tới đối số `origin = `.  
+
+Điều này sẽ không hoạt động nếu ngày Excel được lưu trữ trong R dưới dạng một kiểu ký tự, vì vậy hãy đảm bảo rằng các số được lữu trữ ở kiểu Số!
+
+<span style="color: black;">**_LƯU Ý:_** Bạn nên cung cấp định dạng ngày ở định dạng mặc định của R ("YYYY-MM-DD").</span>
+
+```{r, eval = FALSE}
+# An example of providing the Excel 'origin date' when converting Excel number dates
+data_cleaned <- data %>% 
+  mutate(date_onset = as.numeric(date_onset)) %>%   # ensure class is numeric
+  mutate(date_onset = as.Date(date_onset, origin = "1899-12-30")) # convert to date using Excel origin
+```
+
+
+
+<!-- ======================================================= -->
+## Ngày lộn xộn  
+
+Hàm `guess_dates()` từ package **linelist** cố gắng nhận diện một cột ngày tháng "lộn xộn" chứa ngày tháng ở nhiều định dạng khác nhau và chuyển đổi ngày tháng sang định dạng chuẩn. Bạn có thể [đọc thêm tài liệu trực tuyến về `guess_dates()`](https://www.repidemicsconsortium.org/linelist/reference/guess_dates.html). Nếu hàm `guess_dates()` chưa có trên CRAN của R phiên bản 4.0.2, hãy thử cài đặt theo cách sau `pacman::p_load_gh("reconhub/linelist")`.
+
+Ví dụ: hàm `guess_dates` sẽ nhận diện một vectơ gồm các ngày chứa ký tự như sau "03 Jan 2018", "07/03/1982", và "08/20/85" và chuyển đổi chúng thành định dạng Ngày tiêu chuẩn như: `2018-01-03`, `1982-03-07`, và `1985-08-20`.  
+
+```{r, }
+parsedate::parse_date(c("03 Jan 2018",
+                        "07/03/1982",
+                        "08/20/85"))
+```
+
+Một số tùy chọn đối số cho hàm `guess_dates()` mà bạn có thể đưa vào là:  
+
+* `error_tolerance` - Tỷ lệ thông tin nhập không thể được xác định là ngày được chấp nhận (mặc định là 0,1 hoặc 10%)
+* `last_date` - ngày hợp lệ cuối cùng (mặc định là ngày hiện tại)  
+* `first_date` - ngày hợp lệ đầu tiên. Giá trị mặc định là năm mươi năm trước last_date.
+
+
+```{r eval = FALSE}
+# An example using guess_dates on the column dater_onset
+linelist <- linelist %>%                 # the dataset is called linelist
+  mutate(date_onset = parse_date(date_onset)
+```
+
+
+
+
+<!-- ======================================================= -->
+## Làm việc với kiểu dữ liệu ngày-giờ  
+
+Như đã đề cập ở trước, R cũng hỗ trợ kiểu dữ liệu `datetime` - là một cột chứa thông tin ngày **và** giờ. Bởi vì với kiểu dữ liệu `Date`, chúng cần được chuyển đổi từ các đối tượng kiểu `character` thành kiểu `datetime`. 
+
+### Chuyển đổi ngày giờ {.unnumbered}  
+
+Một đối tượng `datetime` được định dạng phần ngày trước, sau đó là phần thời gian - ví dụ:  _01 Jan 2020, 16:30_. Cũng như ngày, có nhiều cách có thể được định dạng và có nhiều cấp độ chính xác (giờ, phút, giây) có thể sử dụng.  
+
+Thật may mắn, các hàm hỗ trợ trong **lubridate** cũng tồn tại để giúp chuyển đổi thông tin dạng chuỗi này thành các đối tượng dạng `datetime`. Các hàm này là phần mở rộng của các hàm ngày, với hàm `_h` (chỉ cung cấp giờ), hàm `_hm` (cung cấp giờ và phút), hoặc hàm `_hms` (cung cấp giờ, phút và giây) được thêm vào cuối cùng (vd: `dmy_hms()`). Chúng có thể được sử dụng như sau:
+
+Chuyển đổi datetime chỉ có giờ thành đối tượng datetime 
+
+```{r}
+ymd_h("2020-01-01 16hrs")
+ymd_h("2020-01-01 4PM")
+```
+
+Chuyển đổi datetime với giờ và phút thành đối tượng datetime  
+
+```{r}
+dmy_hm("01 January 2020 16:20")
+```
+
+Chuyển đổi datetime với giờ, phút và giây sang đối tượng datetime  
+
+```{r}
+mdy_hms("01 January 2020, 16:20:40")
+```
+
+Bạn có thể cung cấp múi giờ nhưng nó bị bỏ qua. Xem các phần sau trong chương này về múi giờ.  
+
+```{r}
+mdy_hms("01 January 2020, 16:20:40 PST")
+
+```
+
+Khi làm việc với một data frame, các cột ngày và giờ có thể được kết hợp để tạo cột ngày-giờ bằng cách sử dụng hàm `str_glue()` từ package **stringr**  và các hàm của package **lubridate**. Xem chương [Ký tự và chuỗi](characters_strings.vn.qmd) để biết thêm chi tiết về **stringr**.  
+
+Trong ví dụ này, bộ dữ liệu `linelist` có một cột ở định dạng “giờ:phút”. Để chuyển đổi thành ngày giờ, chúng tôi làm theo một số bước:  
+
+1) Tạo một cột thời gian nhập viện "sạch" với các giá trị bị thiếu được điền bằng trung vị cột. Chúng ta làm điều này bởi vì **lubridate** sẽ không hoạt động trên các giá trị missing. Kết hợp nó với cột `date_hospitalisation`, sau đó sử dụng hàm `ymd_hm()` để chuyển đổi.  
+
+```{r, eval = FALSE}
+# packages
+pacman::p_load(tidyverse, lubridate, stringr)
+
+# time_admission is a column in hours:minutes
+linelist <- linelist %>%
+  
+  # when time of admission is not given, assign the median admission time
+  mutate(
+    time_admission_clean = ifelse(
+      is.na(time_admission),         # if time is missing
+      median(time_admission),        # assign the median
+      time_admission                 # if not missing keep as is
+  ) %>%
+  
+    # use str_glue() to combine date and time columns to create one character column
+    # and then use ymd_hm() to convert it to datetime
+  mutate(
+    date_time_of_admission = str_glue("{date_hospitalisation} {time_admission_clean}") %>% 
+      ymd_hm()
+  )
+
+```
+
+### Chỉ chuyển đổi thời gian {.unnumbered}  
+
+Nếu dữ liệu của bạn chỉ chứa thời gian dạng ký tự (giờ và phút), bạn có thể chuyển đổi và thao tác chúng bằng cách sử dụng hàm `strptime()` từ **base** R. Ví dụ: để phân biệt sự khác biệt giữa hai loại thời gian này:  
+
+```{r}
+# raw character times
+time1 <- "13:45" 
+time2 <- "15:20"
+
+# Times converted to a datetime class
+time1_clean <- strptime(time1, format = "%H:%M")
+time2_clean <- strptime(time2, format = "%H:%M")
+
+# Difference is of class "difftime" by default, here converted to numeric hours 
+as.numeric(time2_clean - time1_clean)   # difference in hours
+
+```
+
+Tuy nhiên, lưu ý rằng nếu không có giá trị ngày được cung cấp, phần mềm sẽ giả định là ngày hôm nay. Để kết hợp chuỗi ngày và giờ với nhau, hãy thử cách sử dụng **stringr** đã được nói ở phần bên trên. Đọc thêm về `strptime()` [tại đây](https://rdrr.io/r/base/strptime.html).  
+
+Để chuyển đổi các số có một chữ số thành hai chữ số (ví dụ: để “độn thêm” giờ hoặc phút với các số 0 ở đầu để đạt được 2 chữ số), hãy xem phần ["Độ dài chuỗi ký tự" trong chương Ký tự và chuỗi](#str_pad).  
+
+
+### Thời gian chính xác {.unnumbered}  
+
+Bạn có thể trích xuất các phần tử của thời gian với các hàm `hour()`, `minute()`, hoặc `second()` từ **lubridate**.  
+
+Đây là một ví dụ về trích xuất giờ và sau đó phân loại theo từng phần trong ngày. Chúng ta bắt đầu với cột `time_admission`, có kiểu ký tự ở định dạng "HH:MM". Đầu tiên, hàm `strptime()` được sử dụng như mô tả ở trên để chuyển đổi các ký tự thành kiểu ngày giờ. Sau đó, giờ được trích xuất với hàm `hour()`, trả về một số từ 0-24. Cuối cùng, cột `time_period` được tạo bằng cách sử dụng logic với hàm `case_when()` để phân loại các dòng thành các buổi Sáng / Chiều / Tối / Đêm dựa trên giờ được nhập liệu.  
+
+```{r}
+linelist <- linelist %>%
+  mutate(hour_admit = hour(strptime(time_admission, format = "%H:%M"))) %>%
+  mutate(time_period = case_when(
+    hour_admit > 06 & hour_admit < 12 ~ "Morning",
+    hour_admit >= 12 & hour_admit < 17 ~ "Afternoon",
+    hour_admit >= 17 & hour_admit < 21 ~ "Evening",
+    hour_admit >=21 | hour_admit <= 6 ~ "Night"))
+```
+
+Để tìm hiểu thêm về hàm `case_when()`, hãy xem chương [Làm sạch số liệu và các hàm quan trọng](cleaning.vn.qmd).  
+
+<!-- ======================================================= -->
+## Làm việc với ngày   
+
+`lubridate` cũng có thể được sử dụng cho nhiều chức năng khác, chẳng hạn như **trích xuất các phần tử của ngày/ngày-giờ**, **tính toán ngày dạng số học**, hoặc **tính toán khoảng cách giữa ngày với ngày**
+
+Ở đây chúng tôi tạo ra một ngày mẫu để sử dụng cho các ví dụ:  
+
+```{r, }
+# create object of class Date
+example_date <- ymd("2020-03-01")
+```
+
+### Trích xuất các cấu phần của ngày {.unnumbered}  
+
+Bạn có thể trích xuất các cấu phần phổ biến như tháng, ngày, ngày trong tuần:  
+
+```{r}
+month(example_date)  # month number
+day(example_date)    # day (number) of the month
+wday(example_date)   # day number of the week (1-7)
+```
+
+Bạn cũng có thể trích xuất các cấu phần thời gian từ một đối tượng hoặc cột có kiểu `datetime`. Điều này có thể hữu ích nếu bạn muốn xem phân phối của thời gian nhập viện.  
+
+```{r, eval=F}
+example_datetime <- ymd_hm("2020-03-01 14:45")
+
+hour(example_datetime)     # extract hour
+minute(example_datetime)   # extract minute
+second(example_datetime)   # extract second
+```
+
+Có một số tùy chọn để trích xuất tuần. Xem thêm ở mục tuần Dịch tễ học bên dưới.  
+
+Lưu ý rằng nếu bạn đang tìm cách *hiển thị* ngày theo một cách nhất định (ví dụ: "Jan 2020" hoặc "Thursday 20 March" hoặc "Week 20, 1977"), bạn có thể thực hiện điều này linh hoạt hơn như được mô tả trong mục Hiển thị ngày.  
+
+
+### Tính toán ngày {.unnumbered}  
+
+Bạn có thể thêm số ngày hoặc tuần nhất định bằng cách sử dụng các hàm tương ứng từ package **lubridate**.  
+
+```{r}
+# add 3 days to this date
+example_date + days(3)
+  
+# add 7 weeks and subtract two days from this date
+example_date + weeks(7) - days(2)
+```
+
+### Khoảng ngày {.unnumbered}  
+
+Sự khác biệt giữa các ngày có thể được tính bằng:  
+
+1. Đảm bảo cả hai trường ngày đều thuộc phân lớp ngày tiêu chuẩn  
+2. Sử dụng phép trừ để trả về khoảng chênh lệch "difftime" giữa hai ngày  
+3. Nếu cần thiết, hãy chuyển đổi kết quả thành phân lớp dạng số để thực hiện các phép tính toán học tiếp theo 
+
+Dưới đây là khoảng thời gian giữa hai ngày được tính toán và hiển thị. Bạn có thể tìm các khoảng thời gian bằng cách sử dụng ký hiệu trừ "minus" trên các giá trị dạng Ngày tiêu chuẩn. Tuy nhiên, lưu ý rằng phân lớp của giá trị trả về là “difftime” như được hiển thị bên dưới và phải được chuyển đổi thành dạng số. 
+
+```{r}
+# find the interval between this date and Feb 20 2020 
+output <- example_date - ymd("2020-02-20")
+output    # print
+class(output)
+```
+
+Để thực hiện các thao tác tiếp theo trên “difftime”, hãy chuyển nó thành dạng số với hàm `as.numeric()`. 
+
+Tất cả điều này có thể được kết hợp với nhau để xử lý dữ liệu - ví dụ:
+
+```{r, eval = F}
+pacman::p_load(lubridate, tidyverse)   # load packages
+
+linelist <- linelist %>%
+  
+  # convert date of onset from character to date objects by specifying dmy format
+  mutate(date_onset = dmy(date_onset),
+         date_hospitalisation = dmy(date_hospitalisation)) %>%
+  
+  # filter out all cases without onset in march
+  filter(month(date_onset) == 3) %>%
+    
+  # find the difference in days between onset and hospitalisation
+  mutate(days_onset_to_hosp = date_hospitalisation - date_of_onset)
+```
+
+
+
+Trong bối cảnh của bộ dữ liệu, nếu thiếu một trong hai giá trị ngày ở trên, thì thao tác này sẽ không thực hiện thành công. Điều này sẽ tạo ra một kết quả là `NA` thay vì là một giá trị số. Khi sử dụng các cột này để tính toán, hãy chắc chắn rằng bạn thiết lập đối số `na.rm = ` là `TRUE`. Ví dụ:
+
+```{r, eval = FALSE}
+# calculate the median number of days to hospitalisation for all cases where data are available
+median(linelist_delay$days_onset_to_hosp, na.rm = T)
+```
+
+
+<!-- ======================================================= -->
+## Hiển thị ngày  
+
+Một khi ngày tháng đã được định dạng đúng kiểu, bạn thường muốn chúng hiển thị theo nhiều cách khác nhau, ví dụ: hiển thị là "Monday 05 January" thay vì "2018-01-05". Bạn cũng có thể muốn điều chỉnh hiển thị để nhóm các dòng theo các yếu tố ngày - ví dụ: nhóm theo tháng-năm.  
+
+### `format()` {.unnumbered}  
+
+Điều chỉnh hiển thị ngày với hàm `format()` từ **base** R. Hàm này chấp nhận một chuỗi ký tự (trong dấu ngoặc kép) xác định rõ định dạng đầu ra *mong muốn* bằng chữ viết tắt “%” strptime (cú pháp tương tự như được sử dụng trong hàm `as.Date()`). Dưới đây là các từ viết tắt phổ biến.  
+
+Lưu ý: việc sử dụng hàm `format()` sẽ chuyển đổi các giá trị thành kiểu ký tự, vì vậy điều này thường được sử dụng ở cuối phân tích hoặc chỉ cho mục đích hiển thị! Bạn có thể xem danh sách đầy đủ bằng cách chạy lệnh `?strptime`.  
+
+%d = Thứ tự ngày trong tháng (5, 17, 28, v.v.)  
+%j = Thứ tự ngày trong năm (theo lịch Julian, ngày từ 001-366)  
+%a = Ngày trong tuần viết tắt (Mon, Tue, Wed, v.v.)  
+%A = Ngày trong tuần viết đầy đủ (Monday, Tuesday, v.v.)
+%w = Thứ tự ngày trong tuần (0-6, Chủ Nhật là 0)  
+%u = Thứ tự ngày trong tuần (1-7, Thứ hai là 1)  
+%W = Thứ tự của tuần trong năm (00-53, Thứ Hai là đầu tuần)  
+%U = Thứ tự của tuần trong năm (01-53, Chủ Nhật là ngày bắt đầu tuần)  
+%m = Thứ tự của tháng trong năm (vd: 01, 02, 03, 04)  
+%b = Tháng viết tắt (Jan, Feb, v.v.)  
+%B = Tháng viết đầy đủ (January, February, v.v.)  
+%y = năm 2 chữ số  (vd: 89)  
+%Y = năm 4 chữ số  (vd: 1989)  
+%H = giờ (đồng hồ 24h)  
+%M = phút  
+%S = giây
+%z = offset from GMT  
+%Z = Múi giờ (dạng ký tự)
+
+Ví dụ về định dạng ngày hôm nay:  
+
+```{r}
+# today's date, with formatting
+format(Sys.Date(), format = "%d %B %Y")
+
+# easy way to get full date and time (default formatting)
+date()
+
+# formatted combined date, time, and time zone using str_glue() function
+str_glue("{format(Sys.Date(), format = '%A, %B %d %Y, %z  %Z, ')}{format(Sys.time(), format = '%H:%M:%S')}")
+
+# Using format to display weeks
+format(Sys.Date(), "%Y Week %W")
+```
+
+Lưu ý rằng nếu sử dụng hàm `str_glue()`, hãy lưu ý rằng các nội dung lẽ ra nên để trong dấu ngoặc kép thì bạn chỉ nên sử dụng dấu ngoặc đơn (như trên).  
+
+
+### Tháng-Năm {.unnumbered}  
+
+Để chuyển đổi cột Ngày sang định dạng Tháng-năm, chúng tôi khuyên bạn nên sử dụng hàm `as.yearmon()` từ package **zoo**. Nó giúp chuyển đổi từ định dạng ngày thành định dạng “yearmon” và giữ lại thứ tự thích hợp. Ngược lại, sử dụng hàm `format(column, "%Y %B")` sẽ chuyển đổi giá trị thành kiểu Ký tự và sẽ sắp xếp các giá trị theo thứ tự bảng chữ cái (không chính xác). 
+
+Dưới đây, một cột `yearmonth` mới được tạo ra từ cột `date_onset`, sử dụng hàm `as.yearmon()`. Thứ tự mặc định (đúng) của các giá trị kết quả được hiển thị trong bảng.  
+
+```{r}
+# create new column 
+test_zoo <- linelist %>% 
+     mutate(yearmonth = zoo::as.yearmon(date_onset))
+
+# print table
+table(test_zoo$yearmon)
+```
+
+Ngược lại, bạn có thể thấy sử dụng hàm `format()` chỉ có thể giúp đạt được định dạng hiển thị mong muốn, nhưng sẽ không có thứ tự chính xác.  
+
+```{r}
+# create new column
+test_format <- linelist %>% 
+     mutate(yearmonth = format(date_onset, "%b %Y"))
+
+# print table
+table(test_format$yearmon)
+```
+
+Lưu ý: nếu bạn đang làm việc với hàm `ggplot()` và chỉ muốn điều chỉnh chỉ *hiển thị* ngày, bạn chỉ cần cung cấp định dạng strptime là đủ tới đối số `date_labels = ` của hàm `scale_x_date()` - bạn có thể sử dụng `"%b %Y"` hoặc `"%Y %b"`. Xem thêm chương [Các mẹo với ggplot](ggplot_tips.vn.qmd).  
+
+
+Package **zoo** cũng cung cấp hàm `as.yearqtr()`, và bạn có thể sử dụng hàm `scale_x_yearmon()` khi sử dụng hàm `ggplot()`.  
+
+
+
+<!-- ======================================================= -->
+## Tuần dịch tễ học {#dates_epi_wks}
+
+### **lubridate** {.unnumbered}  
+
+Xem chương [Nhóm dữ liệu](grouping.vn.qmd) để biết thêm các ví dụ mở rộng về nhóm dữ liệu theo ngày. Dưới đây chúng tôi mô tả ngắn gọn cách nhóm dữ liệu theo tuần.  
+
+Thông thường, chúng tôi khuyên bạn nên sử dụng hàm `floor_date()` từ package **lubridate**, với đối số `unit = "week"`. Điều này làm tròn ngày cần xử lý thành ngày "bắt đầu" của tuần, như được xác định bởi đối số `week_start = `. Ngày bắt đầu của tuần mặc định là 1 (đối với Thứ Hai) nhưng bạn có thể chỉ định bất kỳ ngày nào trong tuần làm ngày bắt đầu (ví dụ: 7 đối với Chủ Nhật). Hàm `floor_date()` rất linh hoạt và có thể sử dụng để làm tròn xuống các đơn vị thời gian khác bằng cách thiết lập đối số `unit = ` bằng “giây”, “phút”, “giờ”, “ngày”, “tháng”, hoặc “năm”.  
+
+Giá trị trả về là ngày bắt đầu trong tuần, với kiểu dữ liệu Ngày. Kiểu dữ liệu này rất hữu ích khi vẽ biểu đồ, vì nó sẽ dễ dàng sử dụng và sắp xếp chính xác trong hàm `ggplot()`.
+
+Nếu bạn chỉ quan tâm đến việc điều chỉnh ngày để *hiển thị* theo tuần trong biểu đồ, hãy xem mục Hiển thị ngày trong chương này. Ví dụ: khi vẽ đồ thị một đường cong dịch tễ, bạn có thể định dạng hiển thị ngày bằng cách sử dụng cú pháp strptime "%". Ví dụ, sử dụng "%Y-%W" hoặc "%Y-%U" để trả về giá trị năm và số tuần (tương ứng với bắt đầu tuần vào ngày thứ Hai hoặc Chủ nhật).  
+
+### Đếm theo tuần {.unnumbered}  
+
+Xem chương [Nhóm dữ liệu](grouping.vn.qmd) để được giải thích kỹ hơn về cách nhóm dữ liệu với hàm `count()`, `group_by()`, và `summarise()`. Dưới đây là một ví dụ ngắn gọn.  
+
+1) Tạo cột ‘tuần’ mới với hàm `mutate()`, sử dụng hàm `floor_date()` với đối số `unit = "week"`  
+2) Đếm số lượng dòng (quan sát) mỗi tuần với hàm `count()`; lọc ra bất kỳ trường hợp nào bị thiếu ngày  
+3) Kết thúc với hàm `complete()` từ package **tidyr** để đảm bảo rằng *tất cả* các tuần đều xuất hiện trong dữ liệu - ngay cả những tuần không có dòng/ quan sát nào. Theo mặc định, giá trị đếm cho bất kỳ hàng "mới" nào sẽ là NA, nhưng bạn có thể đặt chúng bằng 0 với đối số `fill = `, mà điều này kỳ vọng cho một danh sách tên (bên dưới, `n` là tên của cột đếm).  
+
+```{r}
+# Make aggregated dataset of weekly case counts
+weekly_counts <- linelist %>% 
+  drop_na(date_onset) %>%             # remove cases missing onset date
+  mutate(weekly_cases = floor_date(   # make new column, week of onset
+    date_onset,
+    unit = "week")) %>%            
+  count(weekly_cases) %>%           # group data by week and count rows per group (creates column 'n')
+  tidyr::complete(                  # ensure all weeks are present, even those with no cases reported
+    weekly_cases = seq.Date(          # re-define the "weekly_cases" column as a complete sequence,
+      from = min(weekly_cases),       # from the minimum date
+      to = max(weekly_cases),         # to the maxiumum date
+      by = "week"),                   # by weeks
+    fill = list(n = 0))             # fill-in NAs in the n counts column with 0
+```
+
+Đây là các hàng đầu tiên của kết quả bộ dữ liệu:  
+
+```{r message=FALSE, echo=F}
+DT::datatable(head(weekly_counts, 20), rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+
+### Các thay thế cho tuần dịch tễ học {.unnumbered}  
+
+Lưu ý là package **lubridate** cũng có các hàm `week()`, `epiweek()`, và `isoweek()`, mỗi hàm có ngày bắt đầu khác nhau một chút và các sắc thái khác nhau. Mặc dù nói chung, hàm `floor_date()` là tất cả những gì bạn cần. Đọc thêm về các hàm này bằng cách gõ `?week` ở cửa sổ console hoặc đọc tài liệu [tại đây](https://www.rdocumentation.org/packages/lubridate/versions/1.7.4/topics/week). 
+
+
+Bạn có thể cân nhắc sử dụng package **aweek** để thiết lập tuần dịch tễ học. Bạn có thể đọc thêm về nó [ở trang web của RECON](https://www.repidemicsconsortium.org/aweek/). Nó có các hàm `date2week()` và `week2date()` trong đó bạn có thể đặt ngày bắt đầu tuần với `week_start = "Monday"`. Package này là dễ sử dụng nhất nếu bạn muốn hiển thị "tuần" theo kiểu đầu ra (vd: "2020-W12"). Một ưu điểm khác của **aweek** là khi áp dụng hàm `date2week()` cho cột ngày, cột trả về (định dạng tuần) sẽ tự động thuộc kiểu Factor và bao gồm các cấp độ cho tất cả các tuần trong khoảng thời gian (điều này tránh thêm bước `complete()` được mô tả ở trên). Tuy nhiên, **aweek** không có chức năng làm tròn ngày thành các đơn vị thời gian khác như tháng, năm, v.v.  
+
+
+Một giải pháp thay thế khác cho chuỗi thời gian cũng hoạt động tốt để hiển thị định dạng “tuần” ("2020 W12") là hàm `yearweek()` từ package **tsibble**, như được minh họa trong chương [Chuỗi thời gian và phát hiện ổ dịch](time_series.vn.qmd).  
+
+
+<!-- ======================================================= -->
+## Chuyển đổi múi ngày giờ
+
+Khi dữ liệu hiển thị ở các múi giờ khác nhau, điều quan trọng là phải chuẩn hóa dữ liệu này thành một múi giờ thống nhất. Điều này có thể gây ra một thách thức lớn hơn nữa, vì thành phần múi giờ của dữ liệu phải được mã hóa theo cách thủ công trong hầu hết các trường hợp.
+
+Trong R, mỗi đối tượng *datetime* có một cấu phần múi giờ. Mặc định, tất cả các đối tượng datetime sẽ mang múi giờ địa phương của máy tính đang sử dụng - điều này thường đặc trưng cho một *vị trí* chứ không phải tự đặt tên cho múi giờ đó, vì múi giờ thường sẽ thay đổi ở các vị trí phụ thuộc vào thời gian chiếu sáng. Không thể bù trừ chính xác cho các múi giờ mà không có cấu phần thời gian trong biến ngày, vì mốc trong cột ngày đại diện không thể được quy cho một thời gian cụ thể và do đó không thể tính toán hợp lý sự chuyển đổi thời gian bằng giờ
+
+Để xử lý múi giờ, có một số hàm trợ giúp trong lubridate có thể được sử dụng để thay đổi múi giờ của đối tượng datetime từ múi giờ địa phương sang các múi giờ khác. Múi giờ được đặt bằng cách gán múi giờ cơ sở dữ liệu tz hợp lệ cho đối tượng datetime. Bạn có thể tìm thấy danh sách những thứ này tại đây - nếu vị trí bạn đang sử dụng dữ liệu không có trong danh sách này, các múi giờ của thành phố lớn lân cận có thể được sử dụng thay thế. 
+
+https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
+
+
+```{r}
+# assign the current time to a column
+time_now <- Sys.time()
+time_now
+
+# use with_tz() to assign a new timezone to the column, while CHANGING the clock time
+time_london_real <- with_tz(time_now, "Europe/London")
+
+# use force_tz() to assign a new timezone to the column, while KEEPING the clock time
+time_london_local <- force_tz(time_now, "Europe/London")
+
+
+# note that as long as the computer that was used to run this code is NOT set to London time,
+# there will be a difference in the times 
+# (the number of hours difference from the computers time zone to london)
+time_london_real - time_london_local
+
+```
+
+Điều này có vẻ trừu tượng và thường không cần thiết nếu người dùng không làm việc trên các múi giờ.  
+
+
+
+
+
+<!-- ======================================================= -->
+## Phép toán về khoảng thời gian  
+
+`lead()` và `lag()` là các hàm thuộc package **dplyr** giúp tìm các giá trị trước đó (lagged) hoặc tiếp theo (leading) trong một vectơ - thường là vectơ số hoặc ngày. Điều này rất hữu ích khi thực hiện các phép tính về sự thay đổi / chênh lệch giữa các đơn vị thời gian.  
+
+
+```{r, echo=F}
+counts <- import(here("data", "example", "district_weekly_count_data.xlsx")) %>% 
+  filter(District == "Nibari") %>% 
+  mutate(Date = as.Date(Date),
+         week_start = lubridate::floor_date(Date, "week")) %>%
+  group_by(week_start) %>% 
+  summarize(cases_wk = sum(Cases, na.rm=T)) %>% 
+  complete(week_start = seq.Date(min(week_start), max(week_start), by = "week"), fill = list(cases_wk = 0))
+```
+
+Giả sử bạn muốn tính toán sự khác biệt trong trường hợp giữa tuần hiện tại và tuần trước đó. Dữ liệu ban đầu được cung cấp theo số lượng hàng tuần như dưới đây.  
+
+```{r message=FALSE, echo=F}
+DT::datatable(counts, rownames = FALSE,  options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+**Khi sử dụng hàm `lag()` hoặc `lead()`, thứ tự của các dòng trong khung dữ liệu là rất quan trọng! - chú ý xem ngày/số của bạn tăng dần hay giảm dần**  
+
+Đầu tiên, tạo một cột mới chứa giá trị của tuần trước đó (lagged).  
+
+* Kiểm soát số lượng đơn vị trước/sau với `n = ` (phải là số nguyên không âm)  
+* Sử dụng `default = ` để xác định giá trị được đặt trong các dòng không tồn tại (vd: hàng đầu tiên không có giá trị lagged). Mặc định, nó là `NA`.  
+* Sử dụng `order_by = TRUE` nếu các dòng không được sắp xếp theo cột tham chiếu  
+
+
+```{r}
+counts <- counts %>% 
+  mutate(cases_prev_wk = lag(cases_wk, n = 1))
+```
+
+```{r message=FALSE, echo=F}
+DT::datatable(counts, rownames = FALSE,  options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+Tiếp theo, tạo một cột mới khác biệt với hai cột đang tham chiếu:  
+
+```{r}
+counts <- counts %>% 
+  mutate(cases_prev_wk = lag(cases_wk, n = 1),
+         case_diff = cases_wk - cases_prev_wk)
+```
+
+```{r message=FALSE, echo=F}
+DT::datatable(counts, rownames = FALSE,  options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+
+Bạn có thể đọc thêm về hàm `lead()` và `lag()` trong tài liệu [này](https://dplyr.tidyverse.org/reference/lead-lag.html) hoặc gõ `?lag` vào cửa sổ console.  
+
+
+<!-- ======================================================= -->
+## Nguồn  
+
+**lubridate** [tidyverse page](https://lubridate.tidyverse.org/)  
+**lubridate** RStudio [cheatsheet](https://rawgit.com/rstudio/cheatsheets/master/lubridate.pdf)  
+R for Data Science page on [dates and times](https://r4ds.had.co.nz/dates-and-times.html)  
+[Online tutorial](https://www.statmethods.net/input/dates.html)
+[Date formats](https://www.r-bloggers.com/2013/08/date-formats-in-r/)

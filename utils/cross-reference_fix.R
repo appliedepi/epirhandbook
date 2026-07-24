@@ -3,10 +3,10 @@ pacman::p_load(tidyverse,
                stringr)
 
 # Define the base folder containing the Quarto files
-folder_path <- here("new_pages")
+folder_path <- here("chapters")
 
 # Provided list of chapter base names
-chapter_list <- c("editorial_style", "data_used", "basics", "transition_to_R", "packages_suggested", "r_projects", "importing", "cleaning", 
+chapter_list <- c("editorial_style", "data_used", "basics", "transition_to_r", "packages_suggested", "r_projects", "importing", "cleaning", 
                  "dates", "characters_strings", 
                  "factors", "pivoting", "grouping", "joining_matching", "deduplication", "iteration", "tables_descriptive", "stat_tests", "regression", "missing_data", 
                  "standardization", "moving_average", "time_series", "epidemic_models", "contact_tracing", "survey_analysis", "survival_analysis", "gis", "tables_presentation", "ggplot_basics", "ggplot_tips", "epicurves", "age_pyramid", "heatmaps", "diagrams", "combination_analysis", "transmission_chains", "phylogenetic_trees", "interactive_plots", "rmarkdown", "reportfactory", "flexdashboard", "shiny_basics", "writing_functions", "directories", "collaboration", "errors", "help", "network_drives", "data_table")

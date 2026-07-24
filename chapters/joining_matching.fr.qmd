@@ -1,0 +1,977 @@
+---
+aliases:
+  - /new_pages/joining_matching.fr.html
+---
+
+# Joindre des données {#joining_matching}  
+
+```{r out.width = c('50%'), fig.show='hold', echo=F}
+knitr::include_graphics(here::here("images", "left-join.gif"))
+```
+
+*Ci-dessus : animation d'une jointure par la gauche ([source de l'image ](https://github.com/gadenbuie/tidyexplain/tree/master/images))*  
+
+Ce chapitre décrit les méthodes permettant de joindre / fusionner / faire correspondre / lier / "merger" / unir / combiner des tableaux.  
+
+Lors de l'analyse de données épidémiologiques, il est rare que votre processus de nettoyage des données n'implique pas des sources de données multiples, et donc leur mise en relation. 
+Par exemple, vous aurez peut-être à joindre des données de laboratoire aux résultats cliniques des patients, ou des données de mobilité Google aux tendances des maladies infectieuses, ou même un jeu de données à un stade donné de l'analyse et une version transformée de lui-même.  
+
+Dans ce chapitre, nous allons :  
+
+* Réaliser des *jointures* de deux dataframes en faisant correspondre les lignes sur la base d'une clef primaire (dans une ou plusieurs colonnes).  
+* Joindre des jeux de données sur la base de correspondances *probabilistes* (probables) entre les observations  
+* Étendre un jeu de données en *concaténant* des lignes ou des colonnes d'un autre jeu de données.   
+
+
+<!-- ======================================================= -->
+## Étapes préliminaires { }
+
+### Importation des paquets {.unnumbered}  
+
+Ces lignes de code chargent les paquets nécessaires aux analyses. Dans ce guide, nous mettons l'accent sur `p_load()` de **pacman**, qui installe le paquet si nécessaire *puis* l'importe pour l'utiliser. Vous pouvez également charger les paquets installés avec `library()` de **base** R. Voir la page sur [bases de R](#rbasics) pour plus d'informations sur les paquets R.  
+
+```{r}
+pacman::p_load(
+  rio,            # import des fichiers
+  here,           # chemins d'accès
+  tidyverse,      # gestion des données + graphiques (ggplot2)
+  RecordLinkage,  # correspondances probabilistes
+  fastLink        # correspondances probabilistes
+)
+```
+
+
+### Importation des données {.unnumbered}
+
+Nous importons un jeu de données de cas d'une épidémie d'ébola fictive. Pour reproduire les étapes, <a href='https://github.com/epirhandbook/Epi_R_handbook/raw/master/data/case_linelists/linelist_cleaned.rds' class='download-button'>cliquez pour télécharger la linelist "propre"</a> (as .rds file). Importez vos données avec la fonction `import()` du paquet **rio** (elle accepte de nombreux types de fichiers comme .xlsx, .rds, .csv - voir la page [Importation et exportation des données](import_export) pour plus de détails).  
+
+
+```{r, echo=F}
+# importer la linelist dans R
+linelist <- rio::import(here::here("data", "case_linelists", "linelist_cleaned.rds"))
+```
+
+```{r, eval=F}
+# importer la linelist dans R
+linelist <- import("linelist_cleaned.rds")
+```
+
+Les cinquantes premières lignes sont affichées ci-dessous :  
+
+```{r, message=FALSE, echo=F}
+# display the linelist data as a table
+DT::datatable(head(linelist, 50), rownames = FALSE, filter = "top",
+              options = list(pageLength = 5, scrollX = T), 
+              class = 'white-space: nowrap' )
+```
+
+
+<!-- ======================================================= -->
+### Jeux de données simplifiés {.unnumbered}
+
+Dans les exemples ci-dessous, nous utiliserons des jeux de données simplifiés pour mieux voir ce qui se passe :  
+
+
+1) Une version "miniature" de la linelist (liste des cas), contenant seulement les colonnes `case_id`, `date_onset`, et `hospital`, et seulement les 10 premières lignes.   
+2) Une table nommée `hosp_info`, qui contient des détails sur chaque hôpital.  
+
+Dans la section sur l'appariement probabiliste, nous utiliserons deux petits ensembles de données différents. Le code pour créer ces jeux de données sera donné dans cette section.  
+
+
+#### Linelist miniature {#joins_llmini .unnumbered}  
+
+Nous générons ici la linelist miniature des cas, qui contient seulement 10 lignes et seulement les colonnes `case_id`, `date_onset`, et `hospital`.  
+
+
+```{r}
+linelist_mini <- linelist %>%                 
+  select(case_id, date_onset, hospital) %>%   # sélectionne les colonnes
+  head(10)                                    # garde les 10 premières lignes
+```
+
+```{r message=FALSE, echo=F}
+DT::datatable(linelist_mini, rownames = FALSE, options = list(pageLength = nrow(10)))
+```
+
+
+
+
+#### Jeu de données des hôpitaux {#joins_hosp_info .unnumbered}  
+
+Le code ci-dessous permet de créer un jeu de données contenant des informations supplémentaires sur sept hôpitaux (la population desservie et le niveau de soins disponible). Notez que le nom "Hôpital militaire" appartient à deux hôpitaux différents, l'un de niveau primaire desservant 10000 résidents et l'autre de niveau secondaire desservant 50280 résidents.  
+
+```{r}
+# Crée des informations sur les hôpitaux : 
+hosp_info = data.frame(
+  hosp_name     = c("central hospital", "military", "military", 
+                    "port", "St. Mark's", "ignace", "sisters"),
+  catchment_pop = c(1950280, 40500, 10000, 50280, 
+                    12000, 5000, 4200),
+  level         = c("Tertiary", "Secondary", "Primary", "Secondary",
+                    "Secondary", "Primary", "Primary")
+)
+```
+
+Voici le tableau ainsi produit :    
+
+```{r message=FALSE, echo=F}
+# display the hospital data as a table
+DT::datatable(hosp_info, rownames = FALSE, options = list(pageLength = nrow(hosp_info)))
+```
+
+
+
+
+
+<!-- ======================================================= -->
+### Nettoyage préliminaire {.unnumbered}
+
+Les jointures "traditionnelles" (*i.e.* non-probabilistes) sont sensibles à la casse et nécessitent des correspondances exactes entre les valeurs des colonnes utilisées comme clef/identifiant. Pour démontrer certaines des étapes de nettoyage que vous pourriez avoir besoin de faire avant de joindre vos données, nous allons commencer par nettoyer et aligner les dataframe `linelist_mini` et `hosp_info`.  
+
+**Identifier les différences**  
+
+Le nom de l'hôpital étant notre identifiant/clef commun aux deux jeux de données, nous avons besoin que les valeurs de la colonne `hosp_name` dans le tableau `hosp_info` correspondent aux valeurs de la colonne `hospital` dans le tableau `linelist_mini`.  
+
+Voici le dataframe `linelist_mini`, affiché avec la fonction **base** R `unique()` :  
+
+```{r}
+unique(linelist_mini$hospital)
+```
+
+... et voici les valeurs dans le dataframe `hosp_info` :    
+
+```{r}
+unique(hosp_info$hosp_name)
+```
+
+Il est clair que si certains hôpitaux sont présents dans les deux dataframes, leurs noms ne sont pas toujours orthographiés de la même manière.  
+
+**Aligner les valeurs**  
+
+Nettoyons les valeurs du jeu de données `hosp_info`. Comme expliqué dans le chapitre sur le [Nettoyage de données et fonctions essentielles](#cleaning_data), il est possible de recoder les valeurs à partir de critères logiques en utilisant la fonction `case_when()` de **dplyr**. Pour les quatre hôpitaux communs dans les deux dataframes, nous modifions les noms pour les aligner avec les noms dans le tableau `linelist_mini` (en ne touchant pas aux noms des autres hôpitaux grâce à l'argument `TRUE ~ hosp_name`).   
+
+<span style="color: orange;">**_ATTENTION:_** Normalement on devrait créer une nouvelle colonne pour ce type de nettoyage (`hosp_name_clean` par exemple), mais pour mieux comprendre ce qui se passe lors des étapes suivantes, nous modifions directement la colonne contenant les données "brutes"</span>
+
+```{r}
+hosp_info <- hosp_info %>% 
+  mutate(
+    hosp_name = case_when(
+      # critère                          # nouvelles valeur
+      hosp_name == "military"          ~ "Military Hospital",
+      hosp_name == "port"              ~ "Port Hospital",
+      hosp_name == "St. Mark's"        ~ "St. Mark's Maternity Hospital (SMMH)",
+      hosp_name == "central hospital"  ~ "Central Hospital",
+      TRUE                             ~ hosp_name
+      )
+    )
+```
+
+Les noms des hôpitaux qui apparaissent dans les deux bases de données sont désormais identiques. Il y a deux hôpitaux dans `hosp_info` qui ne sont pas présents dans `linelist_mini`, nous les traiterons plus tard, lors de la jointure.  
+
+```{r}
+unique(hosp_info$hosp_name)
+```
+
+Avant une jointure, il est souvent rassurant de convertir une colonne tout en minuscules ou majuscules. Pour cela, on peut utiliser `mutate()` et une des colonnes de **stringr** (voir le chapitre [sur les chaînes de caractères](#character_strings)):  
+
+`str_to_upper()`  
+`str_to_lower()`  
+`str_to_title()`  
+
+
+
+<!-- ======================================================= -->
+## Jointures à l'aide de **dplyr** { }
+
+Le package **dplyr** offre plusieurs fonctions qui permettent d'effectuer des jointures différentes. **dplyr** est inclus dans le paquet **tidyverse**.  
+
+Un grand merci à [https://github.com/gadenbuie](https://github.com/gadenbuie/tidyexplain/tree/master/images) pour les gifs informatifs !  
+
+
+
+<!-- ======================================================= -->
+### Syntaxe générale {.unnumbered}
+
+Les fonctions de jointure peuvent s'utiliser seules pour unir deux dataframes et créer un nouveau dataframe, mais aussi au sein d'un enchaînement de commandes (pipe avec `%>%`) pour fusionner un dataframe dans un autre à la volée.  
+
+Dans l'exemple ci-dessous, la fonction `left_join()` est utilisée de manière autonome pour créer un nouveau jeu de données (`joined_data`). Les arguments à l'entrée sont les dataframes à unir/fusionner/joindre (`df1` et `df2`). Le premier dataframe listé est le dataframe *de base*, et le deuxième dataframe listé est joint *à* celui-ci.  
+
+Le troisième argument `by = ` précise quelle(s) colonne(s) sera utilisée pour faire la correspondance entre les lignes des deux dataframes (la clef). Si les noms de ces colonnes sont différents, fournissez-les dans un vecteur `c()` comme dans l'exemple ci-dessous, les identifiants communs sont dans la colonne `ID` dans `df1` et dans la colonne `identifier` dans `df2`.  
+ 
+
+```{r, eval=F}
+# Jointure basée sur les valeurs communes dans la colonne ID (df1) et la colonne "identifier" (df2)
+joined_data <- left_join(df1, df2, 
+                         by = c("ID" = "identifier"))
+```
+
+Si la ou les colonnes "clef" à le même nom dans les deux tableaux, alors leur nom peut juste être fourni directement, avec des guillemets :  
+
+```{r, eval=F}
+# Jointure basée sur les valeurs communes dans la colonne ID présente dans df1 et df2
+joined_data <- left_join(df1, df2, 
+                         by = "ID")
+```
+
+S'il y a besoin de plusieurs colonnes pour identifier de manière unique les observations (i.e. créer une clef primaire), on peut lister plusieurs colonnes dans un vecteur et le passer à `by`.
+Dans cet exemple, les lignes des deux dataframes sont unies si les valeurs sont identiques dans les trois colonnes.  
+
+
+```{r, eval=F}
+# Jointure basée sur le prénom, le nom de famille et l'age : les lignes sont fusionnées si les valeurs sont alignées exactement
+joined_data <- left_join(df1, df2, 
+                         by = c("name"    = "firstname", 
+                                "surname" = "lastname", 
+                                "Age"     = "age"))
+```
+
+
+Les fonctions de jointure peuvent également être exécutées dans un enchaînement d'instructions (ou _pipe_). Cela modifiera le jeu de données qui est passée dans le pipe.  
+
+Dans l'exemple ci-dessous, `df1` est pipé, `df2` lui est joint, et `df1` est ainsi modifié et redéfini.  
+
+```{r eval=F}
+df1 <- df1 %>%
+  filter(date_onset < as.Date("2020-03-05")) %>%  # nettoyage divers
+  left_join(df2, by = c("ID" = "identifier"))     # jointure de df2 à df1
+```
+
+
+<span style="color: orange;">**_ATTENTION:_** Les jointures respectent les majuscules/minuscules ! Il peut donc être utile de convertir les colonnes utilisées comme clefs en minuscules ou majuscules. Voir le chapitre [sur les chaînes de caractères](#character_strings)</span>
+
+
+
+<!-- ======================================================= -->
+### Jointures à gauche et droite {.unnumbered}  
+
+**Une jointure à gauche ou droite est une opération très couramment utilisée pour ajouter des informations à un dataframe**, en particulier dans les analyses épidémiologiques. Les nouvelles informations sont ajoutées uniquement aux lignes qui existaient déjà dans le dataframe de "référence".  
+
+*En utilisant ces jointures, l'ordre d'écriture des dataframes dans la commande est important*.  
+
+
+* Dans une *jointure à gauche*, le *premier* dataframe écrit est utilisé comme "référence" à laquelle on adjoint les informations venant de l'autre table.  
+* Dans une *jointure à droite*, le *second* dataframe est la référence à laquelle on rajoute les informations venant du premier dataframe.   
+
+Plus précisement :  
+* **Toutes les lignes présentes dans le dataframe de référence sont conservées**. Les informations contenues dans le dataframe secondaire sont adjointes au dataframe de référence *uniquement s'il existe une correspondance via la ou les colonnes d'identification/clefs*.    
+
+* Les lignes du dataframe secondaire qui ne correspondent pas sont abandonnées.  
+
+* Si plusieurs lignes du dataframe utilisé comme référence correspondent à une ligne dans le dataframe secondaire (many-to-one), les informations du dataframe secondaire sont ajoutées à *chaque ligne du dataframe de référence correspondantes*.  
+
+* Si une ligne du dataframe de référence correspond à plusieurs lignes dans le dataframe secondaire (one-to-many), **toutes les combinaisons sont données**, ce qui signifie que *de nouvelles lignes sont ajoutées au dataframe de référence !*.  
+
+Exemples animés de jointures gauche et droite ([source de l'image](https://github.com/gadenbuie/tidyexplain/tree/master/images))
+
+```{r out.width = c('50%'), fig.show='hold', echo=F}
+knitr::include_graphics(here::here("images", "left-join.gif"))
+knitr::include_graphics(here::here("images", "right-join.gif"))
+```
+
+**Exemple**  
+
+Voici le résultat d'un `left_join()` de `hosp_info` (dataframe secondaire, [voir ici](#joins_hosp_info)) *dans*/*vers* `linelist_mini` (dataframe de référence, [voir ici](#joins_llmini)). La `linelist_mini` originale a `nrow(linelist_mini)` lignes. La `linelist_mini` modifiée est affichée. On constate que :   
+
+* Deux nouvelles colonnes, `catchment_pop` et `level` ont été ajoutées sur le côté gauche de `linelist_mini`.  
+
+* Toutes les lignes originales du dataframe de référence `linelist_mini` ont été conservées.  
+
+* Toutes les lignes originales de `linelist_mini` pour "Military Hospital" ont été dupliquées car elles correspondaient à *deux* lignes dans le dataframe secondaire, et donc les deux combinaisons ont été  retournées.  
+
+* La colonne d'identifiant/clef de jointure du dataframe secondaire (`hosp_name`) a disparu car elle est redondante avec la colonne d'identifiant du dataframe de référence (`hospital`)   
+
+* Lorsqu'une ligne du dataframe de gauche ne correspond à aucune du dataframe de droite (par exemple, lorsque `hospital` est "Autre" ou "Manquant"), les observations renvoyées dans les colonnes venant du dataframe de droite sont `NA`.  
+
+* Les lignes du dataframe de droite qui ne correspondent pas au dataframe gauche (hôpitaux "sisters" et "ignace") ont été abandonnées.   
+
+
+```{r, eval=F}
+linelist_mini %>% 
+  left_join(hosp_info, by = c("hospital" = "hosp_name"))
+```
+
+```{r message=FALSE, echo=F}
+linelist_mini %>% 
+  left_join(hosp_info, by = c("hospital" = "hosp_name")) %>% 
+  DT::datatable(rownames = FALSE, options = list(pageLength = 11))
+```
+
+
+#### Jointure à gauche ou jointure à droite ? {.unnumbered}  
+
+Pour répondre à la question, il faut décider quel dataframe doit conserver toutes ses lignes, et l'utiliser comme dataframe de référence. Une *jonction à gauche* conserve toutes les lignes du premier dataframe écrit dans la commande, tandis qu'une *jonction à droite* conserve toutes les lignes du second dataframe.    
+
+
+Les deux instructions ci-dessous retournent le même résultat : 10 lignes de `hosp_info` jointes *dans* un dataframe `linelist_mini`, mais elles utilisent des jointures différentes. Le résultat est que l'ordre des colonnes sera différent selon que `hosp_info` arrive "par la droite" (dans la jointure à gauche) ou arrive "par la gauche" (dans la jointure à droite). L'ordre des lignes peut également changer en conséquence. Néanmoins ces deux conséquences peuvent être traitées ultérieurement, en utilisant `select()` pour réordonner les colonnes ou `arrange()` pour trier les lignes.  
+
+
+```{r, eval=F}
+# On obtient le même jeu de données, mais avec l'ordre des colonnes et des lignes différent
+left_join(linelist_mini, hosp_info, by = c("hospital" = "hosp_name"))
+right_join(hosp_info, linelist_mini, by = c("hosp_name" = "hospital"))
+```
+
+Voici le résultat d'une fusion de `hosp_info` dans `linelist_mini` par une jointure à gauche (nouvelles colonnes ajoutées par la droite) :  
+
+
+```{r message=FALSE, echo=F}
+left_join(linelist_mini, hosp_info, 
+          by = c("hospital" = "hosp_name")) %>% 
+  DT::datatable(rownames = FALSE, options = list(pageLength = 11))
+```
+
+Voici le résultat de la fusion de `hosp_info` dans `linelist_mini` par une jointure à droite (nouvelles colonnes ajoutées par la gauche) :   
+
+
+```{r message=FALSE, echo=F}
+right_join(hosp_info, linelist_mini, 
+           by = c("hosp_name" = "hospital")) %>% 
+  DT::datatable(rownames = FALSE, options = list(pageLength = 11))
+```
+
+Une autre chose à considérer est si la jointure est réalisée au sein d'une chaîne d'instructions pipées (`%>%`). Si le dataframe transmis par le pipe doit être utilisé comme référence, utilisez une jointure à gauche pour lui adjoindre de nouvelles données.  
+
+
+<!-- ======================================================= -->
+### Jointure complète {.unnumbered} 
+
+**La jointure complète est la plus *inclusive* des jointures**, elle renvoie toutes les lignes des deux dataframes fusionnés.  
+
+Si des lignes ne sont présentes que dans l'un des dataframes fusionnés (*i.e* aucune correspondance n'est trouvée), elles seront inclues dans le dataframe final (qui s'allonge donc), avec des `NA` pour combler les vides.  
+
+Lorsque vous effectuez une jointure, **surveillez attentivement le nombre de colonnes et de lignes pour vérifier le nombre de lignes des dataframes en entrée, et du dataframe fusionné**. Cela vous permettra notamment de détecter des problèmes de correspondance dus à la sensibilité à la casse ou à des correspondances inexactes. 
+
+Le dataframe de référence utilisé comme base est celui qui est écrit en premier dans la commande. Dans une jointure complète, Lequel des deux dataframes est écrit en premier n'affecte que l'ordre des lignes, l'ordre des colonnes et le nom des colonnes clef retenues.   
+
+
+```{r out.width = c('50%'), fig.show='hold', echo=F}
+knitr::include_graphics(here::here("images", "full-join.gif"))
+```
+
+Exemple animé d'une jointure complète ([image source](https://github.com/gadenbuie/tidyexplain/tree/master/images))
+
+**Exemple**  
+
+Voici la sortie d'une  jointure complète du dataframe `hosp_info` (originellement ` nrow(hosp_info)` lignes, [voir ici](#joins_hosp_info))  *avec* `linelist_mini` (originellement ` nrow(linelist_mini)` lignes, [voir ici](#joins_llmini)). On constate que :    
+
+
+* Toutes les lignes du dataframe de référence sont conservées (`linelist_mini`).   
+
+* Les lignes du second dataframe qui n'ont pas de correspondance avec le premier dataframe sont conservées ("ignace" et "sisters"), et les valeurs des colonnes apportées par le dataframe de référence, `case_id` et `onset`, sont complétées par des valeurs manquantes.  
+
+* De même, les lignes du dataframe de référence qui ne correspondent pas à la ligne secondaire ("Autre" et "Manquant") sont conservées, les colonnes secondaires `catchment_pop` et `level` étant remplies de valeurs manquantes.  
+
+* Dans le cas d'une correspondance un-à-plusieurs ou plusieurs-à-un (par exemple, des lignes pour "Hôpital militaire"), toutes les combinaisons possibles sont retournées (ce qui allonge le dataframe final).  
+
+* Seule la colonne d'identification du dataframe de référence est conservée (`hospital`).  
+
+
+
+```{r, eval=F}
+linelist_mini %>% 
+  full_join(hosp_info, by = c("hospital" = "hosp_name"))
+```
+
+```{r message=FALSE, echo=F}
+linelist_mini %>% 
+  full_join(hosp_info, by = c("hospital" = "hosp_name")) %>% 
+  DT::datatable(rownames = FALSE, options = list(pageLength = 15))
+```
+
+
+
+
+
+<!-- ======================================================= -->
+### Jointure interne {.unnumbered} 
+
+**La jointure interne est la plus *restrictive* des jointures** : elle renvoie uniquement les lignes avec des correspondances dans les deux dataframes.  
+Le nombre de lignes dans le dataframe de référence peut ainsi *diminuer*. Le choix du dataframe à passer en premier à la fonction n'aura pas d'impact sur les lignes conservées, mais affectera l'ordre des colonnes, l'ordre des lignes et clefs d'identification retenues.   
+
+
+```{r out.width = c('50%'), fig.show='hold', echo=F}
+knitr::include_graphics(here::here("images", "inner-join.gif"))
+```
+
+Exemple animé d'une jointure complète : ([image source](https://github.com/gadenbuie/tidyexplain/tree/master/images))
+
+
+**Exemple**  
+
+Voici la sortie d'un `inner_join()` de la `linelist_mini` (référence) avec `hosp_info` (secondaire). On constate que :  
+
+* Les lignes du dataframe de référence sans correspondance dans le second dataframe sont supprimées (lignes où `hospital` est "Missing" ou "Other").   
+* De même, les lignes du dataframe secondaires qui n'ont pas de correspondance dans le dataframe de référence (lignes où `hosp_name` est "sisters" ou "ignace") sont supprimées.   
+* Seule la colonne clef du dataframe de référence est conservée (`hospital`).  
+
+
+```{r, eval=F}
+linelist_mini %>% 
+  inner_join(hosp_info, 
+             by = c("hospital" = "hosp_name"))
+```
+
+
+```{r message=FALSE, echo=F}
+linelist_mini %>% 
+  inner_join(hosp_info, 
+             by = c("hospital" = "hosp_name")) %>% 
+  DT::datatable(rownames = FALSE, 
+                options = list(pageLength = 12))
+```
+
+
+
+
+<!-- ======================================================= -->
+### Semi jointure {.unnumbered} 
+
+Les semi jointures sont des jointures dites "filtrantes", qui utilisent la correspondance avec un second dataframe pour *filtrer le dataframe de référence*. 
+
+**La semi jointure garde toutes les observations du dataframe de référence qui ont une correspondance dans le dataframe secondaire**. Mais les colonnes du dataframe secondaire ne sont pas ajoutées et les lignes du dataframe de référence ne sont pas dupliquées s'il y a des correspondances multiples.  
+
+Plus d'explications sur les semi-jointures  [ici](https://towardsdatascience.com/level-up-with-semi-joins-in-r-a068426096e0).  
+
+```{r out.width = c('50%'), fig.show='hold', echo=F}
+knitr::include_graphics(here::here("images", "semi-join.gif"))
+```
+
+Exemple animé d'une semi jointure ([image source](https://github.com/gadenbuie/tidyexplain/tree/master/images))
+
+Voici un exemple qui retourne les lignes du dataframe `hosp_info` qui ont une correspondance dans le dataframe `linelist_mini` en utilisant le nom de l'hôpital comme clé de jointure/identifiant.  
+
+```{r}
+hosp_info %>% 
+  semi_join(linelist_mini, 
+            by = c("hosp_name" = "hospital"))
+```
+
+
+
+<!-- ======================================================= -->
+### Anti-jointure `anti_join()` {.unnumbered} 
+
+**L'anti-jointure est une autre type de jointure filtrante, qui, à l'opposé du semi-join, ne renvoie que les lignes du dataframe de référence qui n'ont PAS de correspondance dans le dataframe secondaire.**  
+
+Plus de détails sur les jointures filtrantes [ici](https://towardsdatascience.com/level-up-with-semi-joins-in-r-a068426096e0).  
+
+Voici quelques cas d'usage de l'anti-jointure : identifier les observations non présentes dans un autre dataframe, identifier les typos qui compliquent une jointure (se focaliser sur les observations qui auraient du correspondre), examiner les observations qui ont été exclues d'une jointure etc.  
+
+**Comme pour les jointures à droite (`right_join()`) et à gauche (`left_join()`), l'ordre dans lequel sont passés les dataframe a de l'importance.** Dans les joins filtrants, on ne renvoie que les lignes présentes dans le dataframe de référence (écrit en premier), comme on peut le voir dans l'animation ci-dessous (la ligne 4, violette, du dataframe secondaire n'est pas retournée, alors qu'elle ne matche avec aucune ligne du dataframe de référence).  
+
+```{r out.width = c('50%'), fig.show='hold', echo=F}
+knitr::include_graphics(here::here("images", "anti-join.gif"))
+```
+
+Exemple animé d'une anti-jointure ([image source](https://github.com/gadenbuie/tidyexplain/tree/master/images))
+
+
+#### Exemple simple d'anti-jointure  {.unnumbered}  
+
+Un cas d'utilisation simple est de rechercher les hôpitaux dans le tableau `hosp_info` qui n'ont pas de cas présents dans le tableau `linelist_mini`. 
+Nous rentrons `hosp_info` en premier, comme dataframe de référence, puis `linelist_mini`, la seconde table à comparer pour trouver les hôpitaux qui n'y sont pas présents.  
+
+
+```{r, eval=F}
+hosp_info %>% 
+  anti_join(linelist_mini, by = c("hosp_name" = "hospital"))
+```
+
+```{r message=FALSE, echo=F}
+hosp_info %>% 
+  anti_join(linelist_mini, by = c("hosp_name" = "hospital")) %>% 
+  DT::datatable(rownames = FALSE, options = list(pageLength = 12))
+```
+
+
+#### Exemple d'anti-jointure plus complexe  {.unnumbered}  
+
+Imaginons cette fois-ci que nous avons exécuté une jointure interne (`inner_join()`) entre les dataframes `linelist_mini` et `hosp_info`. Cette opération ne retourne qu'un sous-ensemble des lignes originales de `linelist_mini`, car certains hôpitaux ne sont pas présents dans `hosp_info`. 
+
+```{r, eval=F}
+linelist_mini %>% 
+  inner_join(hosp_info, by = c("hospital" = "hosp_name"))
+```
+
+```{r message=FALSE, echo=F}
+linelist_mini %>% 
+  inner_join(hosp_info, by = c("hospital" = "hosp_name")) %>% 
+  DT::datatable(rownames = FALSE, options = list(pageLength = 8))
+```
+
+Nous pouvons utiliser une anti jointure pour inspecter les éléments de `linelist_mini` qui ont été exclus lors de la jointure interne, avec les mêmes paramètres (`linelist_mini` comme dataframe de référence).  
+
+
+```{r, eval = F}
+linelist_mini %>% 
+  anti_join(hosp_info, by = c("hospital" = "hosp_name"))
+```
+
+```{r message=FALSE, echo=F}
+linelist_mini %>% 
+  anti_join(hosp_info, by = c("hospital" = "hosp_name")) %>% 
+  DT::datatable(rownames = FALSE, options = list(pageLength = 8))
+```
+
+Pour voir les lignes d'`hosp_info` exclues lors de la jointure interne, nous pourrions aussi exécuter une anti-jointure en utilisant `hosp_info` comme table de référence.
+
+
+
+<!-- ======================================================= -->
+## Apparienement probabiliste { }
+
+Si l'on ne dispose pas d'un identifiant unique commun à tous les dataframes sur lequel se baser, il est possible d'utiliser un algorithme de correspondance probabiliste. Cet algorithme cherche des correspondances entre les observations sur la base de la **similarité** (par exemple, la distance entre les chaînes de caractères Jaro-Winkler ou la distance numérique). Nous illustrons ce concept ci-dessous à l'aide du paquet **fastLink**.  
+
+
+**Charger les paquets**  
+
+```{r}
+pacman::p_load(
+  tidyverse,      # manipulation de données et visualisation
+  fastLink        # appariement d'observations
+  )
+```
+
+Nous créons d'abord deux petits jeux de données d'exemple que nous utiliserons pour démontrer l'appariement/la correspondance probabiliste (`cases` et `test_results`) :  
+
+```{r}
+# Création des jeux de données
+
+cases <- tribble(
+  ~gender, ~first,      ~middle,     ~last,        ~yr,   ~mon, ~day, ~district,
+  "M",     "Amir",      NA,          "Khan",       1989,  11,   22,   "River",
+  "M",     "Anthony",   "B.",        "Smith",      1970, 09, 19,      "River", 
+  "F",     "Marialisa", "Contreras", "Rodrigues",  1972, 04, 15,      "River",
+  "F",     "Elizabeth", "Casteel",   "Chase",      1954, 03, 03,      "City",
+  "M",     "Jose",      "Sanchez",   "Lopez",      1996, 01, 06,      "City",
+  "F",     "Cassidy",   "Jones",      "Davis",     1980, 07, 20,      "City",
+  "M",     "Michael",   "Murphy",     "O'Calaghan",1969, 04, 12,      "Rural", 
+  "M",     "Oliver",    "Laurent",    "De Bordow" , 1971, 02, 04,     "River",
+  "F",      "Blessing",  NA,          "Adebayo",   1955,  02, 14,     "Rural"
+)
+
+results <- tribble(
+  ~gender,  ~first,     ~middle,     ~last,          ~yr, ~mon, ~day, ~district, ~result,
+  "M",      "Amir",     NA,          "Khan",         1989, 11,   22,  "River", "positive",
+  "M",      "Tony",   "B",         "Smith",          1970, 09,   19,  "River", "positive",
+  "F",      "Maria",    "Contreras", "Rodriguez",    1972, 04,   15,  "Cty",   "negative",
+  "F",      "Betty",    "Castel",   "Chase",        1954,  03,   30,  "City",  "positive",
+  "F",      "Andrea",   NA,          "Kumaraswamy",  2001, 01,   05,  "Rural", "positive",      
+  "F",      "Caroline", NA,          "Wang",         1988, 12,   11,  "Rural", "negative",
+  "F",      "Trang",    NA,          "Nguyen",       1981, 06,   10,  "Rural", "positive",
+  "M",      "Olivier" , "Laurent",   "De Bordeaux",  NA,   NA,   NA,  "River", "positive",
+  "M",      "Mike",     "Murphy",    "O'Callaghan",  1969, 04,   12,  "Rural", "negative",
+  "F",      "Cassidy",  "Jones",     "Davis",        1980, 07,   02,  "City",  "positive",
+  "M",      "Mohammad", NA,          "Ali",          1942, 01,   17,  "City",  "negative",
+  NA,       "Jose",     "Sanchez",   "Lopez",        1995, 01,   06,  "City",  "negative",
+  "M",      "Abubakar", NA,          "Abullahi",     1960, 01,   01,  "River", "positive",
+  "F",      "Maria",    "Salinas",   "Contreras",    1955, 03,   03,  "River", "positive"
+  )
+
+```
+
+
+**Le dataframe `cases` a 9 observations** de patients attendant les résultats de leur test.  
+
+```{r message=FALSE, echo=F}
+# display the hospital data as a table
+DT::datatable(cases, rownames = FALSE, options = list(pageLength = nrow(cases), scrollX=T), class = 'white-space: nowrap')
+```
+
+
+**Le dataframe `test_results`** a 14 observations et contient la colonne `result`, qui contient des informations que nous voudrions rapatrier dans le jeu de données `cases` en utilisant un algorithme probabiliste pour faire correspondre les observations.
+
+```{r message=FALSE, echo=F}
+# display the hospital data as a table
+DT::datatable(results, rownames = FALSE, options = list(pageLength = nrow(results), scrollX=T), class = 'white-space: nowrap')
+```
+
+### Appariement probabiliste {.unnumbered}  
+
+La fonction `fastLink()` du paquet **fastLink** peut être utilisée pour appliquer un algorithme probabiliste de correspondance. Voici quelques informations basiques, mais vous pouvez en savoir plus en tapant `?fastLink` dans la console.  
+
+* Définir les deux dataframes à comparer grâce aux arguments `dfA = ` et `dfB = `.  
+* Dans `varnames = `, indiquer les noms de toutes les colonnes à utiliser pour la comparaison. Ces colonnes doivent exister à la fois dans `dfA` et `dfB`.  
+* Dans `stringdist.match = `, donner les colonnes sur lesquelles effectuer le calcul de la distance de similarité entre les chaînes de caractère (ce ou ces colonnes doivent être présentes dans  `varnames`).  
+* Dans `numeric.match = `, donner les colonnes sur lesquelles calculer une mesure de distance numérique (ce ou ces colonnes doivent être présentes dans  `varnames`).  
+* Les valeurs manquantes sont ignorées.  
+* Par défaut, chaque ligne de l'un des deux dataframes est comparée à une ligne au maximum de l'autre dataframe. Si vous voulez voir toutes les correspondances évaluées, choisissez `dedupe.matches = FALSE`. La dé-duplication est faite en utilisant la technique de programmation linéaire de Winkler. 
+
+
+*Astuce : divisez une colonne de date en trois colonnes numériques distinctes en utilisant `day()`, `month()`, et `year()` du package **lubridate***.  
+
+Le seuil par défaut pour les correspondances est de 0.94 (`threshold.match = `) mais il peut être ajusté. Un seuil plus élevé peut produire plus de faux négatifs (des lignes qui ne correspondent pas alors qu'elles devraient correspondre) et un seuil plus bas peut produire plus de faux positifs.  
+
+Ci-dessous, les données sont comparées sur la base de la distance de similarité entre les chaînes de caractères dans les colonnes du nom et du district, et sur la base de la distance numérique pour l'année, le mois et le jour de naissance. Un seuil de correspondance de 95% de probabilité est fixé.  
+
+
+```{r, message=F, warning=F}
+fl_output <- fastLink::fastLink(
+  dfA = cases,
+  dfB = results,
+  varnames = c("gender", "first", "middle", "last", "yr", "mon", "day", "district"),
+  stringdist.match = c("first", "middle", "last", "district"),
+  numeric.match = c("yr", "mon", "day"),
+  threshold.match = 0.95)
+```
+
+
+**Vérification des correspondance**  
+
+L'objet `fl_output` contient la sortie de la fonction `fastLink()`. Cet objet est une liste (classe `list`) qui contient plusieurs dataframes détaillant les résultats de l'analyse des correspondances. Le dataframe `matches` contient les correspondances les plus probables entre `cases` et `results`. On peut y accéder avec la commande `fl_output$matches`. Ci-dessous, nous l'enregistrons sous le nom de `my_matches` pour faciliter son accès ultérieur.    
+
+Le dataframe `my_matches` contient deux colonnes contenant les numéros de lignes/indices (aussi appelés "rownames") de `cases` ("inds.a") et de `results` ("inds.b"), représentant les meilleures correspondances. Si un numéro de ligne d'un dataframe est manquant, alors aucune correspondance n'a été trouvée dans l'autre dataframe au seuil de correspondance spécifié.    
+
+
+```{r}
+# print matches
+my_matches <- fl_output$matches
+my_matches
+```
+
+On observe que :  
+
+* Les correspondances ont été trouvées malgré les légères différences dans l'orthographe des noms et les dates de naissance, c'est la beauté de ce type d'approche :  
+  * "Tony B. Smith" correspond à "Anthony B. Smith".  
+  * "Maria Rodriguez" correspond à "Marialisa Rodrigues".  
+  * "Betty Chase" correspond à "Elizabeth Chase".  
+  * "Olivier Laurent De Bordeaux" correspond à "Oliver Laurent De Bordow" (date de naissance manquante ignorée).  
+* Une ligne de `cases` (pour "Blessing Adebayo", ligne 9) n'avait pas de bonne correspondance dans `results`, elle n'est donc pas présente dans `my_matches`.  
+
+
+**Jointure basée sur les correspondances probabilistes**.  
+
+Pour utiliser ces correspondances afin de joindre les `results` aux `cases`, une stratégie consiste à :  
+
+1) Utiliser `left_join()` pour joindre `my_matches` à `cases` (en faisant correspondre les rownames dans `cases` à "inds.a" dans `my_matches`)  
+2) Utiliser ensuite un autre `left_join()` pour joindre `results` à `cases` (en faisant correspondre les "inds.b" nouvellement acquis dans `cases` aux noms de domaine dans `results`).  
+
+Avant les jointures, nous devons nettoyer les trois dataframes :  
+
+* Les numéros de ligne ("rowname") de `dfA` et `dfB` doivent être convertis en une colonne.    
+* Les deux colonnes de `my_matches` sont converties en chaînes de caractères, donc elles peuvent être jointes aux caractères rownames.  
+
+
+
+```{r}
+# Préparation des dataframes avant la jointure
+#############################
+
+# Covertir les numéros de lignes en colonne
+cases_clean   <- cases %>% rownames_to_column()
+results_clean <- results %>% rownames_to_column()  
+
+# Convertir toutes les colonnes du dataframe des correspondances en texte pour pouvoire les joindre aux numéros de ligne
+matches_clean <- my_matches %>%
+  mutate(across(everything(), as.character))
+
+
+
+# Joindre `clean_matches` à dfA, puis ajouer dfB
+###################################
+# la colonne "inds.b" est ajoutée à dfA
+complete <- left_join(cases_clean, matches_clean, by = c("rowname" = "inds.a"))
+
+# les colonnes de dfB sont rappatriées 
+complete <- left_join(complete, results_clean, by = c("inds.b" = "rowname"))
+```
+
+Le dataframe `complete` ainsi crée contient *toutes* les colonnes de `cases` et de `results`. Beaucoup d'entre elles se retrouvent ajoutées avec les suffixes ".x" et ".y", parce que les noms des colonnes seraient dupliqués sinon.  
+
+
+```{r message=FALSE, echo=F}
+DT::datatable(complete, rownames = FALSE, options = list(pageLength = nrow(complete), scrollX=T), class = 'white-space: nowrap')
+```
+
+Pour obtenir seulement les 9 observations "originales" dans `cases` avec la ou les nouvelles colonnes de `results`, utiliser `select()` sur `results` avant les jointures, de sorte que e dataframe ne contienne que les rownames et les colonnes que vous voulez ajouter à `cases` (par exemple la colonne `result`).  
+
+
+```{r}
+cases_clean <- cases %>% rownames_to_column()
+
+results_clean <- results %>%
+  rownames_to_column() %>% 
+  select(rowname, result)    # Sélectionner certaines colonnes
+
+matches_clean <- my_matches %>%
+  mutate(across(everything(), as.character))
+
+# jointure
+complete <- left_join(cases_clean, matches_clean, by = c("rowname" = "inds.a"))
+complete <- left_join(complete, results_clean, by = c("inds.b" = "rowname"))
+```
+
+
+```{r message=FALSE, echo=F}
+DT::datatable(complete, rownames = FALSE, options = list(pageLength = nrow(complete), scrollX=T), class = 'white-space: nowrap')
+```
+
+Si vous voulez ne garder que les lignes qui avec des correspondances dans l'un ou l'autre des des dataframe, vous pouvez utiliser les codes ci-dessous :  
+
+```{r}
+cases_matched <- cases[my_matches$inds.a,]  # Lignes de  `cases` qui matchent une ligne dans 'results'
+results_matched <- results[my_matches$inds.b,]  # Lignes de 'results qui matchent une ligne dans `cases`
+```
+
+Ou pour ne voir que les lignes **sans correspondances** :  
+
+```{r}
+cases_not_matched <- cases[!rownames(cases) %in% my_matches$inds.a,]  # Lignes dans `cases` sans matchs dans `results`
+results_not_matched <- results[!rownames(results) %in% my_matches$inds.b,]  # Lignes dans  `results` sans matchs dans `cases`
+```
+
+
+### Déduplication probabiliste {.unnumbered}  
+
+La correspondance probabiliste peut également être utilisée pour dé-dupliquer un jeu de données. Voir la page sur la dé-duplication pour d'autres méthodes de dé-duplication.  
+
+Ici, nous modifions le tableau `cases`, en ajoutant des lignes supplémentaires qui peuvent être des doublons de lignes existantes, et l'appelons `cases_dup`; voir "Tony" avec "Anthony", et "Marialisa Rodrigues" avec "Maria Rodriguez".  
+
+
+```{r, echo=F}
+## Ajout de duplicats
+#cases_dup <- rbind(cases, cases[sample(1:nrow(cases), 3, replace = FALSE),])
+
+cases_dup <- tribble(
+  ~gender, ~first,      ~middle,     ~last,        ~yr,   ~mon, ~day, ~district,
+  "M",     "Amir",      NA,          "Khan",       1989,  11,   22,   "River",
+  "M",     "Anthony",   "B.",        "Smith",      1970, 09, 19,      "River", 
+  "F",     "Marialisa", "Contreras", "Rodrigues",  1972, 04, 15,      "River",
+  "F",     "Elizabeth", "Casteel",   "Chase",      1954, 03, 03,      "City",
+  "M",     "Jose",      "Sanchez",   "Lopez",      1996, 01, 06,      "City",
+  "F",     "Cassidy",   "Jones",      "Davis",     1980, 07, 20,      "City",
+  "M",     "Michael",   "Murphy",     "O'Calaghan",1969, 04, 12,      "Rural", 
+  "M",     "Oliver",    "Laurent",    "De Bordow" , 1971, 02, 04,     "River",
+  "F",      "Blessing",  NA,          "Adebayo",   1955,  02, 14,     "Rural",
+  "M",     "Tony",   "B.",        "Smith",         1970, 09, 19,      "River", 
+  "F",     "Maria",  "Contreras", "Rodriguez",     1972, 04, 15,      "River",
+)
+
+```
+
+```{r message=FALSE, echo=F}
+DT::datatable(cases_dup, rownames = FALSE, options = list(pageLength = nrow(cases_dup)))
+```
+
+On peut désormais utiliser la fonction `fastLink()` comme précédemment, mais en comparant le jeu de données `cases_dup` à lui-même. Lorsque les dataframes fournis en argument sont identiques, la fonction suppose que vous voulez dé-dupliquer. 
+
+Notez que nous ne spécifions pas `stringdist.match =` ou `numeric.match =` comme nous le faisions précédemment.  
+
+
+```{r, message = F, warning = F}
+## Utiliser fastLink sur le même jeu de données
+dedupe_output <- fastLink(
+  dfA = cases_dup,
+  dfB = cases_dup,
+  varnames = c("gender", "first", "middle", "last", "yr", "mon", "day", "district")
+)
+```
+
+La fonction `getMatches()` permet d'examiner la sortie de `fastLink` pour rechercher les doublons potentiels.
+Il faut fournir le dataframe d'origine à `dfA = ` *et* `dfB = `, ainsi que la sortie de  `fastLink()` à `fl.out = `.  
+
+Note : `fl.out` doit nécessairement être de la classe `fastLink.dedupe`, ou en d'autres termes, le résultat de `fastLink()`.  
+
+
+```{r}
+## Executer getMatches()
+cases_dedupe <- getMatches(
+  dfA = cases_dup,
+  dfB = cases_dup,
+  fl.out = dedupe_output)
+```
+
+
+La colonne la plus à droite indique les identifiants des doublons. Ici les deux dernières lignes sont identifiées comme étant des doublons probables des lignes 2 et 3.  
+
+
+```{r message=FALSE, echo=F}
+DT::datatable(cases_dedupe, rownames = FALSE, options = list(pageLength = nrow(cases_dedupe)))
+```
+
+Pour obtenir les numéros de ligne des lignes qui sont potentiellement des doublons, il suffit de compter le nombre de lignes par valeur unique dans la colonne `dedupe.ids`, puis de filtrer pour ne garder que celles qui ont plus d'une ligne. Dans ce cas, nous obtenons laisse les lignes 2 et 3.  
+
+
+```{r}
+cases_dedupe %>% 
+  count(dedupe.ids) %>% 
+  filter(n > 1)
+```
+
+Pour inspecter les doublons, on peut utiliser le numéro de ligne pour obtenir la ligne complète :  
+
+```{r}
+# Afficher la ligne 2 et ses duplicats probables
+cases_dedupe[cases_dedupe$dedupe.ids == 2,]   
+```
+
+
+
+## Assembler et aligner des dataframes
+
+Une autre manière de combiner deux dataframes consiste à les assembler/concaténer/coller/aligner. On peut également considérer cette méthode comme un ajout de lignes ou de colonnes.  
+
+Cette section explique également comment "aligner" l'ordre des lignes d'un dataframe sur celui d'un autre dataframe. Ce sujet est abordé ci-dessous dans la section consacrée à la liaison des colonnes. 
+
+
+### Assembler verticallement {.unnumbered}
+
+La fonction `bind_rows()` de **dplyr** permet de coller les lignes d'un dataframe à la suite d'un autre dataframe (verticalement, donc). Elle est très inclusive : toute colonne présente dans l'un ou l'autre des dataframes sera incluse dans la sortie. 
+
+Quelques notes :  
+
+* Contrairement à la version **base** de R `row.bind()`, **dplyr**'s `bind_rows()` n'exige pas que l'ordre des colonnes soit le même dans les deux dataframes à assembler. Du moment que les noms des colonnes sont orthographiés de manière identique, la fonction les alignera correctement.  
+
+* Il est possible de fournir une chaîne de caractères à l'argument `.id = ` pour produire une  nouvelle colonne qui servira à identifier de quel dataframe chaque ligne provient à l'origine.  
+
+* Il est possible d'utiliser `bind_rows()` sur une liste de dataframes possédant la même structure pour les combiner en un seul. Vous trouverez un exemple de cette action dans la page [Itération, boucles et listes](#iteration) qui importe plusieurs linelists avec le paquet **purrr**.  
+
+
+Un exemple classique d'assemblage de dataframes est d'ajouter une ligne "total" à un tableau descriptif créé avec la fonction `summarise()` de **dplyr**. Ci-dessous, nous créons un tableau des nombres de cas et des valeurs médianes de CT par hôpital et y ajoutons une ligne de total.  
+
+La fonction `summarise()` est utilisée sur des données groupées par hôpital pour retourner un dataframe récapitulatif par hôpital. Malheureusement, elle ne produit pas automatiquement une ligne de "totaux", donc nous devons la rajouter nous même. Nous l'obtenons en résumant *à nouveau* ces données, mais sans grouper par hôpital. Cela produit un deuxième dataframe d'une seule ligne, que nous concaténons ensuite au premier  pour obtenir le tableau final.  
+
+Vous trouverez d'autres exemples de ce type dans les pages [Tableaux descriptifs](#descriptive_tables) et [Tableaux de présentation](#presentation_tables).  
+
+
+```{r}
+# Créer la table de base
+###################
+hosp_summary <- linelist %>% 
+  group_by(hospital) %>%      # grouper les données par hôpital
+  summarise(                  # Créer résumé :
+    cases = n(),               # NNombre de lignes par hôpital
+    ct_value_med = median(ct_blood, na.rm=T))     # Médiane du CT par hôpital
+```
+
+Voici à quoi ressemble `hosp_summary` :  
+
+```{r message=FALSE, echo=F}
+DT::datatable(hosp_summary, rownames = FALSE, options = list(pageLength = nrow(10)))
+```
+
+Maintenant nous créons un dataframe d'une seule ligne contenant les statistiques pour tous les hôpitaux (données _non groupées_) :   
+
+```{r}
+# Créer la ligne de totaux
+###############
+totals <- linelist %>% 
+  summarise(
+    cases = n(),                               # Nb lignes dataframe entier
+    ct_value_med = median(ct_blood, na.rm=T))  # Médiane du CT
+```
+
+Ci-dessous, le dataframe `totals`. Remarquez qu'il n'y a que deux colonnes alors que `hosp_summary` en contenant trois. Ce n'est pas un problème.
+
+```{r message=FALSE, echo=F}
+DT::datatable(totals, rownames = FALSE, options = list(pageLength = nrow(10)))
+```
+
+Nous utilisons à présent `bind_rows()` pour assembler les deux dataframes :  
+
+```{r}
+# Combiner les deux dataframes ensemble
+combined <- bind_rows(hosp_summary, totals)
+```
+
+Pour le résultat ci-dessous. Dans la dernière ligne, une valeur vide `NA` a été automatiquement insérée dans la colonne `hospital`, qui n'était pas dans `hosp_summary`. Comme expliqué dans la page [Tableaux de présentation](#presentation_tables), il est possible de "remplir" cette cellule avec "Total" en utilisant `replace_na()`.  
+
+
+```{r message=FALSE, echo=F}
+DT::datatable(combined, rownames = FALSE, options = list(pageLength = nrow(10)))
+```
+
+
+
+### Assembler des colonnes latéralement {.unnumbered}
+
+De manière assez similaire, il existe une fonction `bind_cols()` dans **dplyr** qui combine deux dataframes latéralement. **En revanche, contrairement aux jointures, les lignes sont alignées les unes aux autres par position** : la ligne X du dataframe 1 sera alignée à la ligne X du dataframe 2.
+
+Par exemple, nous allons assembler plusieurs tableaux récapitulatifs. Nous montrerons au passage comment réarranger l'ordre des lignes d'un dataframe pour qu'il corresponde à l'ordre dans un autre dataframe, à l'aide de la fonction `match()`.    
+
+Ici, nous définissons `case_info` comme un dataframe récapitulatif des cas de la liste linéaire, par hôpital, avec le nombre de cas et le nombre de décès.
+
+
+```{r}
+# Information sur les cas 
+case_info <- linelist %>% 
+  group_by(hospital) %>% 
+  summarise(
+    cases = n(),
+    deaths = sum(outcome == "Death", na.rm=T)
+  )
+```
+
+```{r message=FALSE, echo=F}
+DT::datatable(case_info, rownames = FALSE, options = list(pageLength = nrow(10)))
+```
+
+Nous définissons également `contact_fu`, un autre dataframe contenant des informations sur le pourcentage de contacts exposés ayant fait l'objet d'une enquête et d'un "suivi", toujours par hôpital.  
+
+```{r}
+contact_fu <- data.frame(
+  hospital = c("St. Mark's Maternity Hospital (SMMH)", "Military Hospital", "Missing", "Central Hospital", "Port Hospital", "Other"),
+  investigated = c("80%", "82%", NA, "78%", "64%", "55%"),
+  per_fu = c("60%", "25%", NA, "20%", "75%", "80%")
+)
+```
+
+```{r message=FALSE, echo=F}
+DT::datatable(contact_fu, rownames = FALSE, options = list(pageLength = nrow(10)))
+```
+
+Notez que les hôpitaux sont les mêmes, mais dans un ordre différent dans les deux dataframes. La solution la plus simple serait d'utiliser un `left_join()` sur la colonne `hospital`, mais il est aussi possible d'utiliser `bind_cols()` avec une étape supplémentaire.  
+
+
+#### Utiliser `match()` pour homogénéiser l'ordre des lignes {.unnumbered}  
+
+Comme l'ordre des lignes est différent, un simple `bind_cols()` entraînerait une mauvaise correspondance des données. Pour résoudre ce problème, nous pouvons utiliser la fonction `match()` de **base** R pour aligner les lignes d'un dataframes dans le même ordre que dans un autre. Pour cette approche, nous supposons qu'il n'y a pas de doublons dans les dataframes.  
+
+Lorsque nous utilisons `match()`, la syntaxe est `match(vecteur/colonne dans l'ordre désiré, colonne de dataframe à ordonner)`, où le premier argument est l'ordre souhaité (soit un vecteur autonome, soit une colonne d'un dataframe), et le second argument est la colonne du dataframe qui sera réordonnée. La sortie de `match()` est un vecteur de nombres représentant l'ordre correct des positions. Vous pouvez en savoir plus avec `?match`. 
+
+
+```{r}
+match(case_info$hospital, contact_fu$hospital)
+```
+
+On peut utiliser ce vecteur numérique pour réorganiser le dataframe : placez-le entre des crochets `[ ]` *avant la virgule*. Pour en savoir plus sur la syntaxe des crochets pour séléctionner les lignes et/ou colonnes d'un dataframe en **base** R, consultez la page [Bases de R](#rbasics). La commande ci-dessous crée un nouveau dataframe, défini comme l'ancien dataframe dans lequel les lignes sont ordonnées selon le tableau numérique ci-dessus. 
+
+```{r}
+contact_fu_aligned <- contact_fu[match(case_info$hospital, contact_fu$hospital),]
+```
+
+
+```{r message=FALSE, echo=F}
+DT::datatable(contact_fu_aligned, rownames = FALSE, options = list(pageLength = nrow(10)))
+```
+
+Maintenant nous pouvons lier les colonnes du dataframe ensemble, avec l'ordre correct des lignes respecté. Notez que certaines colonnes sont dupliquées et devront être nettoyées avec `rename()`. Pour en savoir plus sur `bind_rows()`, rendez-vous [ici](https://dplyr.tidyverse.org/reference/bind.html).  
+
+
+```{r}
+bind_cols(case_info, contact_fu)
+```
+
+Une alternative **base** R à `bind_cols` est `cbind()`, qui effectue la même opération.  
+
+
+
+
+<!-- ======================================================= -->
+## Resources { }
+
+La [page du tidyverse sur les jointures](https://dplyr.tidyverse.org/reference/join.html)  
+
+Le [chapitre sur les données relationelles dans R for Data Science](https://r4ds.had.co.nz/relational-data.html)  
+
+La [page de dplyr sur bind](https://dplyr.tidyverse.org/reference/bind.html) on binding  
+
+Une vignette sur[fastLink](https://github.com/kosukeimai/fastLink) sur la page Github du paquet
+
+Publication décrivant la méthodologie de [fastLink](https://imai.fas.harvard.edu/research/files/linkage.pdf)  
+
+Publication décrivant le paquet[RecordLinkage](https://journal.r-project.org/archive/2010/RJ-2010-017/RJ-2010-017.pdf)
+
+
+
+
