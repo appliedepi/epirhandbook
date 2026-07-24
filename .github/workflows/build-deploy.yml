@@ -1,0 +1,328 @@
+name: Build and Deploy
+on:
+  workflow_call:
+    inputs:
+      ref:
+        required: true
+        type: string
+      branch:
+        required: true
+        type: string
+    secrets:
+      GHCR_READ_TOKEN:
+        # required: true only wires the secret through from the caller (via
+        # `secrets: inherit`, see preview.yml/staging.yml) -- GitHub cannot
+        # statically check that the underlying repository secret has an
+        # actual value. Whether it does is checked at RUN time below, with a
+        # message naming exactly what is missing.
+        required: true
+
+jobs:
+  # A GitHub Actions matrix must be static YAML or come from a prior job's
+  # output -- so this job's only purpose is reading babelquarto's language
+  # list out of _quarto.yml (the single source of truth for which languages
+  # ship) and handing it to `render` as JSON. The language list is NEVER
+  # hard-coded in this file.
+  languages:
+    runs-on: ubuntu-latest
+    outputs:
+      mainlanguage: ${{ steps.read.outputs.mainlanguage }}
+      all: ${{ steps.read.outputs.all }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Install PyYAML
+        run: pip install --quiet pyyaml
+
+      - name: Read babelquarto languages from _quarto.yml
+        id: read
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          import sys
+          import yaml
+
+          with open("_quarto.yml") as fh:
+              cfg = yaml.safe_load(fh)
+          bq = cfg.get("babelquarto") or {}
+          main = bq.get("mainlanguage")
+          others = bq.get("languages") or []
+          if not main:
+              sys.exit("::error::_quarto.yml is missing babelquarto.mainlanguage")
+          if not others:
+              sys.exit("::error::_quarto.yml is missing babelquarto.languages")
+          all_langs = [main] + list(others)
+          print(f"mainlanguage={main}")
+          print(f"all={json.dumps(all_langs)}")
+          PY
+
+  # One matrix leg per language -- languages use separate workspaces (this
+  # repo checkout is per-job), so they render in parallel with nothing to
+  # race on (build_all_chapters.sh's own comment: "Different LANGUAGES use
+  # separate workspaces ... and MAY be processed in parallel with each
+  # other"). Within a language, build_all_chapters.sh itself renders
+  # sequentially and does the two-pass cross-reference fix internally (see
+  # its "for lang in ALL_LANGS" loop calling render_pass ... 1 then ... 2) --
+  # this workflow does not reimplement that, only calls the script.
+  render:
+    needs: languages
+    strategy:
+      # fail-fast: false so one broken language does not hide failures in the
+      # others -- still fails the job (and this workflow) as a whole. No step
+      # anywhere in this workflow tolerates a failure; a failed render fails
+      # the build.
+      fail-fast: false
+      matrix:
+        lang: ${{ fromJson(needs.languages.outputs.all) }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Install PyYAML
+        run: pip install --quiet pyyaml
+
+      # The images at ghcr.io/appliedepi/aedockerpublic are currently
+      # PRIVATE, and this repository's default GITHUB_TOKEN cannot read
+      # another repository's packages. GHCR_READ_TOKEN is a PAT with
+      # read:packages scope that the repository owner must create as a
+      # secret -- there is no fallback, and this step fails loudly, by name,
+      # when it is absent rather than silently skipping the login.
+      # DELETE THIS WHOLE STEP once ghcr.io/appliedepi/aedockerpublic is made
+      # public.
+      - name: Log in to GHCR
+        env:
+          GHCR_READ_TOKEN: ${{ secrets.GHCR_READ_TOKEN }}
+        run: |
+          if [ -z "$GHCR_READ_TOKEN" ]; then
+            echo "::error::secret GHCR_READ_TOKEN is not set on this repository (or not passed through by the caller workflow). Create a GitHub PAT with 'read:packages' scope and add it as repository secret GHCR_READ_TOKEN so this job can pull the private ghcr.io/appliedepi/aedockerpublic images."
+            exit 1
+          fi
+          echo "$GHCR_READ_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Read registry prefix from docker-images.yml
+        id: registry
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import yaml
+
+          with open("docker-images.yml") as fh:
+              cfg = yaml.safe_load(fh)
+          print(f"prefix={cfg['registry']}")
+          PY
+
+      # build_all_chapters.sh runs on the RUNNER, not in a container (it
+      # itself launches one docker run per chapter), so it is extracted from
+      # the common image rather than executed inside it -- exactly the
+      # mechanism this script's own header documents:
+      #   docker run --rm <common-image> cat /usr/local/bin/build_all_chapters.sh
+      - name: Extract build_all_chapters.sh from the common image
+        run: |
+          docker pull "${{ steps.registry.outputs.prefix }}/epirhandbook-common:2.7"
+          docker run --rm "${{ steps.registry.outputs.prefix }}/epirhandbook-common:2.7" \
+            cat /usr/local/bin/build_all_chapters.sh > build_all.sh
+          chmod +x build_all.sh
+
+      # INTERFACE FINDING (see report): build_all_chapters.sh has usage
+      #   build_all_chapters.sh <handbook_dir> <registry_prefix> [<output_dir>]
+      # -- there is NO per-language argument. It always renders
+      # babelquarto.mainlanguage + babelquarto.languages exactly as declared
+      # in the _quarto.yml inside <handbook_dir>, by design (its own "WHY NOT
+      # A LANGUAGE LIST ARGUMENT" comment: that pair is the single source of
+      # truth, and a second CLI list would be a second, driftable one). So
+      # "run it for its one language" is achieved by narrowing a JOB-LOCAL,
+      # never-committed copy of _quarto.yml's babelquarto.languages before
+      # calling the script -- not by an argument the script does not have.
+      #
+      # CONSEQUENCE, flagged rather than hidden: babelquarto.mainlanguage is
+      # unconditionally included in every invocation's language loop (see
+      # ALL_LANGS=("$MAIN_LANG" "${OTHER_LANGS[@]}") in that script), so a
+      # non-mainlanguage leg ALSO renders the main language as a side effect,
+      # roughly doubling that leg's time versus a true single-language
+      # render. Only this leg's own target-language output survives (next
+      # step); the redundant mainlanguage copy is discarded, never uploaded.
+      - name: Narrow _quarto.yml to this leg's language
+        run: |
+          python3 - "${{ matrix.lang }}" "${{ needs.languages.outputs.mainlanguage }}" <<'PY'
+          import sys
+          import yaml
+
+          lang, mainlanguage = sys.argv[1], sys.argv[2]
+          with open("_quarto.yml") as fh:
+              cfg = yaml.safe_load(fh)
+          cfg["babelquarto"]["languages"] = [] if lang == mainlanguage else [lang]
+          with open("_quarto.yml", "w") as fh:
+              yaml.safe_dump(cfg, fh, allow_unicode=True, sort_keys=False)
+          PY
+
+      - name: Render (build_all_chapters.sh -- two passes per language, internal)
+        run: ./build_all.sh . "${{ steps.registry.outputs.prefix }}" html_outputs
+
+      # Keep only this leg's own content: the assembled root for the
+      # mainlanguage leg, or the <lang>/ subtree for every other leg.
+      #
+      # ALSO strip any <div id="languages-links-parent"> switcher fragment
+      # build_all_chapters.sh's OWN internal inject_language_links.R call
+      # just added over THIS leg's small (1-2 language) output. That call is
+      # unconditional and cannot be skipped (see the brief: "your workflow
+      # calls it, it does not reimplement any of that"), so its fragment must
+      # be removed here instead: inject_language_links.R's
+      # add_dropdown_links() REUSES an existing <ul id="languages-links">
+      # rather than recreating it (read directly from the script), so if
+      # this leg's partial fragment survives into the assembled tree, Job 2's
+      # later, authoritative injection over the full 8-language site would
+      # APPEND its links alongside this leg's partial ones instead of
+      # replacing them -- duplicate entries on every translated page. The
+      # regex below is safe because add_dropdown_links() never nests a <div>
+      # inside this fragment (only <button>/<i>/<ul>/<li>/<a>), so the first
+      # "</div>" after the opening tag is always its true close.
+      - name: Scope this leg's output for upload
+        run: |
+          mkdir -p artifact_out
+          if [ "${{ matrix.lang }}" = "${{ needs.languages.outputs.mainlanguage }}" ]; then
+            cp -a html_outputs/. artifact_out/
+          else
+            cp -a "html_outputs/${{ matrix.lang }}/." artifact_out/
+          fi
+          python3 - <<'PY'
+          import glob
+          import re
+
+          pattern = re.compile(
+              r'<div\b[^>]*\bid="languages-links-parent"[^>]*>.*?</div>',
+              re.DOTALL,
+          )
+          for path in glob.glob("artifact_out/**/*.html", recursive=True):
+              with open(path, encoding="utf-8") as fh:
+                  html = fh.read()
+              stripped = pattern.sub("", html)
+              if stripped != html:
+                  with open(path, "w", encoding="utf-8") as fh:
+                      fh.write(stripped)
+          PY
+
+      - name: Upload this language's output
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-${{ matrix.lang }}
+          path: artifact_out
+          if-no-files-found: error
+
+  assemble-deploy:
+    needs: [languages, render]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Download every language's artifact
+        uses: actions/download-artifact@v4
+        with:
+          path: downloaded
+
+      # English (mainlanguage) at the tree root, every other language at
+      # <lang>/ -- the exact shape inject_language_links.R assumes (its own
+      # header: "the main language's pages sit directly at <site_dir>/*.html
+      # ... every other language's pages sit at <site_dir>/<lang>/*.html").
+      - name: Assemble one site tree
+        run: |
+          mkdir -p site
+          mainlanguage="${{ needs.languages.outputs.mainlanguage }}"
+          cp -a "downloaded/site-$mainlanguage/." site/
+          for dir in downloaded/site-*; do
+            lang="$(basename "$dir" | sed 's/^site-//')"
+            if [ "$lang" != "$mainlanguage" ]; then
+              mkdir -p "site/$lang"
+              cp -a "$dir/." "site/$lang/"
+            fi
+          done
+
+      # Same secret, same fail-loud contract as the render job above.
+      # DELETE THIS WHOLE STEP once ghcr.io/appliedepi/aedockerpublic is made
+      # public.
+      - name: Log in to GHCR
+        env:
+          GHCR_READ_TOKEN: ${{ secrets.GHCR_READ_TOKEN }}
+        run: |
+          if [ -z "$GHCR_READ_TOKEN" ]; then
+            echo "::error::secret GHCR_READ_TOKEN is not set on this repository (or not passed through by the caller workflow). Create a GitHub PAT with 'read:packages' scope and add it as repository secret GHCR_READ_TOKEN so this job can pull the private ghcr.io/appliedepi/aedockerpublic images."
+            exit 1
+          fi
+          echo "$GHCR_READ_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Install PyYAML
+        run: pip install --quiet pyyaml
+
+      - name: Read registry prefix from docker-images.yml
+        id: registry
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import yaml
+
+          with open("docker-images.yml") as fh:
+              cfg = yaml.safe_load(fh)
+          print(f"prefix={cfg['registry']}")
+          PY
+
+      # The mandatory post-render pass: the switcher is never produced by
+      # rendering, only by this, run once over the FULLY assembled,
+      # all-8-language tree, using this job's OWN fresh checkout of
+      # _quarto.yml (pristine -- never patched, unlike each render leg's
+      # job-local copy).
+      - name: Inject language-switcher links
+        run: |
+          docker pull "${{ steps.registry.outputs.prefix }}/epirhandbook-common:2.7"
+          docker run --rm \
+            -v "$PWD/site:/site" \
+            -v "$PWD/_quarto.yml:/quarto/_quarto.yml:ro" \
+            -w /site "${{ steps.registry.outputs.prefix }}/epirhandbook-common:2.7" \
+            inject_language_links.sh /site /quarto/_quarto.yml
+
+      # Deploy technique copied from the reference build-deploy.yml
+      # (appliedepi/websitetimecourse): force-push an orphan branch.
+      - name: Deploy to branch
+        shell: bash
+        run: |
+          # Set git identity
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # Save the build output to a safe place outside the repo
+          cp -r site /tmp/site_output
+          # Switch to the orphan branch
+          git checkout --orphan ${{ inputs.branch }}
+          # Delete all visible files
+          # In bash, '*' does not match hidden items like .git or .github
+          rm -rf *
+          # Clean up remaining top-level hidden files except .git and .github
+          # This ensures a truly clean state without killing the runner metadata
+          find . -maxdepth 1 -name ".*" ! -name "." ! -name ".." ! -name ".git" ! -name ".github" -exec rm -rf {} +
+          # Copy the rendered site contents back in
+          cp -r /tmp/site_output/. .
+          # Stage all site files
+          git add -A
+          # Unstage .github so it is not included in the deployed branch
+          git rm -rf --cached .github --ignore-unmatch
+          # Commit and force push
+          git commit -m "Deploy site from ${GITHUB_SHA}"
+          git push origin ${{ inputs.branch }} --force
