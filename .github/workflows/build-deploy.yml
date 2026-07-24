@@ -147,8 +147,12 @@ jobs:
           # whose /usr/local/bin/build_all_chapters.sh is EXECUTED on the
           # runner. Pin it to the expected registry and allow only characters
           # that can appear in an image reference.
-          if not re.fullmatch(r"ghcr\.io/appliedepi/[a-z0-9._/-]+", prefix):
-              sys.exit(f"::error::docker-images.yml registry {prefix!r} is not an allowed ghcr.io/appliedepi/... reference")
+          # Exact equality, not a character filter. A permissive pattern still
+          # accepts a trailing slash, "..", or another appliedepi package
+          # namespace -- and this value selects the image whose script is
+          # executed on the runner.
+          if prefix != "ghcr.io/appliedepi/aedockerpublic":
+              sys.exit(f"::error::docker-images.yml registry {prefix!r} is not the expected ghcr.io/appliedepi/aedockerpublic")
           print(f"prefix={prefix}")
           PY
 
@@ -263,8 +267,12 @@ jobs:
           # whose /usr/local/bin/build_all_chapters.sh is EXECUTED on the
           # runner. Pin it to the expected registry and allow only characters
           # that can appear in an image reference.
-          if not re.fullmatch(r"ghcr\.io/appliedepi/[a-z0-9._/-]+", prefix):
-              sys.exit(f"::error::docker-images.yml registry {prefix!r} is not an allowed ghcr.io/appliedepi/... reference")
+          # Exact equality, not a character filter. A permissive pattern still
+          # accepts a trailing slash, "..", or another appliedepi package
+          # namespace -- and this value selects the image whose script is
+          # executed on the runner.
+          if prefix != "ghcr.io/appliedepi/aedockerpublic":
+              sys.exit(f"::error::docker-images.yml registry {prefix!r} is not the expected ghcr.io/appliedepi/aedockerpublic")
           print(f"prefix={prefix}")
           PY
 
@@ -288,7 +296,21 @@ jobs:
       # (appliedepi/websitetimecourse): force-push an orphan branch.
       - name: Deploy to branch
         shell: bash
+        env:
+          DEPLOY_BRANCH: ${{ inputs.branch }}
         run: |
+          # The branch name is an input, and everything below it is
+          # destructive and ends in a force-push. Refuse to proceed on an
+          # empty or malformed name rather than discovering it at `git push`.
+          if [ -z "${DEPLOY_BRANCH:-}" ]; then
+            echo "::error::inputs.branch is empty -- refusing to deploy" >&2
+            exit 1
+          fi
+          case "$DEPLOY_BRANCH" in
+            preview|staging) ;;
+            *) echo "::error::refusing to force-push to unexpected branch '$DEPLOY_BRANCH' (expected preview or staging; production is a promotion, see production.yml)" >&2; exit 1 ;;
+          esac
+          git check-ref-format --branch "$DEPLOY_BRANCH"
           # Set git identity
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

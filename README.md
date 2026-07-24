@@ -111,6 +111,14 @@ the already-built `staging` artifact to `production`. Nothing is rebuilt at rele
 time. What goes live is exactly what was already reviewed on staging — not a fresh
 render that might behave differently.
 
+**Previews only work for pull requests opened from a branch in this repository.**
+GitHub deliberately withholds repository secrets from a pull request opened from a
+fork, and the build needs one to pull its Docker images. A fork's preview therefore
+stops at the login step with an explicit error rather than rendering. That is the
+safe behaviour: the alternative — handing a token to a workflow that runs code the
+pull request controls — is how CI credentials get stolen. Once the images are public
+the login step goes away and fork previews work too.
+
 ### Publishing an update, end to end
 
 1. Open a pull request with your change.
@@ -169,21 +177,22 @@ built before this exclusion. They will stop resolving once this deploys. A chapt
 absent from `book.chapters` is never rendered, so it never emits the alias redirect
 stub that would otherwise keep the old URL alive.
 
-**Six chapters still link to them.** Those links now go nowhere, because the
-target page is no longer rendered:
+**Other chapters link to them, in two different ways, with two different fates.**
 
-| Chapter containing the link | Links to |
-|---|---|
-| `basics` | `gis` |
-| `data_used` | `gis`, `epidemic_models` |
-| `flexdashboard` | `gis` |
-| `importing` | `gis` |
-| `rmarkdown` | `gis` |
-| `survey_analysis` | `gis` |
+*Links to the chapter page* — 31 of them, in 21 files, across English, Japanese,
+Portuguese, Russian, Turkish and Vietnamese. They are written as `(gis.qmd)`,
+`(gis.ru.qmd)` and so on, from `basics`, `data_used`, `flexdashboard`, `importing`,
+`rmarkdown` and `survey_analysis`. These work today and stop working while the
+chapter is excluded. Leave them: they start working again the moment the target
+renders. One further link, to `epidemic_models`, behaves the same way.
 
-Seven links in total, all in the English sources. Leave them in place if the
-chapters are coming back — they will start working again the moment the target
-renders. Remove them only if the exclusion becomes permanent.
+*Links to an anchor inside the chapter* — 26 of them, written as `(#gis)` or
+`(#gis-basics)`. **These are already broken today**, in the currently published
+site, and excluding the chapter does not change that. A same-page anchor never
+reaches another page, so restoring `gis` will not fix them either. They are
+ordinary content bugs and belong with the other prose fixes in
+[TRANSLATION-BACKLOG.md](TRANSLATION-BACKLOG.md) — the production render carries
+106 dead fragments in total, of which these are the largest single group.
 
 **What it would take to bring each back:**
 

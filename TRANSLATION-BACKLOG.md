@@ -104,3 +104,31 @@ times in every language), so the same stale passages exist in all of them. The
 **translated wording itself was not read** — nobody who reads all 8 languages checked
 whether the phrasing differs from the English. Treat "Should say" as the idea to
 convey in each language, not a literal string to paste in.
+
+
+## Appendix: dead same-page anchors (not caused by the forward-port)
+
+Separate from the five prose items above, the published site carries **106 dead
+same-page anchors** — links of the form `(#something)` where no element on that page
+has that id. They are long-standing content bugs, present in the current production
+render, and unrelated to the 2.7 forward-port.
+
+The largest groups:
+
+| Anchor | Occurrences |
+|---|---|
+| `#gis` | 15 |
+| `#contact_us` | 7 |
+| `#objectstructure` | 6 |
+| `#ggplot_basics_map_loc` | 6 |
+| `#pivot_prep` | 6 |
+| `#gis-basics` | 6 |
+
+`#gis` and `#gis-basics` deserve a note. They look like they should point at the GIS
+chapter, but a `#`-only link never leaves the page it is on. Excluding the GIS chapter
+did not break them, and restoring it will not fix them. Each needs rewriting as a real
+cross-page link, or removing.
+
+To find them, render the site and check every `href="#x"` for a matching `id="x"` in
+the same file. Percent-decode the fragment first — hrefs are URL-encoded and `id`
+attributes are not, which otherwise inflates the count roughly fortyfold.
