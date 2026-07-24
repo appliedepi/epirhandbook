@@ -25,6 +25,9 @@ jobs:
   # hard-coded in this file.
   languages:
     runs-on: ubuntu-latest
+    # Read-only. This job only parses _quarto.yml; nothing here needs to write.
+    permissions:
+      contents: read
     outputs:
       mainlanguage: ${{ steps.read.outputs.mainlanguage }}
       all: ${{ steps.read.outputs.all }}
@@ -46,6 +49,7 @@ jobs:
         run: |
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
           import json
+          import re
           import sys
           import yaml
 
@@ -59,6 +63,14 @@ jobs:
           if not others:
               sys.exit("::error::_quarto.yml is missing babelquarto.languages")
           all_langs = [main] + list(others)
+          # _quarto.yml is PR-controlled, and these values reach a shell and
+          # select which Docker image gets executed on the runner. Constrain
+          # them to a shape that cannot carry shell metacharacters.
+          bad = [x for x in all_langs if not re.fullmatch(r"[a-z]{2,3}", str(x))]
+          if bad:
+              sys.exit(f"::error::_quarto.yml declares invalid language code(s) {bad!r}; expected 2-3 lowercase letters")
+          if len(set(all_langs)) != len(all_langs):
+              sys.exit("::error::_quarto.yml declares a duplicate language code")
           print(f"mainlanguage={main}")
           print(f"all={json.dumps(all_langs)}")
           PY
@@ -82,11 +94,18 @@ jobs:
       matrix:
         lang: ${{ fromJson(needs.languages.outputs.all) }}
     runs-on: ubuntu-latest
+    # Read-only, and NO pushable credentials left on disk. This job executes a
+    # script extracted from a Docker image, against content a pull request
+    # controls; it must not be able to write to the repository even if that
+    # went wrong. Only assemble-deploy gets contents: write.
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.ref }}
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -111,17 +130,26 @@ jobs:
             echo "::error::secret GHCR_READ_TOKEN is not set on this repository (or not passed through by the caller workflow). Create a GitHub PAT with 'read:packages' scope and add it as repository secret GHCR_READ_TOKEN so this job can pull the private ghcr.io/appliedepi/aedockerpublic images."
             exit 1
           fi
-          echo "$GHCR_READ_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          echo "$GHCR_READ_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
 
       - name: Read registry prefix from docker-images.yml
         id: registry
         run: |
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import re
+          import sys
           import yaml
 
           with open("docker-images.yml") as fh:
               cfg = yaml.safe_load(fh)
-          print(f"prefix={cfg['registry']}")
+          prefix = str(cfg["registry"])
+          # docker-images.yml is PR-controlled and this value names the image
+          # whose /usr/local/bin/build_all_chapters.sh is EXECUTED on the
+          # runner. Pin it to the expected registry and allow only characters
+          # that can appear in an image reference.
+          if not re.fullmatch(r"ghcr\.io/appliedepi/[a-z0-9._/-]+", prefix):
+              sys.exit(f"::error::docker-images.yml registry {prefix!r} is not an allowed ghcr.io/appliedepi/... reference")
+          print(f"prefix={prefix}")
           PY
 
       # build_all_chapters.sh runs on the RUNNER, not in a container (it
@@ -130,9 +158,11 @@ jobs:
       # mechanism this script's own header documents:
       #   docker run --rm <common-image> cat /usr/local/bin/build_all_chapters.sh
       - name: Extract build_all_chapters.sh from the common image
+        env:
+          PREFIX: ${{ steps.registry.outputs.prefix }}
         run: |
-          docker pull "${{ steps.registry.outputs.prefix }}/epirhandbook-common:2.7"
-          docker run --rm "${{ steps.registry.outputs.prefix }}/epirhandbook-common:2.7" \
+          docker pull "$PREFIX/epirhandbook-common:2.7"
+          docker run --rm "$PREFIX/epirhandbook-common:2.7" \
             cat /usr/local/bin/build_all_chapters.sh > build_all.sh
           chmod +x build_all.sh
 
@@ -150,11 +180,11 @@ jobs:
       # page. The switcher is injected exactly once, in Job 2, over the
       # complete tree.
       - name: Render this language (two passes, internal to the script)
+        env:
+          LANG_CODE: ${{ matrix.lang }}
+          PREFIX: ${{ steps.registry.outputs.prefix }}
         run: |
-          ./build_all.sh \
-            --only-lang "${{ matrix.lang }}" \
-            --no-inject \
-            . "${{ steps.registry.outputs.prefix }}" html_outputs
+          ./build_all.sh --only-lang "$LANG_CODE" --no-inject . "$PREFIX" html_outputs
 
       - name: Upload this language's output
         uses: actions/upload-artifact@v4
@@ -184,9 +214,11 @@ jobs:
       # header: "the main language's pages sit directly at <site_dir>/*.html
       # ... every other language's pages sit at <site_dir>/<lang>/*.html").
       - name: Assemble one site tree
+        env:
+          MAINLANGUAGE: ${{ needs.languages.outputs.mainlanguage }}
         run: |
           mkdir -p site
-          mainlanguage="${{ needs.languages.outputs.mainlanguage }}"
+          mainlanguage="$MAINLANGUAGE"
           cp -a "downloaded/site-$mainlanguage/." site/
           for dir in downloaded/site-*; do
             lang="$(basename "$dir" | sed 's/^site-//')"
@@ -207,7 +239,7 @@ jobs:
             echo "::error::secret GHCR_READ_TOKEN is not set on this repository (or not passed through by the caller workflow). Create a GitHub PAT with 'read:packages' scope and add it as repository secret GHCR_READ_TOKEN so this job can pull the private ghcr.io/appliedepi/aedockerpublic images."
             exit 1
           fi
-          echo "$GHCR_READ_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          echo "$GHCR_READ_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -220,11 +252,20 @@ jobs:
         id: registry
         run: |
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import re
+          import sys
           import yaml
 
           with open("docker-images.yml") as fh:
               cfg = yaml.safe_load(fh)
-          print(f"prefix={cfg['registry']}")
+          prefix = str(cfg["registry"])
+          # docker-images.yml is PR-controlled and this value names the image
+          # whose /usr/local/bin/build_all_chapters.sh is EXECUTED on the
+          # runner. Pin it to the expected registry and allow only characters
+          # that can appear in an image reference.
+          if not re.fullmatch(r"ghcr\.io/appliedepi/[a-z0-9._/-]+", prefix):
+              sys.exit(f"::error::docker-images.yml registry {prefix!r} is not an allowed ghcr.io/appliedepi/... reference")
+          print(f"prefix={prefix}")
           PY
 
       # The mandatory post-render pass: the switcher is never produced by
@@ -233,12 +274,14 @@ jobs:
       # _quarto.yml (pristine -- never patched, unlike each render leg's
       # job-local copy).
       - name: Inject language-switcher links
+        env:
+          PREFIX: ${{ steps.registry.outputs.prefix }}
         run: |
-          docker pull "${{ steps.registry.outputs.prefix }}/epirhandbook-common:2.7"
+          docker pull "$PREFIX/epirhandbook-common:2.7"
           docker run --rm \
             -v "$PWD/site:/site" \
             -v "$PWD/_quarto.yml:/quarto/_quarto.yml:ro" \
-            -w /site "${{ steps.registry.outputs.prefix }}/epirhandbook-common:2.7" \
+            -w /site "$PREFIX/epirhandbook-common:2.7" \
             inject_language_links.sh /site /quarto/_quarto.yml
 
       # Deploy technique copied from the reference build-deploy.yml
@@ -252,7 +295,7 @@ jobs:
           # Save the build output to a safe place outside the repo
           cp -r site /tmp/site_output
           # Switch to the orphan branch
-          git checkout --orphan ${{ inputs.branch }}
+          git checkout --orphan "$DEPLOY_BRANCH"
           # Delete all visible files
           # In bash, '*' does not match hidden items like .git or .github
           rm -rf *
@@ -267,4 +310,4 @@ jobs:
           git rm -rf --cached .github --ignore-unmatch
           # Commit and force push
           git commit -m "Deploy site from ${GITHUB_SHA}"
-          git push origin ${{ inputs.branch }} --force
+          git push origin "$DEPLOY_BRANCH" --force
