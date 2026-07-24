@@ -5,7 +5,7 @@
 
 ***Go to www.epiRhandbook.com to see the latest version of the online handbook.***
 
-![Project logo](https://github.com/appliedepi/epirhandbook/blob/master/images/Epi%20R%20Handbook%20Banner%20Beige%201500x500.png)
+![Project logo](https://github.com/appliedepi/epirhandbook/blob/main/images/Epi%20R%20Handbook%20Banner%20Beige%201500x500.png)
 
 **This book strives to:**  
 
@@ -15,7 +15,7 @@
 * Be accessible in settings with low internet-connectivity via an **offline version**
   
 
-<img src="https://github.com/appliedepi/epirhandbook/blob/master/images/epiRhandbook_HexSticker_500x500.png" width="200" height="200">
+<img src="https://github.com/appliedepi/epirhandbook/blob/main/images/epiRhandbook_HexSticker_500x500.png" width="200" height="200">
 
 <span style="color: black;">**Written by epis, for epis**</span>
 We are applied epis from around the world, writing in our spare time to offer this resource to the community. Your encouragement and feedback is most welcome:  
@@ -24,6 +24,12 @@ We are applied epis from around the world, writing in our spare time to offer th
 * Email **epiRhandbook@gmail.com** or tweet **[\@epiRhandbook](https://twitter.com/epirhandbook)**  
 * Submit issues to our **[Github repository](https://github.com/epirhandbook/Epi_R_handbook)**  
 
+
+> **Upgrading from an earlier version?**
+> [CHANGES-2.6-to-2.7.md](CHANGES-2.6-to-2.7.md) explains what changed for readers and authors in
+> 2.7 — which chapters were edited, what readers will notice, and the decisions behind two chapters
+> that are no longer included. Translators should also read
+> [TRANSLATION-BACKLOG.md](TRANSLATION-BACKLOG.md).
 
 ## How to use this handbook  
 
