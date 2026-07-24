@@ -7,7 +7,6 @@ aliases:
 
 Chương này sẽ hướng dẫn hai cách để chuẩn hóa một kết quả như là tỷ suất tử vong hoặc nhập viện theo các đặc điểm của tuổi và giới. 
 
-* Sử dụng package **dsr** 
 * Sử dụng package **PHEindicatormethods**  
 
 Chúng ta bắt đầu bằng cách làm rõ quá trình chuẩn bị/làm sạch/kết nối số liệu, vì việc này thường được thực hiện khi kết nối số liệu dân số từ nhiều quốc gia, số liệu dân số chuẩn, tử vong,.v.v.  
@@ -44,36 +43,9 @@ pacman::p_load(
      rio,                 # import/export data
      here,                # locate files
      stringr,             # cleaning characters and strings
-     frailtypack,         # needed for dsr, for frailty models
-     dsr,                 # standardise rates
      PHEindicatormethods, # alternative for rate standardisation
      tidyverse)           # data management and visualization
 ```
-
-
-<span style="color: orange;">**_CẨN TRỌNG:_** Nếu đang sử dụng một phiên bản mới hơn của R, chúng ta không thể tải gói lệnh **dsr** trực tiếp từ CRAN. Tuy nhiên, nó vẫn còn trong mục lưu trữ của CRAN. Chúng ta có thể cài đặt và sử dụng nó. </span>
-
-Đối với người không sử dụng hệ điều hành Mac:  
-
-```{r, eval=F} 
-packageurl <- "https://cran.r-project.org/src/contrib/Archive/dsr/dsr_0.2.2.tar.gz"
-install.packages(packageurl, repos=NULL, type="source")
-```
-
-```{r, eval=FALSE}
-# Other solution that may work
-require(devtools)
-devtools::install_version("dsr", version="0.2.2", repos="http:/cran.us.r.project.org")
-```
-
-Đối với người sử dụng hệ điều hành Mac:  
-
-```{r, eval=FALSE}
-require(devtools)
-devtools::install_version("dsr", version="0.2.2", repos="https://mac.R-project.org")
-```
-
-
 
 
 ### Tải số liệu dân số {.unnumbered}  
@@ -321,109 +293,6 @@ DT::datatable(all_data, rownames = FALSE, options = list(pageLength = 5, scrollX
 
 
 <!-- ======================================================= -->
-## Package **dsr** {  }
- 
-Bên dưới, chúng tôi trình bày việc tính toán và so sánh các tỷ suất được chuẩn hóa trực tiếp bằng cách sử dụng package **dsr**. Package **dsr** cho phép chúng ta tính toán và so sánh các tỷ suất được chuẩn hóa trực tiếp (không phải các tỷ suất được chuẩn hóa gián tiếp!).
-  
-Trong phần Chuẩn bị số liệu, chúng ta đã tạo các bộ số liệu riêng biệt cho các quốc gia và dân số chuẩn:  
-
-1) đối tượng `country_data` mà là một bảng dân số với số lượng dân số và số tử vong theo tầng cho mỗi quốc gia  
-2) đối tượng `standard_pop_clean`, bao gồm số lượng dân số theo tầng cho dân số tham chiếu, Dân số Chuẩn Thế giới  
-
-Chúng ta sẽ sử dụng các bộ số liệu riêng rẽ này cho cách tiếp cận sử dụng package **dsr**.  
-
-
-<!-- ======================================================= -->
-### Tỷ suất chuẩn hóa {.unnumbered}
-
-Bên dưới, chúng ta tính toán các tỷ suất theo quốc gia được chuẩn hóa trực tiếp theo tuổi và giới. Chúng ta sử dụng hàm `dsr()`. 
-
-Lưu ý - `dsr()` đòi hỏi một bộ số liệu dân số của các quốc gia và số lượng sự kiện (tử vong), *và một bộ số liệu* **riêng rẽ** *với dân số tham chiếu*. Nó cũng đòi hỏi trong bộ số liệu của dân số tham chiếu này tên cột đơn vị-thời gian là “pop” (chúng ta đã đảm bảo điều này trong phần Chuẩn bị số liệu).  
-
-Có nhiều đối số, như được chú thích bên dưới. Đáng chú ý, đối số `event = ` được đặt thành cột `Deaths`, và đối số `fu = ` ("follow-up") được đặt thành cột `Population`. Chúng ta đặt các nhóm so sánh là cột `Country` và chuẩn hóa dựa trên cột `age_cat5` và `Sex`. Hai cột cuối cùng này không được gán với một đối số có tên cụ thể. Gõ `?dsr` để biết thêm chi tiết. 
-
-```{r, warning=F, message=F}
-# Calculate rates per country directly standardized for age and sex
-mortality_rate <- dsr::dsr(
-     data = country_data,  # specify object containing number of deaths per stratum
-     event = Deaths,       # column containing number of deaths per stratum 
-     fu = Population,      # column containing number of population per stratum
-     subgroup = Country,   # units we would like to compare
-     age_cat5,             # other columns - rates will be standardized by these
-     Sex,
-     refdata = standard_pop_clean, # reference population data frame, with column called pop
-     method = "gamma",      # method to calculate 95% CI
-     sig = 0.95,            # significance level
-     mp = 100000,           # we want rates per 100.000 population
-     decimals = 2)          # number of decimals)
-
-
-# Print output as nice-looking HTML table
-knitr::kable(mortality_rate) # show mortality rate before and after direct standardization
-```
-
-Bên trên, chúng ta thấy rằng tỷ suất tử vong thô của quốc gia A thấp hơn quốc gia B, nhưng tỷ suất được chuẩn hóa trực tiếp theo tuổi và giới thì cao hơn.
-
-
-
-
-<!-- ======================================================= -->
-### Tỷ số của các tỷ suất chuẩn hóa {.unnumbered}
-
-```{r,warning=F, message=F}
-# Calculate RR
-mortality_rr <- dsr::dsrr(
-     data = country_data, # specify object containing number of deaths per stratum
-     event = Deaths,      # column containing number of deaths per stratum 
-     fu = Population,     # column containing number of population per stratum
-     subgroup = Country,  # units we would like to compare
-     age_cat5,
-     Sex,                 # characteristics to which we would like to standardize 
-     refdata = standard_pop_clean, # reference population, with numbers in column called pop
-     refgroup = "B",      # reference for comparison
-     estimate = "ratio",  # type of estimate
-     sig = 0.95,          # significance level
-     mp = 100000,         # we want rates per 100.000 population
-     decimals = 2)        # number of decimals
-
-# Print table
-knitr::kable(mortality_rr) 
-```
-
-Tỷ suất tử vong chuẩn hóa của quốc gia A cao gấp 1.22 lần so với quốc gia B (95% CI 1.17-1.27).
-
-<!-- ======================================================= -->
-### Khác biệt của các tỷ suất chuẩn hóa {.unnumbered}
-
-```{r, warning=F, message=F}
-# Calculate RD
-mortality_rd <- dsr::dsrr(
-     data = country_data,       # specify object containing number of deaths per stratum
-     event = Deaths,            # column containing number of deaths per stratum 
-     fu = Population,           # column containing number of population per stratum
-     subgroup = Country,        # units we would like to compare
-     age_cat5,                  # characteristics to which we would like to standardize
-     Sex,                        
-     refdata = standard_pop_clean, # reference population, with numbers in column called pop
-     refgroup = "B",            # reference for comparison
-     estimate = "difference",   # type of estimate
-     sig = 0.95,                # significance level
-     mp = 100000,               # we want rates per 100.000 population
-     decimals = 2)              # number of decimals
-
-# Print table
-knitr::kable(mortality_rd) 
-```
-
-Quốc gia A có hơn 4,24 ca tử vong trên 100,000 dân (95% CI 3.24-5.24) so với quốc gia B.
-
-
-
-
-
-
-
-<!-- ======================================================= -->
 ## Package **PHEindicatormethods** {#standard_phe  }
 
 Một cách khác để tính tỷ suất chuẩn hóa là dùng package **PHEindicatormethods**. Package này cho phép chúng ta tính toán tỷ suất chuẩn hóa trực tiếp cũng như gián tiếp. Chúng tôi sẽ hướng dẫn cả hai.  
@@ -486,8 +355,6 @@ knitr::kable(mortality_is_rate_phe_A)
 
 <!-- ======================================================= -->
 ## Tài nguyên học liệu {  }
-
-Nếu bạn muốn tìm thêm các ví dụ có thể tái lập được sử dụng package **dsr**, vui lòng xem [hướng dẫn này]( https://mran.microsoft.com/snapshot/2020-02-12/web/packages/dsr/vignettes/dsr.html)  
 
 Với các ví dụ khác sử dụng package **PHEindicatormethods**, vui lòng xem tại [website này](https://mran.microsoft.com/snapshot/2018-10-22/web/packages/PHEindicatormethods/vignettes/IntroductiontoPHEindicatormethods.html)  
 

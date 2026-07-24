@@ -7,7 +7,6 @@ aliases:
 
 Cette page vous montre deux façons de normaliser un résultat, tel que les hospitalisations ou la mortalité, en fonction de caractéristiques telles que l'âge et le sexe. 
 
-* Utilisation du paquet **dsr**
 * Utilisation du paquet **PHEindicatormethods**.  
 
 Nous commençons par démontrer de manière extensive les processus de préparation/nettoyage/jonction des données, car cela est courant lorsqu'on combine des données de population provenant de plusieurs pays, des données de population standard, des décès, etc.  
@@ -45,36 +44,9 @@ pacman::p_load(
      rio, # importer/exporter des données
      here, # localisation des fichiers
      stringr, # nettoyage des caractères et des chaînes de caractères
-     frailtypack, # nécessaire pour dsr, pour les modèles de frailty
-     dsr, # standardiser les taux
      PHEindicatormethods, # alternative pour la standardisation des taux
      tidyverse) # gestion et visualisation des données
 ```
-
-
-<span style="color : orange ;">**ATTENTION:_** Si vous avez une version plus récente de R, le paquet **dsr** ne peut pas être téléchargé directement avec CRAN. Cependant, il est toujours disponible de l'archive CRAN. Vous pouvez installer et utiliser celui-ci. </span>
-
-Pour les utilisateurs non-Mac :  
-
-```{r, eval=F} 
-packageurl <- "https://cran.r-project.org/src/contrib/Archive/dsr/dsr_0.2.2.tar.gz"
-install.packages(packageurl, repos=NULL, type="source")
-```
-
-```{r, eval=FALSE}
-# Autre solution qui peut fonctionner
-require(devtools)
-devtools::install_version("dsr", version="0.2.2", repos="http:/cran.us.r.project.org")
-```
-
-Pour les utilisateurs de Mac :  
-
-```{r, eval=FALSE}
-require(devtools)
-devtools::install_version("dsr", version="0.2.2", repos="https://mac.R-project.org")
-```
-
-
 
 
 ### Charger les données de la population {.unnumbered}  
@@ -320,109 +292,6 @@ DT::datatable(all_data, rownames = FALSE, options = list(pageLength = 5, scrollX
 
 
 <!-- ======================================================= -->
-## **dsr** package { }
- 
-Nous démontrons ci-dessous le calcul et la comparaison de taux directement standardisés à l'aide du package **dsr**. Le package **dsr** vous permet de calculer et de comparer des taux directement standardisés (pas de taux indirectement standardisés !).
-  
-Dans la section Préparation des données, nous avons créé des jeux de données distincts pour le nombre de pays et la population standard :  
-
-1) l'objet `country_data`, qui est un tableau de population avec le nombre de population et le nombre de décès par strate par pays  
-2) l'objet `standard_pop_clean`, contenant le nombre de personnes par strate pour notre population de référence, la population standard mondiale.  
-
-Nous utiliserons ces ensembles de données distincts pour l'approche **dsr**.  
-
-
-<!-- ======================================================= -->
-### Taux standardisés {.unnumbered}
-
-Ci-dessous, nous calculons les taux par pays directement standardisés pour l'âge et le sexe. Nous utilisons la fonction `dsr()`. 
-
-A noter - `dsr()` s'attend à un cadre de données pour les populations des pays et le nombre d'événements (décès), **et un autre cadre de données avec la population de référence**. Il s'attend également à ce que dans cette base de données de la population de référence, le nom de la colonne unité-temps soit "pop" (nous nous en sommes assurés dans la section Préparation des données).  
-
-Il y a de nombreux arguments, comme annoté dans le code ci-dessous. Notamment, `event = ` est fixé à la colonne `Deaths`, et le `fu = ` ("follow-up") est fixé à la colonne `Population`. Nous définissons les sous-groupes de comparaison comme la colonne `Country` et nous standardisons sur la base de `age_cat5` et `Sex`. Ces deux dernières colonnes n'ont pas d'argument nommé particulier. Voir `?dsr` pour plus de détails. 
-
-```{r, warning=F, message=F}
-# Calculez les taux par pays directement standardisés pour l'âge et le sexe
-mortality_rate <- dsr::dsr(
-     data = country_data, # spécifier l'objet contenant le nombre de décès par strate
-     event = Deaths, # colonne contenant le nombre de décès par strate 
-     fu = Population, # colonne contenant le nombre de population par strate
-     subgroup = Country, # unités que nous souhaitons comparer
-     age_cat5, # autres colonnes - les taux seront standardisés par celles-ci
-     Sex,
-     refdata = standard_pop_clean, # cadre de données de la population de référence, avec une colonne appelée "pop".
-     method = "gamma", # méthode pour calculer l'IC à 95%.
-     sig = 0,95, # niveau de signification
-     mp = 100000, # nous voulons les taux pour 100.000 habitants
-     decimals = 2) # nombre de décimales)
-
-
-# Imprimez la sortie sous la forme d'un joli tableau HTML
-knitr::kable(mortality_rate) # Afficher le taux de mortalité avant et après la standardisation directe
-```
-
-Ci-dessus, nous voyons que même si le pays A avait un taux de mortalité brut plus faible que le pays B, il a un taux standardisé plus élevé après standardisation directe par âge et par sexe.
-
-
-
-
-<!-- ======================================================= -->
-### Ratios de taux standardisés {.unnumbered}
-
-```{r,warning=F, message=F}
-# Calculer le RR
-mortality_rr <- dsr::dsrr(
-     data = country_data, # spécifier l'objet contenant le nombre de décès par strate
-     event = Deaths, # colonne contenant le nombre de décès par strate 
-     fu = Population, # colonne contenant le nombre de population par strate
-     subgroup = Country, # unités que nous souhaitons comparer
-     age_cat5,
-     Sex, # caractéristiques sur lesquelles nous aimerions nous standardiser 
-     refdata = standard_pop_clean, # population de référence, avec des chiffres dans la colonne appelée pop
-     refgroup = "B", # référence pour la comparaison
-     estimate = "ratio", # type d'estimation
-     sig = 0.95, # niveau de signification
-     mp = 100000, # nous voulons des taux pour 100.000 habitants
-     decimals = 2) # nombre de décimales
-
-# Imprimer le tableau
-knitr::kable(mortality_rr) 
-```
-
-Le taux de mortalité standardisé est 1,22 fois plus élevé dans le pays A que dans le pays B (IC 95 % 1.17-1.27).
-
-<!-- ======================================================= -->
-### Différence de taux standardisé {.unnumbered}
-
-```{r, warning=F, message=F}
-# Calculer RD
-mortality_rd <- dsr::dsrr(
-     data = country_data, # spécifier l'objet contenant le nombre de décès par strate
-     event = Deaths, # colonne contenant le nombre de décès par strate 
-     fu = Population, # colonne contenant le nombre de population par strate
-     subgroup = Country, # unités que nous souhaitons comparer
-     age_cat5, # caractéristiques sur lesquelles nous voulons nous standardiser
-     Sex,                        
-     refdata = standard_pop_clean, # population de référence, avec des chiffres dans la colonne appelée pop
-     refgroup = "B", # référence pour la comparaison
-     estimate = "difference", # type d'estimation
-     sig = 0.95, # niveau de signification
-     mp = 100000, # nous voulons des taux pour 100.000 habitants
-     decimals = 2) # nombre de décimales
-
-# Imprimer le tableau
-knitr::kable(mortality_rd) 
-```
-
-Le pays A a 4.24 décès supplémentaires pour 100.000 habitants (IC 95% 3.24-5.24) par rapport au pays A.
-
-
-
-
-
-
-
-<!-- ======================================================= -->
 ## **PHEindicatormethods** package {#standard_phe}
 
 Une autre façon de calculer les taux standardisés est avec le paquet **PHEindicatormethods**. Ce package vous permet de calculer les taux standardisés directement et indirectement. Nous allons montrer les deux.  
@@ -485,8 +354,6 @@ knitr::kable(mortality_is_rate_phe_A)
 
 <!-- ======================================================= -->
 ## Ressources { }
-
-Si vous souhaitez voir un autre exemple reproductible utilisant **dsr**, veuillez consulter [cette vignette]( https://mran.microsoft.com/snapshot/2020-02-12/web/packages/dsr/vignettes/dsr.html).  
 
 Pour un autre exemple utilisant **PHEindicatormethods**, veuillez vous rendre sur [ce site Web](https://mran.microsoft.com/snapshot/2018-10-22/web/packages/PHEindicatormethods/vignettes/IntroductiontoPHEindicatormethods.html)  
 

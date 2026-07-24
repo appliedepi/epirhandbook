@@ -7,7 +7,6 @@ aliases:
 
 Esta página irá descrever duas maneiras de normalizar os dados, como hospitalizações ou mortalidade, com características como idade e sexo.
 
-* Utilizando o pacote **dsr** 
 * Utilizando o pacote **PHEindicatormethods**
 
 Nós iniciaremos enfatizando os processos de preparação/limpeza/união dos dados, por serem atividades comuns ao combinar dados populacionais de diferentes países, dados populacionais padrões, óbitos, etc.
@@ -45,37 +44,10 @@ pacman::p_load(
      rio,                 # importar/exportar dados
      here,                # localizar arquivos
      stringr,             # limpar caracteres e strings
-     frailtypack,         # necessário para dsr, para modelos de fragilidade
      PHEindicatormethods, # alternativa para padronização das taxas
      tidyverse)           # gerenciamento e visualização dos dados
 
-pacman::p_load_gh("cran/dsr") # foi removido do CRAN
 ```
-
-
-<span style="color: orange;">**_CUIDADO:_** Se você tem uma versão mais nova do R, o pacote **dsr** não pode ser diretamente baixado do CRAN. Entretanto, ainda está disponível do arquivo do CRAN. Você pode instalar e utilizar esta versão do arquivo. </span>
-
-Para os que não utilizam Mac:
-
-```{r, eval=F} 
-packageurl <- "https://cran.r-project.org/src/contrib/Archive/dsr/dsr_0.2.2.tar.gz"
-install.packages(packageurl, repos=NULL, type="source")
-```
-
-```{r, eval=FALSE}
-# Outra solução que pode funcionar
-require(devtools)
-devtools::install_version("dsr", version="0.2.2", repos="http:/cran.us.r.project.org")
-```
-
-Para usuários de Mac:
-
-```{r, eval=FALSE}
-require(devtools)
-devtools::install_version("dsr", version="0.2.2", repos="https://mac.R-project.org")
-```
-
-
 
 
 ### Carregue os dados populacionais {.unnumbered}  
@@ -323,109 +295,6 @@ DT::datatable(all_data, rownames = FALSE, options = list(pageLength = 5, scrollX
 
 
 <!-- ======================================================= -->
-## pacote **dsr** {  }
- 
-Abaixo, nós demonstramos como calcular e comparar taxas normalizadas diretamente, utilizando o pacote **dsr**. O pacote **dsr** permite o cálculo e comparação de taxas normalizadas diretamente (mas não taxas normalizadas indiretamente!).
-  
-Na seção sobre Preparação dos dados, nós construímos diferentes conjuntos de dados para contagens dos países e da população padrão:
-
-1) o objeto `country_data` contém uma tabela populacional com a quantidade da população e o número de mortes por estrato por país
-2) o objeto `standard_pop_clean` contém o número da população por estrato da população padrão, a População Mundial Padrão
-
-Nós iremos utilizar estes dados separados na abordagem do **dsr**.  
-
-
-<!-- ======================================================= -->
-### Taxas normalizadas {.unnumbered}
-
-Abaixo, nós calculamos as taxas por país normalizadas diretamente para idade e sexo. Nós utilizamos a função `dsr()`. 
-
-De nota - a função `dsr()` espera uma tabela de dados para as populações do país e as contagens dos eventos (mortes), *e um data frame **separado** contendo a população padrão*. Ela também considera que no banco de dados da população padrão, o nome da coluna com a unidade-tempo é "pop" (nós garantimos isto na seção sobre Preparação de dados).
-
-Existem muitos argumentos possíveis, como anotado no código abaixo. Notavelmente, a coluna `Deaths` está selecionada em `event = `, e a coluna `Population` está selecionada para `fu = ` ("acompanhamento"). Nós selecionamos os subgrupos de comparação como sendo da coluna `Country`, e padronizamos baseado em `age_cat5` e `Sex`. Estas últimas duas colunas não foram utilizadas em nenhum argumento em particular. Veja `?dsr` para detalhes.
-
-```{r, warning=F, message=F}
-# Calcula as taxas por país normalizadas diretamente por idade (age) e sexo (sex)
-mortality_rate <- dsr::dsr(
-     data = country_data,  # especifique o objeto contendo o número de mortes por estrato
-     event = Deaths,       # coluna contendo o número de mortes por estrato
-     fu = Population,      # coluna contendo o número da população por estrato
-     subgroup = Country,   # unidades que gostaríamos de comparar
-     age_cat5,             # outras colunas - taxas serão normalizadas por estas colunas
-     Sex,
-     refdata = standard_pop_clean, # data frame contendo a população de referência, com a coluna chamada pop
-     method = "gamma",      # método para calcular o IC 95%
-     sig = 0.95,            # nível de significância
-     mp = 100000,           # nós queremos taxas por 100.000 habitantes
-     decimals = 2)          # quantidade de decimais
-
-
-# Printa o output como uma tabela em HTML
-knitr::kable(mortality_rate) # mostra as taxas de mortalidade antes e após padronização direta
-```
-
-Acima, nós vemos que enquanto o país A possui uma menor taxa de mortalidade bruta do que o país B, ele possui uma maior taxa normalizada de mortalidade após normalizar utilizando a idade e o sexo.
-
-
-
-
-<!-- ======================================================= -->
-### Relação entre taxas normalizadas {.unnumbered}
-
-```{r,warning=F, message=F}
-# Calcule a razão entre as taxas (rates ratio)
-mortality_rr <- dsr::dsrr(
-     data = country_data, # especifique o objeto que contém o número de mortes por estrato
-     event = Deaths,      # coluna contendo o número de óbitos por estrato
-     fu = Population,     # coluna contendo o número da população por estrato
-     subgroup = Country,  # unidades que queremos comparar
-     age_cat5,
-     Sex,                 # características para as quais gostaríamos de normalizar
-     refdata = standard_pop_clean, # população de referência, com números em uma coluna chamada pop
-     refgroup = "B",      # referência para comparação
-     estimate = "ratio",  # tipo de estimativa
-     sig = 0.95,          # nível de significância
-     mp = 100000,         # nós queremos taxas por 100.000 habitantes
-     decimals = 2)        # quantidade de decimais
-
-# Printa a tabela
-knitr::kable(mortality_rr) 
-```
-
-A taxa de mortalidade normalizada é 1.22 vezes maior no país A em relação ao país B (IC 95% 1.17-1.27).
-
-<!-- ======================================================= -->
-### Diferença entre taxas normalizadas {.unnumbered}
-
-```{r, warning=F, message=F}
-# Calcule a diferença entre taxas normalizadas (Rates Difference)
-mortality_rd <- dsr::dsrr(
-     data = country_data,       # especifique o objeto contendo o número de mortes por estrato
-     event = Deaths,            # coluna contendo o número de óbitos por estrato
-     fu = Population,           # coluna contendo a quantidade de população por estrato
-     subgroup = Country,        # unidades que gostaríamos de comparar
-     age_cat5,                  # características para as quais gostaríamos de normalizar
-     Sex,                        
-     refdata = standard_pop_clean, # população de referência, com números na coluna chamada pop
-     refgroup = "B",            # refência para comparação
-     estimate = "difference",   # tipo de estimativa
-     sig = 0.95,                # nível de significância
-     mp = 100000,               # nós queremos taxas por 100.000 habitantes
-     decimals = 2)              # quantidade de decimais
-
-# Printa a tabela
-knitr::kable(mortality_rd) 
-```
-
-Quando comparado ao país B, o país A possui 4.24 óbitos adicionais por 100.000 habitantes (IC 95% 3.24-5.24).
-
-
-
-
-
-
-
-<!-- ======================================================= -->
 ## pacote **PHEindicatormethods** {#standard_phe  }
 
 Outra forma de calcular as taxas normalizadas é com o pacote **PHEindicatormethods**. Este pacote permite calcular tanto taxas normalizadas diretamente, como taxas normalizadas indiretamente. Nós iremos mostrar como realizar ambos cálculos.
@@ -488,8 +357,6 @@ knitr::kable(mortality_is_rate_phe_A)
 
 <!-- ======================================================= -->
 ## Recursos {  }
-
-Se você quiser ver outros exemplos reproduzíveis utilizando **dsr**, por favor veja [esse tutorial]( https://mran.microsoft.com/snapshot/2020-02-12/web/packages/dsr/vignettes/dsr.html)  
 
 Para outro exemplo utilizando **PHEindicatormethods**, por favor vá a [esse website](https://mran.microsoft.com/snapshot/2018-10-22/web/packages/PHEindicatormethods/vignettes/IntroductiontoPHEindicatormethods.html)  
 

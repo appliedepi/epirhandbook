@@ -492,11 +492,11 @@ summary_table %>%
 ```{r}
 # получаем значения процентилей возраста по умолчанию (0%, 25%, 50%, 75%, 100%)
 linelist %>% 
-  summarise(age_percentiles = quantile(age_years, na.rm = TRUE))
+  reframe(age_percentiles = quantile(age_years, na.rm = TRUE))
 
 # получаем уточненные вручную значения процентилей возраста (5%, 50%, 75%, 98%)
 linelist %>% 
-  summarise(
+  reframe(
     age_percentiles = quantile(
       age_years,
       probs = c(.05, 0.5, 0.75, 0.98), 
@@ -579,8 +579,7 @@ linelist_agg %>%
 linelist %>% 
   group_by(outcome) %>% 
   summarise(across(.cols = c(age_years, temp, wt_kg, ht_cm),  # столбцы
-                   .fns = mean,                               # функция
-                   na.rm=T))                                  # дополнительные аргументы
+                   .fns = ~ mean(.x, na.rm=T)))                                  # дополнительные аргументы
 ```
 
 Несколько функций можно выполнять одновременно. Ниже в `.fns = ` указываются функции `mean` (среднее) и `sd` (стандартное отклонение) внутри `list()`. У вас есть возможность задать текстовые имена (например, "mean" и "sd"), которые будут добавлены к новым названиям столбцов.  
@@ -589,8 +588,7 @@ linelist %>%
 linelist %>% 
   group_by(outcome) %>% 
   summarise(across(.cols = c(age_years, temp, wt_kg, ht_cm), # столбцы
-                   .fns = list("mean" = mean, "sd" = sd),    # несколько функций 
-                   na.rm=T))                                 # дополнительные аргументы
+                   .fns = list("mean" = ~mean(.x, na.rm=T), "sd" = ~sd(.x, na.rm=T))))                                 # дополнительные аргументы
 ```
 
 Вот функции-помощники "tidyselect", которые вы можете указать в `.cols = `, чтобы выбрать столбцы:  
@@ -613,8 +611,7 @@ linelist %>%
   group_by(outcome) %>% 
   summarise(across(
     .cols = where(is.numeric),  # все числовые столбцы в датафрейме
-    .fns = mean,
-    na.rm=T))
+    .fns = ~ mean(.x, na.rm=T)))
 ```
 
 
@@ -913,7 +910,6 @@ linelist %>%
     digits = all_continuous() ~ 1,                              # округление для непрерывных столбцов
     type   = all_categorical() ~ "categorical",                 # заставляет отображать все категориальные уровни
     label  = list(                                              # отображает подписи для имен столбцов
-      outcome   ~ "Outcome",                           
       age_years ~ "Age (years)",
       gender    ~ "Gender",
       temp      ~ "Temperature",
@@ -994,7 +990,7 @@ addmargins(age_by_outcome)
 5) Печатаем, просматриваем или экспортируем по желанию. В этом примере мы используем `flextable()` из пакета **flextable**, как описано на странице [Таблицы для презентации]. Это напечатает в панели просмотра RStudio viewer красивое изображение в формате HTML.  
 
 ```{r, warning=F, message=F}
-table(fct_explicit_na(linelist$age_cat), fct_explicit_na(linelist$outcome)) %>% 
+table(fct_na_value_to_level(linelist$age_cat, level = "(Missing)"), fct_na_value_to_level(linelist$outcome, level = "(Missing)")) %>% 
   addmargins() %>% 
   as.data.frame.matrix() %>% 
   tibble::rownames_to_column(var = "Age Category") %>% 

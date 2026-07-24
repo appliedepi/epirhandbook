@@ -7,7 +7,6 @@ aliases:
 
 この章では、年齢や性別などの背景によって入院や死亡などのアウトカムを標準化する2つの方法について説明します。
 
-* **dsr** パッケージの利用
 * **PHEindicatormethods** パッケージの利用
 
 まず、データの準備・クリーニング・結合の手順を詳しく説明します。この手順は、複数の国の人口データ、標準化人口データ、死亡数などを結合するときによく行われます。
@@ -45,34 +44,10 @@ pacman::p_load(
      rio,                 # データのインポート・エクスポート
      here,                # ファイルの場所を特定
      stringr,             # 文字と文字列のクリーニング
-     frailtypack,         # dsr で必要：フレイルティモデルのため
-     dsr,                 # 標準化率
      PHEindicatormethods, # 標準化のための代替のパッケージ
      tidyverse)           # データマネジメントと視覚化
 ```
 
-
-<span style="color: orange;">**_注意：_**新しいバージョンの R を使用している場合、**dsr** パッケージは CRAN から直接ダウンロードできません。ただし、まだ CRAN のアーカイブから利用可能で、インストールして利用することができます。</span>
-
-非Macユーザは以下を実行してください。 
-
-```{r, eval=F} 
-packageurl <- "https://cran.r-project.org/src/contrib/Archive/dsr/dsr_0.2.2.tar.gz"
-install.packages(packageurl, repos = NULL, type = "source")
-```
-
-```{r, eval=FALSE}
-# 別の方法でも実行できます
-require(devtools)
-devtools::install_version("dsr", version = "0.2.2", repos = "http:/cran.us.r.project.org")
-```
-
-Macユーザは以下を実行してください。
-
-```{r, eval=FALSE}
-require(devtools)
-devtools::install_version("dsr", version = "0.2.2", repos = "https://mac.R-project.org")
-```
 
 ### 人口データの読み込み {.unnumbered}  
 
@@ -322,107 +297,6 @@ DT::datatable(all_data, rownames = FALSE, options = list(pageLength = 5, scrollX
 
 
 <!-- ======================================================= -->
-## **dsr** パッケージ {  }
-
-以下では、**dsr** パッケージを用いて直接標準化率の計算と比較を行います。**dsr** パッケージでは、直接標準化率の計算と比較を行うことができますが、間接標準化率は計算できません。
-
-データの準備の節では、各国と標準人口について別々のデータセットを作成しました。
-
-1) `country_data` オブジェクトは、国ごとの各層における人口と死亡数の人口統計表です
-2) `standard_pop_clean` オブジェクトは、ここで用いる参照集団である世界標準人口の各層における人口が含まれています
-
-**dsr** パッケージのために、これらの分かれているデータセットを使用します。
-
-
-<!-- ======================================================= -->
-### 標準化率（Standardized rates） {.unnumbered}
-
-以下では、年齢と性別による各国の直接標準化率を計算します。計算には `dsr()` を使用します。
-
-注意点：`dsr()` は国の人口とイベント数（死亡数）のデータフレーム<u>と**別の**参照集団のデータフレーム</u>に分かれている事を想定しています。また、この参照集団データセットの単位時間あたりの人口の列の名前が "pop" になっている事（これについては、データの準備の節でも確認しました）も想定しています。
-
-以下のコードに注釈を入れたように、この関数には沢山の引数があります。注目すべきところは、`event = ` は列 `Deaths` に設定され、`fu = ` ("follow-up") は列 `Population` に設定されていることです。また、比較したいサブグループは列 `Country` と設定し、`age_cat5` と `Sex` に基づいて標準化を行っています。この最後の2列には特に引数名が割り当てられていません。詳細は `?dsr` を確認してください。
-
-```{r, warning=F, message=F}
-# 年齢と性別による各国の直接標準化率の計算
-mortality_rate <- dsr::dsr(
-     data = country_data,          # 各層の死亡数が含まれている方のデータの指定
-     event = Deaths,               # 各層の死亡数が含まれる列
-     fu = Population,              # 各層の人口が含まれる列
-     subgroup = Country,           # 比較の単位
-     age_cat5,                     # 他の列：これらにより率を標準化
-     Sex,
-     refdata = standard_pop_clean, # 人数の列 pop が含まれる参照集団データ
-     method = "gamma",             # 95%信頼区間の計算方法
-     sig = 0.95,                   # 有意水準
-     mp = 100000,                  # 100,000人あたりの率を計算したい
-     decimals = 2)                 # 小数点以下の桁数
-
-# 見た目がきれいなHTML形式の表で結果表示
-knitr::kable(mortality_rate)       # 標準化前と標準化後の死亡率を表示
-```
-
-上のように、国 A の粗死亡率は国 B よりも低いですが、年齢と性別による直接標準化を行った後の標準化率は国 A の方が高いことがわかります。
-
-
-
-
-<!-- ======================================================= -->
-### 標準化率比（Standardized rate tratios） {.unnumbered}
-
-```{r,warning=F, message=F}
-# 標準化率比（RR）の計算
-mortality_rr <- dsr::dsrr(
-     data = country_data,          # 各層の死亡数が含まれている方のデータの指定
-     event = Deaths,               # 各層の死亡数が含まれる列
-     fu = Population,              # 各層の人口が含まれる列
-     subgroup = Country,           # 比較の単位
-     age_cat5,                     # 標準化したい特性変数
-     Sex,                          
-     refdata = standard_pop_clean, # 人数の列 pop が含まれる参照集団データ
-     refgroup = "B",               # 比較の参照水準
-     estimate = "ratio",           # 推定値の種類
-     sig = 0.95,                   # 有意水準
-     mp = 100000,                  # 100,000人あたりの率を計算したい
-     decimals = 2)                 # 小数点以下の桁数
-
-# 結果の表示
-knitr::kable(mortality_rr) 
-```
-
-標準化率は国 B よりも国 A の方が 1.22 倍（ 95 ％信頼区間は 1.17 倍 - 1.27 倍）高いです。
-
-<!-- ======================================================= -->
-### 標準化率差（Standardized rate difference） {.unnumbered}
-
-```{r, warning=F, message=F}
-# 標準化率差（RD）の計算
-mortality_rd <- dsr::dsrr(
-     data = country_data,          # 各層の死亡数が含まれている方のデータの指定
-     event = Deaths,               # 各層の死亡数が含まれる列
-     fu = Population,              # 各層の人口が含まれる列
-     subgroup = Country,           # 比較の単位
-     age_cat5,                     # 標準化したい特性変数
-     Sex,                        
-     refdata = standard_pop_clean, # 人数の列 pop が含まれる参照集団データ
-     refgroup = "B",               # 比較の参照水準
-     estimate = "difference",      # 推定値の種類
-     sig = 0.95,                   # 有意水準
-     mp = 100000,                  # 100,000人あたりの率を計算したい
-     decimals = 2)                 # 小数点以下の桁数
-
-# 結果の表示
-knitr::kable(mortality_rd)
-```
-
-国 A は国 B と比較して、100,000 人あたり 4.24 人（ 95 ％信頼区間は 3.24 人-5.24 人）死亡が多いです。
-
-
-
-
-
-
-<!-- ======================================================= -->
 ## **PHEindicatormethods** パッケージ {#standard_phe}
 
 **PHEindicatormethods** パッケージを使用すると、別のやり方で標準化率を計算できます。このパッケージでは、直接標準化も間接標準化も行うことができます。以下では、両方の例を示します。
@@ -485,8 +359,6 @@ knitr::kable(mortality_is_rate_phe_A)
 
 <!-- ======================================================= -->
 ## 参考資料 {  }
-
-**dsr** を用いた他の再現可能なコードを参照したい場合は、[このvignette]( https://mran.microsoft.com/snapshot/2020-02-12/web/packages/dsr/vignettes/dsr.html) を確認してください。
 
 **PHEindicatormethods** を用いた別の例については、[このウェブサイト](https://mran.microsoft.com/snapshot/2018-10-22/web/packages/PHEindicatormethods/vignettes/IntroductiontoPHEindicatormethods.html)を見てください。
 

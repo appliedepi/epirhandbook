@@ -471,11 +471,11 @@ O cálculo dos *percentis* e quantis no **dplyr** merece uma menção especial. 
 ```{r}
 # obtenha os percentis padrões da variável age (0%, 25%, 50%, 75%, 100%)
 linelist %>% 
-  summarise(age_percentiles = quantile(age_years, na.rm = TRUE))
+  reframe(age_percentiles = quantile(age_years, na.rm = TRUE))
 
 # obtenha os percentis em diferentes níveis da mesma variável (5%, 50%, 75%, 98%)
 linelist %>% 
-  summarise(
+  reframe(
     age_percentiles = quantile(
       age_years,
       probs = c(.05, 0.5, 0.75, 0.98), 
@@ -552,8 +552,7 @@ Pode ser difícil acertar a ordem dos parênteses e vírgulas ao utilizar `acros
 linelist %>% 
   group_by(outcome) %>% 
   summarise(across(.cols = c(age_years, temp, wt_kg, ht_cm),  # colunas utilizadas
-                   .fns = mean,                               # função aplicada
-                   na.rm=T))                                  # argumentos extras
+                   .fns = ~ mean(.x, na.rm=T)))                                  # argumentos extras
 ```
 
 Funções múltiplas podem ser executadas de uma vez. Abaixo, o atributo `.fns =` recebe as funções `mean` e `sd` dentro de uma `list()`. Você tem a oportunidade de escolher nomes das características (ex.: "mean" e "sd") que serão colocadas inseridas ao nome das novas colunas.
@@ -562,8 +561,7 @@ Funções múltiplas podem ser executadas de uma vez. Abaixo, o atributo `.fns =
 linelist %>% 
   group_by(outcome) %>% 
   summarise(across(.cols = c(age_years, temp, wt_kg, ht_cm), # colunas
-                   .fns = list("mean" = mean, "sd" = sd),    # múltiplas funções
-                   na.rm=T))                                 # argumentos extras
+                   .fns = list("mean" = ~mean(.x, na.rm=T), "sd" = ~sd(.x, na.rm=T))))                                 # argumentos extras
 ```
 
 Aqui são as funções auxiliares "tidyselect", que você pode utilizar em `.cols =` para selecionar colunas:
@@ -585,8 +583,7 @@ linelist %>%
   group_by(outcome) %>% 
   summarise(across(
     .cols = where(is.numeric),  # all numeric columns in the data frame
-    .fns = mean,
-    na.rm=T))
+    .fns = ~ mean(.x, na.rm=T)))
 ```
 
 ### Utilizando o pivot_wider() {#tbls_pivot_wider .unnumbered}
@@ -883,7 +880,6 @@ linelist %>%
     digits = all_continuous() ~ 1,                              # arredondamento para colunas contínuas
     type   = all_categorical() ~ "categorical",                 # force todos os níveis de colunas categóricas a serem mostrados
     label  = list(                                              # mostre etiquetas de acordo com o nome das colunas
-      outcome   ~ "Outcome",                           
       age_years ~ "Age (years)",
       gender    ~ "Gender",
       temp      ~ "Temperature",
@@ -958,7 +954,7 @@ Converter um objeto `table()` diretamente para um quadro de dado (*data frame*)s
 5)  Exporte, Visualize, ou exporte como desejado. Neste exemplo, nós utilizamos a função `flextable()`, do pacote **flextable**, como descrito na página [Tabelas para apresentação](#tables-presentation). Isto irá exportar a tabela para o RStudio viewer como uma linda imagem HTML.
 
 ```{r, warning=F, message=F}
-table(fct_explicit_na(linelist$age_cat), fct_explicit_na(linelist$outcome)) %>% 
+table(fct_na_value_to_level(linelist$age_cat, level = "(Missing)"), fct_na_value_to_level(linelist$outcome, level = "(Missing)")) %>% 
   addmargins() %>% 
   as.data.frame.matrix() %>% 
   tibble::rownames_to_column(var = "Age Category") %>% 

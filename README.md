@@ -43,6 +43,142 @@ We want to translate this into languages other than English. If you can help, pl
 
 
 
+## How this all works
+
+This section explains how the handbook is built, translated, and published. It is for
+anyone changing a chapter, adding a language, or debugging a broken build.
+
+### The two-repo split
+
+Two repositories build this handbook, and each owns a different part:
+
+* **[appliedepi/aedockerpublic](https://github.com/appliedepi/aedockerpublic)** owns the R
+  packages, the Docker images, and the render scripts.
+* **This repository** owns the `.qmd` content, in every language, and the choice of
+  which image renders each chapter.
+
+Neither repository fetches from the other at build time.
+
+They are split because a chapter's prose and a chapter's package set change on
+different schedules, and by different people. An author can fix a sentence today
+without waiting on a package upgrade. A package upgrade can happen without touching
+a single word of text.
+
+### The manifest
+
+`docker-images.yml`, in this repository, maps each chapter to a Docker image.
+
+Each chapter gets **one entry**, called a "stem" (e.g. `time_series`). One entry
+covers all of that chapter's languages, because a translation runs the same R code
+as the English original, so it needs the same packages.
+
+To move one chapter to a different image version, change that one line.
+
+The language list is **not** in this manifest. It lives in `_quarto.yml`'s
+`babelquarto:` block, which is the single source of truth for which languages ship.
+
+### How languages are handled
+
+English is the main language. It renders at the site root.
+
+Every other language renders from its own `.<lang>.qmd` files (e.g.
+`time_series.fr.qmd`) and lands under `<lang>/` (e.g. `/fr/`).
+
+Old `/new_pages/...` URLs still work. Every chapter file carries an `aliases:` entry
+in its front matter, and Quarto turns that into a redirect stub at the old path:
+
+```
+---
+aliases:
+  - /new_pages/time_series.html
+---
+```
+
+The alias value must be root-relative — it must start with a leading `/`. Without
+the leading slash, Quarto writes the redirect stub in the wrong place, and the old
+link stays broken.
+
+### The three environments
+
+Three environments build from this repository:
+
+* **`preview`** — one build per pull request.
+* **`staging`** — builds on every push to `main`.
+* **`production`** — builds only when a release is published.
+
+**Production is a promotion of staging, not a rebuild.** Cutting a release force-pushes
+the already-built `staging` artifact to `production`. Nothing is rebuilt at release
+time. What goes live is exactly what was already reviewed on staging — not a fresh
+render that might behave differently.
+
+### Publishing an update, end to end
+
+1. Open a pull request with your change.
+2. Check the preview build for that pull request.
+3. Merge the pull request to `main`.
+4. Check the staging build.
+5. Cut a release. This promotes staging to production.
+
+### Where things live
+
+| To change... | Edit... |
+|---|---|
+| A chapter's prose | this repository, in `chapters/` |
+| A chapter's R packages | [appliedepi/aedockerpublic](https://github.com/appliedepi/aedockerpublic) |
+| Which image a chapter uses | `docker-images.yml`, in this repository |
+
+### Routine maintenance
+
+**Bump one chapter's image.** Edit that chapter's row in `docker-images.yml` to
+point at the new image tag. Every other chapter keeps its own tag and is
+unaffected.
+
+**Add a new chapter.** Four things, across both repositories:
+
+1. A `.qmd` file here, in `chapters/` (plus translated `.qmd` files, if any).
+2. An image in aedockerpublic — a new one, or an existing one that already has the
+   right packages.
+3. A new row in `docker-images.yml`, in this repository.
+4. A new entry in `_quarto.yml`, in this repository — under `book.chapters`, with
+   an `aliases:` entry if the chapter replaces an old URL.
+
+### Debugging a failed render
+
+Start by identifying three things: which job failed, which language, and which
+chapter.
+
+**A render that exits 0 is not proof the chapter is correct.** A chapter can render
+successfully and still be wrong — stale output, a broken cross-reference, a
+computed value that silently changed. The build validates its own output as a
+separate step; check what that validation reports, not just whether the render
+job's exit code was 0.
+
+### Excluded chapters
+
+Two chapters are currently excluded from the build. Both are commented out of
+`_quarto.yml`, under `book.chapters`.
+
+* **`gis`** — it depends on an external OpenStreetMap service. That makes its
+  render network-dependent, which is not suitable for a hermetic CI build.
+* **`epidemic_models`** — it fails on a recorded EpiNow2 API break (an
+  `xy.coords()` error; see aedockerpublic's `epirhandbook/2.7/BREAKAGE.tsv`).
+
+**Their old URLs will stop working.** `/new_pages/gis.html` and
+`/new_pages/epidemic_models.html` still return HTTP 200 today, from the version
+built before this exclusion. They will stop resolving once this deploys. A chapter
+absent from `book.chapters` is never rendered, so it never emits the alias redirect
+stub that would otherwise keep the old URL alive.
+
+**What it would take to bring each back:**
+
+* `gis` needs a way to render without reaching an external network service during
+  CI — for example, a vendored or mocked tile source instead of a live OpenStreetMap
+  call.
+* `epidemic_models` needs its EpiNow2 code rewritten against the current API (the
+  chapter uses result accessors that EpiNow2 has since removed), then a verified
+  end-to-end render.
+
+
 
 <!-- ======================================================= -->
 ## Acknowledgements   

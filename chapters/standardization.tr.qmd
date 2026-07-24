@@ -7,7 +7,6 @@ aliases:
 
 Bu sayfa, hastaneye yatış veya ölüm oranları gibi bir çıktıyı yaş ve cinsiyet gibi özelliklere göre standardize etmenin iki yolunu gösterecektir. 
 
-* **dsr** paketini kullanma
 * **PHEindicatormethods** paketini kullanma 
 
 Birden fazla ülkeden nüfus verileri, standart nüfus verileri, ölümler vb. birleştirilmesi için yaygın kullanımı olduğu için, veri hazırlama/temizleme/birleştirme süreçlerini kapsamlı bir şekilde göstererek başlıyoruz.
@@ -45,36 +44,9 @@ pacman::p_load(
      rio,                 # verileri içe/dışa aktar
      here,                # dosyaları bul
      stringr,             # karakterleri ve dizeleri (string) temizleme
-     frailtypack,         # frailty modelleri için dsr için gerekli
-     dsr,                 # hızları standardize et
      PHEindicatormethods, # hızların  standardizasyonu için alternatif
      tidyverse)           # veri yönetimi ve görselleştirme
 ```
-
-
-<span style="color: orange;">**DİKKAT:_** Daha yeni bir R sürümüne sahipseniz, **dsr** paketi doğrudan CRAN'den indirilemez. Ancak, yine de bu paket CRAN arşivinden temin edilebilir. Bu şekilde paketi yükleyebilir ve kullanabilirsiniz. </span>
-
-Mac kullanıcısı olmayanlar için:  
-
-```{r, eval=F} 
-packageurl <- "https://cran.r-project.org/src/contrib/Archive/dsr/dsr_0.2.2.tar.gz"
-install.packages(packageurl, repos=NULL, type="source")
-```
-
-```{r, eval=FALSE}
-# Diğer çözüm
-require(devtools)
-devtools::install_version("dsr", version="0.2.2", repos="http:/cran.us.r.project.org")
-```
-
-Mac kullanıcıları için:  
-
-```{r, eval=FALSE}
-require(devtools)
-devtools::install_version("dsr", version="0.2.2", repos="https://mac.R-project.org")
-```
-
-
 
 
 ### Popülasyon verisinin yüklenmesi {.unnumbered}  
@@ -320,104 +292,6 @@ DT::datatable(all_data, rownames = FALSE, options = list(pageLength = 5, scrollX
 
 
 <!-- ======================================================= -->
-## **dsr** paketi {  }
-
-Aşağıda, **dsr** paketini kullanarak direkt standardize edilmiş hızları hesaplamayı ve karşılaştırmayı gösteriyoruz. **dsr** paketi, direkt standardize edilmiş hızları hesaplamanıza ve karşılaştırmanıza olanak tanır (indirekt standardize edilmiş oranlar yok!).
-
-Veri Hazırlama bölümünde ülkeler ve standart nüfus için ayrı ayrı veri tabanları oluşturduk:
-
-1) Ülke için tabaka başına nüfus ve ölüm sayısını içeren bir nüfus tablosu olan `country_data` nesnesi
-2) Referans popülasyonumuz olan World Standard Population için tabaka başına popülasyonu gösteren içeren `standard_pop_clean` nesnesi 
-
-Bu ayrı veri tabanlarını **dsr** yaklaşımı için kullanacağız.  
-
-
-<!-- ======================================================= -->
-### Standardize edilmiş hızlar {.unnumbered}
-
-Aşağıda, yaş ve cinsiyet için direkt standardize edilmiş oranları ülkeler için hesaplıyoruz. Bu işlem için `dsr()` fonksiyonunu kullanıyoruz.
-
-Not: `dsr()`, ülke popülasyonları ve olay sayıları (ölümler) için bir veri tabanı *ve* referans popülasyonu için **ayrı bir** veri tabanı bekler. Ayrıca bu referans popülasyon veri tabanında birim-zaman sütun adının “pop” olmasını bekler (bunu veri Hazırlama bölümünde sağladık)
-
-Aşağıdaki kodda görüldüğü gibi bu fonksiyon için birçok argüman vardır. Dikkat çekici bir şekilde, `event =` ölümler sütununa ve `fu =` ("follow up"- “takip”), `Population` sütununa ayarlanmıştır. Karşılaştırma alt gruplarını `Country` sütunu olarak belirledik ve `age_cat5` ve `Sex`'e göre standardize ettik. Bu son iki sütuna belirli bir argüman atanmaz. Ayrıntılar için `?dsr` komutuna bakınız.
-
-```{r, warning=F, message=F}
-# Yaş ve cinsiyet için direkt standardize edilmiş hızları ülke başına hesapla
-mortality_rate <- dsr::dsr(
-     data = country_data,  # tabaka başına ölüm sayısını içeren nesneyi belirt
-     event = Deaths,       # tabaka başına ölüm sayısını içeren sütun
-     fu = Population,      # tabaka başına nüfus sayısını içeren sütun
-     subgroup = Country,   # karşılaştırmak istediğimiz birimler
-     age_cat5,             # standardize etmek istediğimiz özellikler
-     Sex,
-     refdata = standard_pop_clean, # pop olarak adlandırılan sütundaki sayılarla referans popülasyonu
-     method = "gamma",      # 95% güven aralığını hesaplayan yöntem
-     sig = 0.95,            # anlamlılık düzeyi
-     mp = 100000,           # 100.000 kişilik nüfus başına hız istiyoruz
-     decimals = 2)          # ondalık basamak sayısı
-
-
-# Çıktıyı iyi görünen bir HTML tablosu olarak yazdır
-knitr::kable(mortality_rate) # direkt standardizasyondan önce ve sonra ölüm oranını göster
-```
-
-Yukarıda, A ülkesinin B ülkesinden daha düşük bir kaba ölüm hızına sahip olduğunu, ancak yaş ve cinsiyet için direkt standardizasyon sonrası, A ülkesinin daha yüksek bir standardize edilmiş hıza sahip olduğunu görüyoruz.
-
-
-<!-- ======================================================= -->
-### Standardize hız oranları {.unnumbered}
-
-```{r,warning=F, message=F}
-# Calculate RR
-mortality_rr <- dsr::dsrr(
-     data = country_data, # tabaka başına ölüm sayısını içeren nesneyi belirt
-     event = Deaths,      # tabaka başına ölüm sayısını içeren sütun
-     fu = Population,     # tabaka başına nüfus sayısını içeren sütun
-     subgroup = Country,  # karşılaştırmak istediğimiz birimler
-     age_cat5,
-     Sex,                 # standardize istediğimiz özellikler
-     refdata = standard_pop_clean, # pop olarak adlandırılan sütundaki sayılarla referans popülasyonu
-     refgroup = "B",      # karşılaştırma için referans
-     estimate = "ratio",  # tahmin tipi
-     sig = 0.95,          # anlamlılık seviyesi
-     mp = 100000,         # 100.000 kişilik nüfus başına hız istiyoruz
-     decimals = 2)        # ondalık basamak sayısı
-
-# Tabloyu yazdır
-knitr::kable(mortality_rr) 
-```
-
-Standardize ölüm oranı, A ülkesinde B ülkesine kıyasla 1,22 kat daha yüksektir (%95 GA 1,17-1,27).
-
-<!-- ======================================================= -->
-### Standardize hız farkı {.unnumbered}
-
-```{r, warning=F, message=F}
-# Calculate RD
-mortality_rd <- dsr::dsrr(
-     data = country_data,       # tabaka başına ölüm sayısını içeren nesneyi belirt
-     event = Deaths,            # tabaka başına ölüm sayısını içeren sütun 
-     fu = Population,           # tabaka başına nüfus sayısını içeren sütun
-     subgroup = Country,        # karşılaştırmak istediğimiz birimler
-     age_cat5,                  # standardize istediğimiz özellikler
-     Sex,                        
-     refdata = standard_pop_clean, # pop olarak adlandırılan sütundaki sayılarla referans popülasyonu
-     refgroup = "B",            # karşılaştırma için referans
-     estimate = "difference",   # tahmin tipi
-     sig = 0.95,                # anlamlılık seviyesi
-     mp = 100000,               # 100.000 kişilik nüfus başına hız istiyoruz
-     decimals = 2)              # ondalık basamak sayısı
-
-# Tabloyu yazdır
-knitr::kable(mortality_rd) 
-```
-
-A Ülkesi, B ülkesine kıyasla 100.000 nüfus başına 4.24 ek ölüme (%95 GA 3.24-5.24) sahiptir.
-
-
-
-
-<!-- ======================================================= -->
 ## **PHEindicatormethods** paketi {#standard_phe  }
 
 Standardize hızları hesaplamanın başka bir yolu da **PHEindicatormethods** paketidir. Bu paket, direkt ve indirekt olarak standardize edilmiş hızları hesaplamanıza olanak tanır. İkisini de göstereceğiz.
@@ -479,8 +353,6 @@ knitr::kable(mortality_is_rate_phe_A)
 
 <!-- ======================================================= -->
 ## Kaynaklar {  }
-
-**dsr** paketini kullanarak başka bir tekrarlanabilir örnek görmek isterseniz, lütfen [bu skece]( https://mran.microsoft.com/snapshot/2020-02-12/web/packages/dsr/vignettes/dsr.html) bakın.
 
 **PHEindicatormethods** paketini kullanan başka bir örnek için lütfen [bu web sitesine](https://mran.microsoft.com/snapshot/2018-10-22/web/packages/PHEindicatormethods/vignettes/IntroductiontoPHEindicatormethods.html) gidin.
 
