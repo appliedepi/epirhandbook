@@ -5,7 +5,7 @@
 
 ***Go to www.epiRhandbook.com to see the latest version of the online handbook.***
 
-![Project logo](https://github.com/appliedepi/epiRhandbook_eng/blob/master/images/Epi%20R%20Handbook%20Banner%20Beige%201500x500.png)
+![Project logo](https://github.com/appliedepi/epirhandbook/blob/master/images/Epi%20R%20Handbook%20Banner%20Beige%201500x500.png)
 
 **This book strives to:**  
 
@@ -15,7 +15,7 @@
 * Be accessible in settings with low internet-connectivity via an **offline version**
   
 
-<img src="https://github.com/appliedepi/epiRhandbook_eng/blob/master/images/epiRhandbook_HexSticker_500x500.png" width="200" height="200">
+<img src="https://github.com/appliedepi/epirhandbook/blob/master/images/epiRhandbook_HexSticker_500x500.png" width="200" height="200">
 
 <span style="color: black;">**Written by epis, for epis**</span>
 We are applied epis from around the world, writing in our spare time to offer this resource to the community. Your encouragement and feedback is most welcome:  
