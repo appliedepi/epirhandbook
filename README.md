@@ -169,6 +169,22 @@ built before this exclusion. They will stop resolving once this deploys. A chapt
 absent from `book.chapters` is never rendered, so it never emits the alias redirect
 stub that would otherwise keep the old URL alive.
 
+**Six chapters still link to them.** Those links now go nowhere, because the
+target page is no longer rendered:
+
+| Chapter containing the link | Links to |
+|---|---|
+| `basics` | `gis` |
+| `data_used` | `gis`, `epidemic_models` |
+| `flexdashboard` | `gis` |
+| `importing` | `gis` |
+| `rmarkdown` | `gis` |
+| `survey_analysis` | `gis` |
+
+Seven links in total, all in the English sources. Leave them in place if the
+chapters are coming back — they will start working again the moment the target
+renders. Remove them only if the exclusion becomes permanent.
+
 **What it would take to bring each back:**
 
 * `gis` needs a way to render without reaching an external network service during
