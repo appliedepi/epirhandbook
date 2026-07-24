@@ -122,11 +122,26 @@ the login step goes away and fork previews work too.
 
 ### Publishing an update, end to end
 
-1. Open a pull request with your change.
-2. Check the preview build for that pull request.
-3. Merge the pull request to `main`.
-4. Check the staging build.
-5. Cut a release. This promotes staging to production.
+This is the same flow as
+[appliedepi/websitetimecourse](https://github.com/appliedepi/websitetimecourse). Content
+changes, translations included, all go through it.
+
+1. Create a branch off `main` and make your edits.
+2. Check they render locally.
+3. Open a pull request into `main`.
+4. That triggers a build to the **`preview`** branch. View it at the preview website
+   URL. **Check it before merging.**
+5. Merge the pull request into `main`. That triggers a build to the **`staging`**
+   branch. Check the build succeeded.
+6. If staging is good, create a GitHub release, following the versioning conventions.
+   That pulls `staging` into `production`, and a webhook updates the live site.
+
+Only rendered HTML reaches `preview`, `staging` and `production`. They are orphan
+branches: CI force-pushes them, nothing is ever merged into them, and they contain no
+`.qmd` source. The source lives on `main` and nowhere else.
+
+Nothing is re-rendered at release time. Step 6 copies the artifact you already checked
+in step 5, so what goes live is exactly what was reviewed.
 
 ### Where things live
 
