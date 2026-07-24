@@ -100,11 +100,12 @@ link stays broken.
 
 ### The three environments
 
-Three environments build from this repository:
+Three environments publish from this repository:
 
 * **`preview`** — one build per pull request.
 * **`staging`** — builds on every push to `main`.
-* **`production`** — builds only when a release is published.
+* **`production`** — updated only when a release is published, by promoting
+  staging. Nothing is rendered at release time.
 
 **Production is a promotion of staging, not a rebuild.** Cutting a release force-pushes
 the already-built `staging` artifact to `production`. Nothing is rebuilt at release
@@ -147,8 +148,9 @@ unaffected.
 2. An image in aedockerpublic — a new one, or an existing one that already has the
    right packages.
 3. A new row in `docker-images.yml`, in this repository.
-4. A new entry in `_quarto.yml`, in this repository — under `book.chapters`, with
-   an `aliases:` entry if the chapter replaces an old URL.
+4. A new entry in `_quarto.yml`, in this repository, under `book.chapters`.
+5. If the chapter replaces an old URL, an `aliases:` entry in the chapter's own
+   front matter — not in `_quarto.yml`. The value needs a leading `/`.
 
 ### Debugging a failed render
 

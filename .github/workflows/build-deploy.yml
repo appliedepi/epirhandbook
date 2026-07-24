@@ -17,6 +17,15 @@ on:
         # message naming exactly what is missing.
         required: true
 
+# One deployment per target branch at a time, newest wins. Without this, a
+# slow build of an older commit can finish after a faster build of a newer one
+# and force-push the branch BACKWARD -- silently serving stale content. Every
+# pull request also shares the single `preview` branch, so previews race each
+# other too. Keyed on the branch so preview and staging never block one another.
+concurrency:
+  group: deploy-${{ inputs.branch }}
+  cancel-in-progress: true
+
 jobs:
   # A GitHub Actions matrix must be static YAML or come from a prior job's
   # output -- so this job's only purpose is reading babelquarto's language
@@ -136,7 +145,6 @@ jobs:
         id: registry
         run: |
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
-          import re
           import sys
           import yaml
 
@@ -147,10 +155,10 @@ jobs:
           # whose /usr/local/bin/build_all_chapters.sh is EXECUTED on the
           # runner. Pin it to the expected registry and allow only characters
           # that can appear in an image reference.
-          # Exact equality, not a character filter. A permissive pattern still
-          # accepts a trailing slash, "..", or another appliedepi package
-          # namespace -- and this value selects the image whose script is
-          # executed on the runner.
+          # Exact equality. This value selects the image whose script is
+          # executed on the runner, so a pattern match is not good enough:
+          # a permissive one still accepts a trailing slash, ".." components,
+          # or a different appliedepi package namespace.
           if prefix != "ghcr.io/appliedepi/aedockerpublic":
               sys.exit(f"::error::docker-images.yml registry {prefix!r} is not the expected ghcr.io/appliedepi/aedockerpublic")
           print(f"prefix={prefix}")
@@ -256,7 +264,6 @@ jobs:
         id: registry
         run: |
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
-          import re
           import sys
           import yaml
 
@@ -267,10 +274,10 @@ jobs:
           # whose /usr/local/bin/build_all_chapters.sh is EXECUTED on the
           # runner. Pin it to the expected registry and allow only characters
           # that can appear in an image reference.
-          # Exact equality, not a character filter. A permissive pattern still
-          # accepts a trailing slash, "..", or another appliedepi package
-          # namespace -- and this value selects the image whose script is
-          # executed on the runner.
+          # Exact equality. This value selects the image whose script is
+          # executed on the runner, so a pattern match is not good enough:
+          # a permissive one still accepts a trailing slash, ".." components,
+          # or a different appliedepi package namespace.
           if prefix != "ghcr.io/appliedepi/aedockerpublic":
               sys.exit(f"::error::docker-images.yml registry {prefix!r} is not the expected ghcr.io/appliedepi/aedockerpublic")
           print(f"prefix={prefix}")
