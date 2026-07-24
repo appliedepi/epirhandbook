@@ -30,7 +30,6 @@ jobs:
       - name: Create and update language branches and PRs
         run: |
           LANGS=("fr" "es" "vn" "jp" "tr" "pt" "ru")  
-          EN_BRANCH="${{ github.ref }}"
           VERSION_SUFFIX="${EN_BRANCH#refs/heads/handbook_}"
 
           for lang in "${LANGS[@]}"; do
@@ -66,14 +65,14 @@ jobs:
             latest_commit_en_branch=$(git show --format=%H -s ${EN_BRANCH})
             latest_commit_info=$(git log ${EN_BRANCH} --since="$latest_commit_date" --format="%H %s" --reverse)
             commit_messages=$(echo "$latest_commit_info" | cut -d' ' -f2-)
-            latest_commit_master=$(git show --format=%H -s origin/master)
+            latest_commit_base=$(git show --format=%H -s origin/main)
             
             echo $latest_commit_en_branch
-            echo $latest_commit_master
+            echo $latest_commit_base
             echo $latest_commit_info
 
             # Check if there are new commits
-            if [ "$latest_commit_en_branch" == "$latest_commit_master" ]; then
+            if [ "$latest_commit_en_branch" == "$latest_commit_base" ]; then
               echo "No new commits to include in PR for ${TRANSLATION_BRANCH}"
               continue
             fi
@@ -82,7 +81,7 @@ jobs:
             PR_EXISTS=$(gh pr list --head "${TRANSLATION_BRANCH}" --state open --json number --jq length)
             if [ "$PR_EXISTS" -eq 0 ]; then
               echo "Creating new PR for ${TRANSLATION_BRANCH}"
-              PR_URL=$(gh pr create --base deploy-preview --head "$TRANSLATION_BRANCH" --title "Handbook ${VERSION_SUFFIX/_en/} $lang" --body "Automated pull request for $lang handbook version ${VERSION_SUFFIX/_en/}")
+              PR_URL=$(gh pr create --base main --head "$TRANSLATION_BRANCH" --title "Handbook ${VERSION_SUFFIX/_en/} $lang" --body "Automated pull request for $lang handbook version ${VERSION_SUFFIX/_en/}")
               PR_NUMBER=$(echo "$PR_URL" | grep -oE '[0-9]+$')
             else
               # Get the PR number for the translation branch
@@ -129,3 +128,4 @@ jobs:
           done
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EN_BRANCH: ${{ github.ref }}
