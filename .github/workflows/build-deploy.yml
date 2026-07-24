@@ -136,89 +136,31 @@ jobs:
             cat /usr/local/bin/build_all_chapters.sh > build_all.sh
           chmod +x build_all.sh
 
-      # INTERFACE FINDING (see report): build_all_chapters.sh has usage
-      #   build_all_chapters.sh <handbook_dir> <registry_prefix> [<output_dir>]
-      # -- there is NO per-language argument. It always renders
-      # babelquarto.mainlanguage + babelquarto.languages exactly as declared
-      # in the _quarto.yml inside <handbook_dir>, by design (its own "WHY NOT
-      # A LANGUAGE LIST ARGUMENT" comment: that pair is the single source of
-      # truth, and a second CLI list would be a second, driftable one). So
-      # "run it for its one language" is achieved by narrowing a JOB-LOCAL,
-      # never-committed copy of _quarto.yml's babelquarto.languages before
-      # calling the script -- not by an argument the script does not have.
+      # build_all_chapters.sh renders ONE language per leg via --only-lang,
+      # and does both cross-reference passes internally (its render_pass ... 1
+      # then ... 2). Under --only-lang the language's site lands at the ROOT of
+      # the output dir, with no <lang>/ nesting -- there is nothing to nest it
+      # under, because no other language was rendered. So this leg uploads
+      # html_outputs as-is and Job 2 decides where it lands.
       #
-      # CONSEQUENCE, flagged rather than hidden: babelquarto.mainlanguage is
-      # unconditionally included in every invocation's language loop (see
-      # ALL_LANGS=("$MAIN_LANG" "${OTHER_LANGS[@]}") in that script), so a
-      # non-mainlanguage leg ALSO renders the main language as a side effect,
-      # roughly doubling that leg's time versus a true single-language
-      # render. Only this leg's own target-language output survives (next
-      # step); the redundant mainlanguage copy is discarded, never uploaded.
-      - name: Narrow _quarto.yml to this leg's language
+      # --no-inject is REQUIRED here, not an optimisation.
+      # inject_language_links.R reuses an existing <ul id="languages-links">
+      # instead of rebuilding it, so injecting per-leg AND again over the
+      # assembled site would append a second set of links to every translated
+      # page. The switcher is injected exactly once, in Job 2, over the
+      # complete tree.
+      - name: Render this language (two passes, internal to the script)
         run: |
-          python3 - "${{ matrix.lang }}" "${{ needs.languages.outputs.mainlanguage }}" <<'PY'
-          import sys
-          import yaml
-
-          lang, mainlanguage = sys.argv[1], sys.argv[2]
-          with open("_quarto.yml") as fh:
-              cfg = yaml.safe_load(fh)
-          cfg["babelquarto"]["languages"] = [] if lang == mainlanguage else [lang]
-          with open("_quarto.yml", "w") as fh:
-              yaml.safe_dump(cfg, fh, allow_unicode=True, sort_keys=False)
-          PY
-
-      - name: Render (build_all_chapters.sh -- two passes per language, internal)
-        run: ./build_all.sh . "${{ steps.registry.outputs.prefix }}" html_outputs
-
-      # Keep only this leg's own content: the assembled root for the
-      # mainlanguage leg, or the <lang>/ subtree for every other leg.
-      #
-      # ALSO strip any <div id="languages-links-parent"> switcher fragment
-      # build_all_chapters.sh's OWN internal inject_language_links.R call
-      # just added over THIS leg's small (1-2 language) output. That call is
-      # unconditional and cannot be skipped (see the brief: "your workflow
-      # calls it, it does not reimplement any of that"), so its fragment must
-      # be removed here instead: inject_language_links.R's
-      # add_dropdown_links() REUSES an existing <ul id="languages-links">
-      # rather than recreating it (read directly from the script), so if
-      # this leg's partial fragment survives into the assembled tree, Job 2's
-      # later, authoritative injection over the full 8-language site would
-      # APPEND its links alongside this leg's partial ones instead of
-      # replacing them -- duplicate entries on every translated page. The
-      # regex below is safe because add_dropdown_links() never nests a <div>
-      # inside this fragment (only <button>/<i>/<ul>/<li>/<a>), so the first
-      # "</div>" after the opening tag is always its true close.
-      - name: Scope this leg's output for upload
-        run: |
-          mkdir -p artifact_out
-          if [ "${{ matrix.lang }}" = "${{ needs.languages.outputs.mainlanguage }}" ]; then
-            cp -a html_outputs/. artifact_out/
-          else
-            cp -a "html_outputs/${{ matrix.lang }}/." artifact_out/
-          fi
-          python3 - <<'PY'
-          import glob
-          import re
-
-          pattern = re.compile(
-              r'<div\b[^>]*\bid="languages-links-parent"[^>]*>.*?</div>',
-              re.DOTALL,
-          )
-          for path in glob.glob("artifact_out/**/*.html", recursive=True):
-              with open(path, encoding="utf-8") as fh:
-                  html = fh.read()
-              stripped = pattern.sub("", html)
-              if stripped != html:
-                  with open(path, "w", encoding="utf-8") as fh:
-                      fh.write(stripped)
-          PY
+          ./build_all.sh \
+            --only-lang "${{ matrix.lang }}" \
+            --no-inject \
+            . "${{ steps.registry.outputs.prefix }}" html_outputs
 
       - name: Upload this language's output
         uses: actions/upload-artifact@v4
         with:
           name: site-${{ matrix.lang }}
-          path: artifact_out
+          path: html_outputs
           if-no-files-found: error
 
   assemble-deploy:
