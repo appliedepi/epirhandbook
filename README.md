@@ -118,13 +118,55 @@ the already-built `staging` artifact to `production`. Nothing is rebuilt at rele
 time. What goes live is exactly what was already reviewed on staging — not a fresh
 render that might behave differently.
 
-**Previews only work for pull requests opened from a branch in this repository.**
-GitHub deliberately withholds repository secrets from a pull request opened from a
-fork, and the build needs one to pull its Docker images. A fork's preview therefore
-stops at the login step with an explicit error rather than rendering. That is the
-safe behaviour: the alternative — handing a token to a workflow that runs code the
-pull request controls — is how CI credentials get stolen. Once the images are public
-the login step goes away and fork previews work too.
+**Fork previews work, because the images are public.** GitHub deliberately withholds
+repository secrets from a pull request opened from a fork. That used to stop a fork's
+preview dead, because the build needed a token to pull private images. Since 2.8 the
+images are public, so the GHCR login is skipped when no token is present and the
+render proceeds. The token is still used when it *is* available, and it is still never
+handed to a workflow running fork-controlled code — that is how CI credentials get
+stolen.
+
+### Setting up to contribute
+
+You do not need to install R, Quarto, or any package to work on this handbook. The
+environment ships as a container.
+
+Open the repository in a **dev container**. `.devcontainer.json` at the repository root
+names the image:
+
+```json
+{
+  "name": "epirhandbook",
+  "image": "ghcr.io/appliedepi/aedockerpublic/epirhandbook-monolith:2.8"
+}
+```
+
+1. Install [Positron](https://positron.posit.co/) (or VS Code) and Docker.
+2. Clone this repository and open the folder.
+3. Accept the "Reopen in Container" prompt. See
+   [Positron's dev containers guide](https://positron.posit.co/dev-containers.html).
+
+The image is **public** — no `docker login`, no token, no Applied Epi account.
+
+**Why the monolith.** CI renders each chapter in its own group image, holding only that
+group's packages. The monolith holds all of them at once. It is generated from the six
+group images rather than maintained by hand, so it cannot drift from what CI uses. One
+container therefore renders any chapter, which is what you want while editing and what
+you do not want in CI, where a smaller image is faster.
+
+To render a single chapter inside the container:
+
+```bash
+quarto render chapters/epicurves.qmd
+```
+
+Rendering the whole book in all nine languages is CI's job, not something to do locally.
+
+**If you add a package**, that is a change to
+[appliedepi/aedockerpublic](https://github.com/appliedepi/aedockerpublic), not to this
+repository. Add the package to the chapter's group list there, rerun
+`epirhandbook/2.8/generate_groups.py`, and commit — the group images and the monolith
+are regenerated from the same source, so they cannot disagree.
 
 ### Publishing an update, end to end
 

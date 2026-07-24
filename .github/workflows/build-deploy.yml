@@ -10,12 +10,14 @@ on:
         type: string
     secrets:
       GHCR_READ_TOKEN:
-        # required: true only wires the secret through from the caller (via
+        # Declaring the secret only wires it through from the caller (via
         # `secrets: inherit`, see preview.yml/staging.yml) -- GitHub cannot
-        # statically check that the underlying repository secret has an
-        # actual value. Whether it does is checked at RUN time below, with a
-        # message naming exactly what is missing.
-        required: true
+        # statically check that the underlying repository secret has a value.
+        #
+        # NOT required: the 2.8 images are public, so a build with no token
+        # pulls anonymously. This is what lets a FORK pull request render at
+        # all, since GitHub withholds secrets from forks. See the login step.
+        required: false
 
 # One deployment per target branch at a time, newest wins. Without this, a
 # slow build of an older commit can finish after a faster build of a newer one
@@ -123,21 +125,27 @@ jobs:
       - name: Install PyYAML
         run: pip install --quiet pyyaml
 
-      # The images at ghcr.io/appliedepi/aedockerpublic are currently
-      # PRIVATE, and this repository's default GITHUB_TOKEN cannot read
-      # another repository's packages. GHCR_READ_TOKEN is a PAT with
-      # read:packages scope that the repository owner must create as a
-      # secret -- there is no fallback, and this step fails loudly, by name,
-      # when it is absent rather than silently skipping the login.
-      # DELETE THIS WHOLE STEP once ghcr.io/appliedepi/aedockerpublic is made
-      # public.
-      - name: Log in to GHCR
+      # The 2.8 images at ghcr.io/appliedepi/aedockerpublic are PUBLIC, so the
+      # pull below needs no credential and this login is now optional. It used
+      # to be fatal when the secret was missing, because the 2.7 per-chapter
+      # images were private.
+      #
+      # Skipping instead of failing is what makes FORK previews work. GitHub
+      # withholds repository secrets from a pull request opened from a fork, so
+      # a fork build reaches this step with GHCR_READ_TOKEN empty; failing here
+      # stopped those previews dead. Anonymous pulls now carry them through.
+      #
+      # The step is kept rather than deleted: it still authenticates when a
+      # token IS present, which keeps working if any image is ever made private
+      # again. It must never be made fatal again without first checking that
+      # every image docker-images.yml names is public.
+      - name: Log in to GHCR (optional -- images are public)
         env:
           GHCR_READ_TOKEN: ${{ secrets.GHCR_READ_TOKEN }}
         run: |
           if [ -z "$GHCR_READ_TOKEN" ]; then
-            echo "::error::secret GHCR_READ_TOKEN is not set on this repository (or not passed through by the caller workflow). Create a GitHub PAT with 'read:packages' scope and add it as repository secret GHCR_READ_TOKEN so this job can pull the private ghcr.io/appliedepi/aedockerpublic images."
-            exit 1
+            echo "No GHCR_READ_TOKEN (expected for a fork pull request). Pulling anonymously; the images are public."
+            exit 0
           fi
           echo "$GHCR_READ_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
 
@@ -247,16 +255,15 @@ jobs:
             fi
           done
 
-      # Same secret, same fail-loud contract as the render job above.
-      # DELETE THIS WHOLE STEP once ghcr.io/appliedepi/aedockerpublic is made
-      # public.
-      - name: Log in to GHCR
+      # Same secret, same optional contract as the render job above: the images
+      # are public, so a missing token is not fatal here either.
+      - name: Log in to GHCR (optional -- images are public)
         env:
           GHCR_READ_TOKEN: ${{ secrets.GHCR_READ_TOKEN }}
         run: |
           if [ -z "$GHCR_READ_TOKEN" ]; then
-            echo "::error::secret GHCR_READ_TOKEN is not set on this repository (or not passed through by the caller workflow). Create a GitHub PAT with 'read:packages' scope and add it as repository secret GHCR_READ_TOKEN so this job can pull the private ghcr.io/appliedepi/aedockerpublic images."
-            exit 1
+            echo "No GHCR_READ_TOKEN (expected for a fork pull request). Pulling anonymously; the images are public."
+            exit 0
           fi
           echo "$GHCR_READ_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
 
