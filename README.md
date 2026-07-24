@@ -26,7 +26,7 @@ We are applied epis from around the world, writing in our spare time to offer th
 
 
 > **Upgrading from an earlier version?**
-> [CHANGES-2.6-to-2.7.md](CHANGES-2.6-to-2.7.md) explains what changed for readers and authors in
+> [STAKEHOLDERS.md](STAKEHOLDERS.md) explains what changed for readers and authors in
 > 2.7 — which chapters were edited, what readers will notice, and the decisions behind two chapters
 > that are no longer included. Translators should also read
 > [TRANSLATION-BACKLOG.md](TRANSLATION-BACKLOG.md).
