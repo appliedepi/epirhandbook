@@ -82,6 +82,45 @@ here rather than quietly fixed, because some were visible to readers.
 Translated prose written during the migration is machine-written and logged in
 `TRANSLATION-BACKLOG.md` by file and line. It wants a native-speaker pass.
 
+### Translated "Download handbook and data" pages, brought in line with English
+
+The seven translated versions of that page had drifted badly during the 2.8 migration and are
+now aligned with the English original, section by section. This is worth stating plainly
+because every defect below was **visible to readers on the live site**, and none of it was
+caught by the automated checks used at the time — those checked structure, and structure was
+not the problem.
+
+What readers were being told, wrongly:
+
+* That `get_data()` downloads example data onto their computer, and that one call fetches
+  *all* of it. It does neither: it returns a single dataset as an R object.
+* That they must then import what `get_data()` had saved. Nothing was saved.
+* To download the data file by file from Github, under a "manual download" heading that the
+  English page no longer has.
+* To import a phylogenetic tree with `ape::read.tree()` from a `.txt` file that nothing had
+  written. `get_data()` returns the tree object directly.
+* To download ten years of climate data and read it with `stars::read_stars()`. `get_data()`
+  returns the whole bundle as one combined object.
+* In the GIS section, to download each shapefile component individually — and, in three
+  languages, that "option 1" already included every shapefile. It did not.
+* To install the package by way of a subsection that had been removed, with the instruction
+  to "try option 2" left pointing at nothing.
+
+Three code defects that would have errored if run: a positional `get_data("...")` call, a
+`get_data(file = )` call, and a `get_data("all")` call. All three are the **retired**
+`epirhandbook` package's interface; **appliedepidata** takes `name = `.
+
+Also corrected: the install code sat under the offline-handbook heading in all seven and was
+duplicated in Spanish; Russian had an untranslated English heading; Portuguese had its GIS
+section at the wrong heading level; French had a link to a page that does not exist
+(`suggested_packages.fr.qmd` for `packages_suggested.fr.qmd`, a mistake also present in two
+other French chapters), four page references written as bare anchors, and several
+typographical errors.
+
+Every page was rendered in the 2.8 container to confirm it produces output with no warnings
+and no stray code markers. Remaining work, and the reasoning behind how it was found, is in
+`PLAN-translated-data-used.md`.
+
 ### Still cut
 
 `gis` and `epidemic_models` remain excluded, for the reasons given under 2.6 → 2.7. Nothing
