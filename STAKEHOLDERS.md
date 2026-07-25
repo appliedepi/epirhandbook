@@ -4,6 +4,11 @@
 It is cumulative and kept up to date as releases land. Newest release first. It says what
 changed and what it means for you; it is not build output and not a commit log.
 
+**It is not a to-do list.** Open translation work lives in
+[TRANSLATION-BACKLOG.md](TRANSLATION-BACKLOG.md), which holds only what is still outstanding —
+with a search token and target wording per item. This file records what changed; that file
+records what is left. Nothing belongs in both.
+
 ---
 
 ## 2.7 → 2.8
@@ -58,80 +63,56 @@ package's own accessors.
 
 ### Corrections after review
 
-An adversarial review of the 2.8 work found defects that had already shipped. They are listed
-here rather than quietly fixed, because some were visible to readers.
+Independent adversarial review of the 2.8 work found defects that had already shipped. They are
+recorded here rather than quietly fixed, because most were visible to readers.
 
-* **The seven translated "Download handbook and data" pages were malformed.** The migration
-  spliced R code blocks into the middle of sentences, so Quarto never parsed them as code and
-  readers saw literal `{r, eval=F}` inside prose. English was not affected. All seven now
-  render exactly as English does: no stray code markers, no warnings. Verified by rendering
-  each language in the 2.8 container, not by inspection.
-* **Those pages still told readers to install a retired package.** They described
-  `epirhandbook` and its `download_book()`, which 2.8 replaces with **appliedepidata**. The
-  instructions now match English. The offline-handbook subsection that depended on
-  `download_book()` is gone, as it is in English; the direct download link above it is
-  unchanged and still works.
-* **Fork pull requests do not publish previews.** The README claimed they did. A fork now
-  renders — that part is new and real — but GitHub gives a fork a read-only token, so the
-  deploy step fails and the run goes red on a contribution that is fine. Documented honestly,
-  including what a red check on a fork actually means.
-* **The image manifest is less constrained than it looked.** Only the registry prefix is
-  pinned, so a pull request can name any public image in that namespace and have it executed.
-  Recorded in the workflow. Not yet fixed.
-
-Translated prose written during the migration is machine-written and logged in
-`TRANSLATION-BACKLOG.md` by file and line. It wants a native-speaker pass.
-
-### Translated "Download handbook and data" pages, brought in line with English
-
-The seven translated versions of that page had drifted badly during the 2.8 migration and are
-now aligned with the English original, section by section. This is worth stating plainly
-because every defect below was **visible to readers on the live site**, and none of it was
-caught by the automated checks used at the time — those checked structure, and structure was
-not the problem.
+**The seven translated "Download handbook and data" pages had drifted badly, and are now aligned
+with English section by section.** This was the largest item and took eight review rounds to close.
 
 What readers were being told, wrongly:
 
-* That `get_data()` downloads example data onto their computer, and that one call fetches
-  *all* of it. It does neither: it returns a single dataset as an R object.
+* That `get_data()` downloads example data onto their computer, and that one call fetches *all*
+  of it. It does neither: it returns a single dataset as an R object.
 * That they must then import what `get_data()` had saved. Nothing was saved.
-* To download the data file by file from Github, under a "manual download" heading that the
-  English page no longer has.
-* To import a phylogenetic tree with `ape::read.tree()` from a `.txt` file that nothing had
-  written. `get_data()` returns the tree object directly.
+* To download the data file by file from Github, under a "manual download" heading English no
+  longer has.
+* To import a phylogenetic tree with `ape::read.tree()` from a `.txt` file nothing had written.
 * To download ten years of climate data and read it with `stars::read_stars()`. `get_data()`
-  returns the whole bundle as one combined object.
+  returns the whole bundle as one object.
 * In the GIS section, to download each shapefile component individually — and, in three
   languages, that "option 1" already included every shapefile. It did not.
-* To install the package by way of a subsection that had been removed, with the instruction
-  to "try option 2" left pointing at nothing.
+* To install a **retired** package, `epirhandbook`, via a subsection that had been removed, with
+  the instruction to "try option 2" left pointing at nothing.
 
-Three code defects that would have errored if run: a positional `get_data("...")` call, a
-`get_data(file = )` call, and a `get_data("all")` call. All three are the **retired**
-`epirhandbook` package's interface; **appliedepidata** takes `name = `.
+Three code defects would have errored if run — a positional `get_data("...")`, a
+`get_data(file = )`, and a `get_data("all")`. All three are the retired package's interface;
+**appliedepidata** takes `name = `. The pages were also malformed: code blocks spliced into the
+middle of sentences, so Quarto never parsed them and readers saw literal `{r, eval=F}` in prose.
 
-Also corrected: the install code sat under the offline-handbook heading in all seven and was
-duplicated in Spanish; Russian had an untranslated English heading; Portuguese had its GIS
-section at the wrong heading level; French had a link to a page that does not exist
-(`suggested_packages.fr.qmd` for `packages_suggested.fr.qmd`, a mistake also present in two
-other French chapters), four page references written as bare anchors, and several
-typographical errors.
+Review also surfaced defects **older than this migration**: a Quarto formatting instruction a
+translator had translated, so one heading was numbered when its fifteen siblings were not; a
+Russian sentence corrupted into non-words; a Vietnamese section titled "survival analysis" when
+it is about survey analysis; and English fragments left in translated pages.
 
-Every page was rendered in the 2.8 container to confirm it produces output with no warnings
-and no stray code markers.
+Two further findings, not about translation:
 
-**This work is now complete.** It took eight rounds of independent adversarial review, which
-found 11, 8, 6, 2, 4, 2, 1 and finally 0 defects before returning a clean verdict. Later rounds
-also caught defects that had nothing to do with this migration and had been live for a long
-time: a Quarto formatting instruction that a translator had translated, so one heading was
-numbered when its fifteen siblings were not; a Russian sentence corrupted into non-words; and
-English fragments left in translated pages.
+* **Fork pull requests do not publish previews.** The README claimed they did. A fork now
+  renders — that part is new and real — but GitHub gives a fork a read-only token, so the deploy
+  fails and the run goes red on a contribution that is fine. Documented honestly, including what
+  a red check on a fork actually means.
+* **The image manifest is less constrained than it looked.** Only the registry prefix is pinned,
+  so a pull request can name any public image in that namespace and have it executed. Recorded in
+  the workflow. **Not yet fixed.**
 
-The reason it took eight rounds is worth recording. Automated checks confirmed throughout that
-the pages were well-formed and rendered cleanly — and every real defect passed those checks.
-A page can be perfectly valid and still tell the reader to do something the code does not do.
-Finding that needs someone to read the translated text against the original and ask whether it
-is true. `PLAN-translated-data-used.md` keeps the full record.
+Every page was rendered in the 2.8 container to confirm it produces output with no warnings and
+no stray code markers.
+
+**Why it took eight rounds, which is the part worth keeping.** Automated checks confirmed
+throughout that the pages were well-formed and rendered cleanly — and every real defect passed
+those checks. A page can be perfectly valid and still tell the reader to do something the code
+does not do. Finding that needs someone to read the translated text against the original and ask
+whether it is true. `PLAN-translated-data-used.md` keeps the full record; open translation work is
+in `TRANSLATION-BACKLOG.md`.
 
 ### Still cut
 

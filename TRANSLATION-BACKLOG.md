@@ -1,4 +1,18 @@
-# Translation backlog: prose left stale by the 2.7 forward-port
+# Translation backlog
+
+**This file holds OPEN translation work only.** When an item is done it comes out of here; the
+record of what changed lives in [STAKEHOLDERS.md](STAKEHOLDERS.md) and in git history. That rule
+exists because this file previously described work that had since been completed, which is worse
+than saying nothing — a translator would have redone it.
+
+The division of labour between the two files:
+
+| | Purpose | Audience |
+|---|---|---|
+| `STAKEHOLDERS.md` | release notes — what changed, and why it matters to you | readers, authors, translators, contributors |
+| `TRANSLATION-BACKLOG.md` | a work queue — what is still to do, with search tokens and target wording | whoever picks up translation work |
+
+Covers items from the 2.7 forward-port and the 2.8 **appliedepidata** migration.
 
 ## What this is
 
@@ -288,49 +302,23 @@ already malformed pre-existing (broken anchor tags with stray `<`/missing `>`/mi
 `interactive_plots.jp.qmd:67`, `interactive_plots.pt.qmd:68`, `heatmaps.ru.qmd:59`,
 `pivoting.jp.qmd:71`, `diagrams.pt.qmd:43`. Same templates, same review need.
 
-### `data_used.<lang>.qmd` — dataset reference section
+### `data_used.<lang>.qmd` — COMPLETE, do not redo
 
-Separately from the sentences above, each `data_used.<lang>.qmd` page has its own
-per-dataset listing (mirroring English's `data_used.qmd` restructure in `e4130b5`).
-Every `class='download-button'` anchor and markdown-style download link pointing at an
-in-package dataset was replaced with a short fenced `eval=F` code chunk:
-```
-​```{r, eval=F}
-VARNAME <- appliedepidata::get_data(name = "AED_NAME")
-​```
-```
-20 such chunks were written per language (140 total across all 7). Surrounding
-descriptive prose (already translated, human-written) was left untouched. The
-`germany_weather` section, which had 10 near-identical per-year buttons, was collapsed
-to the one representative code chunk that survived automated conversion; English's
-final version additionally documents a `save_data()`-plus-`unzip()` alternative for
-getting the raw yearly `.nc` files, which was not added here — flag for a follow-up pass
-if the raw-files alternative is wanted in translation too.
+The seven translated "Download handbook and data" pages were fully aligned with English and
+signed off by independent adversarial review on 2026-07-25. They now match English in structure
+and in what they claim.
 
-### Scope boundary — NOT touched, flagged for follow-up
+This entry is kept only to stop anyone reopening it. Details are in
+[STAKEHOLDERS.md](STAKEHOLDERS.md) under "2.7 → 2.8", and the method in
+`PLAN-translated-data-used.md`. Nothing in these seven files is outstanding.
 
-- **The "install `epirhandbook`, `download_book()`, `p_install_gh()`" narrative in all 7
-  `data_used.<lang>.qmd` files was left as-is.** English's `data_used.qmd` was
-  substantially rewritten in `e4130b5` (pak::pak install of appliedepidata instead of
-  the retired epirhandbook package; `list_data()`/`search_data()` browsing) but this unit's
-  scope was download-button conversion, not full-page content authoring. This is a real,
-  larger content gap — the translated intro sections describe a package/workflow
-  (`epirhandbook::download_book()`) that no longer exists. Recommend a dedicated pass
-  per language.
-- **`data_used.pt.qmd`** has a **pre-existing translation duplication**, not introduced
-  here: both the "clean linelist" bullet and the "Other related files" bullet pointed at
-  the same `linelist_cleaned.rds` URL (English has the .rds one and a separate .xlsx
-  ["clean" Excel] one). PT's translation never had the Excel-format one; both now
-  correctly call `appliedepidata::get_data(name = "linelist_cleaned_rds")`, but the
-  `linelist_cleaned_excel` dataset is not referenced anywhere in `data_used.pt.qmd`.
-  Not fabricated a fix — flag for a translator who can confirm the intended content of
-  that bullet.
-- **`ggplot_basics_old.{es,fr,pt,tr,vn}.qmd` and `data_table.jp.qmd`** are chapters
-  outside English's own `dbaa049`/`e4130b5` migration (either legacy/undeclared chapters
-  not in `_quarto.yml`, e.g. `ggplot_basics_old`, or chapters English deliberately left
-  reading `data/` directly, e.g. `data_table.qmd`). Their download buttons were **not**
-  converted to `get_data()` — only their stale URL was fixed (org/branch rename) — to
-  avoid asserting a code/data correspondence that was never verified for these chapters.
-- **`data/malaria_app/data/facility_count_data.rds`** (linked from the Shiny section of
-  `data_used.<lang>.qmd`) has no `appliedepidata` counterpart (a genuine, pre-existing
-  gap per `utils/data-map.tsv`) — its download link was kept, URL fixed, not converted.
+### Still open elsewhere, outside `data_used`
+
+- **`ggplot_basics_old.{es,fr,pt,tr,vn}.qmd` and `data_table.jp.qmd`** had only their stale URLs
+  corrected, not their download links converted to `get_data()`. `ggplot_basics_old` is an
+  undeclared legacy chapter not in `_quarto.yml`; `data_table` is one English deliberately left
+  reading `data/` directly. Converting either would assert a code/data correspondence nobody has
+  verified for those chapters. Leave them unless you verify it.
+- **`data/malaria_app/data/facility_count_data.rds`** has no **appliedepidata** counterpart — a
+  genuine, pre-existing gap recorded in `utils/data-map.tsv`. Its download link is intentionally
+  kept.
