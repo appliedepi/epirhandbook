@@ -132,3 +132,205 @@ cross-page link, or removing.
 To find them, render the site and check every `href="#x"` for a matching `id="x"` in
 the same file. Percent-decode the fragment first — hrefs are URL-encoded and `id`
 attributes are not, which otherwise inflates the count roughly fortyfold.
+
+
+## appliedepidata migration — machine-written prose (Unit D)
+
+The English handbook was migrated from reading `data/` files directly to calling
+`appliedepidata::get_data()` / `save_data()` (commits `dbaa049` and `e4130b5`). This
+section propagates the same code changes to the 7 translations (es, fr, jp, pt, ru, tr,
+vn) and converts every `class='download-button'` (and equivalent markdown-link) button
+that pointed at now-migrated data.
+
+**All prose below was machine-written during this propagation.** It follows a fixed
+per-language template (below) but was not reviewed by a native speaker for grammar,
+register, or naturalness. Treat it as a first draft that needs a native-speaker pass,
+same as the five items already logged above.
+
+### LINKTEXT used per language, and where it came from
+
+Each converted sentence links to that language's own "Download handbook and data" page
+(`data_used.<lang>.qmd`), using link text native to that language. Per rule, this text
+was extracted from the language's own files wherever it already existed as real inline
+link text; where no such precedent existed, it was taken from the page's own `#` title
+(also the language's own words, just not previously used as a link).
+
+| Lang | LINKTEXT used | Source |
+|---|---|---|
+| es | "Descargando el manual y los datos" | `data_used.es.qmd` H1 title — **no existing inline link to this page anywhere in the ES corpus**, so no precedent to extract. Judgment call: reused the page's own title text. Flag for native review. |
+| fr | "Télécharger le manuel et les données" | `data_used.fr.qmd` H1 title — only one weak precedent existed (`[chapitre sur les données](#data_used)` in `time_series.fr.qmd`, different wording, anchor-only). Judgment call: reused the page's own title text instead. Flag for native review. |
+| jp | "ハンドブックとデータのダウンロード" | Already used as inline link text 16 times (bound to `#data-used` anchor); reused verbatim, target corrected to `data_used.jp.qmd`. |
+| pt | "Baixar manual e dados" | Already used as inline link text 9 times (most common of 3 variants found; dominant over "Download do manual e dados" ×2 and "Baixar livro e dados" ×2), bound to `#data-used` anchor; reused verbatim, target corrected to `data_used.pt.qmd`. |
+| ru | "Скачивание руководства и данных" | Already used as inline link text 8 times, **already** with the correct `data_used.ru.qmd` target; reused verbatim, nothing to fix. |
+| tr | "El kitabı ve veri indirme" | Already used as inline link text once (of 2 variants found), with the correct `data_used.tr.qmd` target; reused verbatim. |
+| vn | "Tải sách và dữ liệu" | Already used as inline link text 14 times, **already** with the correct `data_used.vn.qmd` target; reused verbatim, nothing to fix. |
+
+### Sentence templates used (adapted per surrounding sentence's grammar where the lead
+clause was kept; used verbatim where no lead clause existed to keep)
+
+- **es**: Cárguelo directamente con `` `appliedepidata::get_data(name = "X")` `` (véase la página [LINKTEXT](data_used.es.qmd) para más detalles).
+- **fr**: Chargez-les directement avec `` `appliedepidata::get_data(name = "X")` `` (voir la page [LINKTEXT](data_used.fr.qmd) pour plus de détails).
+- **pt**: Carregue diretamente com `` `appliedepidata::get_data(name = "X")` `` (consulte a página [LINKTEXT](data_used.pt.qmd) para mais detalhes).
+- **tr**: Doğrudan `` `appliedepidata::get_data(name = "X")` `` ile yükleyin (ayrıntılar için [LINKTEXT](data_used.tr.qmd) sayfasına bakın).
+- **ru**: Загрузите их напрямую с помощью `` `appliedepidata::get_data(name = "X")` `` (подробности см. на странице [LINKTEXT](data_used.ru.qmd)).
+- **vn**: Tải trực tiếp bằng `` `appliedepidata::get_data(name = "X")` `` (xem trang [LINKTEXT](data_used.vn.qmd) để biết chi tiết).
+- **jp**: `` `appliedepidata::get_data(name = "X")` `` で直接読み込めます（詳細は[LINKTEXT](data_used.jp.qmd)のページを参照）。
+
+Algorithm used: kept everything in the paragraph up to and including the last
+sentence-ending period before the button (the "we import dataset X" lead clause, if one
+existed); replaced everything from there through the button and its trailing "(as .ext
+file). Import with `import()`..." clause with the template sentence above. Where no lead
+clause existed (the button opened the paragraph), the template sentence stands alone.
+
+### Every sentence written, by language (file:line → dataset)
+
+All rows below use the template for that language shown above, substituting the dataset
+name shown. 188 sentences total.
+
+#### es (28)
+`age_pyramid.es.qmd:47`, `characters_strings.es.qmd:55`, `combination_analysis.es.qmd:89`,
+`descriptive_statistics.es.qmd:31`, `diagrams.es.qmd:42`, `factors.es.qmd:43`,
+`flexdashboard.es.qmd:49`, `ggplot_basics.es.qmd:44`, `ggplot_tips.es.qmd:37`,
+`grouping.es.qmd:54`, `heatmaps.es.qmd:57`, `interactive_plots.es.qmd:67`,
+`iteration.es.qmd:43`, `joining_matching.es.qmd:39`, `missing_data.es.qmd:44`,
+`moving_average.es.qmd:39`, `pivoting.es.qmd:76`, `plot_continuous.es.qmd:89`,
+`plot_discrete.es.qmd:61`, `regression.es.qmd:49`, `relational_databases.es.qmd:24`,
+`stat_tests.es.qmd:53`, `survival_analysis.es.qmd:71`, `tables_descriptive.es.qmd:53`,
+`tables_presentation.es.qmd:135` → dataset `linelist_cleaned_rds`.
+`cleaning.es.qmd:115` → `case_linelists_linelist_raw`.
+`pivoting.es.qmd:53` → `malaria_facility_count_data`.
+`time_series.es.qmd:61` → `campylobacter_germany`.
+
+#### fr (28)
+`age_pyramid.fr.qmd:41`, `characters_strings.fr.qmd:54`, `combination_analysis.fr.qmd:87`,
+`descriptive_statistics.fr.qmd:31`, `diagrams.fr.qmd:43`, `factors.fr.qmd:43`,
+`flexdashboard.fr.qmd:48`, `ggplot_basics.fr.qmd:43`, `ggplot_tips.fr.qmd:36`,
+`grouping.fr.qmd:57`, `heatmaps.fr.qmd:59`, `interactive_plots.fr.qmd:67`,
+`iteration.fr.qmd:46`, `joining_matching.fr.qmd:47`, `missing_data.fr.qmd:42`,
+`moving_average.fr.qmd:41`, `pivoting.fr.qmd:82`, `plot_continuous.fr.qmd:87`,
+`plot_discrete.fr.qmd:61`, `regression.fr.qmd:55`, `relational_databases.fr.qmd:24`,
+`stat_tests.fr.qmd:54`, `survival_analysis.fr.qmd:69`, `tables_descriptive.fr.qmd:55`,
+`tables_presentation.fr.qmd:130` → dataset `linelist_cleaned_rds`.
+`cleaning.fr.qmd:123` → `case_linelists_linelist_raw`.
+`pivoting.fr.qmd:56` → `malaria_facility_count_data`.
+`time_series.fr.qmd:57` → `campylobacter_germany`.
+
+#### jp (24 — jp has no translations of `basics_old`/`cleaning`/`plot_continuous`/`plot_discrete`/`relational_databases` buttons in this set; `cleaning.jp.qmd` had no button to begin with)
+`age_pyramid.jp.qmd:52`, `characters_strings.jp.qmd:54`, `combination_analysis.jp.qmd:89`,
+`descriptive_statistics.jp.qmd:31`, `factors.jp.qmd:43`, `flexdashboard.jp.qmd:48`,
+`ggplot_basics.jp.qmd:42`, `ggplot_tips.jp.qmd:37`, `interactive_plots.jp.qmd:67`,
+`iteration.jp.qmd:43`, `joining_matching.jp.qmd:45`, `missing_data.jp.qmd:43`,
+`moving_average.jp.qmd:36`, `pivoting.jp.qmd:71`, `plot_continuous.jp.qmd:89`,
+`plot_discrete.jp.qmd:61`, `regression.jp.qmd:48`, `relational_databases.jp.qmd:24`,
+`stat_tests.jp.qmd:52`, `survival_analysis.jp.qmd:75`, `tables_descriptive.jp.qmd:53`,
+`tables_presentation.jp.qmd:134` → dataset `linelist_cleaned_rds`.
+`pivoting.jp.qmd:50` → `malaria_facility_count_data`.
+`time_series.jp.qmd:57` → `campylobacter_germany`.
+
+#### pt (28)
+`age_pyramid.pt.qmd:52`, `characters_strings.pt.qmd:54`, `combination_analysis.pt.qmd:98`,
+`descriptive_statistics.pt.qmd:31`, `diagrams.pt.qmd:43`, `factors.pt.qmd:43`,
+`flexdashboard.pt.qmd:48`, `ggplot_basics.pt.qmd:48`, `ggplot_tips.pt.qmd:37`,
+`grouping.pt.qmd:53`, `heatmaps.pt.qmd:59`, `interactive_plots.pt.qmd:68`,
+`iteration.pt.qmd:42`, `joining_matching.pt.qmd:48`, `missing_data.pt.qmd:43`,
+`moving_average.pt.qmd:36`, `pivoting.pt.qmd:79`, `plot_continuous.pt.qmd:89`,
+`plot_discrete.pt.qmd:61`, `regression.pt.qmd:50`, `relational_databases.pt.qmd:24`,
+`stat_tests.pt.qmd:54`, `survival_analysis.pt.qmd:72`, `tables_descriptive.pt.qmd:51`,
+`tables_presentation.pt.qmd:136` → dataset `linelist_cleaned_rds`.
+`cleaning.pt.qmd:136` → `case_linelists_linelist_raw`.
+`pivoting.pt.qmd:57` → `malaria_facility_count_data`.
+`time_series.pt.qmd:65` → `campylobacter_germany`.
+
+#### ru (24 — ru's translation set omits several chapters entirely, e.g. `descriptive_statistics.ru.qmd`, `plot_continuous.ru.qmd`, `plot_discrete.ru.qmd` don't exist)
+`age_pyramid.ru.qmd:52`, `characters_strings.ru.qmd:54`, `combination_analysis.ru.qmd:88`,
+`diagrams.ru.qmd:43`, `factors.ru.qmd:46`, `flexdashboard.ru.qmd:48`,
+`ggplot_basics.ru.qmd:44`, `ggplot_tips.ru.qmd:37`, `grouping.ru.qmd:56`,
+`heatmaps.ru.qmd:59`, `interactive_plots.ru.qmd:67`, `iteration.ru.qmd:46`,
+`joining_matching.ru.qmd:48`, `missing_data.ru.qmd:43`, `moving_average.ru.qmd:40`,
+`pivoting.ru.qmd:78`, `regression.ru.qmd:50`, `stat_tests.ru.qmd:54`,
+`survival_analysis.ru.qmd:75`, `tables_descriptive.ru.qmd:54`,
+`tables_presentation.ru.qmd:133` → dataset `linelist_cleaned_rds`.
+`cleaning.ru.qmd:117` → `case_linelists_linelist_raw`.
+`pivoting.ru.qmd:56` → `malaria_facility_count_data`.
+`time_series.ru.qmd:64` → `campylobacter_germany`.
+
+#### tr (28)
+`age_pyramid.tr.qmd:44`, `characters_strings.tr.qmd:53`, `combination_analysis.tr.qmd:77`,
+`descriptive_statistics.tr.qmd:31`, `diagrams.tr.qmd:42`, `factors.tr.qmd:46`,
+`flexdashboard.tr.qmd:46`, `ggplot_basics.tr.qmd:42`, `ggplot_tips.tr.qmd:34`,
+`grouping.tr.qmd:51`, `heatmaps.tr.qmd:59`, `interactive_plots.tr.qmd:66`,
+`iteration.tr.qmd:46`, `joining_matching.tr.qmd:48`, `missing_data.tr.qmd:43`,
+`moving_average.tr.qmd:40`, `pivoting.tr.qmd:77`, `plot_continuous.tr.qmd:89`,
+`plot_discrete.tr.qmd:61`, `regression.tr.qmd:49`, `relational_databases.tr.qmd:24`,
+`stat_tests.tr.qmd:53`, `survival_analysis.tr.qmd:74`, `tables_descriptive.tr.qmd:58`,
+`tables_presentation.tr.qmd:132` → dataset `linelist_cleaned_rds`.
+`cleaning.tr.qmd:123` → `case_linelists_linelist_raw`.
+`pivoting.tr.qmd:55` → `malaria_facility_count_data`.
+`time_series.tr.qmd:59` → `campylobacter_germany`.
+
+#### vn (28)
+`age_pyramid.vn.qmd:52`, `characters_strings.vn.qmd:54`, `combination_analysis.vn.qmd:98`,
+`descriptive_statistics.vn.qmd:31`, `diagrams.vn.qmd:43`, `factors.vn.qmd:44`,
+`flexdashboard.vn.qmd:48`, `ggplot_basics.vn.qmd:42`, `ggplot_tips.vn.qmd:37`,
+`grouping.vn.qmd:47`, `heatmaps.vn.qmd:57`, `interactive_plots.vn.qmd:67`,
+`iteration.vn.qmd:46`, `joining_matching.vn.qmd:45`, `missing_data.vn.qmd:41`,
+`moving_average.vn.qmd:36`, `pivoting.vn.qmd:71`, `plot_continuous.vn.qmd:89`,
+`plot_discrete.vn.qmd:61`, `regression.vn.qmd:47`, `relational_databases.vn.qmd:24`,
+`stat_tests.vn.qmd:54`, `survival_analysis.vn.qmd:75`, `tables_descriptive.vn.qmd:51`,
+`tables_presentation.vn.qmd:134` → dataset `linelist_cleaned_rds`.
+`cleaning.vn.qmd:134` → `case_linelists_linelist_raw`.
+`pivoting.vn.qmd:50` → `malaria_facility_count_data`.
+`time_series.vn.qmd:57` → `campylobacter_germany`.
+
+Five more sentences were hand-written (not scripted) because the surrounding HTML was
+already malformed pre-existing (broken anchor tags with stray `<`/missing `>`/missing
+`<` on the closing tag), so the automated converter couldn't match them:
+`interactive_plots.jp.qmd:67`, `interactive_plots.pt.qmd:68`, `heatmaps.ru.qmd:59`,
+`pivoting.jp.qmd:71`, `diagrams.pt.qmd:43`. Same templates, same review need.
+
+### `data_used.<lang>.qmd` — dataset reference section
+
+Separately from the sentences above, each `data_used.<lang>.qmd` page has its own
+per-dataset listing (mirroring English's `data_used.qmd` restructure in `e4130b5`).
+Every `class='download-button'` anchor and markdown-style download link pointing at an
+in-package dataset was replaced with a short fenced `eval=F` code chunk:
+```
+​```{r, eval=F}
+VARNAME <- appliedepidata::get_data(name = "AED_NAME")
+​```
+```
+20 such chunks were written per language (140 total across all 7). Surrounding
+descriptive prose (already translated, human-written) was left untouched. The
+`germany_weather` section, which had 10 near-identical per-year buttons, was collapsed
+to the one representative code chunk that survived automated conversion; English's
+final version additionally documents a `save_data()`-plus-`unzip()` alternative for
+getting the raw yearly `.nc` files, which was not added here — flag for a follow-up pass
+if the raw-files alternative is wanted in translation too.
+
+### Scope boundary — NOT touched, flagged for follow-up
+
+- **The "install `epirhandbook`, `download_book()`, `p_install_gh()`" narrative in all 7
+  `data_used.<lang>.qmd` files was left as-is.** English's `data_used.qmd` was
+  substantially rewritten in `e4130b5` (pak::pak install of appliedepidata instead of
+  the retired epirhandbook package; `list_data()`/`search_data()` browsing) but this unit's
+  scope was download-button conversion, not full-page content authoring. This is a real,
+  larger content gap — the translated intro sections describe a package/workflow
+  (`epirhandbook::download_book()`) that no longer exists. Recommend a dedicated pass
+  per language.
+- **`data_used.pt.qmd`** has a **pre-existing translation duplication**, not introduced
+  here: both the "clean linelist" bullet and the "Other related files" bullet pointed at
+  the same `linelist_cleaned.rds` URL (English has the .rds one and a separate .xlsx
+  ["clean" Excel] one). PT's translation never had the Excel-format one; both now
+  correctly call `appliedepidata::get_data(name = "linelist_cleaned_rds")`, but the
+  `linelist_cleaned_excel` dataset is not referenced anywhere in `data_used.pt.qmd`.
+  Not fabricated a fix — flag for a translator who can confirm the intended content of
+  that bullet.
+- **`ggplot_basics_old.{es,fr,pt,tr,vn}.qmd` and `data_table.jp.qmd`** are chapters
+  outside English's own `dbaa049`/`e4130b5` migration (either legacy/undeclared chapters
+  not in `_quarto.yml`, e.g. `ggplot_basics_old`, or chapters English deliberately left
+  reading `data/` directly, e.g. `data_table.qmd`). Their download buttons were **not**
+  converted to `get_data()` — only their stale URL was fixed (org/branch rename) — to
+  avoid asserting a code/data correspondence that was never verified for these chapters.
+- **`data/malaria_app/data/facility_count_data.rds`** (linked from the Shiny section of
+  `data_used.<lang>.qmd`) has no `appliedepidata` counterpart (a genuine, pre-existing
+  gap per `utils/data-map.tsv`) — its download link was kept, URL fixed, not converted.

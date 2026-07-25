@@ -32,23 +32,24 @@ pacman::p_load(
      here,        # localizador de ficheros
      purrr,       # iteración
      grates,      # scales in ggplot
-     tidyverse    # gestión y visualización de datos
+     tidyverse, # gestión y visualización de datos
+     appliedepidata # datos de ejemplo utilizados en este manual
 )
 ```
 
 
 ### Importar datos {.unnumbered}  
 
-Importamos los datos de casos de una epidemia de ébola simulada. Si quieres seguir el proceso, [clica para descargar linelist "limpio"](https://github.com/epirhandbook/Epi_R_handbook/raw/master/data/case_linelists/linelist_cleaned.rds) (como archivo .rds). Importa los datos con la función `import()` del paquete **rio** (maneja muchos tipos de archivos como .xlsx, .csv, .rds - Mira la página de [importación y exportación](#import-and-export) para más detalles).  
+Importamos los datos de casos de una epidemia de ébola simulada. Cárguelo directamente con `appliedepidata::get_data(name = "linelist_cleaned_rds")` (véase la página [Descargando el manual y los datos](data_used.es.qmd) para más detalles).    
 
 ```{r, echo=F}
 # importar el listado de casos en R
-linelist <- rio::import(here::here("data", "case_linelists", "linelist_cleaned.rds"))
+linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds")
 ```
 
 ```{r, eval=F}
 # importar el listado de casos
-linelist <- import("linelist_cleaned.rds")
+linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds")
 ```
 
 A continuación se muestran las primeras 50 filas del listado. 
@@ -435,12 +436,16 @@ Este es un enfoque que utiliza `map()`:
 En primer lugar, tenemos que extraer los nombres de las hojas y guardarlos. Proporcionamos la ruta del archivo de Excel a la función `excel_sheets()` del paquete **readxl**, que extrae los nombres de las hojas. Los almacenamos en un vector de caracteres llamado `sheet_names`. 
 
 ```{r, echo=F}
-sheet_names <- readxl::excel_sheets(here::here("data", "example", "hospital_linelists.xlsx"))
+hospital_linelists_dir <- tempfile()
+dir.create(hospital_linelists_dir)
+appliedepidata::save_data(name = "example_hospital_linelists", path = hospital_linelists_dir)
+sheet_names <- readxl::excel_sheets(fs::path(hospital_linelists_dir, "example_hospital_linelists.xlsx"))
 
 ```
 
 ```{r, eval=F}
-sheet_names <- readxl::excel_sheets("hospital_linelists.xlsx")
+appliedepidata::save_data(name = "example_hospital_linelists", path = getwd())
+sheet_names <- readxl::excel_sheets("example_hospital_linelists.xlsx")
 ```
 
 Aquí están los nombres: 
@@ -459,15 +464,21 @@ Guardamos la lista de salida como `combined`.
 
 
 ```{r, echo=F}
-combined <- sheet_names %>% 
-  purrr::set_names() %>% 
-  map(.f = ~import(here::here("data", "example", "hospital_linelists.xlsx"), which = .x))
+hospital_linelists_dir <- tempfile()
+dir.create(hospital_linelists_dir)
+appliedepidata::save_data(name = "example_hospital_linelists", path = hospital_linelists_dir)
+
+combined <- sheet_names %>%
+  purrr::set_names() %>%
+  map(.f = ~import(fs::path(hospital_linelists_dir, "example_hospital_linelists.xlsx"), which = .x))
 ```
 
 ```{r, eval=F}
-combined <- sheet_names %>% 
-  purrr::set_names() %>% 
-  map(.f = ~import("hospital_linelists.xlsx", which = .x))
+appliedepidata::save_data(name = "example_hospital_linelists", path = getwd())
+
+combined <- sheet_names %>%
+  purrr::set_names() %>%
+  map(.f = ~import("example_hospital_linelists.xlsx", which = .x))
 ```
 
 Cuando inspeccionamos la salida, vemos que los datos de cada hoja de Excel se guardan en la lista con un nombre. Esto es bueno, pero no hemos terminado. 
@@ -482,21 +493,25 @@ Por último, utilizamos la función `bind_rows()` (de **dplyr**) que acepta la l
 A continuación se muestra toda la secuencia de comandos: 
 
 ```{r, echo=F}
-sheet_names <- readxl::excel_sheets(here::here("data", "example", "hospital_linelists.xlsx"))
+hospital_linelists_dir <- tempfile()
+dir.create(hospital_linelists_dir)
+appliedepidata::save_data(name = "example_hospital_linelists", path = hospital_linelists_dir)
+sheet_names <- readxl::excel_sheets(fs::path(hospital_linelists_dir, "example_hospital_linelists.xlsx"))
 
-combined <- sheet_names %>% 
-  purrr::set_names() %>% 
-  map(.f = ~import(here::here("data", "example", "hospital_linelists.xlsx"), which = .x)) %>% 
+combined <- sheet_names %>%
+  purrr::set_names() %>%
+  map(.f = ~import(fs::path(hospital_linelists_dir, "example_hospital_linelists.xlsx"), which = .x)) %>%
   bind_rows(.id = "origin_sheet")
 ```
 
 
 ```{r, eval=F}
-sheet_names <- readxl::excel_sheets("hospital_linelists.xlsx")  # extrae los nombres de las hojas
+appliedepidata::save_data(name = "example_hospital_linelists", path = getwd())
+sheet_names <- readxl::excel_sheets("example_hospital_linelists.xlsx")  # extrae los nombres de las hojas
  
 combined <- sheet_names %>%                                     # comienza con los nombres de las hojas
   purrr::set_names() %>%                                        # establece sus nombres
-  map(.f = ~import("hospital_linelists.xlsx", which = .x)) %>%  # iterativamente, importa, guarda en una lista
+  map(.f = ~import("example_hospital_linelists.xlsx", which = .x)) %>% # iterativamente, importa, guarda en una lista
   bind_rows(.id = "origin_sheet") # combina la lista de data frames, preservando el origen en la nueva columna  
 ```
 
@@ -515,23 +530,27 @@ Las funciones `map_at()` y `map_if()` también son muy útiles para la iteració
 Utilicemos un ejemplo en el que no queremos leer la primera hoja de datos del hospital. Usamos `map_at()` en lugar de `map()`, y especificamos el argumento `.at = ` a `c(-1)` que significa *no* usar el primer elemento de .x. Alternativamente, puedes proporcionar un vector de números positivos, o nombres, a `.at = ` para especificar qué elementos usar.  
 
 ```{r, echo=F}
-sheet_names <- readxl::excel_sheets(here::here("data", "example", "hospital_linelists.xlsx"))
+hospital_linelists_dir <- tempfile()
+dir.create(hospital_linelists_dir)
+appliedepidata::save_data(name = "example_hospital_linelists", path = hospital_linelists_dir)
+sheet_names <- readxl::excel_sheets(fs::path(hospital_linelists_dir, "example_hospital_linelists.xlsx"))
 
-combined <- sheet_names %>% 
-     purrr::set_names() %>% 
+combined <- sheet_names %>%
+     purrr::set_names() %>%
      # exclude the first sheet
-     map_at(.f = ~import(here::here("data", "example", "hospital_linelists.xlsx"), which = .x),
+     map_at(.f = ~import(fs::path(hospital_linelists_dir, "example_hospital_linelists.xlsx"), which = .x),
             .at = c(-1))
 ```
 
 
 ```{r, eval=F}
-sheet_names <- readxl::excel_sheets("hospital_linelists.xlsx")
+appliedepidata::save_data(name = "example_hospital_linelists", path = getwd())
+sheet_names <- readxl::excel_sheets("example_hospital_linelists.xlsx")
 
 combined <- sheet_names %>% 
      purrr::set_names() %>% 
      # exclude the first sheet
-     map_at(.f = ~import( "hospital_linelists.xlsx", which = .x),
+     map_at(.f = ~import("example_hospital_linelists.xlsx", which = .x),
             .at = c(-1))
 ```
 

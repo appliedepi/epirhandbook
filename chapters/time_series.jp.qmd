@@ -45,7 +45,8 @@ pacman::p_load(rio,          # ファイルのインポート
                stars,        # .nc（天候データ）ファイルの読み込みのため
                units,        # 測定ユニット（天候データ）の定義のため
                yardstick,    # 適切なモデルを探すため
-               surveillance  # 異常検知のため
+               surveillance, # 異常検知のため
+               appliedepidata # 本ハンドブックで使用するサンプルデータ
                )
 ``` 
 
@@ -53,8 +54,7 @@ pacman::p_load(rio,          # ファイルのインポート
 
 本ハンドブックで使用しているすべてのデータは、[ハンドブックとデータのダウンロード](#data-used)の章の手順でダウンロードできます。 
 
-ここでは、2001年から2011年にドイツで報告されたカンピロバクター症例の週次カウントをデータセットとして例示しています。<a href='https://github.com/appliedepi/epirhandbook/raw/main/data/time_series/campylobacter_germany.xlsx' class='download-button'>
-ここをクリックすると、<span>このデータファイル（.xlsx）</span> </a> をダウンロードすることができます。
+ここでは、2001年から2011年にドイツで報告されたカンピロバクター症例の週次カウントをデータセットとして例示しています。`appliedepidata::get_data(name = "campylobacter_germany")` で直接読み込めます（詳細は[ハンドブックとデータのダウンロード](data_used.jp.qmd)のページを参照）。
 
 このデータセットは、[**surveillance**](https://cran.r-project.org/web/packages/surveillance/) パッケージで利用できるデータセットの縮小版です。
 (詳細は surbeillance package パッケージを読み込み、 `?campyDE` を参照してください)
@@ -63,12 +63,12 @@ pacman::p_load(rio,          # ファイルのインポート
 
 ```{r read_data_hide, echo=F}
 # Rにcountsをインポート
-counts <- rio::import(here::here("data", "time_series", "campylobacter_germany.xlsx"))
+counts <- appliedepidata::get_data(name = "campylobacter_germany")
 ```
 
 ```{r read_data_show, eval=F}
 # Rにcountsをインポート
-counts <- rio::import("campylobacter_germany.xlsx")
+counts <- appliedepidata::get_data(name = "campylobacter_germany")
 ```
 
 最初の10行のカウントが以下に表示されます。
@@ -167,15 +167,21 @@ for (i in 2002:2011) {
 ```{r read_climate, warning = FALSE, message = FALSE}
 
 ## 天気フォルダへのパスの定義
-file_paths <- list.files(
-  here::here("data", "time_series", "weather"), # あなた自身のファイルパスとの置き換え
-  full.names = TRUE)
+germany_weather_zip_dir <- tempfile()
+dir.create(germany_weather_zip_dir)
+appliedepidata::save_data(name = "germany_weather", path = germany_weather_zip_dir)
+germany_weather_dir <- tempfile()
+dir.create(germany_weather_dir)
+utils::unzip(fs::path(germany_weather_zip_dir, "germany_weather.zip"), exdir = germany_weather_dir)
 
+file_paths <- list.files(
+  germany_weather_dir,
+  full.names = TRUE)
 ## 現在の興味ある名前のものだけを残す 
 file_paths <- file_paths[str_detect(file_paths, "germany")]
 
 ## 全てのファイルをstartsオブジェクトとして読み込み
-data <- stars::read_stars(file_paths)
+data <- stars::read_stars(file_paths, along = "time")
 ```
 
 これらのファイルがオブジェクト `data` としてインポートされたら、データフレームに変換します。

@@ -33,22 +33,23 @@ pacman::p_load(
      here,        # ファイルの場所の指定のためのパッケージ
      purrr,       # 反復処理のためのパッケージ
      grates,      # scales in ggplot
-     tidyverse    # データ管理と視覚化のためのパッケージ
+     tidyverse, # データ管理と視覚化のためのパッケージ
+     appliedepidata # 本ハンドブックで使用するサンプルデータ
 )
 ```
 
 ### データをインポートする {.unnumbered}
 
-エボラ出血熱の流行をシミュレートしたデータセットをインポートします。お手元の環境でこの章の内容を実行したい方は、 <a href='https://github.com/appliedepi/epirhandbook/raw/main/data/case_linelists/linelist_cleaned.rds' class='download-button'>クリック</a>して「前処理された」ラインリスト（linelist）データをダウンロードしてください>（.rds 形式で取得できます）。データは *rio* パッケージの import() を利用してインポートしましょう（*rio* パッケージは、.xlsx、.csv、.rds など様々な種類のファイルを取り扱うことができます。詳細は、[インポートとエクスポート](#importing) の章をご覧ください。）
+エボラ出血熱の流行をシミュレートしたデータセットをインポートします。`appliedepidata::get_data(name = "linelist_cleaned_rds")` で直接読み込めます（詳細は[ハンドブックとデータのダウンロード](data_used.jp.qmd)のページを参照）。
 
 ```{r, echo=F}
 # ラインリストをインポートする
-linelist <- rio::import(here::here("data", "case_linelists", "linelist_cleaned.rds"))
+linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds")
 ```
 
 ```{r, eval=F}
 # ラインリストをインポートする
-linelist <- import("linelist_cleaned.rds")
+linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds")
 ```
 
 ラインリストの始めの 50 行は、以下の通りです。
@@ -413,12 +414,16 @@ knitr::include_graphics(here::here("images", "hospital_linelists_excel_sheets.pn
 まず、シート名を抽出してオブジェクトに格納する必要があります。**readxl** パッケージの `excel_sheets()` にエクセルファイルのパスを渡し、シート名を抽出します。抽出されたシート名は、`sheet_names` という文字ベクトルに格納されます。
 
 ```{r, echo=F}
-sheet_names <- readxl::excel_sheets(here::here("data", "example", "hospital_linelists.xlsx"))
+hospital_linelists_dir <- tempfile()
+dir.create(hospital_linelists_dir)
+appliedepidata::save_data(name = "example_hospital_linelists", path = hospital_linelists_dir)
+sheet_names <- readxl::excel_sheets(fs::path(hospital_linelists_dir, "example_hospital_linelists.xlsx"))
 
 ```
 
 ```{r, eval=F}
-sheet_names <- readxl::excel_sheets("hospital_linelists.xlsx")
+appliedepidata::save_data(name = "example_hospital_linelists", path = getwd())
+sheet_names <- readxl::excel_sheets("example_hospital_linelists.xlsx")
 ```
 
 各シートの名前は、以下の通りです。
@@ -436,15 +441,21 @@ sheet_names
 反復処理で作成されるリストは `combined` という名前で保存されます。
 
 ```{r, echo=F}
-combined <- sheet_names %>% 
-  purrr::set_names() %>% 
-  map(.f = ~import(here::here("data", "example", "hospital_linelists.xlsx"), which = .x))
+hospital_linelists_dir <- tempfile()
+dir.create(hospital_linelists_dir)
+appliedepidata::save_data(name = "example_hospital_linelists", path = hospital_linelists_dir)
+
+combined <- sheet_names %>%
+  purrr::set_names() %>%
+  map(.f = ~import(fs::path(hospital_linelists_dir, "example_hospital_linelists.xlsx"), which = .x))
 ```
 
 ```{r, eval=F}
-combined <- sheet_names %>% 
-  purrr::set_names() %>% 
-  map(.f = ~import("hospital_linelists.xlsx", which = .x))
+appliedepidata::save_data(name = "example_hospital_linelists", path = getwd())
+
+combined <- sheet_names %>%
+  purrr::set_names() %>%
+  map(.f = ~import("example_hospital_linelists.xlsx", which = .x))
 ```
 
 反復処理後に出力されたリストを確認すると、各 Excel シートのデータが名前付きリストに保存されていることがわかります。ここまで順調ですが、まだ完成形ではありません。
@@ -458,20 +469,24 @@ knitr::include_graphics(here::here("images", "sheets_as_list.png"))
 以下が一連のコマンドの流れです。
 
 ```{r, echo=F}
-sheet_names <- readxl::excel_sheets(here::here("data", "example", "hospital_linelists.xlsx"))
+hospital_linelists_dir <- tempfile()
+dir.create(hospital_linelists_dir)
+appliedepidata::save_data(name = "example_hospital_linelists", path = hospital_linelists_dir)
+sheet_names <- readxl::excel_sheets(fs::path(hospital_linelists_dir, "example_hospital_linelists.xlsx"))
 
-combined <- sheet_names %>% 
-  purrr::set_names() %>% 
-  map(.f = ~import(here::here("data", "example", "hospital_linelists.xlsx"), which = .x)) %>% 
+combined <- sheet_names %>%
+  purrr::set_names() %>%
+  map(.f = ~import(fs::path(hospital_linelists_dir, "example_hospital_linelists.xlsx"), which = .x)) %>%
   bind_rows(.id = "origin_sheet")
 ```
 
 ```{r, eval=F}
-sheet_names <- readxl::excel_sheets("hospital_linelists.xlsx")  # シート名を抽出する
+appliedepidata::save_data(name = "example_hospital_linelists", path = getwd())
+sheet_names <- readxl::excel_sheets("example_hospital_linelists.xlsx")  # シート名を抽出する
  
 combined <- sheet_names %>%                                     # シート名から開始
   purrr::set_names() %>%                                        # 名前を指定
-  map(.f = ~import("hospital_linelists.xlsx", which = .x)) %>%  # 反復処理を行い、インポートし、リストに保存する
+  map(.f = ~import("example_hospital_linelists.xlsx", which = .x)) %>% # 反復処理を行い、インポートし、リストに保存する
   bind_rows(.id = "origin_sheet") # データフレームのリストを結合し、新しい列に元データのシート名を保存する  
 ```
 
@@ -490,22 +505,26 @@ knitr::include_graphics(here::here("images", "sheets_as_df.png"))
 例えば、前述の各病院の症例データについて、1 枚目のシートをインポートしたくない場合を考えてみましょう。この場合、`map()` の代わりに `map_at()` を使用し、`.at =` の引数に `c(-1)` を指定します。これは、インプット `.x` の最初の要素を使用*しない*ことを意味します。また、`.at =` に正の数のベクトルや名前を指定して、使用する要素を指定することもできます。
 
 ```{r, echo=F}
-sheet_names <- readxl::excel_sheets(here::here("data", "example", "hospital_linelists.xlsx"))
+hospital_linelists_dir <- tempfile()
+dir.create(hospital_linelists_dir)
+appliedepidata::save_data(name = "example_hospital_linelists", path = hospital_linelists_dir)
+sheet_names <- readxl::excel_sheets(fs::path(hospital_linelists_dir, "example_hospital_linelists.xlsx"))
 
-combined <- sheet_names %>% 
-     purrr::set_names() %>% 
+combined <- sheet_names %>%
+     purrr::set_names() %>%
      # 1枚目のシートは除く
-     map_at(.f = ~import(here::here("data", "example", "hospital_linelists.xlsx"), which = .x),
+     map_at(.f = ~import(fs::path(hospital_linelists_dir, "example_hospital_linelists.xlsx"), which = .x),
             .at = c(-1))
 ```
 
 ```{r, eval=F}
-sheet_names <- readxl::excel_sheets("hospital_linelists.xlsx")
+appliedepidata::save_data(name = "example_hospital_linelists", path = getwd())
+sheet_names <- readxl::excel_sheets("example_hospital_linelists.xlsx")
 
 combined <- sheet_names %>% 
      purrr::set_names() %>% 
      # 1枚目のシートは除く
-     map_at(.f = ~import( "hospital_linelists.xlsx", which = .x),
+     map_at(.f = ~import("example_hospital_linelists.xlsx", which = .x),
             .at = c(-1))
 ```
 

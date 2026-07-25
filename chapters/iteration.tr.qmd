@@ -35,23 +35,24 @@ pacman::p_load(
      here,        # dosya bulucu
      purrr,       # yineleme
      grates,      # scales in ggplot
-     tidyverse    # veri yönetimi ve görselleştirme
+     tidyverse, # veri yönetimi ve görselleştirme
+     appliedepidata # bu el kitabında kullanılan örnek veriler
 )
 ```
 
 
 ### Verileri içe aktarma {.unnumbered}  
 
-Simüle edilmiş bir Ebola salgınından vakaların veri setini içe aktarıyoruz. Devam etmek isterseniz, <a href='https://github.com/appliedepi/epirhandbook_eng/raw/master/data/case_linelists/linelist_cleaned.rds' class='download-button'>“temiz” satır listesini indirmek için tıklayın</a> (.rds dosyası olarak). Verileri **rio** paketinden `import()` fonksiyonuyla içe aktarın (.xlsx, .csv, .rds gibi birçok dosya türünü işler - ayrıntılar için [İçe ve Dışa Aktarma] sayfasına bakın). 
+Simüle edilmiş bir Ebola salgınından vakaların veri setini içe aktarıyoruz. Doğrudan `appliedepidata::get_data(name = "linelist_cleaned_rds")` ile yükleyin (ayrıntılar için [El kitabı ve veri indirme](data_used.tr.qmd) sayfasına bakın).  
 
 ```{r, echo=F}
 # satır listesini içe aktar
-linelist <- rio::import(here::here("data", "case_linelists", "linelist_cleaned.rds"))
+linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds")
 ```
 
 ```{r, eval=F}
 # satır listesini içe aktar
-linelist <- import("linelist_cleaned.rds")
+linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds")
 ```
 
 Çizgi listesinin ilk 50 satırı aşağıda görüntülenir.
@@ -438,12 +439,16 @@ knitr::include_graphics(here::here("images", "hospital_linelists_excel_sheets.pn
 İlk olarak, sayfa adlarını çıkarmamız ve kaydetmemiz gerekiyor. Excel çalışma kitabının dosya yolunu, sayfa adlarını ayıklayan **readxl** paketinden `excel_sheets()` işlevine sağlıyoruz. Bunları `sheet_names` adlı bir karakter vektöründe saklarız.
 
 ```{r, echo=F}
-sheet_names <- readxl::excel_sheets(here::here("data", "example", "hospital_linelists.xlsx"))
+hospital_linelists_dir <- tempfile()
+dir.create(hospital_linelists_dir)
+appliedepidata::save_data(name = "example_hospital_linelists", path = hospital_linelists_dir)
+sheet_names <- readxl::excel_sheets(fs::path(hospital_linelists_dir, "example_hospital_linelists.xlsx"))
 
 ```
 
 ```{r, eval=F}
-sheet_names <- readxl::excel_sheets("hospital_linelists.xlsx")
+appliedepidata::save_data(name = "example_hospital_linelists", path = getwd())
+sheet_names <- readxl::excel_sheets("example_hospital_linelists.xlsx")
 ```
 
 İşte isimler:  
@@ -461,15 +466,21 @@ Not - `map()` kullandığımız için, her Excel sayfasındaki veriler bir liste
 Çıktı listesini `combined` olarak kaydediyoruz.
 
 ```{r, echo=F}
-combined <- sheet_names %>% 
-  purrr::set_names() %>% 
-  map(.f = ~import(here::here("data", "example", "hospital_linelists.xlsx"), which = .x))
+hospital_linelists_dir <- tempfile()
+dir.create(hospital_linelists_dir)
+appliedepidata::save_data(name = "example_hospital_linelists", path = hospital_linelists_dir)
+
+combined <- sheet_names %>%
+  purrr::set_names() %>%
+  map(.f = ~import(fs::path(hospital_linelists_dir, "example_hospital_linelists.xlsx"), which = .x))
 ```
 
 ```{r, eval=F}
-combined <- sheet_names %>% 
-  purrr::set_names() %>% 
-  map(.f = ~import("hospital_linelists.xlsx", which = .x))
+appliedepidata::save_data(name = "example_hospital_linelists", path = getwd())
+
+combined <- sheet_names %>%
+  purrr::set_names() %>%
+  map(.f = ~import("example_hospital_linelists.xlsx", which = .x))
 ```
 
 Çıktıyı incelediğimizde, her bir Excel sayfasındaki verilerin bir adla listeye kaydedildiğini görüyoruz. Bu iyi, ama tam olarak bitirmedik.  
@@ -484,21 +495,25 @@ Son olarak, benzer şekilde yapılandırılmış veri çerçevelerinin listesini
 Tüm komut dizisi aşağıdadır:  
 
 ```{r, echo=F}
-sheet_names <- readxl::excel_sheets(here::here("data", "example", "hospital_linelists.xlsx"))
+hospital_linelists_dir <- tempfile()
+dir.create(hospital_linelists_dir)
+appliedepidata::save_data(name = "example_hospital_linelists", path = hospital_linelists_dir)
+sheet_names <- readxl::excel_sheets(fs::path(hospital_linelists_dir, "example_hospital_linelists.xlsx"))
 
-combined <- sheet_names %>% 
-  purrr::set_names() %>% 
-  map(.f = ~import(here::here("data", "example", "hospital_linelists.xlsx"), which = .x)) %>% 
+combined <- sheet_names %>%
+  purrr::set_names() %>%
+  map(.f = ~import(fs::path(hospital_linelists_dir, "example_hospital_linelists.xlsx"), which = .x)) %>%
   bind_rows(.id = "origin_sheet")
 ```
 
 
 ```{r, eval=F}
-sheet_names <- readxl::excel_sheets("hospital_linelists.xlsx")  # extract sheet names
+appliedepidata::save_data(name = "example_hospital_linelists", path = getwd())
+sheet_names <- readxl::excel_sheets("example_hospital_linelists.xlsx")  # extract sheet names
  
 combined <- sheet_names %>%                                     # begin with sheet names
   purrr::set_names() %>%                                        # set their names
-  map(.f = ~import("hospital_linelists.xlsx", which = .x)) %>%  # iterate, import, save in list
+  map(.f = ~import("example_hospital_linelists.xlsx", which = .x)) %>%  # iterate, import, save in list
   bind_rows(.id = "origin_sheet") # combine list of data frames, preserving origin in new column  
 ```
 
@@ -517,23 +532,27 @@ Diğer varyasyonlar arasında `map_chr()`, `map_dbl()` bulunur. Bunlar iki neden
 Hastane verilerinin ilk sayfasını okumak istemediğimiz bir örnek kullanalım. `map()` yerine `map_at()` kullanırız ve `.at =` bağımsız değişkeni `c(-1)` olarak belirtiriz, bu da `.x`'in ilk öğesini *kullanılmaması* anlamına gelir. Alternatif olarak, hangi öğelerin kullanılacağını belirtmek için, `.at =` için, bir pozitif sayı veya ad vektörü sağlayabilirsiniz. 
 
 ```{r, echo=F}
-sheet_names <- readxl::excel_sheets(here::here("data", "example", "hospital_linelists.xlsx"))
+hospital_linelists_dir <- tempfile()
+dir.create(hospital_linelists_dir)
+appliedepidata::save_data(name = "example_hospital_linelists", path = hospital_linelists_dir)
+sheet_names <- readxl::excel_sheets(fs::path(hospital_linelists_dir, "example_hospital_linelists.xlsx"))
 
-combined <- sheet_names %>% 
-     purrr::set_names() %>% 
+combined <- sheet_names %>%
+     purrr::set_names() %>%
      # ilk sayfayı hariç tut
-     map_at(.f = ~import(here::here("data", "example", "hospital_linelists.xlsx"), which = .x),
+     map_at(.f = ~import(fs::path(hospital_linelists_dir, "example_hospital_linelists.xlsx"), which = .x),
             .at = c(-1))
 ```
 
 
 ```{r, eval=F}
-sheet_names <- readxl::excel_sheets("hospital_linelists.xlsx")
+appliedepidata::save_data(name = "example_hospital_linelists", path = getwd())
+sheet_names <- readxl::excel_sheets("example_hospital_linelists.xlsx")
 
 combined <- sheet_names %>% 
      purrr::set_names() %>% 
      # ilk sayfayı hariç tut
-     map_at(.f = ~import( "hospital_linelists.xlsx", which = .x),
+     map_at(.f = ~import("example_hospital_linelists.xlsx", which = .x),
             .at = c(-1))
 ```
 
