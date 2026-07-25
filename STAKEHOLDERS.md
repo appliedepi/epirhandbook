@@ -56,6 +56,32 @@ package's own accessors.
 * **Four translated cross-references were pointing at the wrong language** — a Russian page
   linked to the Turkish chapter, and so on. Fixed.
 
+### Corrections after review
+
+An adversarial review of the 2.8 work found defects that had already shipped. They are listed
+here rather than quietly fixed, because some were visible to readers.
+
+* **The seven translated "Download handbook and data" pages were malformed.** The migration
+  spliced R code blocks into the middle of sentences, so Quarto never parsed them as code and
+  readers saw literal `{r, eval=F}` inside prose. English was not affected. All seven now
+  render exactly as English does: no stray code markers, no warnings. Verified by rendering
+  each language in the 2.8 container, not by inspection.
+* **Those pages still told readers to install a retired package.** They described
+  `epirhandbook` and its `download_book()`, which 2.8 replaces with **appliedepidata**. The
+  instructions now match English. The offline-handbook subsection that depended on
+  `download_book()` is gone, as it is in English; the direct download link above it is
+  unchanged and still works.
+* **Fork pull requests do not publish previews.** The README claimed they did. A fork now
+  renders — that part is new and real — but GitHub gives a fork a read-only token, so the
+  deploy step fails and the run goes red on a contribution that is fine. Documented honestly,
+  including what a red check on a fork actually means.
+* **The image manifest is less constrained than it looked.** Only the registry prefix is
+  pinned, so a pull request can name any public image in that namespace and have it executed.
+  Recorded in the workflow. Not yet fixed.
+
+Translated prose written during the migration is machine-written and logged in
+`TRANSLATION-BACKLOG.md` by file and line. It wants a native-speaker pass.
+
 ### Still cut
 
 `gis` and `epidemic_models` remain excluded, for the reasons given under 2.6 → 2.7. Nothing
