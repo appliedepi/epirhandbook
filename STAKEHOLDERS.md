@@ -118,8 +118,20 @@ other French chapters), four page references written as bare anchors, and severa
 typographical errors.
 
 Every page was rendered in the 2.8 container to confirm it produces output with no warnings
-and no stray code markers. Remaining work, and the reasoning behind how it was found, is in
-`PLAN-translated-data-used.md`.
+and no stray code markers.
+
+**This work is now complete.** It took eight rounds of independent adversarial review, which
+found 11, 8, 6, 2, 4, 2, 1 and finally 0 defects before returning a clean verdict. Later rounds
+also caught defects that had nothing to do with this migration and had been live for a long
+time: a Quarto formatting instruction that a translator had translated, so one heading was
+numbered when its fifteen siblings were not; a Russian sentence corrupted into non-words; and
+English fragments left in translated pages.
+
+The reason it took eight rounds is worth recording. Automated checks confirmed throughout that
+the pages were well-formed and rendered cleanly — and every real defect passed those checks.
+A page can be perfectly valid and still tell the reader to do something the code does not do.
+Finding that needs someone to read the translated text against the original and ask whether it
+is true. `PLAN-translated-data-used.md` keeps the full record.
 
 ### Still cut
 
