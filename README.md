@@ -118,13 +118,15 @@ the already-built `staging` artifact to `production`. Nothing is rebuilt at rele
 time. What goes live is exactly what was already reviewed on staging — not a fresh
 render that might behave differently.
 
-**Fork previews work, because the images are public.** GitHub deliberately withholds
-repository secrets from a pull request opened from a fork. That used to stop a fork's
-preview dead, because the build needed a token to pull private images. Since 2.8 the
-images are public, so the GHCR login is skipped when no token is present and the
-render proceeds. The token is still used when it *is* available, and it is still never
-handed to a workflow running fork-controlled code — that is how CI credentials get
-stolen.
+**Fork previews work, because the build needs no credentials at all.** GitHub deliberately
+withholds repository secrets from a pull request opened from a fork. That used to stop a
+fork's preview dead: the 2.7 images were private, so the build had to log in to pull them.
+The 2.8 images are public, so the workflow authenticates to nothing — it takes no secrets,
+and every image pull is anonymous. There is nothing for GitHub to withhold.
+
+That also removes a whole class of failure: a registry or DNS hiccup during login can no
+longer kill a 25-minute render. If an image is ever made private again, the pull fails
+naming the image it wanted, which is where you want to find out.
 
 ### Setting up to contribute
 

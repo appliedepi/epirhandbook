@@ -8,16 +8,11 @@ on:
       branch:
         required: true
         type: string
-    secrets:
-      GHCR_READ_TOKEN:
-        # Declaring the secret only wires it through from the caller (via
-        # `secrets: inherit`, see preview.yml/staging.yml) -- GitHub cannot
-        # statically check that the underlying repository secret has a value.
-        #
-        # NOT required: the 2.8 images are public, so a build with no token
-        # pulls anonymously. This is what lets a FORK pull request render at
-        # all, since GitHub withholds secrets from forks. See the login step.
-        required: false
+# This workflow takes NO secrets. Every image it pulls is public, so it
+# authenticates to nothing. That is why a fork pull request can render: GitHub
+# withholds repository secrets from forks, and there is nothing here to
+# withhold. Callers still say `secrets: inherit`, which is a no-op now and
+# harmless.
 
 # One deployment per target branch at a time, newest wins. Without this, a
 # slow build of an older commit can finish after a faster build of a newer one
@@ -125,38 +120,19 @@ jobs:
       - name: Install PyYAML
         run: pip install --quiet pyyaml
 
-      # The 2.8 images at ghcr.io/appliedepi/aedockerpublic are PUBLIC, so the
-      # pull below needs no credential and this login is now optional. It used
-      # to be fatal when the secret was missing, because the 2.7 per-chapter
-      # images were private.
+      # There is NO GHCR login. Every image docker-images.yml names -- the six
+      # 2.8 group images and epirhandbook-common -- is public, so every pull in
+      # this workflow is anonymous. The login step this replaces existed only
+      # because the 2.7 per-chapter images were private.
       #
-      # Skipping instead of failing is what makes FORK previews work. GitHub
-      # withholds repository secrets from a pull request opened from a fork, so
-      # a fork build reaches this step with GHCR_READ_TOKEN empty; failing here
-      # stopped those previews dead. Anonymous pulls now carry them through.
+      # Two things follow. FORK pull requests render: GitHub withholds secrets
+      # from a fork, and nothing here wants one. And a registry hiccup during
+      # authentication can no longer kill a render -- a transient runner DNS
+      # failure took out a 25-minute leg that way (run 30141571465).
       #
-      # The step is kept rather than deleted: it still authenticates when a
-      # token IS present, which keeps working if any image is ever made private
-      # again. It must never be made fatal again without first checking that
-      # every image docker-images.yml names is public.
-      - name: Log in to GHCR (optional -- images are public)
-        env:
-          GHCR_READ_TOKEN: ${{ secrets.GHCR_READ_TOKEN }}
-        run: |
-          if [ -z "$GHCR_READ_TOKEN" ]; then
-            echo "No GHCR_READ_TOKEN (expected for a fork pull request). Pulling anonymously; the images are public."
-            exit 0
-          fi
-          # A failed login must not fail the job. The images are public, so the
-          # pull works without this; logging in only raises the pull rate limit.
-          # Without the guard a transient runner DNS failure kills a 25-minute
-          # render leg for no reason -- which is exactly what happened to the
-          # French leg of run 30141571465:
-          #   dial tcp: lookup ghcr.io on 127.0.0.53:53: i/o timeout
-          # If a pull genuinely cannot proceed, it fails at the pull, naming the
-          # image -- a far more useful place to fail than here.
-          echo "$GHCR_READ_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin \
-            || echo "::warning::docker login to ghcr.io failed (see error above); continuing anonymously, the images are public"
+      # If an image is ever made private again, the pull fails naming the image
+      # it wanted, which is where you want to find out. Do not reintroduce a
+      # login without first checking every image in docker-images.yml.
 
       - name: Read registry prefix from docker-images.yml
         id: registry
@@ -264,26 +240,8 @@ jobs:
             fi
           done
 
-      # Same secret, same optional contract as the render job above: the images
-      # are public, so a missing token is not fatal here either.
-      - name: Log in to GHCR (optional -- images are public)
-        env:
-          GHCR_READ_TOKEN: ${{ secrets.GHCR_READ_TOKEN }}
-        run: |
-          if [ -z "$GHCR_READ_TOKEN" ]; then
-            echo "No GHCR_READ_TOKEN (expected for a fork pull request). Pulling anonymously; the images are public."
-            exit 0
-          fi
-          # A failed login must not fail the job. The images are public, so the
-          # pull works without this; logging in only raises the pull rate limit.
-          # Without the guard a transient runner DNS failure kills a 25-minute
-          # render leg for no reason -- which is exactly what happened to the
-          # French leg of run 30141571465:
-          #   dial tcp: lookup ghcr.io on 127.0.0.53:53: i/o timeout
-          # If a pull genuinely cannot proceed, it fails at the pull, naming the
-          # image -- a far more useful place to fail than here.
-          echo "$GHCR_READ_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin \
-            || echo "::warning::docker login to ghcr.io failed (see error above); continuing anonymously, the images are public"
+      # No GHCR login here either -- see the render job above. The image this
+      # job pulls is public, so the pull is anonymous.
 
       - name: Set up Python
         uses: actions/setup-python@v5
