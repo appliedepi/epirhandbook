@@ -1,6 +1,19 @@
 # Plan: finish aligning the translated "Download handbook and data" pages
 
-**Status: open. Structurally sound, semantically wrong.**
+**Status: COMPLETE.** Closed 2026-07-25 on a clean verdict from an independent adversarial
+review, after eight review rounds. All seven translated pages now match the English reference in
+structure and in what they claim. The record below is kept because the *method* is the reusable
+part, not the fix.
+
+**What it took, and the lesson.** Eight review passes found 11, 8, 6, 2, 4, 2, 1 and 0 defects.
+The first three rounds were largely damage from my own scripted edits — deleted content, mangled
+comments, prose I had reported fixed and had not. The last four were pre-existing translation
+defects the review surfaced while checking the work: a translated Quarto class, corrupted words,
+untranslated fragments older than this migration.
+
+**Not one of them was visible to a structural check.** Fence balance, indentation, parse success
+and a clean render all passed throughout. Every real defect was found by reading the translated
+prose against its English counterpart and asking whether it was true.
 
 `chapters/data_used.qmd` (English) was rewritten for the 2.8 **appliedepidata** migration.
 `chapters/data_used.{es,fr,jp,pt,ru,tr,vn}.qmd` were migrated by script over three passes. They now
