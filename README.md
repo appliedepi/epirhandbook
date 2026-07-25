@@ -118,15 +118,24 @@ the already-built `staging` artifact to `production`. Nothing is rebuilt at rele
 time. What goes live is exactly what was already reviewed on staging — not a fresh
 render that might behave differently.
 
-**Fork previews work, because the build needs no credentials at all.** GitHub deliberately
-withholds repository secrets from a pull request opened from a fork. That used to stop a
-fork's preview dead: the 2.7 images were private, so the build had to log in to pull them.
-The 2.8 images are public, so the workflow authenticates to nothing — it takes no secrets,
-and every image pull is anonymous. There is nothing for GitHub to withhold.
+**A fork pull request now renders, but still cannot publish a preview.** Be clear about which
+half of that changed.
 
-That also removes a whole class of failure: a registry or DNS hiccup during login can no
-longer kill a 25-minute render. If an image is ever made private again, the pull fails
-naming the image it wanted, which is where you want to find out.
+The 2.8 images are public, so the build authenticates to nothing and every image pull is
+anonymous. A fork PR therefore gets all the way through the render, where it previously died
+at a login step it could never pass. That is genuinely useful: it proves the contributor's
+chapters build.
+
+It stops at the deploy. `assemble-deploy` force-pushes the `preview` branch, and GitHub gives
+a pull request opened from a fork a **read-only** `GITHUB_TOKEN` no matter what `permissions:`
+the workflow asks for. So the push fails and the run goes red, even though nothing is wrong
+with the contribution. **A red check on a fork PR does not mean the change is broken** — look
+at whether the render jobs passed. Publishing a preview for a fork needs a different design
+(a `pull_request_target` deploy, or an upload-artifact-and-comment flow); we have not built it.
+
+Removing the login did remove a whole class of failure: a registry or DNS hiccup during
+authentication can no longer kill a 25-minute render. If an image is ever made private again,
+the pull fails naming the image it wanted, which is where you want to find out.
 
 ### Setting up to contribute
 
