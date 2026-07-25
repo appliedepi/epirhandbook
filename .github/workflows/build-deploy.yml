@@ -147,7 +147,16 @@ jobs:
             echo "No GHCR_READ_TOKEN (expected for a fork pull request). Pulling anonymously; the images are public."
             exit 0
           fi
-          echo "$GHCR_READ_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          # A failed login must not fail the job. The images are public, so the
+          # pull works without this; logging in only raises the pull rate limit.
+          # Without the guard a transient runner DNS failure kills a 25-minute
+          # render leg for no reason -- which is exactly what happened to the
+          # French leg of run 30141571465:
+          #   dial tcp: lookup ghcr.io on 127.0.0.53:53: i/o timeout
+          # If a pull genuinely cannot proceed, it fails at the pull, naming the
+          # image -- a far more useful place to fail than here.
+          echo "$GHCR_READ_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin \
+            || echo "::warning::docker login to ghcr.io failed (see error above); continuing anonymously, the images are public"
 
       - name: Read registry prefix from docker-images.yml
         id: registry
@@ -265,7 +274,16 @@ jobs:
             echo "No GHCR_READ_TOKEN (expected for a fork pull request). Pulling anonymously; the images are public."
             exit 0
           fi
-          echo "$GHCR_READ_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          # A failed login must not fail the job. The images are public, so the
+          # pull works without this; logging in only raises the pull rate limit.
+          # Without the guard a transient runner DNS failure kills a 25-minute
+          # render leg for no reason -- which is exactly what happened to the
+          # French leg of run 30141571465:
+          #   dial tcp: lookup ghcr.io on 127.0.0.53:53: i/o timeout
+          # If a pull genuinely cannot proceed, it fails at the pull, naming the
+          # image -- a far more useful place to fail than here.
+          echo "$GHCR_READ_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin \
+            || echo "::warning::docker login to ghcr.io failed (see error above); continuing anonymously, the images are public"
 
       - name: Set up Python
         uses: actions/setup-python@v5
