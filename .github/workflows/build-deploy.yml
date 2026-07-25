@@ -106,6 +106,9 @@ jobs:
     # went wrong. Only assemble-deploy gets contents: write.
     permissions:
       contents: read
+      # pulling the render images from GHCR; harmless while they are public,
+      # correct if any is ever made private
+      packages: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -120,10 +123,30 @@ jobs:
       - name: Install PyYAML
         run: pip install --quiet pyyaml
 
-      # There is NO GHCR login. Every image docker-images.yml names -- the six
-      # 2.8 group images and epirhandbook-common -- is public, so every pull in
-      # this workflow is anonymous. The login step this replaces existed only
-      # because the 2.7 per-chapter images were private.
+      # Authenticate to GHCR with the run's own GITHUB_TOKEN -- NOT a personal
+      # access token. This repository stored a contributor's PAT as
+      # GHCR_READ_TOKEN when the 2.7 images were private; nothing needs it now.
+      # GITHUB_TOKEN is minted per run, owned by the repository rather than a
+      # person, and expires when the run ends. aedockerpublic already uses it
+      # the same way to PUSH these images.
+      #
+      # The images are PUBLIC, so this login is not required for the pull to
+      # work -- it raises the anonymous pull rate limit, which matters because
+      # nine language legs pull concurrently on cold runners. It must therefore
+      # never be fatal: on a fork, or a registry hiccup, the build continues
+      # and pulls anonymously.
+      #
+      # Unlike a stored secret, GITHUB_TOKEN exists on FORK pull requests too
+      # (read-only), so forks get authenticated pulls rather than being handed
+      # nothing.
+      - name: Log in to GHCR (optional -- images are public)
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | docker login ghcr.io -u "${{ github.actor }}" --password-stdin \
+            || echo "::warning::GHCR login failed; continuing with anonymous pulls (the images are public)"
+
+      # The login step this replaces existed only because the 2.7 per-chapter
+      # images were private and needed a credential GitHub withholds from forks.
       #
       # Two things follow. A fork pull request now RENDERS -- GitHub withholds
       # secrets from a fork and nothing here wants one -- though it still cannot
@@ -220,6 +243,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      packages: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -250,8 +274,13 @@ jobs:
             fi
           done
 
-      # No GHCR login here either -- see the render job above. The image this
-      # job pulls is public, so the pull is anonymous.
+      # Same GITHUB_TOKEN login as the render job, and non-fatal for the same
+      # reason: the image is public, so this only buys rate-limit headroom.
+      - name: Log in to GHCR (optional -- images are public)
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | docker login ghcr.io -u "${{ github.actor }}" --password-stdin \
+            || echo "::warning::GHCR login failed; continuing with anonymous pulls (the images are public)"
 
       - name: Set up Python
         uses: actions/setup-python@v5
