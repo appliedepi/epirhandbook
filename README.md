@@ -26,10 +26,10 @@ We are applied epis from around the world, writing in our spare time to offer th
 
 
 > **Upgrading from an earlier version?**
-> [STAKEHOLDERS.md](STAKEHOLDERS.md) explains what changed for readers and authors in
+> [STAKEHOLDERS.md](modernization/STAKEHOLDERS.md) explains what changed for readers and authors in
 > 2.7 — which chapters were edited, what readers will notice, and the decisions behind two chapters
 > that are no longer included. Translators should also read
-> [TRANSLATION-BACKLOG.md](TRANSLATION-BACKLOG.md).
+> [TRANSLATION-BACKLOG.md](modernization/TRANSLATION-BACKLOG.md).
 
 ## How to use this handbook  
 
@@ -267,7 +267,7 @@ renders. One further link, to `epidemic_models`, behaves the same way.
 site, and excluding the chapter does not change that. A same-page anchor never
 reaches another page, so restoring `gis` will not fix them either. They are
 ordinary content bugs and belong with the other prose fixes in
-[TRANSLATION-BACKLOG.md](TRANSLATION-BACKLOG.md) — the production render carries
+[TRANSLATION-BACKLOG.md](modernization/TRANSLATION-BACKLOG.md) — the production render carries
 106 dead fragments in total, of which these are the largest single group.
 
 **What it would take to bring each back:**
