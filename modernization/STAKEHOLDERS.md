@@ -111,7 +111,7 @@ no stray code markers.
 throughout that the pages were well-formed and rendered cleanly — and every real defect passed
 those checks. A page can be perfectly valid and still tell the reader to do something the code
 does not do. Finding that needs someone to read the translated text against the original and ask
-whether it is true. `PLAN-translated-data-used.md` keeps the full record; open translation work is
+whether it is true. `archive/PLAN-translated-data-used.md` keeps the full record; open translation work is
 in `TRANSLATION-BACKLOG.md`.
 
 ### Still cut

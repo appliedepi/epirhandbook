@@ -310,7 +310,7 @@ and in what they claim.
 
 This entry is kept only to stop anyone reopening it. Details are in
 [STAKEHOLDERS.md](STAKEHOLDERS.md) under "2.7 → 2.8", and the method in
-`PLAN-translated-data-used.md`. Nothing in these seven files is outstanding.
+`archive/PLAN-translated-data-used.md`. Nothing in these seven files is outstanding.
 
 ### Still open elsewhere, outside `data_used`
 

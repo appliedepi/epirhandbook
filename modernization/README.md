@@ -34,7 +34,7 @@ Read `modernization/RESUME.md` section 8 before you use any finding.
 
 ## What to do first in the next session
 
-1. Read `modernization/PLAN.md`.
+1. Read `modernization/SWEEP-PLAN.md`.
 2. Re-approve the plan with the owner.
 3. Start at Phase A, the deterministic segmenter.
 
@@ -56,7 +56,7 @@ Both runs used an identical prompt. The 4 pairs were `basics.tr`, `basics.jp`,
 
 **The decision is Opus.** Sonnet medium cost more per pair and reported fewer findings.
 Sonnet medium also missed all three severe Turkish defects that Opus found in `basics.tr`.
-`PLAN.md` names those three defects, under "The sweep is finding severe defects".
+`SWEEP-PLAN.md` names those three defects, under "The sweep is finding severe defects".
 
 Sonnet medium wrote `data_table.json` instead of `data_table.ru.json`.
 Across 7 languages that filename overwrites 6 of the 7 output files.
@@ -84,11 +84,11 @@ The resumed run MUST count the JSON files on disk, not the return values.
 | Entry | What it holds |
 |---|---|
 | `README.md` | This index. |
-| `PLAN.md` | The approved plan, version 3. A faithful copy, see "Provenance" below. |
+| `SWEEP-PLAN.md` | The approved plan, version 3. A faithful copy, see "Provenance" below. |
 | `RESUME.md` | How to resume the prose sweep, and what the 493 findings do not tell you. |
 | `STAKEHOLDERS.md` | Release notes for readers, authors, translators and contributors. |
 | `TRANSLATION-BACKLOG.md` | Open translation work only, with a search token per item. |
-| `PLAN-translated-data-used.md` | The method record for the `data_used` page alignment. |
+| `archive/PLAN-translated-data-used.md` | The method record for the `data_used` page alignment. |
 | `findings/language-prose-drift.tsv` | 493 rows. One row is one finding. |
 | `findings/language-prose-coverage.tsv` | 5561 rows. One row is one segment pairing. |
 | `findings/prose-sweep/` | 98 JSON files. One file is one completed chapter-language pair. |
@@ -129,19 +129,19 @@ The resumed run MUST count the JSON files on disk, not the return values.
 
 ## Provenance
 
-`PLAN.md` is a byte-faithful copy of `/home/raw996/.claude/plans/noble-mixing-matsumoto.md`.
+`SWEEP-PLAN.md` is a byte-faithful copy of `/home/raw996/.claude/plans/noble-mixing-matsumoto.md`.
 It was copied without edits, so a reader can diff it against that source.
-Four distinct paths in `PLAN.md` still name the locations the artifacts held before this move.
+Four distinct paths in `SWEEP-PLAN.md` still name the locations the artifacts held before this move.
 This table maps each one:
 
-| Path named in `PLAN.md` | Current path |
+| Path named in `SWEEP-PLAN.md` | Current path |
 |---|---|
 | `utils/language-prose-drift.tsv` | `modernization/findings/language-prose-drift.tsv` |
 | `utils/language-prose-coverage.tsv` | `modernization/findings/language-prose-coverage.tsv` |
 | `utils/prose-sweep/` | `modernization/findings/prose-sweep/` |
 | `utils/PROSE-SWEEP-RESUME.md` | `modernization/RESUME.md` |
 
-`PLAN.md` also names `utils/check-language-consistency.R`. That path is still correct.
+`SWEEP-PLAN.md` also names `utils/check-language-consistency.R`. That path is still correct.
 
 Every file under `briefs/` and every file under `reviews/` is a byte-faithful copy.
 Each one records a past dispatch, so none of them was edited for this move.
@@ -156,7 +156,7 @@ because `RESUME.md` section 4 is a set of instructions that a reader runs.
 ## Known broken links inside the moved documents
 
 `TRANSLATION-BACKLOG.md` lines 185 to 191 link to 7 `data_used.<lang>.qmd` files.
-`PLAN-translated-data-used.md` line 160 links to `importing.qmd`.
+`archive/PLAN-translated-data-used.md` line 160 links to `importing.qmd`.
 All 8 links were broken before this move, because those 8 chapters live under `chapters/`.
 The move did not create them, and this unit did not fix them.
 Fix them with the other prose defects, in a phase that is allowed to edit content.
