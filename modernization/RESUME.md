@@ -4,84 +4,87 @@
 
 The prose sweep reads every translated chapter of the handbook against its English source.
 It records each place where the translation says something the English does not say.
-The sweep is **154 of 336 chapter-language pairs complete**.
-The other **182 pairs were never read**.
-Nothing is half-read. Every one of the 22 complete chapters has all 7 languages.
-Every one of the 26 remaining chapters has none.
+The sweep is **182 of 336 chapter-language pairs complete**.
+The other **154 pairs were never read**.
+Nothing is half-read. Every one of the 26 complete chapters has all 7 languages.
+Every one of the 22 remaining chapters has none.
 
 The corpus is 48 declared chapters in 7 languages: `es`, `fr`, `jp`, `pt`, `ru`, `tr`, `vn`.
 48 chapters times 7 languages is 336 pairs.
 
-Two runs produced the 154 pairs. A session quota limit stopped the first run on 2026-08-09
-at 98 pairs. That run did not stop by design. The second run on 2026-08-19 added 56 pairs in
-three planned batches, and it stopped with quota still remaining.
+Two runs produced the 182 pairs. A session quota limit stopped the first run on 2026-08-09
+at 98 pairs. That run did not stop by design. The second run on 2026-08-19 added 84 pairs in
+four planned batches, and it stopped at an owner-set quota ceiling with the record committed.
 
 ## 2. Chapters
 
 | State | Chapters | Pairs |
 |---|---|---|
-| Complete, all 7 languages read | 22 | 154 |
-| Remaining, 0 languages read | 26 | 182 |
+| Complete, all 7 languages read | 26 | 182 |
+| Remaining, 0 languages read | 22 | 154 |
 | Partial | 0 | 0 |
 
-**Complete (22).** Every one has 7 of 7 languages on disk.
+**Complete (26).** Every one has 7 of 7 languages on disk.
 
 ```
 age_pyramid  basics  characters_strings  cleaning  collaboration
 combination_analysis  contact_tracing  data_table  data_used  dates
 deduplication  diagrams  directories  editorial_style  epicurves
-errors  ggplot_basics  ggplot_tips  r_projects  shiny_basics
+errors  ggplot_basics  ggplot_tips  help  network_drives
+packages_suggested  r_projects  reportfactory  shiny_basics
 tables_descriptive  time_series
 ```
 
-**Remaining (26).** Not one language of these was read.
+**Remaining (22).** Not one language of these was read.
 
 ```
-factors  flexdashboard  grouping  heatmaps  help  importing
+factors  flexdashboard  grouping  heatmaps  importing
 interactive_plots  iteration  joining_matching  missing_data
-moving_average  network_drives  packages_suggested  phylogenetic_trees
-pivoting  regression  reportfactory  rmarkdown  standardization
-stat_tests  survey_analysis  survival_analysis  tables_presentation
-transition_to_r  transmission_chains  writing_functions
+moving_average  phylogenetic_trees  pivoting  regression  rmarkdown
+standardization  stat_tests  survey_analysis  survival_analysis
+tables_presentation  transition_to_r  transmission_chains
+writing_functions
 ```
 
 ## 3. What the findings say so far
 
 **Read the base before you read any number in this section.**
-Every count below is over the 154 pairs in the 22 complete chapters.
+Every count below is over the 182 pairs in the 26 complete chapters.
 No count below is over the 336-pair corpus, and none is over the 48 declared chapters.
 
-Total: **798 findings over 154 pairs in 22 chapters**. Mean 5.18 findings per pair.
+Total: **873 findings over 182 pairs in 26 chapters**. Mean 4.80 findings per pair.
 
-By kind, over those same 154 pairs:
+By kind, over those same 182 pairs:
 
 | Kind | Findings | Meaning |
 |---|---|---|
-| untrue | 344 | The translation asserts something the English does not assert. |
-| missing | 232 | The English asserts something the translation drops. |
-| code_mismatch | 115 | The prose describes an output that the chunk beside it does not produce. |
-| added | 94 | The translation adds a claim with no English source. |
-| alignment_mismatch | 13 | The segments pair up, but the pairing is wrong. |
+| untrue | 379 | The translation asserts something the English does not assert. |
+| missing | 254 | The English asserts something the translation drops. |
+| code_mismatch | 120 | The prose describes an output that the chunk beside it does not produce. |
+| added | 106 | The translation adds a claim with no English source. |
+| alignment_mismatch | 14 | The segments pair up, but the pairing is wrong. |
 
-By language, over those same 154 pairs. Each language contributed 22 pairs, one per complete
+By language, over those same 182 pairs. Each language contributed 26 pairs, one per complete
 chapter, so these 7 counts are comparable to each other:
 
 | Language | Findings |
 |---|---|
-| tr | 190 |
-| jp | 125 |
-| fr | 116 |
-| pt | 108 |
-| es | 92 |
-| vn | 90 |
-| ru | 77 |
+| tr | 199 |
+| jp | 141 |
+| fr | 125 |
+| pt | 121 |
+| vn | 102 |
+| es | 98 |
+| ru | 87 |
 
-Turkish led the count at 98 pairs and it still leads at 154 pairs.
+Turkish led the count at 98 pairs and it still leads at 182 pairs.
+Russian has held the lowest count throughout.
 
-148 of the 154 pairs carry at least one finding. Six pairs carry none:
+172 of the 182 pairs carry at least one finding. Ten pairs carry none:
 `combination_analysis.es`, `data_table.ru`, `directories.ru`, `errors.ru`,
-`r_projects.fr` and `r_projects.ru`.
-Those six pairs are read, and they are covered in `modernization/findings/language-prose-coverage.tsv`.
+`network_drives.ru`, `packages_suggested.es`, `packages_suggested.tr`,
+`r_projects.fr`, `r_projects.ru` and `reportfactory.tr`.
+Those ten pairs are read, and they are covered in `modernization/findings/language-prose-coverage.tsv`.
 A pair absent from `modernization/findings/language-prose-drift.tsv` is therefore not proof of a pair that
 nobody read. Use the coverage file to decide what was read.
 
@@ -104,9 +107,9 @@ Do these three things before you start a batch.
 3. Confirm that `/tmp/gate/prose/` exists and is writable. The agents write there.
    `/tmp` does not survive a reboot, so this directory is usually empty.
 
-The batch is a hard slice, which `RESUME.md` earlier called shape B. It cannot overshoot,
-because the pair count is fixed before dispatch. The three 2026-08-19 batches used it and none
-was killed.
+The batch is a hard slice, which this record earlier called shape B. It cannot overshoot,
+because the pair count is fixed before dispatch. The four 2026-08-19 batches used it, all four
+returned every pair, and none was killed.
 
 **Every batch MUST end with a disk reconciliation.** Run this, and report its count:
 
@@ -125,10 +128,11 @@ because a large fixed overhead sits under every agent.
 
 | English chapter, mean size | Measured tokens per pair | Batch |
 |---|---|---|
-| 5,418 bytes | 52,020 | 2026-08-19 wave 1, `r_projects` and `errors` |
+| 5,418 bytes | 52,020 | 2026-08-19 wave 1, 2 chapters |
+| 8,644 bytes | 55,885 | 2026-08-19 wave 4, 4 chapters |
 | 9,599 bytes | 54,820 | 2026-08-09, `directories` and `editorial_style` |
-| 56,607 bytes | 115,244 | 2026-08-19 wave 3, four chapters |
-| 66,580 bytes | 120,616 | 2026-08-19 wave 2, `epicurves` and `shiny_basics` |
+| 56,607 bytes | 115,244 | 2026-08-19 wave 3, 4 chapters |
+| 66,580 bytes | 120,616 | 2026-08-19 wave 2, 2 chapters |
 
 Fit a line to the wave 1 and wave 2 points and you get this model:
 
@@ -136,18 +140,21 @@ Fit a line to the wave 1 and wave 2 points and you get this model:
 tokens_per_pair  ~=  45,900  +  1,121 * (English chapter size in KB)
 ```
 
-The model was fitted on two points and tested against the other two.
-It predicts the 9,599-byte run at 56,700 against a measured 54,820, an error of 3.4%.
-It predicts wave 3 at 3.14M against a measured 3.23M, an error of 2.7%.
+The model was fitted on two points and tested against three others. It predicts the
+9,599-byte run within 3.4%, wave 3 within 2.7%, and wave 4 within 0.5%.
 
 **Do not use a flat per-pair rate.** Two earlier estimates did, and both were low.
 The 13M figure in the 2026-08-09 record and a later 11.7M figure both extrapolated a
 small-chapter rate across the whole corpus.
 
-The 26 remaining chapters hold 675,256 bytes of English source.
-The model puts them at **13.7M tokens**, for 182 pairs.
+The 22 remaining chapters hold 640,680 bytes of English source.
+The model puts them at **12.1M tokens**, for 154 pairs.
 
 To size one batch, sum `45,900 + 1,121 * KB` over its chapters and multiply by 7.
+
+**Findings per token does not favour either end.** The four waves returned 45, 60, 53 and 48
+findings per million tokens. Order a batch by whichever you need: cheap chapters complete more
+chapters per token, large chapters cover more of the corpus.
 
 ## 6. Two defects in the original run
 
@@ -171,7 +178,7 @@ script. The orchestrator runs it. The script logs a reminder and labels its own 
 
 ## 7. Where the data is
 
-`modernization/findings/prose-sweep/` holds the durable copy: 154 JSON files, one per chapter-language pair,
+`modernization/findings/prose-sweep/` holds the durable copy: 182 JSON files, one per chapter-language pair,
 named `<chapter>.<lang>.json`. Each file holds `chapter`, `lang`, `coverage` and `findings`.
 These files are byte-identical to the originals.
 
@@ -179,12 +186,12 @@ These files are byte-identical to the originals.
 Treat `/tmp/gate/prose/` as scratch space, and `modernization/findings/prose-sweep/` as the record.
 
 Two derived tables sit beside the JSON copies. Both are tab-separated with a header row.
-Both were built from the 154 JSON files and from nothing else.
+Both were built from the 182 JSON files and from nothing else.
 
 | File | Rows | One row is |
 |---|---|---|
-| `modernization/findings/language-prose-drift.tsv` | 798 | one finding |
-| `modernization/findings/language-prose-coverage.tsv` | 8552 | one segment pairing |
+| `modernization/findings/language-prose-drift.tsv` | 873 | one finding |
+| `modernization/findings/language-prose-coverage.tsv` | 8970 | one segment pairing |
 
 `modernization/findings/language-prose-drift.tsv` columns:
 `chapter`, `lang`, `heading`, `segment_index`, `kind`, `en_span`, `tr_span`, `proposition`,
@@ -205,29 +212,29 @@ Three notes on the TSV encoding:
 1. A JSON `null` is written as the literal `NA`, which R reads as a missing value.
    `en_segment_id` is `NA` on 27 rows. `tr_segment_id` is `NA` on 9 rows.
 2. `reviewed` is written as `TRUE` or `FALSE`, which R reads as a logical column.
-   It is `TRUE` on all 8552 coverage rows.
-3. No field needed whitespace cleaning. No value in the 154 source files contained a tab,
+   It is `TRUE` on all 8970 coverage rows.
+3. No field needed whitespace cleaning. No value in the 182 source files contained a tab,
    a newline or a carriage return. The rebuild checks this and reports the count.
 
 **Rebuild both TSVs from the JSON files after every batch.** Do not append to them.
 The rebuild is verified: restricted to the original 98 pairs it reproduces the earlier
 493 drift rows and 5561 coverage rows exactly, compared as sets.
 
-**Neither TSV holds a row for any of the 182 unread pairs.**
+**Neither TSV holds a row for any of the 154 unread pairs.**
 That absence is deliberate, and it is the record.
 Do not add a placeholder row for an unread pair. A placeholder would later read as
 "somebody read this pair and found nothing", which is false.
 
 ## 8. What this record does NOT tell you
 
-**No verification pass ran. Not one of the 798 findings is verified.**
+**No verification pass ran. Not one of the 873 findings is verified.**
 
 Each finding is one agent's unverified claim about one segment pair. The agent read the
 English chapter and the translated chapter, and it wrote what it believed it saw.
 Nothing checked that belief.
 
 The plan requires two blind verifiers per finding before a finding is eligible for a fix.
-That step ran for 0 of the 798 findings.
+That step ran for 0 of the 873 findings.
 
 Three consequences follow.
 

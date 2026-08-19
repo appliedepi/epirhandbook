@@ -30,7 +30,11 @@ const LANGS = ['es', 'fr', 'jp', 'pt', 'ru', 'tr', 'vn']
 // model: tokens_per_pair ~= 45,900 + 1,121 * (English chapter KB). It predicts
 // the older 9.6 KB 5-pair run at 56,700 against a measured 54,820.
 // Wave 3 takes the next four largest, working down the size order.
-const STEMS = ['time_series', 'ggplot_basics', 'ggplot_tips', 'tables_descriptive']
+// Wave 3 read the next four largest: 28 pairs, 171 findings, 3,226,830 tokens,
+// 115,244 per pair. The cost model predicted 3.14M against that 3.23M, a 2.7% error.
+// Wave 4 takes the four CHEAPEST remaining chapters, because the window is nearly
+// spent and cheap-first completes twice the chapters per token.
+const STEMS = ['help', 'packages_suggested', 'network_drives', 'reportfactory']
 
 const SUMMARY = {
   type: 'object',
