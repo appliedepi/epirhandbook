@@ -3,40 +3,42 @@
 This folder holds the durable record of the epiRhandbook cross-language modernization work.
 The session that produced the work wrote its scratch files to `/tmp`, and `/tmp` is not preserved.
 
-## State on 2026-08-09
+## State on 2026-08-19
 
 | Phase | State |
 |---|---|
 | Phase 1a, the language checker | COMPLETE. Codex returned ALLOW at round 4. |
-| Phase 1b, the prose sweep | PARTIAL. 98 of 336 chapter-language pairs read. |
-| Phase A, the deterministic segmenter | NOT STARTED. This is the next phase. |
-| Phase B, the cost measurement | NOT STARTED. |
-| Phase C, the remaining 238 pairs | NOT STARTED, and deferred. |
+| Phase 1b, the prose sweep | PARTIAL. 154 of 336 chapter-language pairs read. |
+| Phase A, the deterministic segmenter | NOT STARTED. |
+| Phase B, the cost measurement | COMPLETE. A cost model replaced the flat per-pair rate. |
+| Phase C, the remaining 182 pairs | NOT STARTED. |
 | Phase D, verification of the findings | NOT STARTED. |
 
 The corpus is 48 declared chapters in 7 languages, which is 336 chapter-language pairs.
 
-The prose sweep read 98 of those 336 pairs. It produced these counts:
+The prose sweep read 154 of those 336 pairs. It produced these counts:
 
-- 493 findings over the 98 pairs in 14 chapters.
-- 5561 coverage rows over the same 98 pairs in the same 14 chapters.
-- 14 of the 48 declared chapters complete, each in all 7 languages.
-- 34 of the 48 declared chapters never started, in any language.
+- 798 findings over the 154 pairs in 22 chapters.
+- 8552 coverage rows over the same 154 pairs in the same 22 chapters.
+- 22 of the 48 declared chapters complete, each in all 7 languages.
+- 26 of the 48 declared chapters never started, in any language.
 - 0 chapters half-read. The boundary is clean.
 
-A session quota limit stopped the run. The run did not stop by design.
+Two runs produced the 154 pairs. A session quota limit stopped the first run on 2026-08-09
+at 98 pairs, and that run did not stop by design. The second run on 2026-08-19 added 56 pairs
+in three planned batches. It used a hard slice, it reconciled against disk, and no batch was
+killed. `RESUME.md` sections 4 to 6 hold the method.
 
-**No verification ran on any of the 493 findings.**
-Each of the 493 findings is one agent's unverified claim about one segment pair.
-47 of the 493 findings carry a self-rated `low` confidence, and nothing checked that rating.
+**No verification ran on any of the 798 findings.**
+Each of the 798 findings is one agent's unverified claim about one segment pair.
 Do NOT edit a `.qmd` file on the strength of a finding.
 Read `modernization/RESUME.md` section 8 before you use any finding.
 
 ## What to do first in the next session
 
-1. Read `modernization/SWEEP-PLAN.md`.
+1. Read `modernization/RESUME.md` sections 4 and 5. They give the batch method and the cost model.
 2. Re-approve the plan with the owner.
-3. Start at Phase A, the deterministic segmenter.
+3. Continue Phase C with a batch sized against the quota you hold.
 
 Phase A creates `utils/segment-chapters.R` and changes nothing else in the repository.
 Phase A exists because segmentation, not judgement, drove the model difference below.
@@ -62,8 +64,27 @@ Sonnet medium wrote `data_table.json` instead of `data_table.ru.json`.
 Across 7 languages that filename overwrites 6 of the 7 output files.
 `modernization/findings/sonnet-ab/data_table.json` keeps that defect as evidence.
 
-The remaining 238 pairs cost about 13 million tokens, at the measured 55,000 tokens per pair.
-Plan a fresh quota window before you start that run.
+## Cost is not flat per pair
+
+The 2026-08-09 record put the remaining work at 55,000 tokens per pair. That rate was measured
+on `directories` and `editorial_style`, the two smallest complete chapters at about 9.4 KB.
+Applied to the whole corpus it is too low, because cost rises with chapter size.
+
+The 2026-08-19 batches measured both ends. A 5.4 KB chapter cost 52,020 tokens per pair.
+A 66.6 KB chapter cost 120,616. Fitting those two points gives this model:
+
+```
+tokens_per_pair  ~=  45,900  +  1,121 * (English chapter size in KB)
+```
+
+The model predicts the older 9.4 KB run within 3.4%, and it predicted a later 28-pair batch
+within 2.7%. About 46,000 tokens is fixed overhead per agent, and the rest is the reading.
+
+The 26 remaining chapters hold 675,256 bytes of English source, which the model puts at
+**13.7M tokens** for 182 pairs. `RESUME.md` section 5 shows how to size one batch.
+
+Findings per token favour the large chapters. Wave 2 returned 60 findings per million tokens
+against wave 1's 45, even though wave 2 cost 2.3 times more per pair.
 
 ## The two defects the resumed run MUST avoid
 
@@ -85,15 +106,15 @@ The resumed run MUST count the JSON files on disk, not the return values.
 |---|---|
 | `README.md` | This index. |
 | `SWEEP-PLAN.md` | The approved plan, version 3. A faithful copy, see "Provenance" below. |
-| `RESUME.md` | How to resume the prose sweep, and what the 493 findings do not tell you. |
+| `RESUME.md` | How to resume the prose sweep, the cost model, and what the 798 findings do not tell you. |
 | `STAKEHOLDERS.md` | Release notes for readers, authors, translators and contributors. |
 | `TRANSLATION-BACKLOG.md` | Open translation work only, with a search token per item. |
 | `archive/PLAN-translated-data-used.md` | The method record for the `data_used` page alignment. |
-| `findings/language-prose-drift.tsv` | 493 rows. One row is one finding. |
-| `findings/language-prose-coverage.tsv` | 5561 rows. One row is one segment pairing. |
-| `findings/prose-sweep/` | 98 JSON files. One file is one completed chapter-language pair. |
+| `findings/language-prose-drift.tsv` | 798 rows. One row is one finding. |
+| `findings/language-prose-coverage.tsv` | 8552 rows. One row is one segment pairing. |
+| `findings/prose-sweep/` | 154 JSON files. One file is one completed chapter-language pair. |
 | `findings/sonnet-ab/` | 4 JSON files from the Sonnet medium A/B run. |
-| `workflows/` | 4 Claude Code workflow scripts. See the table below. |
+| `workflows/` | 5 Claude Code workflow scripts. See the table below. |
 | `reviews/` | 4 Codex verdicts on Phase 1a. See the table below. |
 | `briefs/` | 6 subagent briefs and 3 implementer transcripts. |
 
@@ -101,7 +122,8 @@ The resumed run MUST count the JSON files on disk, not the return values.
 
 | Script | What it does |
 |---|---|
-| `epirhandbook-prose-drift-find-wf_549a2da0-bec.js` | The 336-pair finder. Holds the 48 stems inline. `RESUME.md` names this one. |
+| `epirhandbook-prose-drift-batch.js` | **The current script.** One batch of whole chapters, hard-sliced. Set `STEMS` and run it. `RESUME.md` section 4 names this one. |
+| `epirhandbook-prose-drift-find-wf_549a2da0-bec.js` | The 336-pair finder. Holds the 48 stems inline. Superseded: it has no slice and no disk reconciliation. |
 | `epirhandbook-prose-drift-find-wf_23d079e4-151.js` | An earlier revision of the same finder. Takes the stems from `args.stems`. |
 | `epirhandbook-prose-drift-finish-started-wf_87695bbb-ca4.js` | The 5-pair finish run for `directories.tr` and 4 `editorial_style` pairs. |
 | `epirhandbook-prose-ab-sonnet-wf_bfc014a5-a37.js` | The Sonnet medium A/B over the 4 pairs. |
