@@ -8,29 +8,29 @@ The session that produced the work wrote its scratch files to `/tmp`, and `/tmp`
 | Phase | State |
 |---|---|
 | Phase 1a, the language checker | COMPLETE. Codex returned ALLOW at round 4. |
-| Phase 1b, the prose sweep | PARTIAL. 182 of 336 chapter-language pairs read. |
+| Phase 1b, the prose sweep | PARTIAL. 231 of 336 chapter-language pairs read. |
 | Phase A, the deterministic segmenter | NOT STARTED. |
 | Phase B, the cost measurement | COMPLETE. A cost model replaced the flat per-pair rate. |
-| Phase C, the remaining 154 pairs | NOT STARTED. |
+| Phase C, the remaining 105 pairs | NOT STARTED. |
 | Phase D, verification of the findings | NOT STARTED. |
 
 The corpus is 48 declared chapters in 7 languages, which is 336 chapter-language pairs.
 
-The prose sweep read 182 of those 336 pairs. It produced these counts:
+The prose sweep read 231 of those 336 pairs. It produced these counts:
 
-- 873 findings over the 182 pairs in 26 chapters.
-- 8970 coverage rows over the same 182 pairs in the same 26 chapters.
-- 26 of the 48 declared chapters complete, each in all 7 languages.
-- 22 of the 48 declared chapters never started, in any language.
+- 1054 findings over the 231 pairs in 33 chapters.
+- 10474 coverage rows over the same 231 pairs in the same 33 chapters.
+- 33 of the 48 declared chapters complete, each in all 7 languages.
+- 15 of the 48 declared chapters never started, in any language.
 - 0 chapters half-read. The boundary is clean.
 
-Two runs produced the 182 pairs. A session quota limit stopped the first run on 2026-08-09
-at 98 pairs, and that run did not stop by design. The second run on 2026-08-19 added 84 pairs
-in four planned batches. It used a hard slice, it reconciled against disk, and no batch was
-killed. `RESUME.md` sections 4 to 6 hold the method.
+Two runs produced the 231 pairs. A session quota limit stopped the first run on 2026-08-09
+at 98 pairs, and that run did not stop by design. The second run added 133 pairs in five
+planned batches. It used a hard slice, it reconciled against disk, and no batch was killed.
+`RESUME.md` sections 4 to 6 hold the method.
 
-**No verification ran on any of the 873 findings.**
-Each of the 873 findings is one agent's unverified claim about one segment pair.
+**No verification ran on any of the 1054 findings.**
+Each of the 1054 findings is one agent's unverified claim about one segment pair.
 Do NOT edit a `.qmd` file on the strength of a finding.
 Read `modernization/RESUME.md` section 8 before you use any finding.
 
@@ -77,25 +77,28 @@ A 66.6 KB chapter cost 120,616. Fitting those two points gives this model:
 tokens_per_pair  ~=  45,900  +  1,121 * (English chapter size in KB)
 ```
 
-The model was fitted on two points and tested against three others. It predicts them within
-3.4%, 2.7% and 0.5%. About 46,000 tokens is fixed overhead per agent, and the rest is the
-reading.
+The model was fitted on two points and tested against four others, with errors of 3.4%, 2.7%,
+0.5% and 4.4%. About 46,000 tokens is fixed overhead per agent, and the rest is the reading.
 
-The 22 remaining chapters hold 640,680 bytes of English source, which the model puts at
-**12.1M tokens** for 154 pairs. `RESUME.md` section 5 shows how to size one batch.
+**It under-predicts.** Three of the four tests came in above the estimate. Add 5% headroom to
+any batch estimate before you convert it to a share of your quota.
 
-Findings per token favours neither end. The four waves returned 45, 60, 53 and 48 findings per
-million tokens, which is noise rather than a trend. Cheap chapters complete more chapters per
-token. Large chapters cover more of the corpus per token.
+The 15 remaining chapters hold 507,850 bytes of English source, which the model puts at
+**8.8M tokens** for 105 pairs. Budget 9.2M with the headroom. At the measured 705,000 tokens
+per percentage point, that is about 13% of one weekly budget.
+`RESUME.md` section 5 shows how to size one batch.
+
+Findings per token favours neither end. The five waves returned 45, 60, 53, 48 and 53 findings
+per million tokens, which is noise rather than a trend. Cheap chapters complete more chapters
+per token. Large chapters cover more of the corpus per token.
 
 ## The two defects the resumed run MUST avoid
 
 **Defect 1: no budget guard.** The workflow dispatched all 336 pairs at once.
 Nothing checked the remaining quota between dispatches.
 The session limit then killed 253 of the 336 agents in flight.
-The resumed run MUST drain a queue under a remaining-budget check.
-The resumed run MUST also log the queue length it stopped at.
-`modernization/RESUME.md` section 4 gives two guard shapes and names the safer one.
+A batch MUST fix its pair count before it dispatches, by setting `STEMS` to that batch alone.
+`modernization/RESUME.md` section 4 gives the rule. Five batches used it and none was killed.
 
 **Defect 2: return-based accounting.** The workflow counted agent return values.
 It reported 83 completed pairs while 94 JSON files sat on disk.
@@ -108,13 +111,13 @@ The resumed run MUST count the JSON files on disk, not the return values.
 |---|---|
 | `README.md` | This index. |
 | `SWEEP-PLAN.md` | The approved plan, version 3. A faithful copy, see "Provenance" below. |
-| `RESUME.md` | How to resume the prose sweep, the cost model, and what the 873 findings do not tell you. |
+| `RESUME.md` | How to resume the prose sweep, the cost model, and what the 1054 findings do not tell you. |
 | `STAKEHOLDERS.md` | Release notes for readers, authors, translators and contributors. |
 | `TRANSLATION-BACKLOG.md` | Open translation work only, with a search token per item. |
 | `archive/PLAN-translated-data-used.md` | The method record for the `data_used` page alignment. |
-| `findings/language-prose-drift.tsv` | 873 rows. One row is one finding. |
-| `findings/language-prose-coverage.tsv` | 8970 rows. One row is one segment pairing. |
-| `findings/prose-sweep/` | 182 JSON files. One file is one completed chapter-language pair. |
+| `findings/language-prose-drift.tsv` | 1054 rows. One row is one finding. |
+| `findings/language-prose-coverage.tsv` | 10474 rows. One row is one segment pairing. |
+| `findings/prose-sweep/` | 231 JSON files. One file is one completed chapter-language pair. |
 | `findings/sonnet-ab/` | 4 JSON files from the Sonnet medium A/B run. |
 | `workflows/` | 5 Claude Code workflow scripts. See the table below. |
 | `reviews/` | 4 Codex verdicts on Phase 1a. See the table below. |

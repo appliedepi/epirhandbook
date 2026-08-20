@@ -34,7 +34,12 @@ const LANGS = ['es', 'fr', 'jp', 'pt', 'ru', 'tr', 'vn']
 // 115,244 per pair. The cost model predicted 3.14M against that 3.23M, a 2.7% error.
 // Wave 4 takes the four CHEAPEST remaining chapters, because the window is nearly
 // spent and cheap-first completes twice the chapters per token.
-const STEMS = ['help', 'packages_suggested', 'network_drives', 'reportfactory']
+// Wave 4 read the four cheapest: 28 pairs, 75 findings, 1,564,794 tokens, 55,885
+// per pair. The cost model predicted 1.56M against that 1.5648M, a 0.3% error.
+// Wave 5 continues cheap-first over the seven cheapest remaining chapters.
+// Sized to a 5% allocation of the weekly budget at ~705,000 tokens per point.
+const STEMS = ['interactive_plots', 'moving_average', 'standardization', 'stat_tests',
+               'transition_to_r', 'writing_functions', 'pivoting']
 
 const SUMMARY = {
   type: 'object',
