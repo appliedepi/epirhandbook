@@ -13,7 +13,7 @@ No model, no network.
 
 Usage:
     python3 modernization/make-batches.py [--src /tmp/fixpass/extracted.jsonl]
-        [--out-dir /tmp/fixpass] [--max 20] [--wave 12]
+        [--out-dir /tmp/fixpass] [--max 20] [--wave 12] [--priority tr]
 """
 import argparse
 import collections
@@ -82,6 +82,7 @@ def main():
     ap.add_argument('--out-dir', default='/tmp/fixpass')
     ap.add_argument('--max', type=int, default=20)
     ap.add_argument('--wave', type=int, default=12)
+    ap.add_argument('--priority', default='', help='language code scheduled first, e.g. tr')
     args = ap.parse_args()
 
     recs = [json.loads(l) for l in open(args.src, encoding='utf-8')]
@@ -122,7 +123,7 @@ def main():
                                 ','.join(b['files']), ','.join(b['ids'])]) + '\n')
 
     # Waves: greedy, largest batches first, no shared file inside one wave.
-    pending = sorted(batches, key=lambda b: (-b['n'], b['id']))
+    pending = sorted(batches, key=lambda b: (b['lang'] != args.priority, -b['n'], b['id']))
     waves = []
     while pending:
         used, wave, rest = set(), [], []
