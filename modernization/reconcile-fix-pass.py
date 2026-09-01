@@ -10,7 +10,8 @@ each batch named on the command line and checks, against the working tree:
   3. every verdict is fixed, rejected or deferred
   4. every "fixed" entry names a file the batch was allowed to edit, its
      "new" text is present in that file now, and its "old" text is absent
-     (unless "old" is a substring of "new")
+     (unless "old" is a substring of "new"). An empty "new" is a deletion and
+     passes only when a non-empty "old" is gone.
   5. every rejected or deferred entry carries a reason
   6. `git diff --name-only` touches nothing outside the union of the named
      batches' allowed files plus modernization/findings/fix-pass/
@@ -78,7 +79,10 @@ def main(batch_ids):
                 if text is None:
                     fails.append('%s %s: file %s missing' % (bid, r.get('id'), f)); continue
                 if not isinstance(new, str) or not new:
-                    fails.append('%s %s: fixed with empty new text' % (bid, r.get('id')))
+                    # A whole-paragraph deletion (kind added) has an empty replacement.
+                    # It is valid only when the old text is non-empty and gone.
+                    if not (isinstance(old, str) and old and old not in text):
+                        fails.append('%s %s: fixed with empty new text and old text not removed' % (bid, r.get('id')))
                 elif new not in text:
                     fails.append('%s %s: new text NOT in %s' % (bid, r.get('id'), f))
                 if isinstance(old, str) and old and old in text and not (isinstance(new, str) and old in new):
