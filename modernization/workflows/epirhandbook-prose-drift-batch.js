@@ -45,7 +45,14 @@ const LANGS = ['es', 'fr', 'jp', 'pt', 'ru', 'tr', 'vn']
 // the 45,900-token fixed overhead, which is 55% of the per-pair cost at these
 // chapter sizes, and adopting it now would read the last 105 pairs by a method
 // the first 231 were not read by.
-const STEMS = ['grouping', 'transmission_chains', 'factors', 'heatmaps']
+// Wave 6 read 28 pairs, 142 findings, 2,428,408 tokens, 86,729 per pair. The cost
+// model predicted 2,052,198 against that 2,428,408, an 18.3% UNDER-prediction and
+// four times its worst earlier error. Multiply the model by 1.18 until a further
+// batch revises the correction.
+// Wave 7, 2026-09-01, continues cheap-first over the five cheapest remaining.
+// 35 pairs. Bare model 2.73M, corrected 3.22M.
+const STEMS = ['tables_presentation', 'flexdashboard', 'regression',
+               'phylogenetic_trees', 'missing_data']
 
 const SUMMARY = {
   type: 'object',
