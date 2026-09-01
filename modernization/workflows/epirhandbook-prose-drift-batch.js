@@ -51,8 +51,11 @@ const LANGS = ['es', 'fr', 'jp', 'pt', 'ru', 'tr', 'vn']
 // batch revises the correction.
 // Wave 7, 2026-09-01, continues cheap-first over the five cheapest remaining.
 // 35 pairs. Bare model 2.73M, corrected 3.22M.
-const STEMS = ['tables_presentation', 'flexdashboard', 'regression',
-               'phylogenetic_trees', 'missing_data']
+// Wave 7 read 35 pairs, 169 findings, 3,182,493 tokens, 90,928 per pair. Bare model
+// 2,732,146, ratio 1.165. With wave 6's 1.183 over 63 pairs the correction is 1.173.
+// Wave 8, 2026-09-01, takes four of the last six chapters, all of them large.
+// 28 pairs. Bare model 2.57M, corrected 3.01M.
+const STEMS = ['survival_analysis', 'survey_analysis', 'joining_matching', 'rmarkdown']
 
 const SUMMARY = {
   type: 'object',
