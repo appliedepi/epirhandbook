@@ -38,8 +38,14 @@ const LANGS = ['es', 'fr', 'jp', 'pt', 'ru', 'tr', 'vn']
 // per pair. The cost model predicted 1.56M against that 1.5648M, a 0.3% error.
 // Wave 5 continues cheap-first over the seven cheapest remaining chapters.
 // Sized to a 5% allocation of the weekly budget at ~705,000 tokens per point.
-const STEMS = ['interactive_plots', 'moving_average', 'standardization', 'stat_tests',
-               'transition_to_r', 'writing_functions', 'pivoting']
+// Wave 6, 2026-09-01, resumes Phase C after the reboot cleared /tmp/gate/prose.
+// Cheap-first again: the four cheapest of the 15 remaining chapters.
+// 28 pairs. The cost model puts this at 2,056,547 tokens, about 2.9 quota points.
+// Phase A, the deterministic segmenter, is deliberately SKIPPED. It cannot touch
+// the 45,900-token fixed overhead, which is 55% of the per-pair cost at these
+// chapter sizes, and adopting it now would read the last 105 pairs by a method
+// the first 231 were not read by.
+const STEMS = ['grouping', 'transmission_chains', 'factors', 'heatmaps']
 
 const SUMMARY = {
   type: 'object',

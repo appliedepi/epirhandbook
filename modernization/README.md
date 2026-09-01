@@ -3,34 +3,40 @@
 This folder holds the durable record of the epiRhandbook cross-language modernization work.
 The session that produced the work wrote its scratch files to `/tmp`, and `/tmp` is not preserved.
 
-## State on 2026-08-19
+## State on 2026-09-01
 
 | Phase | State |
 |---|---|
 | Phase 1a, the language checker | COMPLETE. Codex returned ALLOW at round 4. |
-| Phase 1b, the prose sweep | PARTIAL. 231 of 336 chapter-language pairs read. |
-| Phase A, the deterministic segmenter | NOT STARTED. |
-| Phase B, the cost measurement | COMPLETE. A cost model replaced the flat per-pair rate. |
-| Phase C, the remaining 105 pairs | NOT STARTED. |
+| Phase 1b, the prose sweep | PARTIAL. 259 of 336 chapter-language pairs read. |
+| Phase A, the deterministic segmenter | SKIPPED. See "Why Phase A is skipped" below. |
+| Phase B, the segmenter saving | SKIPPED with Phase A. It exists only to measure Phase A. |
+| Phase C, the remaining 77 pairs | IN PROGRESS. Wave 6 read 28 of the 105 that were open. |
 | Phase D, verification of the findings | NOT STARTED. |
+
+**Do not read the old "Phase B, the cost measurement | COMPLETE" row as this table's Phase B.**
+That row named the cost model in `RESUME.md` section 5, which is complete and still current.
+`SWEEP-PLAN.md` Phase B is a different thing: a re-sweep of 4 pairs using Phase A's segment
+maps. It cannot have run, because Phase A never ran.
 
 The corpus is 48 declared chapters in 7 languages, which is 336 chapter-language pairs.
 
-The prose sweep read 231 of those 336 pairs. It produced these counts:
+The prose sweep read 259 of those 336 pairs. It produced these counts:
 
-- 1054 findings over the 231 pairs in 33 chapters.
-- 10474 coverage rows over the same 231 pairs in the same 33 chapters.
-- 33 of the 48 declared chapters complete, each in all 7 languages.
-- 15 of the 48 declared chapters never started, in any language.
+- 1196 findings over the 259 pairs in 37 chapters.
+- 11772 coverage rows over the same 259 pairs in the same 37 chapters.
+- 37 of the 48 declared chapters complete, each in all 7 languages.
+- 11 of the 48 declared chapters never started, in any language.
 - 0 chapters half-read. The boundary is clean.
 
-Two runs produced the 231 pairs. A session quota limit stopped the first run on 2026-08-09
+Three runs produced the 259 pairs. A session quota limit stopped the first run on 2026-08-09
 at 98 pairs, and that run did not stop by design. The second run added 133 pairs in five
-planned batches. It used a hard slice, it reconciled against disk, and no batch was killed.
-`RESUME.md` sections 4 to 6 hold the method.
+planned batches. The third, wave 6 on 2026-09-01, added 28 pairs in one batch and returned
+all 28. Every batch after the first used a hard slice, reconciled against disk, and none was
+killed. `RESUME.md` sections 4 to 6 hold the method.
 
-**No verification ran on any of the 1054 findings.**
-Each of the 1054 findings is one agent's unverified claim about one segment pair.
+**No verification ran on any of the 1196 findings.**
+Each of the 1196 findings is one agent's unverified claim about one segment pair.
 Do NOT edit a `.qmd` file on the strength of a finding.
 Read `modernization/RESUME.md` section 8 before you use any finding.
 
@@ -39,9 +45,27 @@ Read `modernization/RESUME.md` section 8 before you use any finding.
 1. Read `modernization/RESUME.md` sections 4 and 5. They give the batch method and the cost model.
 2. Re-approve the plan with the owner.
 3. Continue Phase C with a batch sized against the quota you hold.
+   **Multiply the model estimate by 1.18.** Wave 6 came in 18.3% above the bare model.
 
-Phase A creates `utils/segment-chapters.R` and changes nothing else in the repository.
-Phase A exists because segmentation, not judgement, drove the model difference below.
+## Why Phase A is skipped
+
+Phase A builds a deterministic segmenter, and Phase B measures what it saves. Wave 6 skipped
+both, and this is the reason, so a later reader can overturn it on evidence rather than guess
+at it.
+
+The measured cost model is `45,900 + 1,121 * KB` per pair. The 45,900 is fixed per-agent
+overhead. The 11 remaining chapters average 36.2 KB, which puts a pair at about 86,500 tokens
+by the bare model, of which 45,900 is that fixed floor. A segment map cannot touch the floor,
+and the agent still has to read both chapters to compare them semantically, so the saving is a
+fraction of the remaining 47%. Phase B exists to measure that fraction, so Phase A plus Phase B
+is a spend to find out whether a spend is worth it.
+
+The second reason is the stronger one. The 231 pairs read before wave 6 were hand-segmented.
+Adopting segment maps now reads the last pairs by a method the first 231 were not read by, and
+re-unifying the corpus would mean re-reading 231 pairs, which costs far more than any saving.
+
+**This is a decision about Phase C only.** A deterministic segmenter is still the right tool
+for a future sweep, and for Phase D verification, where no comparability to the 231 is at stake.
 
 ## The measured facts that drive the plan
 
@@ -83,14 +107,18 @@ The model was fitted on two points and tested against four others, with errors o
 **It under-predicts.** Three of the four tests came in above the estimate. Add 5% headroom to
 any batch estimate before you convert it to a share of your quota.
 
-The 15 remaining chapters hold 507,850 bytes of English source, which the model puts at
-**8.8M tokens** for 105 pairs. Budget 9.2M with the headroom. At the measured 705,000 tokens
-per percentage point, that is about 13% of one weekly budget.
-`RESUME.md` section 5 shows how to size one batch.
+**Wave 6 shows the 5% headroom is not enough.** It predicted 2,052,198 tokens and measured
+2,428,408, which is 18.3% above. That is four times the largest error in the original fit.
+**Multiply any model estimate by 1.18.** One point does not re-fit a slope, so treat 1.18 as a
+correction and re-measure it on the next batch.
 
-Findings per token favours neither end. The five waves returned 45, 60, 53, 48 and 53 findings
-per million tokens, which is noise rather than a trend. Cheap chapters complete more chapters
-per token. Large chapters cover more of the corpus per token.
+The 11 remaining chapters hold 407,760 bytes of English source, at a mean of 36.2 KB. The bare
+model puts them at 6.66M tokens for 77 pairs. Corrected by 1.18 that is **7.88M**, and 8.27M
+with a further 5%. `RESUME.md` section 5 shows how to size one batch.
+
+Findings per token favours neither end. The six waves returned 45, 60, 53, 48, 53 and 58
+findings per million tokens, which is noise rather than a trend. Cheap chapters complete more
+chapters per token. Large chapters cover more of the corpus per token.
 
 ## The two defects the resumed run MUST avoid
 
@@ -111,13 +139,14 @@ The resumed run MUST count the JSON files on disk, not the return values.
 |---|---|
 | `README.md` | This index. |
 | `SWEEP-PLAN.md` | The approved plan, version 3. A faithful copy, see "Provenance" below. |
-| `RESUME.md` | How to resume the prose sweep, the cost model, and what the 1054 findings do not tell you. |
+| `RESUME.md` | How to resume the prose sweep, the cost model, and what the 1196 findings do not tell you. |
 | `STAKEHOLDERS.md` | Release notes for readers, authors, translators and contributors. |
 | `TRANSLATION-BACKLOG.md` | Open translation work only, with a search token per item. |
 | `archive/PLAN-translated-data-used.md` | The method record for the `data_used` page alignment. |
-| `findings/language-prose-drift.tsv` | 1054 rows. One row is one finding. |
-| `findings/language-prose-coverage.tsv` | 10474 rows. One row is one segment pairing. |
-| `findings/prose-sweep/` | 231 JSON files. One file is one completed chapter-language pair. |
+| `rebuild-tsv.py` | Rebuilds both TSVs from the JSON files. Run it after every batch. |
+| `findings/language-prose-drift.tsv` | 1196 rows. One row is one finding. |
+| `findings/language-prose-coverage.tsv` | 11772 rows. One row is one segment pairing. |
+| `findings/prose-sweep/` | 259 JSON files. One file is one completed chapter-language pair. |
 | `findings/sonnet-ab/` | 4 JSON files from the Sonnet medium A/B run. |
 | `workflows/` | 5 Claude Code workflow scripts. See the table below. |
 | `reviews/` | 4 Codex verdicts on Phase 1a. See the table below. |
@@ -127,7 +156,7 @@ The resumed run MUST count the JSON files on disk, not the return values.
 
 | Script | What it does |
 |---|---|
-| `epirhandbook-prose-drift-batch.js` | **The current script.** One batch of whole chapters, hard-sliced. Set `STEMS` and run it. `RESUME.md` section 4 names this one. |
+| `epirhandbook-prose-drift-batch.js` | **The current script.** One batch of whole chapters, hard-sliced. Set `STEMS` and run it. `RESUME.md` section 4 names this one. `STEMS` currently holds the wave 6 batch. |
 | `epirhandbook-prose-drift-find-wf_549a2da0-bec.js` | The 336-pair finder. Holds the 48 stems inline. Superseded: it has no slice and no disk reconciliation. |
 | `epirhandbook-prose-drift-find-wf_23d079e4-151.js` | An earlier revision of the same finder. Takes the stems from `args.stems`. |
 | `epirhandbook-prose-drift-finish-started-wf_87695bbb-ca4.js` | The 5-pair finish run for `directories.tr` and 4 `editorial_style` pairs. |
@@ -150,7 +179,7 @@ The resumed run MUST count the JSON files on disk, not the return values.
   Each log is mostly prompt text and tool calls.
   `reviews/codex-round<N>.md` keeps only the final Codex answer, and names its source log.
 - **The volatile prose-sweep originals under `/tmp/gate/prose/`.**
-  `findings/prose-sweep/` holds a byte-identical durable copy of all 98 JSON files.
+  `findings/prose-sweep/` holds a byte-identical durable copy of all 259 JSON files.
 - **`utils/check-language-consistency.R`.** That file stays in `utils/`.
   It is a working tool beside `utils/check-data-equivalence.R`, and it is not bookkeeping.
 
