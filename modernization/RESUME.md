@@ -4,135 +4,119 @@
 
 The prose sweep reads every translated chapter of the handbook against its English source.
 It records each place where the translation says something the English does not say.
-The sweep is **322 of 336 chapter-language pairs complete**.
-The other **14 pairs were never read**.
-Nothing is half-read. Every one of the 46 complete chapters has all 7 languages.
-Both remaining chapters have none.
+
+**The sweep is COMPLETE. All 336 chapter-language pairs are read.**
+Phase C closed on 2026-09-01.
 
 The corpus is 48 declared chapters in 7 languages: `es`, `fr`, `jp`, `pt`, `ru`, `tr`, `vn`.
-48 chapters times 7 languages is 336 pairs.
+48 chapters times 7 languages is 336 pairs. Every one has a JSON file in
+`modernization/findings/prose-sweep/`, and no file there is outside that set.
 
-Three runs produced the 322 pairs. A session quota limit stopped the first run on 2026-08-09
+The chapter list comes from `_quarto.yml` `book.chapters`, where the entries sit nested under
+`part:` blocks. Match `^\s*-\s*chapters/([A-Za-z0-9_]+)\.qmd` over the whole file. A parser
+that stops at the first unindented line finds 20 of the 48 and then reports no missing pairs,
+because it also shrinks what it expects. `index.qmd` is a top-level entry rather than a
+`chapters/` one, and it carries no sweep pair.
+
+Three runs produced the 336 pairs. A session quota limit stopped the first run on 2026-08-09
 at 98 pairs. That run did not stop by design. The second run added 133 pairs in five planned
 batches, and each batch stopped at a size the owner set in advance. The third run, on
-2026-09-01, added 91 pairs in three batches: wave 6 read 28, wave 7 read 35 and wave 8 read
-28. All three returned every pair.
+2026-09-01, added the last 105 pairs in four batches: waves 6, 7, 8 and 9 read 28, 35, 28 and
+14. All four returned every pair, and no batch was killed.
 
 Phase A, the deterministic segmenter, is SKIPPED rather than deferred. Section 5 gives the
-reason: it cannot touch the fixed per-agent overhead, which is most of the per-pair cost, and
-adopting it now would read the last pairs by a method the first 231 were not read by.
+reason: it cannot touch the fixed per-agent overhead, which is about half the per-pair cost,
+and adopting it mid-sweep would have read the last pairs by a method the first 231 were not
+read by. That objection expires now that the sweep is complete, so a future sweep or the
+Phase D verification may use one freely.
 
 ## 2. Chapters
 
+All 48 declared chapters are complete in all 7 languages. Nothing is partial.
+
 | State | Chapters | Pairs |
 |---|---|---|
-| Complete, all 7 languages read | 46 | 322 |
-| Remaining, 0 languages read | 2 | 14 |
+| Complete, all 7 languages read | 48 | 336 |
+| Remaining | 0 | 0 |
 | Partial | 0 | 0 |
-
-**Complete (46).** Every one has 7 of 7 languages on disk.
-
-```
-age_pyramid  basics  characters_strings  cleaning  collaboration
-combination_analysis  contact_tracing  data_table  data_used  dates
-deduplication  diagrams  directories  editorial_style  epicurves
-errors  factors  flexdashboard  ggplot_basics  ggplot_tips
-grouping  heatmaps  help  interactive_plots  joining_matching
-missing_data  moving_average  network_drives  packages_suggested  phylogenetic_trees
-pivoting  r_projects  regression  reportfactory  rmarkdown
-shiny_basics  standardization  stat_tests  survey_analysis  survival_analysis
-tables_descriptive  tables_presentation  time_series  transition_to_r
-transmission_chains  writing_functions
-```
-
-**Remaining (2).** Neither language of these was read. They are the two largest chapters
-in the corpus.
-
-```
-importing  iteration
-```
 
 ## 3. What the findings say so far
 
 **Read the base before you read any number in this section.**
-Every count below is over the 322 pairs in the 46 complete chapters.
-No count below is over the 336-pair corpus, and none is over the 48 declared chapters.
+Every count below is over all 336 pairs in all 48 chapters. The base is now the whole corpus,
+which it was not in any earlier revision of this record.
 
-Total: **1527 findings over 322 pairs in 46 chapters**. Mean 4.74 findings per pair.
-
-By kind, over those same 322 pairs:
+Total: **1617 findings over 336 pairs in 48 chapters**. Mean 4.81 findings per pair.
 
 | Kind | Findings | Meaning |
 |---|---|---|
-| untrue | 668 | The translation asserts something the English does not assert. |
-| missing | 438 | The English asserts something the translation drops. |
-| code_mismatch | 232 | The prose describes an output that the chunk beside it does not produce. |
-| added | 166 | The translation adds a claim with no English source. |
-| alignment_mismatch | 23 | The segments pair up, but the pairing is wrong. |
+| untrue | 702 | The translation asserts something the English does not assert. |
+| missing | 463 | The English asserts something the translation drops. |
+| code_mismatch | 260 | The prose describes an output that the chunk beside it does not produce. |
+| added | 168 | The translation adds a claim with no English source. |
+| alignment_mismatch | 24 | The segments pair up, but the pairing is wrong. |
 
-By language, over those same 322 pairs. Each language contributed 46 pairs, one per complete
-chapter, so these 7 counts are comparable to each other:
+By language. Each language contributed 48 pairs, one per chapter, so these 7 counts are
+directly comparable:
 
 | Language | Findings |
 |---|---|
-| tr | 323 |
-| jp | 254 |
-| pt | 228 |
-| fr | 220 |
-| vn | 172 |
-| ru | 170 |
-| es | 160 |
+| tr | 335 |
+| jp | 270 |
+| pt | 241 |
+| fr | 237 |
+| vn | 180 |
+| es | 177 |
+| ru | 177 |
 
-Turkish led the count at 98 pairs and it still leads at 322 pairs. Spanish has been lowest
-throughout. The middle of the table is not stable: Portuguese has crossed French twice, and
-wave 8 moved Russian below Vietnamese. **Read only the Turkish lead and the Spanish floor as
-settled.**
+Turkish leads by 24% over Japanese and carries 89% more than the three-way floor. It led at
+98 pairs, at 231, and it leads at 336. **That is the one per-language conclusion the sweep
+supports.** The middle of the table moved at nearly every wave, and Portuguese crossed French
+twice, so do not read a one-place gap as real.
 
-309 of the 322 pairs carry at least one finding. Thirteen pairs carry none. Wave 8 added
-`survey_analysis.ru`, which is the first zero-finding pair since 2026-08-19:
+323 of the 336 pairs carry at least one finding. Thirteen pairs carry none:
 `combination_analysis.es`, `data_table.ru`, `directories.ru`, `errors.ru`,
 `moving_average.pt`, `network_drives.ru`, `packages_suggested.es`, `packages_suggested.tr`,
-`r_projects.fr`, `r_projects.ru`, `reportfactory.tr`, `stat_tests.ru` and
-`survey_analysis.ru`.
-Those thirteen pairs are read, and they are covered in `modernization/findings/language-prose-coverage.tsv`.
-A pair absent from `modernization/findings/language-prose-drift.tsv` is therefore not proof of a pair that
-nobody read. Use the coverage file to decide what was read.
+`r_projects.fr`, `r_projects.ru`, `reportfactory.tr`, `stat_tests.ru` and `survey_analysis.ru`.
+Those thirteen pairs are read, and they are covered in
+`modernization/findings/language-prose-coverage.tsv`.
+A pair absent from `modernization/findings/language-prose-drift.tsv` is therefore not proof of
+a pair that nobody read. Use the coverage file to decide what was read.
 
-## 4. How to resume
+Seven of the thirteen are Russian, against a Russian share of one seventh. Russian also sits at
+the floor of the per-language table. Both facts are consistent with the Russian translation
+being the closest to its source, and neither establishes it: nothing has verified a single
+finding, so a lower count may equally mean a less thorough read.
 
-The repository holds the batch script at this path:
+## 4. How the sweep was run
 
-```
-modernization/workflows/epirhandbook-prose-drift-batch.js
-```
+Phase C is complete, so nothing here is a pending instruction. Keep it as the method, because
+Phase D fans out the same way and a future sweep will reuse it.
 
-The Workflow tool runs this file directly. Pass it as `scriptPath`. Do not copy it elsewhere.
+The batch script is at `modernization/workflows/epirhandbook-prose-drift-batch.js`.
+The Workflow tool runs the file directly. Pass it as `scriptPath`.
 
-Do these three things before you start a batch.
+Each batch set `STEMS` to that batch's chapters alone, never the 48-stem corpus. That is the
+hard slice. It cannot overshoot, because the pair count is fixed before dispatch. Nine batches
+used it across two sessions, all nine returned every pair, and none was killed.
 
-1. Set `STEMS` to the chapters this batch reads. Take them from the remaining list in section 2.
-   `STEMS` MUST NOT hold the 48-stem corpus. A whole-corpus run is what defect 1 below describes.
-2. Size the batch with the cost model in section 5. Convert the token estimate to a share of
-   your quota before you dispatch.
-3. Confirm that `/tmp/gate/prose/` exists and is writable. The agents write there.
-   `/tmp` does not survive a reboot, so this directory is usually empty.
+The agents write to `/tmp/gate/prose/`, which does not survive a reboot.
 
-The batch is a hard slice, which this record earlier called shape B. It cannot overshoot,
-because the pair count is fixed before dispatch. The five 2026-08-19 batches used it, all five
-returned every pair, and none was killed.
-
-**Every batch MUST end with a disk reconciliation.** Run this, and report its count:
+**Every batch ended with a disk reconciliation, and so must every future one:**
 
 ```bash
 ls /tmp/gate/prose/*.json | wc -l
 ```
 
-`/tmp/gate/prose/` accumulates across batches within one session, so that count is the running
-total and not the batch. List the batch chapters by name when you need the batch count.
-
 Do not report a completion count taken from the agent return values. Section 6 explains why.
-Then copy the new JSON files into `modernization/findings/prose-sweep/`, and rebuild the two
-TSVs described in section 7:
+
+**Reconcile by NAME, not by count.** Wave 9 put 106 files in that directory where 105 pairs had
+run. The extra was `_segs.json`, an agent's own scratch segment map. A count alone reads that as
+a surplus and a `cp *.json` copies it into the record, where it has no `chapter` key and breaks
+the rebuild. Check that every filename matches `<chapter>.<lang>.json` and that each chapter has
+exactly 7, then copy by explicit name.
+
+Then copy the JSON files into `modernization/findings/prose-sweep/` and rebuild the two TSVs:
 
 ```bash
 python3 modernization/rebuild-tsv.py
@@ -140,20 +124,33 @@ python3 modernization/rebuild-tsv.py
 
 ## 5. Cost, and how to predict it
 
-Cost per pair rises with the size of the English chapter. It does not rise in proportion,
-because a large fixed overhead sits under every agent.
+**The 2026-09-01 session spent 10,062,583 subagent tokens on its 105 pairs**, across four
+waves. That figure is exact, and it is the only session total this record can state.
 
-**The fit is per session. Do not carry a model across sessions.** This is the single most
-important thing in this section, and 2026-09-01 is what established it.
+The 2026-08-19 session's five waves sum to 10,644,259 for 133 pairs, but wave 5 contributes a
+derived figure rather than a logged one. The 2026-08-09 run of 98 pairs never logged a total at
+all: only a per-pair figure of 54,820, measured on 2 of its 14 chapters. **There is therefore no
+trustworthy whole-sweep cost, and this record does not give one.**
+
+Cost per pair rises with the size of the English chapter, on a large fixed overhead per agent.
+Two rules govern any prediction, and both were learned by getting it wrong.
+
+**Rule 1: fit the line per session. Never carry one across sessions.**
 
 | Session | Model | Points | R2 |
 |---|---|---|---|
 | 2026-08 | `tokens_per_pair ~= 45,801 + 1,197 * KB` | 6 | 0.994 |
-| 2026-09-01 | `tokens_per_pair ~= 62,936 + 975 * KB` | 3 | 0.99998 |
+| 2026-09-01 | `tokens_per_pair ~= 57,767 + 1,159 * KB` | 4 | 0.979 |
 
-Between the two sessions the fixed overhead rose 37% and the per-KB slope fell 19%. Each
-session's own line fits its own points almost exactly. The 2026-09-01 fit predicts its three
-waves to within 0.04%.
+Between the two sessions the fixed overhead rose about 26%. Each session's own line fits its
+own points closely; neither predicts the other's.
+
+**Rule 2: a session line is valid only across the sizes it was fitted on.**
+
+Fitted on waves 6, 7 and 8, which span 24.4 to 40.6 KB, the 2026-09-01 line was
+`62,936 + 975 * KB` and it predicted those three waves to within 0.04%. Extrapolated to wave 9
+at 46.1 KB, 5 KB past its range, it came in 4.7% low. The 4-point line above includes wave 9
+and is the one to reuse.
 
 The measured points, with the session that produced each:
 
@@ -168,44 +165,30 @@ The measured points, with the session that produced each:
 | 2026-09-01 | 25,022 bytes | 86,729 | wave 6, 4 chapters |
 | 2026-09-01 | 29,368 bytes | 90,928 | wave 7, 5 chapters |
 | 2026-09-01 | 41,606 bytes | 102,527 | wave 8, 4 chapters |
+| 2026-09-01 | 47,199 bytes | 112,923 | wave 9, 2 chapters |
 
 **How a scale correction went wrong, and why it could not have worked.**
 
 Wave 6 came in 18.3% above the 2026-08 model and wave 7 came in 16.5% above it. Two waves
 agreeing that closely looked like a measurement, so this record carried a flat multiplier of
-1.173 for one commit. Wave 8 then came in at 1.121 and broke it.
+1.173 for one commit. Wave 8 came in at 1.121 and broke it.
 
 The multiplier was the wrong SHAPE, not the wrong number. A single factor scales the intercept
 and the slope together. What actually happened is that the intercept went up while the slope
-went down, so the two waves that set the multiplier were both near 25 to 29 KB, where the two
-errors happened to cancel. Wave 8 sat at 41.6 KB, far enough out for them to stop cancelling.
+went down, so the two waves that set the multiplier both sat at 25 to 29 KB, where the two
+errors cancelled. Wave 8 sat at 41.6 KB, far enough out for them to stop cancelling.
 
-Two rules follow, and the second is the general one:
+**A correction that fits at one size is not a model.** Before you trust one, test it well
+outside the points that produced it. Waves 6 and 7 were 4 KB apart and agreed to 1.8 points,
+which felt conclusive and was not.
 
-1. **Fit a fresh line per session.** Two batches at different sizes give you the line. Run a
-   small batch and a large one early, not two of similar size.
-2. **A correction that fits at one size is not a model.** Before you trust one, check it at a
-   size well outside the points that produced it. Waves 6 and 7 were 4 KB apart and agreed to
-   1.8 points, which felt conclusive and was not.
+**To size a batch:** fit this session's line on its first two batches, choosing one small and
+one large chapter set so the two points are far apart, then sum `intercept + slope * KB` over
+the batch chapters and multiply by 7.
 
-**To size a batch:** fit this session's line on its first two batches, then sum
-`intercept + slope * KB` over the batch chapters and multiply by 7. Until you have two points,
-use the 2026-09-01 line and treat it as provisional.
-
-The 2 remaining chapters hold 94,397 bytes of English source, at a mean of 46.1 KB.
-The 2026-09-01 line puts them at **1.51M tokens** for 14 pairs.
-
-**Findings per token does not favour either end.** The eight waves returned 45, 60, 53, 48, 53,
-58, 53 and 56 findings per million tokens.
-
-### Converting tokens to a share of the weekly quota
-
-The 2026-08-19 session measured this against the owner's meter. 5,643,732 subagent tokens moved
-it 8 percentage points, which is about **705,000 tokens per point**. Orchestrator work sits
-inside that denominator already, so do not add a separate reserve for it.
-
-Re-measure this on the first batch of any new session. The rate is a property of the plan and
-the model in use, not of this repository.
+**Findings per token does not favour either end.** The nine waves returned 45, 60, 53, 48, 53,
+58, 53, 56 and 57 findings per million tokens. Cheap chapters complete more chapters per token.
+Large chapters cover more of the corpus per token.
 
 ## 6. Two defects in the original run
 
@@ -229,7 +212,7 @@ script. The orchestrator runs it. The script logs a reminder and labels its own 
 
 ## 7. Where the data is
 
-`modernization/findings/prose-sweep/` holds the durable copy: 322 JSON files, one per chapter-language pair,
+`modernization/findings/prose-sweep/` holds the durable copy: 336 JSON files, one per chapter-language pair,
 named `<chapter>.<lang>.json`. Each file holds `chapter`, `lang`, `coverage` and `findings`.
 These files are byte-identical to the originals.
 
@@ -237,13 +220,13 @@ These files are byte-identical to the originals.
 Treat `/tmp/gate/prose/` as scratch space, and `modernization/findings/prose-sweep/` as the record.
 
 Two derived tables sit beside the JSON copies. Both are tab-separated with a header row.
-Both were built from the 322 JSON files and from nothing else, by
+Both were built from the 336 JSON files and from nothing else, by
 `modernization/rebuild-tsv.py`.
 
 | File | Rows | One row is |
 |---|---|---|
-| `modernization/findings/language-prose-drift.tsv` | 1527 | one finding |
-| `modernization/findings/language-prose-coverage.tsv` | 15243 | one segment pairing |
+| `modernization/findings/language-prose-drift.tsv` | 1617 | one finding |
+| `modernization/findings/language-prose-coverage.tsv` | 16288 | one segment pairing |
 
 `modernization/findings/language-prose-drift.tsv` columns:
 `chapter`, `lang`, `heading`, `segment_index`, `kind`, `en_span`, `tr_span`, `proposition`,
@@ -264,8 +247,8 @@ Three notes on the TSV encoding:
 1. A JSON `null` is written as the literal `NA`, which R reads as a missing value.
    `en_segment_id` is `NA` on 32 rows. `tr_segment_id` is `NA` on 11 rows.
 2. `reviewed` is written as `TRUE` or `FALSE`, which R reads as a logical column.
-   It is `TRUE` on all 15243 coverage rows.
-3. No field needed whitespace cleaning. No value in the 322 source files contained a tab,
+   It is `TRUE` on all 16288 coverage rows.
+3. No field needed whitespace cleaning. No value in the 336 source files contained a tab,
    a newline or a carriage return. The rebuild checks this and exits non-zero if any did.
 
 **Rebuild both TSVs from the JSON files after every batch.** Do not append to them.
@@ -277,24 +260,24 @@ Restricted to the 231 pairs read before wave 6, via `--only-pairs`, it reproduce
 The check was then proved red by dropping one pair from that list, which lost 5 drift
 rows and which `cmp` detected. Re-run both before you trust a future rebuild.
 
-**Neither TSV holds a row for any of the 14 unread pairs.**
-That absence is deliberate, and it is the record.
-Do not add a placeholder row for an unread pair. A placeholder would later read as
-"somebody read this pair and found nothing", which is false.
+**There are no unread pairs left, so this rule now protects a different thing.**
+Thirteen pairs are read and carry zero findings. They appear in the coverage file and not in
+the drift file. Do not add a placeholder drift row for any of them: absence from the drift file
+is how the record says "read, nothing found", and a placeholder would destroy that.
 
 ## 8. What this record does NOT tell you
 
-**No verification pass ran. Not one of the 1527 findings is verified.**
+**No verification pass ran. Not one of the 1617 findings is verified.**
 
 Each finding is one agent's unverified claim about one segment pair. The agent read the
 English chapter and the translated chapter, and it wrote what it believed it saw.
 Nothing checked that belief.
 
-The agents self-rated 733 findings `high`, 641 `medium` and 153 `low`. Nothing checked
+The agents self-rated 784 findings `high`, 672 `medium` and 161 `low`. Nothing checked
 any of those three ratings either.
 
 The plan requires two blind verifiers per finding before a finding is eligible for a fix.
-That step ran for 0 of the 1527 findings.
+That step ran for 0 of the 1617 findings.
 
 Three consequences follow.
 

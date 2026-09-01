@@ -55,7 +55,12 @@ const LANGS = ['es', 'fr', 'jp', 'pt', 'ru', 'tr', 'vn']
 // 2,732,146, ratio 1.165. With wave 6's 1.183 over 63 pairs the correction is 1.173.
 // Wave 8, 2026-09-01, takes four of the last six chapters, all of them large.
 // 28 pairs. Bare model 2.57M, corrected 3.01M.
-const STEMS = ['survival_analysis', 'survey_analysis', 'joining_matching', 'rmarkdown']
+// Wave 8 read 28 pairs, 162 findings, 2,870,754 tokens, 102,527 per pair. It broke the
+// flat 1.173 correction by coming in at 1.121, and forced the per-session fit recorded
+// in RESUME.md section 5:  2026-09-01  tokens_per_pair ~= 62,936 + 975 * KB, R2 0.99998.
+// Wave 9, 2026-09-01, is the LAST batch of Phase C: the two largest chapters.
+// 14 pairs. Session line puts it at 1.51M. This completes all 336 pairs of the corpus.
+const STEMS = ['importing', 'iteration']
 
 const SUMMARY = {
   type: 'object',
