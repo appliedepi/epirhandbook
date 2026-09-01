@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Commit one fix batch: its translated files and its result file, signed.
-# Usage: modernization/commit-batch.sh <batch-id>
-# Refuses when the reconciliation checker fails for that batch.
+# Usage: modernization/commit-batch.sh <batch-id> [sibling batch ids of the same wave...]
+# Reconciles ALL the ids given (so sibling edits in the tree are not stray), commits only the first.
+# Refuses when the reconciliation checker fails.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 bid="$1"
-python3 modernization/reconcile-fix-pass.py "$bid" > /tmp/fixpass/reconcile-"$bid".txt || { cat /tmp/fixpass/reconcile-"$bid".txt; echo "REFUSED: reconcile failed for $bid"; exit 1; }
+python3 modernization/reconcile-fix-pass.py "$@" > /tmp/fixpass/reconcile-"$bid".txt || { cat /tmp/fixpass/reconcile-"$bid".txt; echo "REFUSED: reconcile failed for $bid"; exit 1; }
 read -r lang kind n fixed rejected deferred files < <(python3 - "$bid" <<'PY'
 import csv, json, sys
 bid = sys.argv[1]
