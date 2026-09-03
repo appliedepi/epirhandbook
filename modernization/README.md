@@ -3,7 +3,7 @@
 This folder holds the durable record of the epiRhandbook cross-language modernization work.
 The session that produced the work wrote its scratch files to `/tmp`, and `/tmp` is not preserved.
 
-## State on 2026-09-01
+## State on 2026-09-02
 
 | Phase | State |
 |---|---|
@@ -11,7 +11,8 @@ The session that produced the work wrote its scratch files to `/tmp`, and `/tmp`
 | Phase 1b / C, the prose sweep | **COMPLETE. All 336 chapter-language pairs read.** |
 | Phase A, the deterministic segmenter | SKIPPED. See "Why Phase A is skipped" below. |
 | Phase B, the segmenter saving | SKIPPED with Phase A. It exists only to measure Phase A. |
-| Phase D, verification of the findings | NOT STARTED. **This is the next phase.** |
+| Phases D, E, F, verify and fix | **COMPLETE on 2026-09-02, as one pass.** 1488 fixed, 73 deferred, 30 rejected, 26 unextractable. See `FIX-PASS.md`. |
+| Phase G, the render gate | NOT STARTED. **This is the next phase.** |
 
 The corpus is 48 declared chapters in 7 languages, which is 336 chapter-language pairs.
 The sweep read all 336. It produced these counts:
@@ -141,6 +142,9 @@ The resumed run MUST count the JSON files on disk, not the return values.
 | `TRANSLATION-BACKLOG.md` | Open translation work only, with a search token per item. |
 | `archive/PLAN-translated-data-used.md` | The method record for the `data_used` page alignment. |
 | `rebuild-tsv.py` | Rebuilds both TSVs from the JSON files. Run it after every batch. |
+| `FIX-PASS.md` | The fix pass: method, result, cost, the codex verdicts, and the three named sets that need the owner. |
+| `findings/fix-pass/` | One JSON per batch with a verdict and exact old/new text per finding, plus `deferred.tsv`, `rejected.tsv`, `unextractable-spans.tsv`, `batch-index.tsv`. |
+| `extract-spans.py`, `make-batches.py`, `reconcile-fix-pass.py`, `commit-batch.sh`, `wave-args.py`, `codex-bundle.sh`, `codex-prompt.txt` | The fix-pass tooling. `FIX-PASS.md` names the order. |
 | `findings/language-prose-drift.tsv` | 1617 rows. One row is one finding. |
 | `findings/language-prose-coverage.tsv` | 16288 rows. One row is one segment pairing. |
 | `findings/prose-sweep/` | 336 JSON files. One file is one completed chapter-language pair. |
