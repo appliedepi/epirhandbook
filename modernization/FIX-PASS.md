@@ -28,7 +28,7 @@ By language, over the 1591 extractable findings:
 | vn | 163 | 4 | 4 |
 
 The diff from `52442a79` touches 317 translated chapter files: 1637 insertions, 1519 deletions.
-No English chapter, no `*.de.qmd`, no code chunk and no file outside `chapters/` changed.
+No English chapter, no `*.de.qmd` and no file outside `chapters/` changed. No existing `{r` chunk was edited; `basics.fr.qmd` gained two chunks copied verbatim from the English, and `errors.tr.qmd` had two error-output fences corrected to R's literal English error text.
 Nothing is pushed.
 
 ## Three named sets that need the owner
@@ -90,16 +90,15 @@ and the current chapter files, read-only, at reasoning effort high. Verdicts are
 |---|---|---|---|---|
 | tr part 1 | 165 | BLOCK, 22 | 24, see commit `4a05d937` | 2 |
 | tr part 2 | 131 | BLOCK, 26 | 1, see commit `ada77630` | 5, and 20 were the part-1 repairs |
+| jp | 228 | none: cut off by the codex usage limit after 320,388 tokens | n/a | n/a |
+| pt | 179 | none: cut off by the codex usage limit | n/a | n/a |
+| es, fr, ru, vn | 150, 174, 154, 147 | not started | n/a | n/a |
 
 Four defect classes came out of the Turkish review, and each was then swept mechanically across
 all seven languages: an inserted link that points at the English chapter, a translated R literal,
 a lost trailing hard break, and a literal folder name translated. The sweep found one more
 Portuguese literal and 13 lost hard breaks in three languages. The wave brief gained one rule
 per class before the last three waves ran.
-
-| jp | 228 | none: cut off by the codex usage limit after 320,388 tokens | n/a | n/a |
-| pt | 179 | none: cut off by the codex usage limit | n/a | n/a |
-| es, fr, ru, vn | 150, 174, 154, 147 | not started | n/a | n/a |
 
 Two codex runs died with "Selected model is at capacity" when four ran at once. Two at a time
 was stable until the owner's codex usage limit tripped at about 02:15 on 2026-09-02; it resets
