@@ -97,8 +97,22 @@ a lost trailing hard break, and a literal folder name translated. The sweep foun
 Portuguese literal and 13 lost hard breaks in three languages. The wave brief gained one rule
 per class before the last three waves ran.
 
+| jp | 228 | none: cut off by the codex usage limit after 320,388 tokens | n/a | n/a |
+| pt | 179 | none: cut off by the codex usage limit | n/a | n/a |
+| es, fr, ru, vn | 150, 174, 154, 147 | not started | n/a | n/a |
+
 Two codex runs died with "Selected model is at capacity" when four ran at once. Two at a time
-was stable.
+was stable until the owner's codex usage limit tripped at about 02:15 on 2026-09-02; it resets
+at 06:14. `codex-bundle.sh <lang> 52442a79 HEAD <lang>` rebuilds any language's workspace, and
+`codex-prompt.txt` is the prompt. The owner decides whether to fund the six remaining calls.
+
+**Structural sweep, all languages, no codex.** For every one of the 317 changed files, the
+counts of fence lines, `{r` chunk openers, headings and `{#anchor}` attributes before and after.
+Fifteen files changed a count. Fourteen are alignment fixes that add or remove a section the
+English has or lacks, one anchor restored from the English, and two English code chunks the
+French `basics` chapter had dropped. One was a defect: a repaired link in `help.es.qmd`
+targeted an in-page anchor where the English targets `collaboration.qmd`. Fixed in commit
+`afc3b69e`. Fence counts stay even in every file.
 
 ## What this pass did not do
 
