@@ -28,25 +28,18 @@ third, on 2026-09-01, added the last 105 in four batches of 28, 35, 28 and 14. E
 after the first used a hard slice, reconciled against disk, and none was killed.
 `RESUME.md` sections 4 to 6 hold the method.
 
-**No verification ran on any of the 1617 findings.**
-Each of the 1617 findings is one agent's unverified claim about one segment pair.
-Do NOT edit a `.qmd` file on the strength of a finding.
-Read `modernization/RESUME.md` section 8 before you use any finding.
+**Every extractable finding was verified and acted on in the fix pass of 2026-09-02.**
+`FIX-PASS.md` holds the result. A finding's verdict is in `findings/fix-pass/<batch>.json`.
+`RESUME.md` section 8 describes the state before that pass and stays as the record of it.
 
 ## What to do next
 
-**Phase D, verification.** Every finding goes to two blind verifiers who see both source spans
-and classify independently, without seeing the finder's verdict or each other's. A finding
-becomes eligible for a fix only on 2-of-2 agreement with the finder. Batch per pair, not per
-finding: 1617 findings at two verifiers each is 3234 agents, well past the 1000-agent workflow
-cap.
+**Phase G, the render gate.** `quarto render --no-execute` over all 8 languages, excluding the
+36 inline-`r` files, as `SWEEP-PLAN.md` specifies. Nothing has rendered since the fix pass.
 
-Phase D may use a deterministic segmenter freely. The objection that kept Phase A out of the
-sweep was comparability across pairs read by different methods, and that expires now that every
-pair is read.
-
-Read `RESUME.md` section 5 before sizing any Phase D batch. Fit a fresh cost line on that
-session's first two batches, choosing one small and one large chapter set.
+Then the three named sets in `FIX-PASS.md`: the 26 unextractable findings, the 73 deferred
+findings (60 of them defects inside code chunks), and the 30 rejected findings, several of
+which name a defect in the English source.
 
 ## Why Phase A is skipped
 
