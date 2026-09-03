@@ -21,7 +21,8 @@ for f in "${files[@]}"; do
   t0=$(date +%s)
   if timeout 180 quarto render "$f" --no-execute --to html > "$out/$(basename "$stem").log" 2>&1; then r=pass; pass=$((pass+1)); else r=FAIL; fail=$((fail+1)); fi
   printf '%s\t%s\t%s\n' "$f" "$r" "$(( $(date +%s) - t0 ))" >> "$out/SUMMARY.tsv"
-  rm -rf "$stem.html" "${stem}_files"
+  # Delete only artifacts that git does not track: some chapters commit their .html and _files.
+  for a in "$stem.html" "${stem}_files"; do git ls-files --error-unmatch "$a" > /dev/null 2>&1 || rm -rf "$a"; done
 done
 echo "rendered: pass $pass, FAIL $fail, skipped inline-r $skip, of ${#files[@]} changed translated files"
 grep -P '\tFAIL' "$out/SUMMARY.tsv" || true
