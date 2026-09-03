@@ -72,6 +72,10 @@ A rejection is a result, not a failure. Do not fix anything to make a count look
 5. Use the Edit tool with an exact old_string for every change. Never rewrite a file with Write. Never run git, quarto or R.
 6. Line numbers in the evidence are from commit 52442a79. Earlier batches may have shifted them by a few lines. Find the text by content. Read at most about 40 lines around a span in the ${L} file when the evidence context is not enough. Do not read whole chapters.
 7. If two findings name the same ${L} text, make one consistent edit and record it under both ids.
+8. An internal cross-reference you insert MUST point at the ${L} chapter: [label](chapter.${b.lang}.qmd), never (chapter.qmd). Copy the English link label translated, and the target with the .${b.lang}. infix.
+9. Keep the English inline-code markup in anything you insert: function names, arguments, R literals such as \`TRUE\`, \`FALSE\`, \`NA\`, package names in **bold**. Never translate an R literal: TRUE stays TRUE, not a ${L} word.
+10. A line that ends with two spaces is a Markdown hard line break. When you edit such a line, the new line MUST also end with two spaces.
+11. When a code chunk beside the prose uses a literal folder or file name, the prose keeps that literal name in ${L} too.
 
 ## Output. Each of these is a MUST.
 
