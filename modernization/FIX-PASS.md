@@ -197,6 +197,12 @@ the English in 336 of 336 after one agent per chapter aligned 11 chapters, commi
 767,127 tokens. Three further apparent mismatches were `#` lines inside bare output fences,
 which the first count did not strip. `render-gate.sh` on the 11 edited files: 7 pass, 0 fail, 4 skipped for inline R.
 
+**Anchor sync.** Of 8,414 heading attribute blocks, 48 carried a different anchor id from
+the English or none where the English has one, and 12 links written English-style into those
+chapters were dead. `sync-anchors.py` set the English id on those 48 headings, kept each
+translation's own classes, and rewrote the one link that targeted an old id: dead links 12
+before, 0 after, counted over every translated file. Commit `9ac73410`. RENDER_GATE_7_LINE
+
 **Inline-code pass.** Every \`span\` in translated prose that occurs nowhere in the English
 chapter is a suspect: 686 of about 34,000, 1.9%. One agent per batch of at most 40 sorts them
 into fix, keep and noise, and edits the fixes. Result, 22 agents, 1,976,923 tokens: 349 fixed, 320 rejected as a placeholder or a deliberate code-font word, 17 deferred to a sentence rewrite. `findings/fix-pass/inl-*.json`, commits `2debe888` to `88e063c6`: 113 files, 465 insertions, 455 deletions.
