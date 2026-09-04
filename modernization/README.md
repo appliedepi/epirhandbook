@@ -11,7 +11,7 @@ The session that produced the work wrote its scratch files to `/tmp`, and `/tmp`
 | Phase 1b / C, the prose sweep | **COMPLETE. All 336 chapter-language pairs read.** |
 | Phase A, the deterministic segmenter | SKIPPED. See "Why Phase A is skipped" below. |
 | Phase B, the segmenter saving | SKIPPED with Phase A. It exists only to measure Phase A. |
-| Phases D, E, F, verify and fix | **COMPLETE on 2026-09-02, as one pass.** 1488 fixed, 73 deferred, 30 rejected, 26 unextractable. See `FIX-PASS.md`. |
+| Phases D, E, F, verify and fix | **COMPLETE on 2026-09-02, as one pass.** Of 1617 findings: 1511 fixed, 76 deferred then 67 of those fixed in the deferred pass, 30 rejected. See `FIX-PASS.md`. |
 | Phase G, the render gate | COMPLETE on 2026-09-02. `render-gate.sh` and `chunk-parse-gate.py`, both green after every pass. |
 | Chunk sync, deferred pass, inline pass | COMPLETE on 2026-09-02. Every translated chapter carries the English code chunks. See `FIX-PASS.md`. |
 | Phase H, verification, commit, push, CI | Commits are on `main`, signed. **Nothing is pushed: a push deploys to staging, and the owner decides.** |
@@ -36,11 +36,13 @@ after the first used a hard slice, reconciled against disk, and none was killed.
 
 ## What to do next
 
-**The push, which is the owner's.** Then, every few months or after an English chapter changes, `modernization/check-sync.sh`; see `SYNC-CHECKS.md`.
+**The push, which is the owner's.** After it, `gh run watch` for CI, and staging.
 
-**The push, which is the owner's.** Then the named sets in `FIX-PASS.md`: 76 deferred findings
-and 5 review rows, 65 of them defects inside code chunks; 11 English source defects; and
-30 rejected findings.
+Then the open sets, all in `findings/fix-pass/`: 4 findings still deferred, each where the
+English is the defective side; 17 inline-code spans deferred to a sentence rewrite, in the
+`inl-*.json` files; 17 English source defects in `source-defects.tsv`, which the translations
+now mirror on purpose. And every few months, or after an English chapter changes,
+`modernization/check-sync.sh`; see `SYNC-CHECKS.md`.
 
 ## Why Phase A is skipped
 
