@@ -78,6 +78,7 @@ no result file; they were stashed and the wave re-run from a clean tree.
 | Subagent tokens, 9 odd-span batches | 506,954 |
 | Subagent tokens, 18 review agents | 2,913,765 |
 | Subagent tokens, 8 deferred-pass agents | 723,262 |
+| Subagent tokens, 22 inline-pass agents | 1,976,923 |
 | Codex, Turkish, two calls | 375,699 and 199,301 tokens |
 
 The owner's estimate of 2.5M tokens assumed about 30,000 per agent. The fixed overhead of an
@@ -171,7 +172,7 @@ agent each, then synced.
 
 **Inline-code pass.** Every \`span\` in translated prose that occurs nowhere in the English
 chapter is a suspect: 686 of about 34,000, 1.9%. One agent per batch of at most 40 sorts them
-into fix, keep and noise, and edits the fixes. INLINE_PASS_LINE
+into fix, keep and noise, and edits the fixes. Result, 22 agents, 1,976,923 tokens: 349 fixed, 320 rejected as a placeholder or a deliberate code-font word, 17 deferred to a sentence rewrite. `findings/fix-pass/inl-*.json`, commits `2debe888` to `88e063c6`: 113 files, 465 insertions, 455 deletions.
 
 **Structural sweep, all languages, no codex.** For every one of the 317 changed files, the
 counts of fence lines, `{r` chunk openers, headings and `{#anchor}` attributes before and after.
