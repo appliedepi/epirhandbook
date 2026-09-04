@@ -12,7 +12,8 @@ The session that produced the work wrote its scratch files to `/tmp`, and `/tmp`
 | Phase A, the deterministic segmenter | SKIPPED. See "Why Phase A is skipped" below. |
 | Phase B, the segmenter saving | SKIPPED with Phase A. It exists only to measure Phase A. |
 | Phases D, E, F, verify and fix | **COMPLETE on 2026-09-02, as one pass.** 1488 fixed, 73 deferred, 30 rejected, 26 unextractable. See `FIX-PASS.md`. |
-| Phase G, the render gate | COMPLETE on 2026-09-02. `render-gate.sh`: 287 pass, 0 fail, 32 skipped for inline R. |
+| Phase G, the render gate | COMPLETE on 2026-09-02. `render-gate.sh` and `chunk-parse-gate.py`, both green after every pass. |
+| Chunk sync, deferred pass, inline pass | COMPLETE on 2026-09-02. Every translated chapter carries the English code chunks. See `FIX-PASS.md`. |
 | Phase H, verification, commit, push, CI | Commits are on `main`, signed. **Nothing is pushed: a push deploys to staging, and the owner decides.** |
 
 The corpus is 48 declared chapters in 7 languages, which is 336 chapter-language pairs.

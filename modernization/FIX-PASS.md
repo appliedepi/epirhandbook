@@ -79,6 +79,8 @@ no result file; they were stashed and the wave re-run from a clean tree.
 | Subagent tokens, 18 review agents | 2,913,765 |
 | Subagent tokens, 8 deferred-pass agents | 723,262 |
 | Subagent tokens, 22 inline-pass agents | 1,976,923 |
+| Subagent tokens, 18 chunk-alignment agents | 1,184,297 |
+| Subagent tokens, all passes | 18,300,271 |
 | Codex, Turkish, two calls | 375,699 and 199,301 tokens |
 
 The owner's estimate of 2.5M tokens assumed about 30,000 per agent. The fixed overhead of an
@@ -169,6 +171,24 @@ after. Portuguese prose that named a renamed object was pointed back at the Engl
 Skipped, chunk count differs from the English: `data_used` in 5 languages, `epicurves` in 3,
 `ggplot_tips` in 3, `phylogenetic_trees.es`, `survey_analysis.es`. These are aligned by an
 agent each, then synced.
+
+**Alignment of the 18 chapters with a different chunk count.** One opus agent per chapter
+deleted chunks the English lacks, inserted English chunks verbatim where the translation
+lacked them, and moved misplaced ones. `data_used` in all seven languages carried six extra
+download chunks from an older English version. Every one of the 18 then matched the English
+count and was synced: 160 chunks. 1,184,297 tokens. `findings/fix-pass/aln-*.json`, commits
+`9b851d5e` and `b76c5b56`. `sync-chunks.py --dry-run` now changes nothing: every translated
+chapter with an English source carries the English chunks.
+
+**Gates after the sync.** `chunk-parse-gate.py`, all 33,520 chunks of the 328 changed files,
+before and after, ignoring a failure the English chunk at the same index shares: 0 files worse,
+55 better. `render-gate.sh`: 166 pass, 0 fail, 21 skipped for inline R over the 187 first-sync
+files; 18 pass, 0 fail over the 18 aligned ones. Verified by both scripts on 2026-09-02.
+
+**One incident.** The render gate's per-file `git ls-files` check failed while a concurrent
+commit held the index lock, so it rendered `contact_tracing.ru.qmd` and dropped an untracked
+`.html` beside it, which `git add chapters/` in commit `78bfaa3e` then swept into the
+repository. Removed in `712f8497`. The gate now reads `git ls-tree -r HEAD` once at start.
 
 **Inline-code pass.** Every \`span\` in translated prose that occurs nowhere in the English
 chapter is a suspect: 686 of about 34,000, 1.9%. One agent per batch of at most 40 sorts them
