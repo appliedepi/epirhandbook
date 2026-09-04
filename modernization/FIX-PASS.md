@@ -230,7 +230,7 @@ was already correct; the French pair was the inverted one. Commit `7f183974`, 74
 One opus agent per language then made the translated prose follow the corrected English at
 the 21 listed places and closed the inline-code deferrals: 16 fixed, 4 already matching, 1
 fixed by hand. Commit `62fff305`, 384,273 tokens. `check-sync.sh`: IN SYNC, 355 informational
-inline suspects. RENDER_GATE_8_LINE
+inline suspects. `render-gate.sh` on the 36 translated files changed since the English fix: 33 pass, 0 fail, 3 skipped for inline R.
 
 Still open: `editorial_style.ru#1`, a Russian legend label whose rename would touch 14 note
 labels in nine other chapters; and the German translation, excluded from
