@@ -62,8 +62,10 @@ English chapter with the fence-parity count and the R parse gate instead.
 - Heading and chunk alignment use one agent per chapter because the edit is structural and
   small, and the mechanical count afterwards is the proof, not the agent's report.
 - Every check was proved red before it was trusted: a corrupted span, an extra parenthesis, a
-  broken YAML front matter, an unclosed fence, a demoted heading. A check that has not been
-  seen to fail is not a check.
+  broken YAML front matter, an unclosed fence, a demoted heading. Check 3 was proved both ways
+  on 2026-09-02: one changed code token inside a Turkish chunk reports DRIFT; a changed or added
+  comment inside a chunk stays IN SYNC. That is the rule: code exact, comments free. A check
+  that has not been seen to fail is not a check.
 
 ## Order, when several things drift at once
 
