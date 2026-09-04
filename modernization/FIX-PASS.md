@@ -81,7 +81,9 @@ no result file; they were stashed and the wave re-run from a clean tree.
 | Subagent tokens, 22 inline-pass agents | 1,976,923 |
 | Subagent tokens, 18 chunk-alignment agents | 1,184,297 |
 | Subagent tokens, 14 heading-alignment agents | 767,127 |
-| Subagent tokens, all passes | 19,067,398 |
+| Subagent tokens, 14 English source-fix agents | 747,328 |
+| Subagent tokens, 6 mirror-pass agents | 384,273 |
+| Subagent tokens, all passes | 20,198,999 |
 | Codex, Turkish, two calls | 375,699 and 199,301 tokens |
 
 The owner's estimate of 2.5M tokens assumed about 30,000 per agent. The fixed overhead of an
@@ -215,6 +217,25 @@ French `basics` chapter had dropped. One was a defect: a repaired link in `help.
 targeted an in-page anchor where the English targets `collaboration.qmd`. Fixed in commit
 `afc3b69e`. Fence counts stay even in every file.
 
+## English source fixes and the mirror pass
+
+The owner then asked for the open sets to be closed. Fourteen opus agents, one per English
+chapter, fixed 17 of the 18 recorded source defects in `chapters/*.qmd`, the first edits to
+an English file in this work: wrong column, function, side or statistic in prose; three inline
+row counts written as plain code; a dead and an empty link; the strptime minute code; four
+`eval=F` chunks that did not parse. The 18th, the `add_count()` sentences in `grouping.qmd`,
+was already correct; the French pair was the inverted one. Commit `7f183974`, 747,328 tokens.
+`sync-chunks.py` then carried the four corrected chunks into 21 translated files, `fb65c948`.
+
+One opus agent per language then made the translated prose follow the corrected English at
+the 21 listed places and closed the inline-code deferrals: 16 fixed, 4 already matching, 1
+fixed by hand. Commit `62fff305`, 384,273 tokens. `check-sync.sh`: IN SYNC, 355 informational
+inline suspects. RENDER_GATE_8_LINE
+
+Still open: `editorial_style.ru#1`, a Russian legend label whose rename would touch 14 note
+labels in nine other chapters; and the German translation, excluded from
+`babelquarto.languages`.
+
 ## What this pass did not do
 
 - Phase G ran as `render-gate.sh`: `quarto render --no-execute` per changed translated file,
@@ -222,7 +243,5 @@ targeted an in-page anchor where the English targets `collaboration.qmd`. Fixed 
   before the review repairs: 287 pass, 0 fail, 32 skipped for inline R, of 319 files.
   Second run, on the 45 files the review repairs touched: 40 pass, 0 fail, 5 skipped. Verified by `modernization/render-gate.sh`.
 - No push. A push to `main` deploys to staging.
-- The English source defects that the agents and codex identified are recorded in
-  `rejected.tsv` and `deferred.tsv` and are not fixed.
 - The translated `DOĞRU`/`YANLIŞ` for `TRUE`/`FALSE` occurs on about 12 more Turkish lines that
   no finding named. They are untouched.

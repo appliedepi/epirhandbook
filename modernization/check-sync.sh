@@ -56,7 +56,7 @@ for tr in sorted(glob.glob('chapters/*.[a-z][a-z].qmd')):
     for s in SPAN.findall(strip(tt)):
         s2 = s.strip()
         if not (s2 in es or s2 in te or s2.strip('r ').strip() in te): per[tr[-6:-4]] += 1
-print('   suspect spans by language:', dict(sorted(per.items())), 'total', sum(per.values()), '(baseline 2026-09-02, after the inline pass: 360, all judged placeholders or noise)')
+print('   suspect spans by language:', dict(sorted(per.items())), 'total', sum(per.values()), '(baseline 2026-09-02, after the inline and mirror passes: 355, all judged placeholders or noise)')
 PY
 if [ "${1:-}" = "--render" ]; then
   echo "== 5. Render gate on every translated chapter (quarto render --no-execute)"

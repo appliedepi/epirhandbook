@@ -14,7 +14,8 @@ The session that produced the work wrote its scratch files to `/tmp`, and `/tmp`
 | Phases D, E, F, verify and fix | **COMPLETE on 2026-09-02, as one pass.** Of 1617 findings: 1511 fixed, 76 deferred then 67 of those fixed in the deferred pass, 30 rejected. See `FIX-PASS.md`. |
 | Phase G, the render gate | COMPLETE on 2026-09-02. `render-gate.sh` and `chunk-parse-gate.py`, both green after every pass. |
 | Chunk sync, deferred pass, inline pass | COMPLETE on 2026-09-02. Every translated chapter carries the English code chunks. See `FIX-PASS.md`. |
-| Phase H, verification, commit, push, CI | Commits are on `main`, signed. **Nothing is pushed: a push deploys to staging, and the owner decides.** |
+| English source fixes and mirror | COMPLETE on 2026-09-02. 17 English defects fixed, translations follow. |
+| Phase H, verification, commit, push, CI | PUSH_STATE_LINE |
 
 The corpus is 48 declared chapters in 7 languages, which is 336 chapter-language pairs.
 The sweep read all 336. It produced these counts:
@@ -38,10 +39,8 @@ after the first used a hard slice, reconciled against disk, and none was killed.
 
 **The push, which is the owner's.** After it, `gh run watch` for CI, and staging.
 
-Then the open sets, all in `findings/fix-pass/`: 4 findings still deferred, each where the
-English is the defective side; 17 inline-code spans deferred to a sentence rewrite, in the
-`inl-*.json` files; 17 English source defects in `source-defects.tsv`, which the translations
-now mirror on purpose. And every few months, or after an English chapter changes,
+The 17 English source defects are fixed and mirrored, the inline deferrals closed. One item
+stays open: `editorial_style.ru#1` in `findings/fix-pass/deferred.tsv`. And every few months, or after an English chapter changes,
 `modernization/check-sync.sh`; see `SYNC-CHECKS.md`.
 
 ## Why Phase A is skipped

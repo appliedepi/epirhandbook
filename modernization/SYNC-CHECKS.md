@@ -26,7 +26,7 @@ English is the reference. For every chapter listed in `_quarto.yml` and every la
 
 Check 4 is informational because a suspect span is often right: a placeholder the reader
 replaces, or a word the author put in code font. The baseline after the 2026-09-02 inline pass
-is 360 suspects, all judged placeholders or noise. A rise above that is what to look at, not
+is 355 suspects, all judged placeholders or noise. A rise above that is what to look at, not
 the number itself. Files without an English chapter, such as `across.*` and `first_page.*`,
 are skipped and listed; that is expected.
 
