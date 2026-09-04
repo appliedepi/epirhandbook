@@ -201,7 +201,7 @@ which the first count did not strip. `render-gate.sh` on the 11 edited files: 7 
 the English or none where the English has one, and 12 links written English-style into those
 chapters were dead. `sync-anchors.py` set the English id on those 48 headings, kept each
 translation's own classes, and rewrote the one link that targeted an old id: dead links 12
-before, 0 after, counted over every translated file. Commit `9ac73410`. RENDER_GATE_7_LINE
+before, 0 after, counted over every translated file. Commit `9ac73410`. `render-gate.sh` on the 41 files: 41 pass, 0 fail, 0 skipped for inline R or a tracked artifact.
 
 **Inline-code pass.** Every \`span\` in translated prose that occurs nowhere in the English
 chapter is a suspect: 686 of about 34,000, 1.9%. One agent per batch of at most 40 sorts them
