@@ -4,7 +4,8 @@
 For each chapters/<chapter>.<lang>.qmd changed between BASE and HEAD, extract the ```{r ...}
 chunks from both versions, parse every chunk in ONE R process, and report per file the count
 of chunks that fail to parse. The gate FAILS if any file has MORE parse failures after than
-before. It prints every failing chunk after, so a pre-existing failure is visible too.
+before, not counting a failure that the English chunk at the same index shares: that is the
+source's pseudo-code or defect, not a regression. It prints every failing chunk after, so a pre-existing failure is visible too.
 
 Proved red: an extra closing parenthesis is reported by parse().
 
@@ -33,7 +34,9 @@ index = []  # (file, version, i, path)
 for f in files:
     old = subprocess.run(['git', 'show', '%s:%s' % (base, f)], capture_output=True, text=True).stdout
     new = open(f, encoding='utf-8').read()
-    for version, text in (('before', old), ('after', new)):
+    en_path = re.sub(r'\.[a-z]{2}\.qmd$', '.qmd', f)
+    english = open(en_path, encoding='utf-8').read() if os.path.exists(en_path) else ''
+    for version, text in (('before', old), ('after', new), ('english', english)):
         for i, c in enumerate(chunks(text)):
             p = os.path.join(tmp, '%s__%s__%d.R' % (os.path.basename(f), version, i))
             open(p, 'w', encoding='utf-8').write(c); index.append((f, version, i, p))
@@ -52,7 +55,9 @@ for line in res.stdout.split('\n'):
 worse = 0
 for f in files:
     fo = [p for (ff, v, i, p) in index if ff == f and v == 'before' and p in fails]
-    fn = [p for (ff, v, i, p) in index if ff == f and v == 'after' and p in fails]
+    en_fail = {i for (ff, v, i, p) in index if ff == f and v == 'english' and p in fails}
+    # A failure the English chunk at the same index shares is the source's, not a regression.
+    fn = [p for (ff, v, i, p) in index if ff == f and v == 'after' and p in fails and i not in en_fail]
     if fn or fo:
         flag = 'WORSE' if len(fn) > len(fo) else ('better' if len(fn) < len(fo) else 'same')
         if len(fn) > len(fo): worse += 1
