@@ -15,7 +15,7 @@ The session that produced the work wrote its scratch files to `/tmp`, and `/tmp`
 | Phase G, the render gate | COMPLETE on 2026-09-02. `render-gate.sh` and `chunk-parse-gate.py`, both green after every pass. |
 | Chunk sync, deferred pass, inline pass | COMPLETE on 2026-09-02. Every translated chapter carries the English code chunks. See `FIX-PASS.md`. |
 | English source fixes and mirror | COMPLETE on 2026-09-02. 17 English defects fixed, translations follow. |
-| Phase H, verification, commit, push, CI | Ready to push: 201 signed commits ahead of `origin/main`. The push is the owner's; it deploys to staging and runs the new sync check. |
+| Phase H, verification, commit, push, CI | COMPLETE. Pushed by the owner on 2026-09-02 at `31abba26`. CI on that SHA: Translation sync check success; Deploy to Staging success, all eight `render (<lang>)` jobs and `assemble-deploy` green. |
 
 The corpus is 48 declared chapters in 7 languages, which is 336 chapter-language pairs.
 The sweep read all 336. It produced these counts:

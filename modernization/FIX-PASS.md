@@ -232,6 +232,10 @@ the 21 listed places and closed the inline-code deferrals: 16 fixed, 4 already m
 fixed by hand. Commit `62fff305`, 384,273 tokens. `check-sync.sh`: IN SYNC, 355 informational
 inline suspects. `render-gate.sh` on the 36 translated files changed since the English fix: 33 pass, 0 fail, 3 skipped for inline R.
 
+**CI on the pushed SHA `31abba26`.** Translation sync check: success, its first real run. Deploy to
+Staging: success, `languages`, all eight `render (<lang>)` jobs with execution, and
+`assemble-deploy`. Read from `gh api .../actions/runs?head_sha=31abba26` and the run's jobs.
+
 Still open: `editorial_style.ru#1`, a Russian legend label whose rename would touch 14 note
 labels in nine other chapters; and the German translation, excluded from
 `babelquarto.languages`.
