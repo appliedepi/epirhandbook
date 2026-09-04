@@ -42,12 +42,12 @@ pacman::p_load(
 Nous importons un jeu de données de cas d'une épidémie d'ébola fictive. Chargez-les directement avec `appliedepidata::get_data(name = "linelist_cleaned_rds")` (voir la page [Télécharger le manuel et les données](data_used.fr.qmd) pour plus de détails).    
 
 ```{r, echo=F}
-# importer la linelist dans R
+# import the linelist into R
 linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds")
 ```
 
 ```{r, eval=F}
-# importer la linelist dans R
+# import the linelist
 linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds")
 ```
 
@@ -55,9 +55,7 @@ Les cinquantes premières lignes sont affichées ci-dessous :
 
 ```{r, message=FALSE, echo=F}
 # display the linelist data as a table
-DT::datatable(head(linelist, 50), rownames = FALSE, filter = "top",
-              options = list(pageLength = 5, scrollX = T), 
-              class = 'white-space: nowrap' )
+DT::datatable(head(linelist, 50), rownames = FALSE, filter="top", options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
 ```
 
 
@@ -91,7 +89,7 @@ Parmi ces cas rares, la création d'une nouvelle colonne avec la fonction **dply
 ```{r, eval=F}
 linelist <- linelist %>% 
   
-  # Créer une nouvelle colonne "age_years" à partir de la colonne "age"
+  # Create new "age_years" column from "age" column
   mutate(age_years = case_when(
     age_unit == "years"  ~ age,    # si l'unité est années => garder la valeur originale
     age_unit == "months" ~ age/12, # l'unité est en mois, diviser par 12
@@ -242,7 +240,7 @@ mean(my_vector, na.rm = TRUE)
 Le package **naniar** permet de détecter et de visualiser l'ampleur de la complétude des données (et donc de leur non-complétude) dans un tableau de données.  
 
 ```{r}
-# installer et charger le paquet
+# install and/or load package
 pacman::p_load(naniar)
 ```
 
@@ -252,7 +250,7 @@ La fonction `pct_miss()` permet de calculer le pourcentage de toutes les valeurs
 
 
 ```{r}
-# pourcentage de données manquantes sur TOUTES les valeurs du dataframe
+# percent of ALL data frame values that are missing
 pct_miss(linelist)
 ```
 
@@ -262,12 +260,12 @@ Note : `NA` signifie manquant, mais que ``""` ou `""` ne sont pas considérées 
 
 
 ```{r}
-# Pourcentage des lignes avec au moins une valeur manquante
+# Percent of rows with any value missing
 pct_miss_case(linelist)   # utiliser n_miss() pour le nombre de lignes
 ```
 
 ```{r}
-# Pourcentage des lignes sans valeur manquante
+# Percent of rows that are complete (no values missing)  
 pct_complete_case(linelist) # utiliser n_complete() pour le nombre
 ```
 
@@ -298,7 +296,7 @@ linelist %>%
 La fonction `vis_miss()` permet de visualiser le dataframe sous forme de carte thermique qui indique quelle valeur est manquante. Vous pouvez également `select()` certaines colonnes du cadre de données et ne fournir que ces colonnes à la fonction.  
 
 ```{r}
-# Carte thermique de la complétude des données à l'échelle du dataframe
+# Heatplot of missingness across the entire data frame  
 vis_miss(linelist)
 ```
 
@@ -369,7 +367,7 @@ linelist %>%
   summarise(across(
     .cols = age_years,             # variable d'intérêt à résumer
     .fns = list("mean" = ~mean(.x, na.rm = TRUE),     # statistiques
-                "sd"  = ~sd(.x, na.rm = TRUE),
+                "sd" = ~sd(.x, na.rm = TRUE),
                 "var" = ~var(.x, na.rm = TRUE),
                 "min" = ~min(.x, na.rm = TRUE),
                 "max" = ~max(.x, na.rm = TRUE))))                 # autres arguments des fonctions statistiques
@@ -390,6 +388,7 @@ outcome_missing <- linelist %>%
   group_by(week) %>%      # groupe les lignes par semaine
   summarise(              # pour chaque semaine, résumme : 
     n_obs = n(),          # nombre total d'observations
+    
     outcome_missing = sum(is.na(outcome) | outcome == ""),  # nombre d'obs avec valeur manquante
     outcome_p_miss  = outcome_missing / n_obs,    # proportion d'obs avec valeur manquante
   
@@ -404,22 +403,19 @@ Ensuite, nous traçons la proportion de données manquantes par semaine, sous fo
 Référez vous à la page [bases de ggplot](#ggplot_basics) si vous n'êtes pas familier avec le package **ggplot2**.  
 
 ```{r, message=F, warning=F}
-ggplot(data = outcome_missing) +
+ggplot(data = outcome_missing)+
     geom_line(
-      mapping = aes(x = week, 
-                    y = value, 
-                    group = statistic, 
-                    color = statistic),
+      mapping = aes(x = week, y = value, group = statistic, color = statistic),
       linewidth = 2,
-      stat = "identity") +
+      stat = "identity")+
     labs(title = "Weekly outcomes",
          x = "Week",
          y = "Proportion of weekly records") + 
      scale_color_discrete(
        name = "",
-       labels = c("Died", "Missing outcome")) +
-    scale_y_continuous(breaks = c(seq(0, 1, 0.1))) +
-  theme_minimal() +
+       labels = c("Died", "Missing outcome"))+
+    scale_y_continuous(breaks = c(seq(0,1,0.1)))+
+  theme_minimal()+
   theme(legend.position = "bottom")
 ```
 
@@ -475,8 +471,8 @@ labs(
   y = "",
   x = "",
   caption  = stringr::str_glue(
-  "n = {nrow(central_data)} du Central Hospital;
-  {nrow(central_data %>% filter(is.na(date_onset)))} cas sans date de début des symptomes et non représentés"))  
+  "n = {nrow(central_data)} from Central Hospital;
+  {nrow(central_data %>% filter(is.na(date_onset)))} cases missing date of onset and not shown."))  
 ```
 
 
@@ -568,13 +564,11 @@ Une méthode un peu plus avancée consiste à utiliser un modèle statistique po
 
 
 ```{r, warning=F, message=F}
-simple_temperature_model_fit <- lm(temp ~ fever + age_years, 
-                                   data = linelist)
+simple_temperature_model_fit <- lm(temp ~ fever + age_years, data = linelist)
 
-# Nous utilisons un modèle linéaire simple avec la température comme variable réponse pour prédire les valeurs de température manquantes
+#using our simple temperature model to predict values just for the observations where temp is missing
 predictions_for_missing_temps <- predict(simple_temperature_model_fit,
-                                         newdata = linelist %>%
-                                              filter(is.na(temp))) 
+                                        newdata = linelist %>% filter(is.na(temp))) 
 ```
 
 On peut utiliser la même approche d'imputation par régression avec le package **mice** pour imputer les les observations de température manquantes :  
@@ -587,9 +581,10 @@ temp_imputed <- mice(model_dataset,
                             method = "norm.predict",
                             seed = 1,
                             m = 1,
-                            print = FALSE)
+                            print = F)
 
 temp_imputed_values <- temp_imputed$imp$temp
+
 ```
 
 
@@ -608,7 +603,7 @@ La fonction `fill()` du package **tidyr** peut être utilisée pour l'imputation
 
 
 ```{r}
-# Création d'un jeu de données
+#creating our simple dataset
 disease <- tibble::tribble(
   ~quarter, ~year, ~cases,
   "Q1",    2000,    66013,
@@ -620,14 +615,15 @@ disease <- tibble::tribble(
   "Q3",      NA,    44568,
   "Q4",      NA,    50197)
 
-# Imputation ds données manquantes pour l'année (vers le bas par défaut)
+#imputing the missing year values:
 disease %>% fill(year)
+
 ```
 
 **Note** : il faut que les données soient correctement triées avant d'utiliser la fonction `fill()`! Par défaut, la fonction `fill()` remplit les données _vers le bas_, mais il est possible d'imputer des valeurs dans différentes directions à l'aide du paramètre `.direction`. Si nous créons un jeu de données similaire où la valeur de l'année est enregistrée uniquement à la fin de l'année et manquante pour les trimestres précédents :  
 
 ```{r}
-# Création d'un jeu de données
+#creating our slightly different dataset
 disease <- tibble::tribble(
   ~quarter, ~year, ~cases,
   "Q1",      NA,    66013,
@@ -639,8 +635,9 @@ disease <- tibble::tribble(
   "Q3",      NA,    44568,
   "Q4",    2001,    50197)
 
-# Imputation des données de l'année "vers le haut"
+#imputing the missing year values in the "up" direction:
 disease %>% fill(year, .direction = "up")
+
 ```
 
 Dans cet exemple, l'imputation avec les méthodes LOCF et BOCF sont clairement les solutions les plus adaptée. Néanmoins, dans des situations plus complexes, il peut être difficile de décider si ces méthodes sont appropriées ou non. Par exemple, vous pouvez avoir des valeurs de laboratoire manquantes pour un patient hospitalisé après le premier jour. Cela pourrait signifier que les valeurs de laboratoire n'ont pas changé... ou que le patient s'est rétabli et donc que ses valeurs seraient très différentes après le premier jour ! Utilisez ces méthodes avec prudence.  
@@ -659,15 +656,14 @@ Note : en fonction des données, on peut créer plus ou moins de jeux de donnée
 Voici un exemple d'application de l'imputation multiple pour prédire la température dans notre jeu de données de liste linéaire, en utilisant l'age et la présence/absence de fièvre :  
 
 ```{r}
-# imputation des valurs manquantes pour notre jeu de données modèle, et création de 10 jeux de données imputés : 
+# imputing missing values for all variables in our model_dataset, and creating 10 new imputed datasets
 multiple_imputation = mice(
   model_dataset,
   seed = 1,
   m = 10,
   print = FALSE) 
 
-model_fit <- with(multiple_imputation, 
-                  lm(temp ~ age_years + fever))
+model_fit <- with(multiple_imputation, lm(temp ~ age_years + fever))
 
 base::summary(mice::pool(model_fit))
 ```

@@ -75,7 +75,7 @@ pacman::p_load(
 このサンプルデータ（`cases` データセット）には、感染者の情報が含まれています。
 
 ```{r}
-cases <- appliedepidata::get_data(name = "cases_clean") %>% 
+cases <- appliedepidata::get_data(name = "cases_clean") %>%
   select(case_id, firstName, lastName, gender, age, age_class,
          occupation, classification, was_contact, hospitalization_typeid)
 ```
@@ -96,7 +96,7 @@ DT::datatable(cases, rownames = FALSE, options = list(pageLength = 5, scrollX=T)
 
 
 ```{r}
-contacts <- appliedepidata::get_data(name = "contacts_clean") %>% 
+contacts <- appliedepidata::get_data(name = "contacts_clean") %>%
   mutate(age_class = forcats::fct_rev(age_class)) %>% 
   select(contact_id, contact_status, firstName, lastName, gender, age,
          age_class, occupation, date_of_reporting, date_of_data_entry,
@@ -118,7 +118,7 @@ DT::datatable(contacts, rownames = FALSE, options = list(pageLength = 5, scrollX
 データをインポートした後、いくつかのデータ加工を行います。特定の列を選択し、文字列変数である `followup_status` をすべて小文字に変換します。
 
 ```{r}
-followups <- appliedepidata::get_data(name = "followups_clean") %>% 
+followups <- appliedepidata::get_data(name = "followups_clean") %>%
   select(contact_id, followup_status, followup_number,
          date_of_followup, admin_2_name, admin_1_name) %>% 
   mutate(followup_status = str_to_lower(followup_status))
@@ -135,7 +135,7 @@ DT::datatable(head(followups, 50), rownames = FALSE, options = list(pageLength =
 ここでは、感染症例と接触の関係性を表すデータをインポートします。表示する列を絞り込んでおきましょう。
 
 ```{r}
-relationships <- appliedepidata::get_data(name = "relationships_clean") %>% 
+relationships <- appliedepidata::get_data(name = "relationships_clean") %>%
   select(source_visualid, source_gender, source_age, date_of_last_contact,
          date_of_data_entry, target_visualid, target_gender,
          target_age, exposure_type)
@@ -208,20 +208,20 @@ apyramid::age_pyramid(
     labels = c("Case", "Contact"))+
   labs(
     fill = "Legend",                                           # 凡例のタイトル
-    title = "Age Pyramid of COVID-19 contacts and cases")+ # 図のタイトル
+    title = "Age/Sex Pyramid of COVID-19 contacts and cases")+ # title of the plot
   theme_minimal()                                              # 背景テーマの設定
 ```
 
 他にも、感染者の職業の内訳などの特徴も可視化することができます（ここでは、感染症例データ（`cases` のデータセット）を使用し、円グラフを作成します）。
 
 ```{r, warning=F, message=F}
-# データを前処理し、職業ごとの感染者数を産出する
+# Clean dataset and get counts by occupation
 occ_plot_data <- cases %>% 
   mutate(occupation = forcats::fct_na_value_to_level(occupation, level = "(Missing)"),  # 欠損値を可視化する（NA をカテゴリーとする）
          occupation = forcats::fct_infreq(occupation)) %>%   # 頻度順で因子型のレベルを並べかえる
   count(occupation)                                          # 職業ごとの感染者数を算出する
   
-# 円グラフを作成する
+# Make pie chart
 ggplot(data = occ_plot_data, mapping = aes(x = "", y = n, fill = occupation))+
   geom_bar(width = 1, stat = "identity") +
   coord_polar("y", start = 0) +
@@ -285,7 +285,7 @@ ggplot(data = contacts_per_case)+        # 上のコードで作成したデー�
 Go.Data からダウンロードしたデータは、追跡データ（`followups` データセット）に含まれており、調査の記録が各行に記載されている縦型データとなっています。以下では、接触者追跡調査データの最初の50行を表示しています。
 
 ```{r, message=FALSE, echo=FALSE}
-# 接触者追跡調査データの最初の50行を表として表示する
+# display the first 50 rows of contact linelist data as a table
 DT::datatable(head(followups, 50), rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
 ```
 
@@ -305,13 +305,13 @@ followups %>%
 ```{r, warning=F, message=F}
 followups_clean <- followups %>%
   
-  # 重複記録の排除
+  # De-duplicate
   group_by(contact_id, date_of_followup) %>%        #接触者ID、調査日ごとに記録をグループ化する
   arrange(contact_id, desc(date_of_followup)) %>%   # 接触者ID毎に、調査日の降順で記録を並び替える（日付の新しい順）
   slice_head() %>%                                  # 接触者ID毎に、最新の調査日の記録のみ残す  
   ungroup() %>% 
   
-  # 他の前処理
+  # Other cleaning
   mutate(followup_number = replace(followup_number, followup_number > 14, NA)) %>% # 調査日のエラーの処理
   drop_na(contact_id)                               # 接触者IDが欠損してる記録を排除する
 ```
@@ -375,7 +375,7 @@ ggplot(data = followups_clean)+
 plot_by_region <- followups_clean %>%                                        # 前処理した followups のデータセットを使用する
   count(admin_1_name, admin_2_name, followup_status) %>%   # 地域別、調査チーム別のカウントを算出する (新たに 'n' 列を作成する)
   
-  # ggplot() を使用して図を作成する
+  # begin ggplot()
   ggplot(                                         # ggplot
     mapping = aes(x = reorder(admin_2_name, n),     # admin_2_name の因子（ファクタ）レベルを 'n' 列のカウントをもとに並び替える
                   y = n,                            # 'n' 列のカウントをy軸に指定する
@@ -432,10 +432,10 @@ plot_by_region
 ここでは、データの変化に合わせて連動する表を作成します。結果を面白くするために、特定の日に `report_date` （この表を提示し、追跡調査の進捗を報告する日）を設定し、表を作成します（この例では、2020年6月10日を選びます）。データは `report_date` でフィルタリングされ、`report_date` の日、または、`report_date` より以前に報告された記録のみ残ります。
 
 ```{r, warning=F, message=F}
-# report_date (報告日)を設定する
+# Set "Report date" to simulate running the report with data "as of" this date
 report_date <- as.Date("2020-06-10")
 
-# report_date (報告日)でデータセットをフィルタリングする
+# Create follow-up data to reflect the report date.
 table_data <- followups_clean %>% 
   filter(date_of_followup <= report_date)
 ```
@@ -553,7 +553,7 @@ contacts_table %>%
 Go.Data では、接触者データ（`contacts` データセット）に新しい接触者が追加されると、API によって、関連データ（`relationships` データセット）に、その接触者と接触した感染者の関係情報が追加されます。`relationships` データセットには、各接触者と接触した感染者の情報が含まれているので、このデータセットを使用すると比較的簡単にヒートマップを作成することができます。以下に、関連データ（`relationships` データセット）の最初の 50 行を表示します。
 
 ```{r, warning=F, message=F, echo=F}
-# 最初の50行を表として表示する
+# display the first 50 rows of relationships data as a table
 DT::datatable(head(relationships, 50), rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
 ```
 

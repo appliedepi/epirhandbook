@@ -13,20 +13,23 @@ L'outil principal pour manipuler, analyser, et visualiser les chaînes de transm
 
 ```{r out.width=c('25%', '25%'), fig.show='hold', echo=F}
 
-## installer la version de développement de epicontacts
+# install development version of epicontacts
 if(
   !"epicontacts" %in% rownames(installed.packages()) |
   packageVersion("epicontacts") != "1.2.0"
 ) remotes::install_github("reconhub/epicontacts@timeline")
 
-## installer et charger les paquets
-pacman::p_load(tidyverse, epicontacts, magrittr, here, webshot, visNetwork)
+## install and load packages
+pacman::p_load(tidyverse,
+               #epicontacts,
+               magrittr, here, webshot, visNetwork)
 
-## charger la liste de diffusion
+library(epicontacts)
+
+## load linelist
 linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds") %>%
   filter(!duplicated(case_id))
-
-## générer des contacts
+## generate contacts
 contacts <- linelist %>%
   transmute(
     from = infector,
@@ -36,22 +39,23 @@ contacts <- linelist %>%
   ) %>%
   drop_na(from)
 
-## générer des epicontacts
+## generate epicontacts
 epic <- epicontacts::make_epicontacts(
   linelist = linelist,
   contacts = contacts, 
   directed = TRUE
 )
 
-## objet subset
-epic %<>% subset(
-  node_attribute = list(date_onset = c(as.Date(c("2014-06-01", "2014-07-01"))))
-) %>%
-  thin("contacts")
+## subset object
+#epic %<>% subset(
+epic_small <- epic %>% 
+  subset(
+    node_attribute = list(date_onset = c(as.Date(c("2014-06-01", "2014-07-01"))))) %>%
+  epicontacts::thin("contacts")
 
-## Graphique avec la date d'apparition en axe x
+# plot with date of onset as x-axis
 plot(
-  epic,
+  epic_small,
   x_axis = "date_onset",
   label = FALSE,
   node_color = "outcome",
@@ -102,19 +106,19 @@ pacman::p_install_gh("reconhub/epicontacts@timeline")
 Nous importons le jeu de données des cas d'une épidémie d'Ebola simulée. Si vous souhaitez télécharger les données pour suivre le code, consultez les instructions de la page [Télécharger le manuel et les données](#download_book_data). Le jeu de données est importé à l'aide de la fonction `import()` du paquet **rio**. Voir la page [Importation et exportation](#import_export) pour connaître les différentes methodes d'importer des données.
 
 ```{r, echo=F}
-# Importez la linelist dans R
+# import the linelist into R
 linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds")
 ```
 
 ```{r, eval=F}
-# Importez la liste de cas
+# import the linelist
 linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds")
 ```
 
 Les 50 premières lignes de la linelist sont affichées ci-dessous. Les colonnes `case_id`, `generation`, `infector`, et `source` sont particulièrement intéressantes.  
 
 ```{r, message=FALSE, echo=F}
-# affiche les données de la liste de diffusion sous forme de tableau
+# display the linelist data as a table
 DT::datatable(head(linelist, 50), rownames = FALSE, filter="top", options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
 ```
 
@@ -132,7 +136,7 @@ Comme nous avons déjà une linelist, il nous suffit de créer une liste de bord
 Dans le code ci-dessous, la fonction `transmute` de le paquet **dplyr** est similaire à `mutate`, sauf qu'elle ne conserve que les colonnes que nous avons spécifiées dans la fonction. La fonction `drop_na` enlevera toutes les lignes où les colonnes spécifiées ont une valeur `NA`. Dans ce cas, nous ne voulons conserver que les lignes où l'infecteur est connu.
 
 ```{r transmission_chains_create_contacts,}
-## générer des contacts
+## generate contacts
 contacts <- linelist %>%
   transmute(
     infector = infector,
@@ -146,7 +150,7 @@ contacts <- linelist %>%
 Nous pouvons maintenant créer l'objet **epicontacts** en utilisant la fonction `make_epicontacts` . Nous devons spécifier quelle colonne de la linelist correspond à l'identifiant unique du cas, ainsi que les colonnes des contacts qui pointent vers les identifiants uniques des cas impliqués dans chaque lien. Ces liens sont directionnels en le sens que l'infection va _de_ l'infecteur _à_ le cas, nous devons donc spécifier les arguments `from` et `to` en conséquence. Nous définissons donc l'argument `directed` (direction) à `TRUE` (VRAI), ce qui affectera les opérations futures.
 
 ```{r transmission_chains_create_epicontacts,}
-## générer un objet epicontacts
+## generate epicontacts object
 epic <- make_epicontacts(
   linelist = linelist,
   contacts = contacts,
@@ -159,7 +163,7 @@ epic <- make_epicontacts(
 En examinant les objets **epicontacts**, on peut voir que la colonne `case_id` de la linelist a été renommée à `id` et que les colonnes `case_id` et `infector` des contacts ont été renommées à `from` et `to`. Cela garantit la cohérence dans le traitement, visualisation et analyse de l'objet **epicontacts**.
 
 ```{r transmission_chains_view_epicontacts,}
-## visualiser l'objet epicontacts
+## view epicontacts object
 epic
 ```
 
@@ -193,7 +197,7 @@ Les réseaux peuvent être élagués pour n'inclure que les composants qui sont 
 prend un vecteur d'identifiants de cas et renvoie la linelist des individus qui sont liés, directement ou indirectement, à ces IDs. Dans le code ci-dessous, nous pouvons voir qu'un total de 13 cas de la linelist sont impliqués dans les clusters contenant `2ae019` et `71577a`.
 
 ```{r}
-sub_id <- subset(epic, cluster_id = c("2ae019", "71577a"))
+sub_id <- subset(epic, cluster_id = c("2ae019","71577a"))
 nrow(sub_id$linelist)
 ```
 
@@ -235,7 +239,7 @@ length(get_id(epic, "common"))
 Toutes les visualisations des objets **epicontacts** sont gérées par la fonction `plot`. Nous allons d'abord filtrer l'objet **epicontacts** pour n'inclure que les cas ayant une date d'apparition en juin 2014, en utilisant la fonction `subset`, et filtrer seulement les contacts liés à ces cas à l'aide de la fonction `thin`.
 	
 ```{r transmission_chains_basic_plot_sub,}
-## sous-ensemble objet epicontacts
+## subset epicontacts object
 sub <- epic %>%
   subset(
     node_attribute = list(date_onset = c(as.Date(c("2014-06-30", "2014-06-01"))))
@@ -246,7 +250,7 @@ sub <- epic %>%
 Nous pouvons ensuite créer le graphique interactif de base très simplement comme suit :
 
 ```{r transmission_chains_basic_plot,}
-## tracer l'objet epicontacts
+## plot epicontacts object
 plot(
   sub,
   width = 700,
@@ -302,7 +306,7 @@ plot(
   sub, 
   node_color = "outcome",
   node_shape = "gender",
-  node_size = "age",
+  node_size = 'age',
   col_pal = c(Death = "firebrick", Recover = "green"),
   shapes = c(f = "female", m = "male"),
   size_range = c(40, 60),
@@ -397,7 +401,7 @@ plot(
 
 Vous pouvez enregistrer un graphique sous forme de fichier html interactif et autonome avec la fonction `visSave` du paquet **VisNetwork** :
 
-```{r transmission_chaînes_save, eval=F}
+```{r transmission_chains_save, eval=F}
 
 plot(
   sub,
@@ -428,7 +432,7 @@ Vous pouvez également ajouter les chronologie de cas sur le réseau, qui sont r
 
 ```{r transmission_chains_create_timeline,}
 
-## générer une ligne chronologique
+## generate timeline
 timeline <- linelist %>%
   transmute(
     id = case_id,
@@ -446,7 +450,7 @@ Voir `?vis_temporal_interactive` (la fonction appelée de plot() avec un objet *
 
 ```{r transmission_chains_vis_timeline,}
 
-## définir les formes
+## define shapes
 shapes <- c(
   f = "female",
   m = "male",
@@ -455,60 +459,68 @@ shapes <- c(
   "NA" = "question-circle"
 )
 
-## définir les couleurs
+## define colours
 colours <- c(
   Death = "firebrick",
   Recover = "green",
   "NA" = "grey"
 )
 
-## faire un graphique
+## make plot
 plot(
   sub,
-  ## coordonnée x maximale de la date d'apparition de la maladie
+  ## max x coordinate to date of onset
   x_axis = "date_onset",
-  ## utiliser une forme de réseau rectangulaire
+  ## use rectangular network shape
   network_shape = "rectangle",
-  ## mappe les formes de noeuds de cas à la colonne de sexe
+  ## mape case node shapes to gender column
   node_shape = "gender",
-  ## nous ne voulons pas mapper la couleur des noeuds à aucune colonne, cela est important car la valeur par défaut est de mapper à l'id du noeud, ce qui va perturber le schéma de couleurs
+  ## we don't want to map node colour to any columns - this is important as the
+  ## default value is to map to node id, which will mess up the colour scheme
   node_color = NULL,
-  ## définir la taille du noeud de cas à 30 (comme il ne s'agit pas d'un caractère, node_size n'est pas mappée à une colonne mais interprétée comme la taille réelle du noeud)
+  ## set case node size to 30 (as this is not a character, node_size is not
+  ## mapped to a column but instead interpreted as the actual node size)
   node_size = 30,
-  ## définir la largeur du lien de transmission à 4 (comme il ne s'agit pas d'un caractère, edge_width n'est pas affectée à une colonne mais interprétée comme la largeur réelle du bord)
+  ## set transmission link width to 4 (as this is not a character, edge_width is
+  ## not mapped to a column but instead interpreted as the actual edge width)
   edge_width = 4,
-  ## fournir l'objet ligne chronologique
+  ## provide the timeline object
   timeline = timeline,
-  ## mappe la forme du noeud de fin à la colonne de résultat dans l'objet de ligne chronologique
+  ## map the shape of the end node to the outcome column in the timeline object
   tl_end_node_shape = "outcome",
-  ## définir la taille du noeud final à 15 (comme il ne s'agit pas d'un caractère, cet argument n'est pas associé à une colonne mais interprété comme la taille réelle du noeud)
+  ## set the size of the end node to 15 (as this is not a character, this
+  ## argument is not mapped to a column but instead interpreted as the actual
+  ## node size)
   tl_end_node_size = 15,
-  ## mappez la couleur du bord de la ligne de temps à la colonne de l'hôpital
+  ## map the colour of the timeline edge to the hospital column
   tl_edge_color = "hospital",
-  ## Définir la largeur du bord de la ligne de temps à 2 (comme il ne s'agit pas d'un caractère, cet argument n'est pas associé à une colonne mais interprété comme la largeur réelle du bord)
+  ## set the width of the timeline edge to 2 (as this is not a character, this
+  ## argument is not mapped to a column but instead interpreted as the actual
+  ## edge width)
   tl_edge_width = 2,
-  ## mappez les étiquettes des bords à la variable hospital
+  ## map edge labels to the hospital variable
   tl_edge_label = "hospital",
-  ## spécifier la forme pour chaque attribut de noeud (défini ci-dessus)
+  ## specify the shape for everyone node attribute (defined above)
   shapes = shapes,
-  ## spécifier la palette de couleurs (définie ci-dessus)
+  ## specify the colour palette (defined above)
   col_pal = colours,
-  ## définir la taille de la flèche à 0.5
+  ## set the size of the arrow to 0.5
   arrow_size = 0.5,
-  ## utiliser deux colonnes dans la légende
+  ## use two columns in the legend
   legend_ncol = 2,
-  ## définir la taille de la police
+  ## set font size
   font_size = 15,
-  ## définir le formatage des dates
+  ## define formatting for dates
   date_labels = c("%d %b %Y"),
-  ## ne pas tracer les étiquettes d'identification sous les noeuds
+  ## don't plot the ID labels below nodes
   label = FALSE,
-  ## spécifier la hauteur
+  ## specify height
   height = 1000,
-  ## spécifier la largeur
+  ## specify width
   width = 1200,
-  ## assurez-vous que chaque noeud de cas a une coordonnée y unique, ceci est très important
-  ## lors de l'utilisation de lignes chronologiques, sinon les lignes chronologiques se chevauchant de différents cas
+  ## ensure each case node has a unique y-coordinate - this is very important
+  ## when using timelines, otherwise you will have overlapping timelines from
+  ## different cases
   position_dodge = TRUE
 )
 
@@ -522,7 +534,7 @@ plot(
 Nous pouvons obtenir un aperçu de certaines propriétés du réseau en utilisant la fonction `summary`.
 
 ```{r transmission_chains_summarise_epicontacts,}
-## résumer l'objet epicontacts
+## summarise epicontacts object
 summary(epic)
 ```
 
@@ -539,8 +551,8 @@ tibble(si = si) %>%
   ggplot(aes(si)) +
   geom_histogram() +
   labs(
-    x = "Intervalle de série",
-    y = "Fréquence"
+    x = "Serial interval",
+    y = "Frequency"
   )
 ```
 
@@ -565,8 +577,8 @@ table(clust$cluster_size)
 ggplot(clust, aes(cluster_size)) +
   geom_bar() +
   labs(
-    x = "Taille des clusters",
-    y = "Fréquence"
+    x = "Cluster size",
+    y = "Frequency"
   )
 ```
 

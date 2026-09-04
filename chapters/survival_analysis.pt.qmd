@@ -29,11 +29,11 @@ O alvo de inferência para a análise de sobrevivência é então o tempo entre 
 
 ```{r echo=F, eval=F, out.width = "80%", out.height="80%", fig.align = "center"}
  
-# Adicionar uma figura dos seguintes chunks para a última versão da página
-# não se esqueça de guardar a figura de saída em "images"
+#Add a figure from the following chunks for the last version of the page
+#do not forget to save the output figure in "images"
 # knitr::include_graphics(here::here("images", "survanalysis.png"))
 
-```
+```  
 
 <!-- ======================================================= -->
 
@@ -47,7 +47,7 @@ Neste manual enfatizamos `p_load()` do **pacman**, que instala o pacote se neces
 
 ```{r, echo=F, message=FALSE, warning=FALSE}
 
-# instala/carrega os diferentes pacotes necessários para esta página
+# install/load the different packages needed for this page
 pacman::p_load(
   survival,      # análise de sobrevivência
   survminer,     # análise de sobrevivência
@@ -58,7 +58,7 @@ pacman::p_load(
   tidyverse,     # manipulação e visualização de dados
   Epi,           # análises estatísticas em Epi
   survival,      # análise de sobrevivência
-  survminer, # análise de sobrevivência: curvas KM avançadas
+  survminer,     # análise de sobrevivência
   appliedepidata # dados de exemplo utilizados neste manual
 )
 
@@ -72,12 +72,12 @@ Esta página explora análises de sobrevivência usando a *linelist* usada na ma
 Importamos o conjunto de dados de casos de uma epidemia simulada de Ebola. Carregue diretamente com `appliedepidata::get_data(name = "linelist_cleaned_rds")` (consulte a página [Baixar manual e dados](data_used.pt.qmd) para mais detalhes).
 
 ```{r echo=F}
-# importar linelist
+# import linelist
 linelist_case_data <- appliedepidata::get_data(name = "linelist_cleaned_rds")
 ```
 
 ```{r eval=F}
-# importar linelist
+# import linelist
 linelist_case_data <- appliedepidata::get_data(name = "linelist_cleaned_rds")
 ```
 
@@ -105,31 +105,31 @@ Definimos:
 Depois utilizamos `case_when()` para criar uma coluna `age_cat_small` na qual existem apenas 3 categorias de idade.
 
 ```{r }
-#criar um novo dado chamado linelist_surv a partir do linelist_case_data
+#create a new data called linelist_surv from the linelist_case_data
 
 linelist_surv <-  linelist_case_data %>% 
      
   dplyr::filter(
-       # remover observações com datas de início ou desfecho erradas ou vazias
+       # remove observations with wrong or missing dates of onset or date of outcome
        date_outcome > date_onset) %>% 
   
   dplyr::mutate(
-       # criar o evento var que é 1 se o paciente morreu e 0 se ele foi censurado correctamente
+       # create the event var which is 1 if the patient died and 0 if he was right censored
        event = ifelse(is.na(outcome) | outcome == "Recover", 0, 1), 
     
-       # criar o var sobre o tempo de seguimento em dias
+       # create the var on the follow-up time in days
        futime = as.double(date_outcome - date_onset), 
     
-       # criar uma nova variável de categoria de idade com apenas 3 níveis de estratos
+       # create a new age category variable with only 3 strata levels
        age_cat_small = dplyr::case_when( 
             age_years < 5  ~ "0-4",
             age_years >= 5 & age_years < 20 ~ "5-19",
             age_years >= 20   ~ "20+"),
        
-       # passo anterior criou age_cat_small var como caractere
-       # agora o converte em fator e especifica os níveis.
-       # note que os valores NA continuam a ser NA e não são colocados num nível "desconhecido", por exemplo,
-       # uma vez que nas análises seguintes tem de ser removidas.
+       # previous step created age_cat_small var as character.
+       # now convert it to factor and specify the levels.
+       # Note that the NA values remain NA's and are not put in a level "unknown" for example,
+       # since in the next analyses they have to be removed.
        age_cat_small = fct_relevel(age_cat_small, "0-4", "5-19", "20+")
        )
 ```
@@ -140,8 +140,8 @@ linelist_surv <-  linelist_case_data %>%
 
 summary(linelist_surv$futime)
 
-# tabulação cruzada das novas variáveis modificadas "event" e "outcome" (desfecho) 
-# para garantir que o código fazia o que se pretendia
+# cross tabulate the new event var and the outcome var from which it was created
+# to make sure the code did what it was intended to
 linelist_surv %>% 
   tabyl(outcome, event)
 ```
@@ -221,7 +221,7 @@ Utilizaremos primeiro a função `Surv()` do pacote **survival** para construir 
 O resultado de tal passo é produzir um objeto do tipo *Surv* que condensa a informação do tempo e se o evento de interesse (óbito) foi observado. Este objeto acabará por ser utilizado no lado direito das fórmulas do modelo subsequente (ver [documentação](https://cran.r-project.org/web/packages/survival/vignettes/survival.pdf)).
 
 ```{r survobj }
-# Use a sintaxe Suv() para dados censurados
+# Use Suv() syntax for right-censored data
 survobj <- Surv(time = linelist_surv$futime,
                 event = linelist_surv$event)
 ```
@@ -247,7 +247,7 @@ linelist_surv %>%
 E aqui estão os primeiros 10 elementos do `survobj`. Imprime essencialmente como um vetor de tempo de seguimento, com "+" para representar se uma observação foi censurada à direita. Veja como os números se alinham acima e abaixo.
 
 ```{r}
-#imprime os 50 primeiros elementos do vetor para ver como ele se apresenta
+#print the 50 first elements of the vector to see how it presents
 head(survobj, 10)
 ```
 
@@ -267,11 +267,11 @@ O resumo deste *objeto survfit* dará o que se chama uma *tabela de vida*. Para 
 Encaixamos as estimativas KM usando a fórmula em que o objeto anteriormente Surv "survobj" é a variável de resposta. "~ 1" precisa que executamos o modelo para a sobrevivência global.
 
 ```{r fit}
-# encaixa nas estimativas KM usando uma fórmula onde o objeto Surv "sobrevivente" é a variável de resposta.
-# "~ 1" significa que executamos o modelo para a sobrevivência global   
+# fit the KM estimates using a formula where the Surv object "survobj" is the response variable.
+# "~ 1" signifies that we run the model for the overall survival  
 linelistsurv_fit <-  survival::survfit(survobj ~ 1)
 
-# imprime o resumo para mais detalhes
+#print its summary for more details
 summary(linelistsurv_fit)
 
 ```
@@ -280,7 +280,7 @@ Enquanto usamos `summary()` podemos adicionar a opção `times` e especificar ce
 
 ```{r print_spec_times}
 
-#imprime o resumo de tempos específicos
+#print its summary at specific times
 summary(linelistsurv_fit, times = c(5,10,20,30,60))
 
 ```
@@ -290,7 +290,7 @@ Podemos também utilizar a função `print()`. O argumento `print.rmean = TRUE` 
 [**NOTA:** O tempo médio de sobrevivência restrito (RMST na sigla em inglês) é uma medida de sobrevivência específica cada vez mais utilizada na análise de sobrevivência ao câncer e que é frequentemente definida como a área sob a curva de sobrevivência, dado que observamos pacientes até ao tempo restrito T (mais detalhes na seção Recursos).]{style="color: black;"}
 
 ```{r, mean_survtime}
-# imprimir objeto linelistsurv_fit com tempo médio de sobrevivência e sua SE.
+# print linelistsurv_fit object with mean survival time and its se. 
 print(linelistsurv_fit, print.rmean = TRUE)
 
 ```
@@ -335,17 +335,17 @@ Uma vez que o evento de interesse é "óbito", desenhar uma curva descrevendo os
 
 ```{r}
 
-# gráfico original
+# original plot
 plot(
   linelistsurv_fit,
-  xlab = "Dias de seguimento",       
-  ylab = "Probabilidade de Sobrevivência",       
+  xlab = "Days of follow-up",       
+  ylab = "Survival Probability",       
   mark.time = TRUE,               # marcar eventos na curva: um "+" é impresso em cada evento
   conf.int = FALSE,              # não traçar o intervalo de confiança
-  main = "Curva geral de sobrevivência e mortalidade acumulada"
+  main = "Overall survival curve and cumulative mortality"
   )
 
-# desenhar uma curva adicional ao gráfico anterior
+# draw an additional curve to the previous plot
 lines(
   linelistsurv_fit,
   lty = 3,             # usar tipo de linha diferente para maior clareza
@@ -354,10 +354,10 @@ lines(
   conf.int = FALSE
   )
 
-# adiciona legenda ao gráfico
+# add a legend to the plot
 legend(
   "topright",                                       # posição da legenda
-  legend = c("Sobrevivência", "Mortalidade Acum."), # texto da legenda
+  legend = c("Survival", "Cum. Mortality"), # legend text 
   lty = c(1, 3),                                    # tipos de linha a serem usados na legenda
   cex = .85,                                        # parâmetros que definem o tamanho do texto da legenda
   bty = "n"                                         # nenhum tipo de caixa a ser desenhada para a legenda
@@ -381,27 +381,27 @@ Ao fornecer `~ gender` como o lado direito da fórmula, deixamos de traçar a so
 
 ```{r comp_surv, warning=FALSE}
 
-# criar um novo objeto do tipo survfit baseado no gênero
+# create the new survfit object based on gender
 linelistsurv_fit_sex <-  survfit(Surv(futime, event) ~ gender, data = linelist_surv)
 ```
 
 Agora podemos traçar as curvas de sobrevivência por gênero. Veja a *ordem* dos níveis de estratos na coluna do gênero antes de definir as suas cores e legendas.
 
 ```{r}
-# padrão de cor
+# set colors
 col_sex <- c("lightgreen", "darkgreen")
 
-# cria a impressão
+# create plot
 plot(
   linelistsurv_fit_sex,
   col = col_sex,
   xlab = "Days of follow-up",
   ylab = "Survival Probability")
 
-# adiciona legenda
+# add legend
 legend(
   "topright",
-  legend = c("Feminino","Masculino"),
+  legend = c("Female","Male"),
   col = col_sex,
   lty = 1,
   cex = .9,
@@ -411,7 +411,7 @@ legend(
 E agora podemos calcular o teste da diferença entre as curvas de sobrevivência usando `survdiff ()`
 
 ```{r}
-# calcula o teste da diferença entre as curvas de sobrevivência
+#compute the test of the difference between the survival curves
 survival::survdiff(
   Surv(futime, event) ~ gender, 
   data = linelist_surv
@@ -459,7 +459,7 @@ linelistsurv_fit_source <-  survfit(
   data = linelist_surv
   )
 
-# impressão
+# plot
 ggsurvplot( 
   linelistsurv_fit_source,
   data = linelist_surv,
@@ -514,18 +514,18 @@ A mesma falta de evidências é notada no que diz respeito ao grupo etário.
 
 ```{r coxmodel_agesex}
 
-# ajustando o modelo cox
+#fitting the cox model
 linelistsurv_cox_sexage <-  survival::coxph(
               Surv(futime, event) ~ gender + age_cat_small, 
               data = linelist_surv
               )
 
 
-#imprimindo o modelo ajustado
+#printing the model fitted
 linelistsurv_cox_sexage
 
 
-#resumo do modelo
+#summary of the model
 summary(linelistsurv_cox_sexage)
 
 ```
@@ -547,14 +547,14 @@ Neste modelo, incluímos um preditor contínuo (`days_onset_hosp`). Neste caso, 
 
 ```{r coxmodel_fit_ph,  message=FALSE}
 
-#cria o modelo
+#fit the model
 linelistsurv_cox <-  coxph(
                         Surv(futime, event) ~ gender + age_years+ source + days_onset_hosp,
                         data = linelist_surv
                         )
 
 
-#testa o modelo de risco proporcional
+#test the proportional hazard model
 linelistsurv_ph_test <- cox.zph(linelistsurv_cox)
 linelistsurv_ph_test
 ```
@@ -572,7 +572,7 @@ Os resultados mostram também uma associação positiva entre a fonte da infecç
 
 ```{r coxmodel_summary,  message=FALSE}
 
-#resumo do modelo
+#print the summary of the model
 summary(linelistsurv_cox)
 
 ```

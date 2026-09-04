@@ -33,7 +33,6 @@ Bu kod kümesi, analizler için gereken paketlerin yüklenmesini gösterir. Bu e
 ```{r load_packages}
 pacman::p_load(rio,          # Dosyanın içe aktarılması
                here,         # Dosyanın yerinin bulunması
-               tidyverse,    # veri yönetimi + ggplot2 grafikleri
                tsibble,      # zaman serisi veri tabanlarını işlemek
                slider,       # hareketli ortalamaları hesaplamak için
                imputeTS,     # eksik değerleri doldurmak için
@@ -47,9 +46,9 @@ pacman::p_load(rio,          # Dosyanın içe aktarılması
                units,        # for defining units of measurement (climate data)
                yardstick,    # model doğruluğuna bakmak için
                surveillance, # sapma tespiti için
+               tidyverse,    # veri yönetimi + ggplot2 grafikleri
                appliedepidata # bu el kitabında kullanılan örnek veriler
                )
-
 ``` 
 
 ### Veri yükleme {.unnumbered}
@@ -61,19 +60,19 @@ Bu bölümde kullanılan örnek veri seti, 2001 ve 2011 yılları arasında Alma
 Bu veri seti, surveillance paketinde bulunan veri setinin küçültülmüş bir versiyonudur. (detaylar için surveillance paketini yükleyin ve bkz. ?campyDE) [**surveillance**](https://cran.r-project.org/web/packages/surveillance/)
 
 ```{r read_data_hide, echo=F}
-# sayımları R'ye aktar
+# import the counts into R
 counts <- appliedepidata::get_data(name = "campylobacter_germany")
 ```
 
 ```{r read_data_show, eval=F}
-# sayımları R'ye aktar
+# import the counts into R
 counts <- appliedepidata::get_data(name = "campylobacter_germany")
 ```
 
 Sayımların ilk 10 satırı aşağıda gösterilmiştir
 
 ```{r inspect_data, message=FALSE, echo=F}
-# sayım verilerini tablo olarak göster
+# display the counts data as a table
 DT::datatable(head(counts, 10), rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
 ```
 
@@ -84,11 +83,11 @@ Aşağıdaki kod, tarih sütununun uygun biçimde olmasını sağlar. Bu sekme i
 
 ```{r clean_data}
 
-## tarih sütununun uygun biçimde olduğundan emin olun
+## ensure the date column is in the appropriate format
 counts$date <- as.Date(counts$date)
 
-## bir takvim haftası değişkeni oluşturun
-## Pazartesi gününden başlayarak haftaların ISO tanımlarına uyumlu hale getirilmesi
+## create a calendar week variable 
+## fitting ISO definitons of weeks starting on a monday
 counts <- counts %>% 
      mutate(epiweek = yearweek(date, week_start = 1))
 
@@ -112,31 +111,30 @@ Verilerini indirmek istediğiniz konumun koordinatlarından emin değilseniz, a�
 
 ```{r weather_data, eval = FALSE}
 
-## konum koordinatlarını al
+## retrieve location coordinates
 coords <- geocode_OSM("Germany", geometry = "point")
 
-## ERA-5 sorgulaması için boylamları/enlemleri bir araya getirin (sınırlayıcı kutu)
-## (tek bir noktanın koordinatlarının tekrar edebileceği gibi)
+## pull together long/lats in format for ERA-5 querying (bounding box) 
+## (as just want a single point can repeat coords)
 request_coords <- str_glue_data(coords$coords, "{y}/{x}/{y}/{x}")
 
 
-## Kopernik uydusundan modellenen verileri çekme (ERA-5 yeniden analizi)
+## Pulling data modelled from copernicus satellite (ERA-5 reanalysis)
 ## https://cds.climate.copernicus.eu/cdsapp#!/software/app-era5-explorer?tab=app
 ## https://github.com/bluegreen-labs/ecmwfr
 
-## hava durumu verileri için anahtar ayarla
+## set up key for weather data 
 wf_set_key(user = "XXXXX",
            key = "XXXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXX",
            service = "cds") 
 
-## ilgilenilen her yıl için çalıştırın (aksi takdirde sunucu zaman aşımına uğrar)
+## run for each year of interest (otherwise server times out)
 for (i in 2002:2011) {
   
-  ## sorguyu bir araya getir
-  ## nasıl yapılacağı için buraya bakın: https://bluegreen-labs.github.io/ecmwfr/articles/cds_vignette.html#the-request-syntax
-  ## yukarıdaki eklenti düğmesini kullanarak isteği bir listeye dönüştürün (listeye python)
-  ## Hedef, çıktı dosyasının adıdır!
-
+  ## pull together a query 
+  ## see here for how to do: https://bluegreen-labs.github.io/ecmwfr/articles/cds_vignette.html#the-request-syntax
+  ## change request to a list using addin button above (python to list)
+  ## Target is the name of the output file!!
   request <- request <- list(
     product_type = "reanalysis",
     format = "netcdf",
@@ -154,7 +152,7 @@ for (i in 2002:2011) {
     target = paste0("germany_weather", i, ".nc")
   )
   
- # dosyayı indirin ve mevcut çalışma dizininde saklayın
+  ## download the file and store it in the current working directory
   file <- wf_request(user     = "XXXXX",  # kullanıcı ID (kimlik doğrulama için)
                      request  = request,  # istek
                      transfer = TRUE,     # dosyayı indir 
@@ -172,7 +170,7 @@ Bu dosyaları stars paketiyle R'a aktarmak için aşağıdaki kodu kullanın.
 
 ```{r read_climate, warning = FALSE, message = FALSE}
 
-## hava durumu klasörüne giden yolu tanımlayın 
+## materialise the germany_weather .nc files into a real folder on disk
 germany_weather_zip_dir <- tempfile()
 dir.create(germany_weather_zip_dir)
 appliedepidata::save_data(name = "germany_weather", path = germany_weather_zip_dir)
@@ -180,34 +178,38 @@ germany_weather_dir <- tempfile()
 dir.create(germany_weather_dir)
 utils::unzip(fs::path(germany_weather_zip_dir, "germany_weather.zip"), exdir = germany_weather_dir)
 
+## define path to weather folder
 file_paths <- list.files(
-  germany_weather_dir,
+  germany_weather_dir, # replace with your own file path
   full.names = TRUE)
-## sadece şu anki ilgi alanına sahip olanları saklayın
+
+## only keep those with the current name of interest
 file_paths <- file_paths[str_detect(file_paths, "germany")]
 
-## tüm dosyaları stars nesnesi olarak oku
+## read in all the files as a stars object
+## along = "time" stacks the ten yearly files into one series; without it
+## stars cannot tell how to merge them and errors
 data <- stars::read_stars(file_paths, along = "time")
 ```
 
 Bu dosyalar nesne verisi olarak içe aktarıldıktan sonra onları bir veri çerçevesine dönüştüreceğiz.
 
 ```{r}
-## veri çerçevesine değiştir
+## change to a data frame 
 temp_data <- as_tibble(data) %>% 
-  ## değişkenler ekleyin ve birimleri düzeltin
+  ## add in variables and correct units
   mutate(
-    ## takvim haftası değişkeni oluşturun
+    ## create an calendar week variable 
     epiweek = tsibble::yearweek(time), 
-    ## tarih değişkeni oluşturun (takvim haftasının başlangıcı)
+    ## create a date variable (start of calendar week)
     date = as.Date(epiweek),
-    ## sıcaklığı kelvin'den santigrat dereceye değiştir
+    ## change temperature from kelvin to celsius
     t2m = set_units(t2m, celsius), 
-    ## yağışı metreden milimetreye değiştir
+    ## change precipitation from metres to millimetres 
     tp  = set_units(tp, mm)) %>% 
-  ## haftaya göre gruplandır (tarihi de sakla)
+  ## group by week (keep the date too though)
   group_by(epiweek, date) %>% 
-  ## haftalık ortalamanın özetlenmesi
+  ## get the average per week
   summarise(t2m = as.numeric(mean(t2m)), 
             tp = as.numeric(mean(tp)))
 
@@ -229,7 +231,7 @@ Bunu yapmak için tsibble() fonksiyonunu kullanırız ve "indeks"i, yani ilgilen
 
 ```{r ts_object}
 
-## zaman serisi nesnesini tanımla
+## define time series object 
 counts <- tsibble(counts, index = epiweek)
 
 ```
@@ -241,7 +243,7 @@ ggplot2 kullanarak verilerinize hızlıca göz atabilirsiniz. Olay örgüsünde 
 
 ```{r basic_plot}
 
-## haftaya göre vakaların bir çizgi grafiğini çizin
+## plot a line graph of cases by week
 ggplot(counts, aes(x = epiweek, y = case)) + 
      geom_line()
 
@@ -260,10 +262,10 @@ tsibble yinelenen gözlemlere izin vermez. Bu nedenle, her satırın benzersiz v
 
 ```{r duplicates, eval = FALSE}
 
-## satırların kopya olup olmadığını DOĞRU/YANLIŞ vektörü olarak çıkarın
+## get a vector of TRUE/FALSE whether rows are duplicates
 are_duplicated(counts, index = epiweek) 
 
-## yinelenen satırların veri çerçevesini çıkarın
+## get a data frame of any duplicated rows 
 duplicates(counts, index = epiweek) 
 
 ```
@@ -280,26 +282,26 @@ Diğer bir alternatif, hareketli ortalama hesaplamak, belirgin raporlama sorunla
 
 ```{r missings}
 
-## raporlama sorunları olan haftalar yerine eksikleri olan bir değişken oluşturun
+## create a variable with missings instead of weeks with reporting issues
 counts <- counts %>% 
      mutate(case_miss = if_else(
-          ## epiweek 52, 53, 1 veya 2 içeriyorsa
+          ## if epiweek contains 52, 53, 1 or 2
           str_detect(epiweek, "W51|W52|W53|W01|W02"), 
-          ## sonrasında eksik olarak ayarlayın
+          ## then set to missing 
           NA_real_, 
-          ## aksi takdirde değeri saklayın
+          ## otherwise keep the value in case
           case
      ))
 
-## alternatif olarak eksikleri doğrusal trendle interpolasyon yapın
-## en yakın iki bitişik nokta arasında
+## alternatively interpolate missings by linear trend 
+## between two nearest adjacent points
 counts <- counts %>% 
   mutate(case_int = imputeTS::na_interpolation(case_miss)
          )
 
-## orijinaline kıyasla hangi değerlerin atfedildiğini (impute) kontrol etmek için
+## to check what values have been imputed compared to the original
 ggplot_na_imputations(counts$case_miss, counts$case_int) + 
-  ## geleneksel bir grafik oluşturun (siyah eksenli ve beyaz arka planlı)
+  ## make a traditional plot (with black axes and white background)
   theme_classic()
 
 ```
@@ -319,17 +321,17 @@ Veriler çok gürültülüyse (yukarı ve aşağı atlamalar sayılır), hareket
 
 ```{r moving_averages}
 
-## hareketli bir ortalama değişkeni oluşturun (eksiklerle ilgilenilecektir)
+## create a moving average variable (deals with missings)
 counts <- counts %>% 
-     ## ma_4w değişkenini oluştur
-     ## case değişkeninin her satırının üzerine kaydırın
+     ## create the ma_4w variable 
+     ## slide over each row of the case variable
      mutate(ma_4wk = slider::slide_dbl(case, 
-                               ## her satır için ad hesapla
+                               ## for each row calculate the name
                                ~ mean(.x, na.rm = TRUE),
-                               ## önceki dört haftayı kullan
+                               ## use the four previous weeks
                                .before = 4))
 
-## farkını hızla görselleştirin 
+## make a quick visualisation of the difference 
 ggplot(counts, aes(x = epiweek)) + 
      geom_line(aes(y = case)) + 
      geom_line(aes(y = ma_4wk), colour = "red")
@@ -347,16 +349,16 @@ Aşağıda bir periodogram oluşturmak için özel bir fonksiyon tanımlıyoruz.
 
 
 ```{r periodogram}
-## Fonksiyonun argümanları
+## Function arguments
 #####################
-## x veritabanıdır
-## x içindeki oranlar ya da sayımlar değişkendir
+## x is a dataset
+## counts is variable with count data or rates within x 
 ## start_week is the first week in your dataset
-## periyot bir yıldaki birim sayısıdır 
-## çıktı, dönüş spektral periodogramı ya da peak görülen haftalardır.
-  ## "periodogram" veya "weeks"
+## period is how many units in a year 
+## output is whether you want return spectral periodogram or the peak weeks
+  ## "periodogram" or "weeks"
 
-# Fonksiyonu tanımlamak
+# Define function
 periodogram <- function(x, 
                         counts, 
                         start_week = c(2002, 1), 
@@ -364,20 +366,20 @@ periodogram <- function(x,
                         output = "weeks") {
   
 
-    ## bir tsibble olmadığından emin olun, projeye filtre uygulayın ve yalnızca ilgilenilen sütunları tutun
+    ## make sure is not a tsibble, filter to project and only keep columns of interest
     prepare_data <- dplyr::as_tibble(x)
     
-    # veriyi hazırla <- prepare_data[prepare_data[[strata]] == j, ]
+    # prepare_data <- prepare_data[prepare_data[[strata]] == j, ]
     prepare_data <- dplyr::select(prepare_data, {{counts}})
     
-    ## spec.pgram ile kullanılabilecek bir ara zaman serisi (“zoo”) oluşturun
+    ## create an intermediate "zoo" time series to be able to use with spec.pgram
     zoo_cases <- zoo::zooreg(prepare_data, 
                              start = start_week, frequency = period)
     
-    ## hızlı fourier dönüşümü kullanmayan bir spektral periodogram elde edin
+    ## get a spectral periodogram not using fast fourier transform 
     periodo <- spec.pgram(zoo_cases, fast = FALSE, plot = FALSE)
     
-    ## pieak haftaları elde edin 
+    ## return the peak weeks 
     periodo_weeks <- 1 / periodo$freq[order(-periodo$spec)] * period
     
     if (output == "weeks") {
@@ -388,30 +390,28 @@ periodogram <- function(x,
     
 }
 
-## en yüksek frekanslara sahip haftaları çıkarmak için spektral periodogram alın
-## (mevsimsellik kontrolü)
+## get spectral periodogram for extracting weeks with the highest frequencies 
+## (checking of seasonality) 
 periodo <- periodogram(counts, 
                        case_int, 
                        start_week = c(2002, 1),
                        output = "periodogram")
 
-## görselleştirme için bir veri çerçevesine tam spektrum ve frekans yerleştirilir
+## pull spectrum and frequence in to a dataframe for plotting
 periodo <- data.frame(periodo$freq, periodo$spec)
 
-## en sık meydana gelen periyodikliği gösteren bir periodogram çizin
+## plot a periodogram showing the most frequently occuring periodicity 
 ggplot(data = periodo, 
                 aes(x = 1/(periodo.freq/52),  y = log(periodo.spec))) + 
   geom_line() + 
   labs(x = "Period (Weeks)", y = "Log(density)")
- 
 
- 
-## haftaları içeren vektörü artan sırayla elde edin 
+
+## get a vector weeks in ascending order 
 peak_weeks <- periodogram(counts, 
                           case_int, 
                           start_week = c(2002, 1), 
                           output = "weeks")
-
 
 ```
 
@@ -429,13 +429,13 @@ Klasik ayrıştırma, bir zaman serisini parçalara ayırmak için kullanılır 
 
 ```{r decomposition, warning=F, message=F}
 
-## sayımlar veri tabanını ayrıştır 
+## decompose the counts dataset 
 counts %>% 
-  # additif klasik ayrıştırma modeli uygula 
+  # using an additive classical decomposition model
   model(classical_decomposition(case_int, type = "additive")) %>% 
-  ## önemli bilgileri modelden çıkarın
+  ## extract the important information from the model
   components() %>% 
-  ## grafik oluştur 
+  ## generate a plot 
   autoplot()
 
 ```
@@ -452,20 +452,18 @@ PACF() fonksiyonunun kullanılması (kısmi otokorelasyon için) aynı ilişkiyi
 
 ```{r autocorrelation}
 
-## sayım veri tabanını kullanma
+## using the counts dataset
 counts %>% 
-  ## yıl içindeki gecikmeleri kullanarak otokorelasyonu hesaplayın
+  ## calculate autocorrelation using a full years worth of lags
   ACF(case_int, lag_max = 52) %>% 
-  ## grafik oluşturun
+  ## show a plot
   autoplot()
- 
 
- 
-## sayım veri tabanını kullanma 
+## using the counts data set 
 counts %>% 
-  ## yıl içindeki gecikmeleri kullanarak kısmi otokorelasyonu hesaplayın
+  ## calculate the partial autocorrelation using a full years worth of lags
   PACF(case_int, lag_max = 52) %>% 
-  ## grafik oluşturun
+  ## show a plot
   autoplot()
 
 ```
@@ -475,7 +473,7 @@ Ljung-Box testini (stats paketinde) kullanarak zaman serisindeki bağımsızlık
 
 ```{r ljung_box}
 
-## bağımsızlık testi 
+## test for independance 
 Box.test(counts$case_int, type = "Ljung-Box")
 
 ```
@@ -498,7 +496,7 @@ Aşağıdaki kodda $ operatörünü kullanarak atadık, çünkü fourier() iki s
 
 ```{r fourier}
 
-## epi hafta ve case_int değişkenlerini kullanarak fourier terimleri ekleyin
+## add in fourier terms using the epiweek and case_int variabless
 counts$fourier <- select(counts, epiweek, case_int) %>% 
   fourier(K = 1)
 ```
@@ -517,37 +515,38 @@ Diğer fark, önce modeli tanımlamamız ve ardından onu verilere fit() ile uyd
 
 ```{r nb_reg, warning = FALSE}
 
-## uydurmak istediğiniz modeli tanımlayın (negatif binom)
+## define the model you want to fit (negative binomial) 
 model <- glm_nb_model(
-  ## ilgilenilen sonuç olarak vaka sayısını belirlemek
+  ## set number of cases as outcome of interest
   case_int ~
-    ## trendi hesaba katmak için epiweek'i kullanın
+    ## use epiweek to account for the trend
     epiweek +
-    ## mevsimselliği hesaba katmak için fourier terimlerini kullanın
+    ## use the fourier terms to account for seasonality
     fourier)
 
-## sayım veri tabanını kullanarak modelinize uydurun
+## fit your model using the counts dataset
 fitted_model <- trending::fit(model, data.frame(counts))
 
-## güven ve tahmin aralıklarını hesaplayın
+## calculate confidence intervals and prediction intervals 
 observed <- predict(fitted_model, simulate_pi = FALSE)
 
 estimate_res <- data.frame(observed$result)
 
-## regresyonunuzu görselleştirin 
+## plot your regression 
 ggplot(data = estimate_res, aes(x = epiweek)) + 
-  ## model tahmini için bir satır ekleyin
+  ## add in a line for the model estimate
   geom_line(aes(y = estimate),
             col = "Red") + 
-  ## tahmin aralıkları için bir bant ekleyin
+  ## add in a band for the prediction intervals 
   geom_ribbon(aes(ymin = lower_pi, 
                   ymax = upper_pi), 
               alpha = 0.25) + 
-  ## gözlemlenen vaka sayılarınız için bir satır ekleyin
+  ## add in a line for your observed case counts
   geom_line(aes(y = case_int), 
             col = "black") + 
-  ## geleneksel bir grafik oluşturun (siyah eksenli ve beyaz arka planlı)
+  ## make a traditional plot (with black axes and white background)
   theme_classic()
+
 
 ```
 
@@ -562,57 +561,42 @@ Aşağıdan gördüğümüz gibi modelle tüm varyansı açıklamamaktayız. Dah
 
 ```{r, warning=F, message=F}
 
-## artıkların hesabı 
+## calculate the residuals 
 estimate_res <- estimate_res %>% 
   mutate(resid = fitted_model$result[[1]]$residuals)
 
-## artıklar zaman içinde oldukça sabit mi (değilse: salgın? uygulamada değişiklik?)
+## are the residuals fairly constant over time (if not: outbreaks? change in practice?)
 estimate_res %>%
   ggplot(aes(x = epiweek, y = resid)) +
   geom_line() +
   geom_point() + 
   labs(x = "epiweek", y = "Residuals")
- 
 
- 
-## artıklarda otokorelasyon var mı (hatanın bir motifi var mı?)
+## is there autocorelation in the residuals (is there a pattern to the error?)  
 estimate_res %>% 
   as_tsibble(index = epiweek) %>% 
   ACF(resid, lag_max = 52) %>% 
   autoplot()
- 
 
- 
-## artıklar normal olarak dağılmış mı (tahminin altında mı yoksa üzerinde mi?)
+## are residuals normally distributed (are under or over estimating?)  
 estimate_res %>%
   ggplot(aes(x = resid)) +
   geom_histogram(binwidth = 100) +
   geom_rug() +
   labs(y = "count") 
- 
-
- 
-## gözlemlenen sayıları artıklarıyla karşılaştırın
-  ## ayrıca motif görülmemeli
+  
+## compare observed counts to their residuals 
+  ## should also be no pattern 
 estimate_res %>%
   ggplot(aes(x = estimate, y = resid)) +
   geom_point() +
   labs(x = "Fitted", y = "Residuals")
- 
 
- 
-## artıkların otokorelasyonunu test edin
-## H0, artıkların beyaz gürültü (yani rastgele) olmasıdır
-## bağımsızlık testi
-## p değeri anlamlıysa rastgele değil
+## formally test autocorrelation of the residuals
+## H0 is that residuals are from a white-noise series (i.e. random)
+## test for independence 
+## if p value significant then non-random
 Box.test(estimate_res$resid, type = "Ljung-Box")
- 
-## 
-##  Box-Ljung test
-## 
-## data:  observed$resid
-## X-squared = 346.64, df = 1, p-value < 2.2e-16
-
 
 ```
 
@@ -628,9 +612,8 @@ Hafta değişkenini kullanarak veri tabanlarımızı birleştirebiliriz. Birleş
 
 ```{r join}
 
-## sol birleştirme, böylece yalnızca sayılarda mevcut olan satırlarımız olur 
-## temp_data'dan tarih değişkenini çıkarın (aksi takdirde yinelenir)
-
+## left join so that we only have the rows already existing in counts
+## drop the date variable from temp_data (otherwise is duplicated)
 counts <- left_join(counts, 
                     select(temp_data, -date),
                     by = "epiweek")
@@ -645,23 +628,23 @@ Görünür bir ilişki olup olmadığını görmek için önce verilerinizi çiz
 ```{r basic_plot_bivar}
 
 counts %>% 
-  ## sadece ilgilendiğimiz değişkenler veritabanında kalır  
+  ## keep the variables we are interested 
   select(epiweek, case_int, t2m) %>% 
-  ## verilerinizi uzun formatta değiştirin
+  ## change your data in to long format
   pivot_longer(
-    ## anahtar olarak epiweek'i kullanın
+    ## use epiweek as your key
     !epiweek,
-    ## sütun adlarını yeni "ölçü" sütununa taşıyın
+    ## move column names to the new "measure" column
     names_to = "measure", 
-    ## hücre değerlerini yeni "değerler" sütununa taşı
+    ## move cell values to the new "values" column
     values_to = "value") %>% 
-  ## yukarıdaki veritabanından bir grafik oluşturun 
-  ## epiweek'i x ekseninde ve değerler (sayılar/santigrat) y ekseninde grafik çizin
+  ## create a plot with the dataset above
+  ## plot epiweek on the x axis and values (counts/celsius) on the y 
   ggplot(aes(x = epiweek, y = value)) + 
-    ## sıcaklık ve vaka sayıları için ayrı bir grafik oluşturun
-    ## kendi y eksenlerini ayarlamalarına izin verin
+    ## create a separate plot for temperate and case counts 
+    ## let them set their own y-axes
     facet_grid(measure ~ ., scales = "free_y") +
-    ## ikisini de bir çizgi grafiği olarak çizin 
+    ## plot both as a line
     geom_line()
 
 ```
@@ -674,18 +657,17 @@ Vakalar ve sıcaklık arasında hangi haftaların en çok ilişkili olduğunu te
 ```{r cross_correlation, warning=FALSE}
 
 counts %>% 
-  ## interpolasyonlu sayımlar ve sıcaklık arasındaki çapraz korelasyonu hesaplayın
+  ## calculate cross-correlation between interpolated counts and temperature
   CCF(case_int, t2m,
-      ## maksimum gecikmeyi 52 hafta olarak ayarlayın
+      ## set the maximum lag to be 52 weeks
       lag_max = 52, 
-      ## korelasyon katsayısını hesaplayın
+      ## return the correlation coefficient 
       type = "correlation") %>% 
-  ## korelasyon katsayısını azalan biçimde dizin
-  ## en yüksek ilişkili gecikmeleri göster
+  ## arange in decending order of the correlation coefficient 
+  ## show the most associated lags
   arrange(-ccf) %>% 
-  ## sadece ilk 10'u gösterin 
+  ## only show the top ten 
   slice_head(n = 10)
-
 
 ```
 
@@ -697,9 +679,8 @@ Burada 4 haftalık bir gecikmenin en yüksek oranda ilişkili olduğunu görüyo
 ```{r lag_tempvar}
 
 counts <- counts %>% 
-  ## sıcaklık için dört hafta gecikmeli yeni bir değişken oluşturun
+  ## create a new variable for temperature lagged by four weeks
   mutate(t2m_lag4 = lag(t2m, n = 4))
-
 
 ```
 
@@ -713,24 +694,23 @@ Daha önce gösterildiği gibi negatif bir binom regresyon modeli geliştiriyoru
 
 ```{r nb_reg_bivar, warning = FALSE}
 
-## uydurmak istediğiniz modeli tanımlayın (negatif binom)
+## define the model you want to fit (negative binomial) 
 model <- glm_nb_model(
-  ## ilgilenilen çıktı olarak vaka sayısını belirleyin 
+  ## set number of cases as outcome of interest
   case_int ~
-    ## trendi hesaba katmak için epiweek'i kullanın
+    ## use epiweek to account for the trend
     epiweek +
-    ## mevsimselliği hesaba katmak için fourier terimlerini kullanın
+    ## use the fourier terms to account for seasonality
     fourier + 
-    ## dört hafta gecikmeli sıcaklık değişkenini kullanın
+    ## use the temperature lagged by four weeks 
     t2m_lag4
     )
 
-## sayım veri tabanını kullanarak uyumlu modelinizi oluşturun
+## fit your model using the counts dataset
 fitted_model <- trending::fit(model, data.frame(counts))
 
-## güven aralıklarını ve tahmin aralıklarını hesaplayın
+## calculate confidence intervals and prediction intervals 
 observed <- predict(fitted_model, simulate_pi = FALSE)
-
 
 ```
 
@@ -740,34 +720,33 @@ Tek tek terimleri araştırmak için, get_model() fonksiyonunu kullanarak orijin
 ```{r results_nb_reg_bivar}
 
 fitted_model %>% 
-  ## orijinal negatif binom regresyonunu elde edin 
+  ## extract original negative binomial regression
   get_fitted_model() #%>% 
-  ## sonuçların tidy veri çerçevesini elde edin
-  # tidy(exponentiate = TRUE, 
-  #      conf.int = TRUE)
-
+  ## get a tidy dataframe of results
+  #tidy(exponentiate = TRUE, 
+  #     conf.int = TRUE)
 ```
 
 Modelin hızlı görsel incelemesi, modelin gözlemlenen vaka sayılarını tahmin etmede daha iyi bir iş çıkarabileceğini gösterir.
 
 ```{r plot_nb_reg_bivar, warning=F, message=F}
+
 estimate_res <- data.frame(observed$result)
 
-## regresyonunuzu çiz
+## plot your regression 
 ggplot(data = estimate_res, aes(x = epiweek)) + 
-  ## model tahmini için bir satır ekleyin
+  ## add in a line for the model estimate
   geom_line(aes(y = estimate),
             col = "Red") + 
-  ## tahmin aralıkları için bir bant ekleyin
+  ## add in a band for the prediction intervals 
   geom_ribbon(aes(ymin = lower_pi, 
                   ymax = upper_pi), 
               alpha = 0.25) + 
-  ## gözlemlenen vaka sayılarınız için bir satır ekleyin
+  ## add in a line for your observed case counts
   geom_line(aes(y = case_int), 
             col = "black") + 
-  ## geleneksel bir grafik oluşturun (siyah eksenli ve beyaz arka planlı)
+  ## make a traditional plot (with black axes and white background)
   theme_classic()
-
 
 
 ```
@@ -778,52 +757,42 @@ ggplot(data = estimate_res, aes(x = epiweek)) +
 Modelimizin gözlemlenen verilerle ne kadar uyumlu olduğunu görmek için artıkları tekrar araştırırız. Buradaki sonuçlar ve yorum önceki regresyona benzer, bu nedenle sıcaklık değişkenini içermeyen daha basit bir modele bağlı kalmak daha uygun olabilir.
 
 ```{r}
-## artıkları hesapla
+
+## calculate the residuals 
 estimate_res <- estimate_res %>% 
   mutate(resid = case_int - estimate)
 
-## artıklar zaman içinde oldukça sabit mi (değilse: salgın? uygulamada değişiklik?)
+## are the residuals fairly constant over time (if not: outbreaks? change in practice?)
 estimate_res %>%
   ggplot(aes(x = epiweek, y = resid)) +
   geom_line() +
   geom_point() + 
   labs(x = "epiweek", y = "Residuals")
- 
-## Uyarı: Eksik değerler içeren 4 satır kaldırıldı (geom_path).
 
- 
-## artıklarda otokorelasyon var mı (hatanın bir motifi var mı?)
+## is there autocorelation in the residuals (is there a pattern to the error?)  
 estimate_res %>% 
   as_tsibble(index = epiweek) %>% 
   ACF(resid, lag_max = 52) %>% 
   autoplot()
- 
 
- 
-## artıklar normal dağılım gösteriyor mu (tahminin altında mı yoksa üzerinde mi?)
+## are residuals normally distributed (are under or over estimating?)  
 estimate_res %>%
   ggplot(aes(x = resid)) +
   geom_histogram(binwidth = 100) +
   geom_rug() +
   labs(y = "count") 
- 
-## Uyarı: Sonlu olmayan değerler içeren 4 satır kaldırıldı (stat_bin).
-
- 
-## gözlemlenen sayıları artıklarıyla karşılaştırın
-  ## ayrıca tekrarlama olmamalı
+  
+## compare observed counts to their residuals 
+  ## should also be no pattern 
 estimate_res %>%
   ggplot(aes(x = estimate, y = resid)) +
   geom_point() +
   labs(x = "Fitted", y = "Residuals")
- 
-## Uyarı: Eksik değerler içeren 4 satır kaldırıldı (geom_point).
 
- 
-## artıkların otokorelasyonunu test edin
-## H0, artıkların beyaz gürültü (yani rastgele) olmasıdır
-## bağımsızlık testi
-## p değeri anlamlıysa rastgele değildir
+## formally test autocorrelation of the residuals
+## H0 is that residuals are from a white-noise series (i.e. random)
+## test for independence 
+## if p value significant then non-random
 Box.test(estimate_res$resid, type = "Ljung-Box")
 
 ```
@@ -853,16 +822,16 @@ Burada bir başlangıç tarihi (gözlemlerimizin başladığı tarih) ve bir bit
 
 ```{r cut_off}
 
-## başlangıç tarihini tanımlayın (gözlemlerin başladığı zaman)
+## define start date (when observations began)
 start_date <- min(counts$epiweek)
 
-## bir bitiş haftası tanımlayın (temel verinin sonu, tahmin döneminin başlangıcı)
+## define a cut-off week (end of baseline, start of prediction period)
 cut_off <- yearweek("2010-12-31")
 
-## ilgilenilen son tarihi tanımlayın (yani tahminin sonu)
+## define the last date interested in (i.e. end of prediction)
 end_date <- yearweek("2011-12-31")
 
-## ilgilenilen dönemde (yıl) kaç hafta bulun
+## find how many weeks in period (year) of interest
 num_weeks <- as.numeric(end_date - cut_off)
 
 ```
@@ -875,16 +844,15 @@ Tidyverse formatında tahmin yapabilmek için, veri setimizde doğru sayıda sat
 
 ```{r add_rows}
 
-## yılın sonuna kadar eksik haftaları ekleyin
+## add in missing weeks till end of year 
 counts <- counts %>%
-  ## bölgeye göre grup
+  ## group by the region
   group_by_key() %>%
-  ## her grup için en yüksek epiweek’ten yıl sonuna kadar satır ekleyin
+  ## for each group add rows from the highest epiweek to the end of year
   group_modify(~add_row(.,
                         epiweek = seq(max(.$epiweek) + 1, 
                                       end_date,
                                       by = 1)))
-
 
 ```
 
@@ -900,33 +868,32 @@ Not: Satırları bağlamak için rbind() (tidyverse’teki bind_rows yerine) kul
 ```{r fourier_terms_pred}
 
 
-## fourier terimlerini tanımlayın (sincos)
+## define fourier terms (sincos) 
 counts <- counts %>% 
   mutate(
-    ## 2010 kesim tarihinden önceki ve sonraki haftalar için fourier terimlerini birleştirin
-    ## (yani 2011 fourier terimleri tahmin edilmektedir)
+    ## combine fourier terms for weeks prior to  and after 2010 cut-off date
+    ## (nb. 2011 fourier terms are predicted)
     fourier = rbind(
-      ## önceki yıllar için fourier terimlerini getirin 
+      ## get fourier terms for previous years
       fourier(
-        ## sadece 2011'den önceki satırları tutun
+        ## only keep the rows before 2011
         filter(counts, 
                epiweek <= cut_off), 
-        ## bir dizi sin cos terimini dahil et
+        ## include one set of sin cos terms 
         K = 1
         ), 
-      ## 2011 için fourier terimlerini tahmin edin (temel verileri kullanarak)
+      ## predict the fourier terms for 2011 (using baseline data)
       fourier(
-        ## sadece 2011'den önceki satırları tutun
+        ## only keep the rows before 2011
         filter(counts, 
                epiweek <= cut_off),
-        ## bir dizi sin cos terimini dahil et
+        ## include one set of sin cos terms 
         K = 1, 
-        ## 52 hafta sonrasını tahmin et
+        ## predict 52 weeks ahead
         h = num_weeks
         )
       )
     )
-
 
 ```
 
@@ -943,12 +910,12 @@ Purrr hakkında daha fazla bilgi edinmek için Yineleme (iterasyon), döngüler 
 <span style="color: orange;">**_UYARI:_** predict() fonksiyonunda simulate_pi = FALSE argümanının kullanımına dikkat edin. Bunun nedeni, trend oluşturmanın varsayılan davranışının bir tahmin aralığını oluşturmak için ciTools paketinin kullanılmasıdır. NA (eksik) değerler varsa bu fonksiyon çalışmaz ve ayrıca daha granüler aralıklar üretir. Ayrıntılar için ?trending::predict.trending_model_fit'e bakın. </span>  
 
 ```{r forecast_regression, warning = FALSE}
-# uyum ve tahmin için bölünmüş veriler
+# split data for fitting and prediction
 dat <- counts %>% 
   group_by(epiweek <= cut_off) %>%
   group_split()
 
-## uydurmak istediğiniz modeli tanımlayın (negatif binom)
+## define the model you want to fit (negative binomial) 
 model <- glm_nb_model(
   ## set number of cases as outcome of interest
   case_int ~
@@ -958,25 +925,24 @@ model <- glm_nb_model(
     fourier
 )
 
-# Uyum ve tahmin için hangi verilerin kullanılacağını tanımlayın
+# define which data to use for fitting and which for predicting
 fitting_data <- pluck(dat, 2)
 pred_data <- pluck(dat, 1) %>% 
   select(case_int, epiweek, fourier)
 
-# modeli uydurun
+# fit model 
 fitted_model <- trending::fit(model, data.frame(fitting_data))
 
-# Uydurulan veriler için sınır ve tahmin değerleri elde edin
+# get confint and estimates for fitted data
 observed <- fitted_model %>% 
   predict(simulate_pi = FALSE)
 
-# tahmin için kullanılacak veri ile tahmin 
+# forecast with data want to predict with 
 forecasts <- fitted_model %>% 
   predict(data.frame(pred_data), simulate_pi = FALSE)
 
-## temel ve tahmin edilmiş veri tabanlarını birleştirin 
+## combine baseline and predicted datasets
 observed <- bind_rows(observed$result, forecasts$result)
-
 
 ```
 
@@ -984,25 +950,25 @@ Daha önce olduğu gibi modelimizi ggplot ile görselleştirebiliriz. %95 tahmin
 
 ```{r forecast_plot}
 
-## regresyonunuzu görselleştirin 
+## plot your regression 
 ggplot(data = observed, aes(x = epiweek)) + 
-  ## model tahmini için bir satır ekleyin
+  ## add in a line for the model estimate
   geom_line(aes(y = estimate),
             col = "grey") + 
-  ## tahmin aralıkları için bir bant ekleyin
+  ## add in a band for the prediction intervals 
   geom_ribbon(aes(ymin = lower_pi, 
                   ymax = upper_pi), 
               alpha = 0.25) + 
-  ## gözlemlenen vaka sayılarınız için bir çizgi grafiği ekleyin
+  ## add in a line for your observed case counts
   geom_line(aes(y = case_int), 
             col = "black") + 
-  ## beklenenin üzerinde gözlenen sayımlar için saçılım grafiği
+  ## plot in points for the observed counts above expected
   geom_point(
     data = filter(observed, case_int > upper_pi), 
     aes(y = case_int), 
     colour = "red", 
     size = 2) + 
-  ## tahminin nerede başladığını göstermek için dikey çizgi ve etiket ekleyin
+  ## add vertical line and label to show where forecasting started
   geom_vline(
            xintercept = as.Date(cut_off), 
            linetype = "dashed") + 
@@ -1013,11 +979,8 @@ ggplot(data = observed, aes(x = epiweek)) +
            angle = 90, 
            vjust = 1
            ) + 
-  ## geleneksel bir grafik oluşturun (siyah eksenli ve beyaz arka planlı)
+  ## make a traditional plot (with black axes and white background)
   theme_classic()
- 
-## Uyarı: Eksik değerler içeren 13 satır kaldırıldı(geom_path).
-
 ```
 
 
@@ -1050,45 +1013,46 @@ Aşağıda, veri kümeleri üzerinde döngü işlemini uygulamak için purrr pak
 
 ```{r cross_validation, warning = FALSE}
 
-## Çapraz doğrulama: Kayan pencereye dayalı olarak önümüzdeki haftaları tahmin etme
+## Cross validation: predicting week(s) ahead based on sliding window
 
-## 52 haftalık pencerelerde kaydırarak verilerinizi genişletin (öncesi + sonrası)
-## 52 hafta sonrasını tahmin etmek
-## (daha uzun gözlem zincirleri oluşturur- eski verileri tutar)
+## expand your data by rolling over in 52 week windows (before + after) 
+## to predict 52 week ahead
+## (creates longer and longer chains of observations - keeps older data)
 
-## kaydırmak istediğiniz pencereyi tanımlayın
+## define window want to roll over
 roll_window <- 52
 
-## tahmin etmek istediğiniz haftaları tanımlayın  
+## define weeks ahead want to predict 
 weeks_ahead <- 52
 
-## yinelenen, giderek daha uzun verilerden oluşan bir veri seti oluşturun
-## her veri setini benzersiz bir kimlikle etiketleyin
-## yalnızca ilgilenilen yıldan önceki vakaları kullanın (yani 2011)
+## create a data set of repeating, increasingly long data
+## label each data set with a unique id
+## only use cases before year of interest (i.e. 2011)
 case_roll <- counts %>% 
   filter(epiweek < cut_off) %>% 
-  ## sadece hafta ve vaka sayısı değişkenlerini veri tabanında tut 
+  ## only keep the week and case counts variables
   select(epiweek, case_int) %>% 
-    ## en son x sayıda gözlemi uzaklaştırın 
-    ## önümüzdeki kaç haftayı tahmin etmek istediğinize bağlı olarak 
-    ## (aksi takdirde "bilinmeyen" için tahmin yapılacaktır)
+    ## drop the last x observations 
+    ## depending on how many weeks ahead forecasting 
+    ## (otherwise will be an actual forecast to "unknown")
     slice(1:(n() - weeks_ahead)) %>%
     as_tsibble(index = epiweek) %>% 
-    ## gruplandırma kimliği oluşturmak amacıyla x’teki her hafta için kaydırın
-    ## kaydırma pencerisinin özgüllüğüne bağlı 
+    ## roll over each week in x after windows to create grouping ID 
+    ## depending on what rolling window specify
     stretch_tsibble(.init = roll_window, .step = 1) %>% 
-  ## önceki vakası yokmuş gibi ilk çifti uzaklaştırın drop the first couple 
+  ## drop the first couple - as have no "before" cases
   filter(.id > roll_window)
 
-## benzersiz veri setlerinin her biri için aşağıdaki kodu çalıştırın
+
+## for each of the unique data sets run the code below
 forecasts <- purrr::map(unique(case_roll$.id), 
                         function(i) {
   
-  ## yalnızca mevcut katlantının uygun olmasını sağlayın
+  ## only keep the current fold being fit 
   mini_data <- filter(case_roll, .id == i) %>% 
     as_tibble()
   
-  ## tahmin için boş bir veri seti oluşturun
+  ## create an empty data set for forecasting on 
   forecast_data <- tibble(
     epiweek = seq(max(mini_data$epiweek) + 1,
                   max(mini_data$epiweek) + weeks_ahead,
@@ -1097,111 +1061,109 @@ forecasts <- purrr::map(unique(case_roll$.id),
     .id = rep.int(i, weeks_ahead)
   )
   
-  ## tahmin verilerini orijinale ekleyin
+  ## add the forecast data to the original 
   mini_data <- bind_rows(mini_data, forecast_data)
   
-  ## en son eksik olmayan sayım verilerine dayalı olarak kesim tarhini tanımlayın
+  ## define the cut off based on latest non missing count data 
   cv_cut_off <- mini_data %>% 
-    ## sadece eksik olmayan satırları tutun 
+    ## only keep non-missing rows
     drop_na(case_int) %>% 
-    ## en son haftayı elde edin 
+    ## get the latest week
     summarise(max(epiweek)) %>% 
-    ## bir veri çerçevesinde olmayacak şekilde dışa aktar 
+    ## extract so is not in a dataframe
     pull()
   
-  ## mini_data’yı tsibble haline getirin
+  ## make mini_data back in to a tsibble
   mini_data <- tsibble(mini_data, index = epiweek)
   
-  ## fourier terimlerini tanımlayın (sincos) 
+  ## define fourier terms (sincos) 
   mini_data <- mini_data %>% 
     mutate(
-    ## fourier terimlerini kesim tarihinden önceki ve sonraki haftaları kombine etmek için kullanın 
+    ## combine fourier terms for weeks prior to  and after cut-off date
     fourier = rbind(
-      ## önceki yıllardan fourier terimelerini getirin 
+      ## get fourier terms for previous years
       forecast::fourier(
-        ## sadece kesim öncesi satırları tutun 
+        ## only keep the rows before cut-off
         filter(mini_data, 
                epiweek <= cv_cut_off), 
-        ## bir sin cos terim setini dahil edin 
+        ## include one set of sin cos terms 
         K = 1
         ), 
-      ## takiben eden yıl için fourier terimlerini tahmin edin (temel veriyi kullanarak)
+      ## predict the fourier terms for following year (using baseline data)
       fourier(
-        ## sadece kesim öncesi satırları tutun
+        ## only keep the rows before cut-off
         filter(mini_data, 
                epiweek <= cv_cut_off),
-        ## bir sin cos terim setini dahil edin
+        ## include one set of sin cos terms 
         K = 1, 
-        ## 52 hafta sonrasını tahmin edin 
+        ## predict 52 weeks ahead
         h = weeks_ahead
         )
       )
     )
-
   
   
-    # uyum ve tahmin için bölünmüş veriler
+  # split data for fitting and prediction
   dat <- mini_data %>% 
     group_by(epiweek <= cv_cut_off) %>%
     group_split()
 
-  ## uydurmak istediğiniz modeli tanımlayın (negatif binom)
+  ## define the model you want to fit (negative binomial) 
   model <- glm_nb_model(
-    ## ilgilenilen çıktı olarak vaka sayısını ayarlayın 
+    ## set number of cases as outcome of interest
     case_int ~
-      ## trendi hesaba katmak için epiweek'i kullanın
+      ## use epiweek to account for the trend
       epiweek +
-      ## mevsimselliği hesaba katmak için fourier terimlerini kullanın
+      ## use the furier terms to account for seasonality
       fourier
   )
 
-  # Uyum ve tahmin için hangi verilerin kullanılacağını tanımlayın
+  # define which data to use for fitting and which for predicting
   fitting_data <- pluck(dat, 2)
   pred_data <- pluck(dat, 1)
   
-  # modeli uydurun 
+  # fit model 
   fitted_model <- trending::fit(model, fitting_data)
   
-  # istenilen verilerle tahmin 
+  # forecast with data want to predict with 
   forecasts <- fitted_model %>% 
-    predict(data.frame(pred_data), simulate_pi = FALSE) 
-  forecasts <- data.frame(forecasts$result[[1]]) %>%
-    ## sadece hafta ve tahmin değerini tutun 
+    predict(data.frame(pred_data), simulate_pi = FALSE)
+  forecasts <- data.frame(forecasts$result[[1]]) %>% 
+       ## only keep the week and the forecast estimate
     select(epiweek, estimate)
     
   }
   )
 
-## listeyi tüm tahminlerle birlikte bir veri çerçevesine dönüştürün
+## make the list in to a data frame with all the forecasts
 forecasts <- bind_rows(forecasts)
 
-## tahmin ile gözlenen verileri birleştirin 
+## join the forecasts with the observed
 forecasts <- left_join(forecasts, 
                        select(counts, epiweek, case_int),
                        by = "epiweek")
 
-## {yardstick} ile ölçümlerin hesabı
-  ## RMSE: Kök Ortalama Kare Hatası
-  ## MAE:  Ortalama mutlak hata 
-  ## MASE: Ortalama mutlak ölçekli hata
-  ## MAPE: Ortalama mutlak yüzde hatası
-
+## using {yardstick} compute metrics
+  ## RMSE: Root mean squared error
+  ## MAE:  Mean absolute error	
+  ## MASE: Mean absolute scaled error
+  ## MAPE: Mean absolute percent error
 model_metrics <- bind_rows(
-  ## tahmin edilen veri setinizde gözlemlenen ile tahmin edileni karşılaştırın
+  ## in your forcasted dataset compare the observed to the predicted
   rmse(forecasts, case_int, estimate), 
   mae( forecasts, case_int, estimate),
   mase(forecasts, case_int, estimate),
   mape(forecasts, case_int, estimate),
   ) %>% 
-  ## yalnızca metrik türünü ve çıktısını tutun
+  ## only keep the metric type and its output
   select(Metric  = .metric, 
          Measure = .estimate) %>% 
-  ## geniş formatta yapın, böylece satırları bağlayın
+  ## make in to wide format so can bind rows after
   pivot_wider(names_from = Metric, values_from = Measure)
 
-## metrik modeli getirin 
+## return model metrics 
 model_metrics
-  
+
 ```
 
 
@@ -1219,22 +1181,21 @@ surveillance paketiyle çalışmak için öncelikle çerçeveye sığacak bir �
 
 ```{r surveillance_obj}
 
-## gözetim zaman serisi nesnesini tanımla
-## not. popülasyon nesnesine bir payda ekleyebilirsiniz (bkz. ?sts)
+## define surveillance time series object
+## nb. you can include a denominator with the population object (see ?sts)
 counts_sts <- sts(observed = counts$case_int[!is.na(counts$case_int)],
-                 start = c(
-              ## yalnızca start_date tarihinden itibaren yılı tutmak için alt küme
-              as.numeric(str_sub(start_date, 1, 4)), 
-              ## yalnızca start_date tarihinden itibaren haftayı tutmak için alt küme
-              as.numeric(str_sub(start_date, 7, 8))), 
-              ## veri türünü tanımlayın (bu durumda haftalık)
-              freq = 52)
+                  start = c(
+                    ## subset to only keep the year from start_date 
+                    as.numeric(str_sub(start_date, 1, 4)), 
+                    ## subset to only keep the week from start_date
+                    as.numeric(str_sub(start_date, 7, 8))), 
+                  ## define the type of data (in this case weekly)
+                  freq = 52)
 
-## dahil etmek istediğiniz hafta aralığını tanımlayın (ör. tahmin dönemi)
-## not. sts nesnesi yalnızca kendilerine tanımlanmış hafta ya da yılları atamadan gözlemleri sayar 
-## bu nedenle uygun olanı tanımlamak için verilerimizi kullanırız
+## define the week range that you want to include (ie. prediction period)
+## nb. the sts object only counts observations without assigning a week or 
+## year identifier to them - so we use our data to define the appropriate observations
 weekrange <- cut_off - start_date
-
 
 ```
 
@@ -1245,30 +1206,29 @@ Daha sonra Farrington yöntemi için parametrelerimizi bir liste halinde tanıml
 
 ```{r farrington}
 
-## kontrolü tanımlayın 
+## define control
 ctrl <- list(
-  ## eşik için zaman periyodunu tanımlayın (yani 2011)
+  ## define what time period that want threshold for (i.e. 2011)
   range = which(counts_sts@epoch > weekrange),
   b = 9, ## temelden kaç yıl geriye 
   w = 2, ## haftalar halinde kaydırma penceresi 
   weightsThreshold = 2.58, ## geçmiş salgınların yeniden ağırlıklandırılması (geliştirilmiş noufaily yöntemi - orijinal öneriler 1)
-  ## pastWeeksNotIncluded = 3, ## mevcut tüm haftaları kullanın (noufaily önerisi 26’yı çıkarın)
+  ## pastWeeksNotIncluded = 3, ## use all weeks available (noufaily suggests drop 26)
   trend = TRUE,
   pThresholdTrend = 1, ## 0.05 normally, however 1 is advised in the improved method (i.e. always keep)
   thresholdMethod = "nbPlugin",
   populationOffset = TRUE
   )
 
-## farrington’ın esnek yöntemini uygulayın 
+## apply farrington flexible method
 farringtonmethod <- farringtonFlexible(counts_sts, ctrl)
 
-## orijinal veri setinde eşik adı verilen yeni bir değişken oluşturun
-## farrington'dan gelen üst sınırı içerir
-## not: bu yalnızca 2011'deki haftalar içindir (bu nedenle satırları alt kümelere ayırmanız gerekir)
+## create a new variable in the original dataset called threshold
+## containing the upper bound from farrington 
+## nb. this is only for the weeks in 2011 (so need to subset rows)
 counts[which(counts$epiweek >= cut_off & 
                !is.na(counts$case_int)),
               "threshold"] <- farringtonmethod@upperbound
-
 ```
 
 Daha sonra sonuçları daha önce olduğu gibi ggplot'ta görselleştirebiliriz.
@@ -1276,20 +1236,19 @@ Daha sonra sonuçları daha önce olduğu gibi ggplot'ta görselleştirebiliriz.
 ```{r plot_farrington, warning=F, message=F}
 
 ggplot(counts, aes(x = epiweek)) + 
-  ## gözlemlenen vaka sayılarını bir çizgi olarak ekleyin
+  ## add in observed case counts as a line
   geom_line(aes(y = case_int, colour = "Observed")) + 
-  ## sapma algoritmasının üst sınırını ekleyin 
+  ## add in upper bound of aberration algorithm
   geom_line(aes(y = threshold, colour = "Alert threshold"), 
             linetype = "dashed", 
             linewidth = 1.5) +
-  ## renkleri belirleyin 
+  ## define colours
   scale_colour_manual(values = c("Observed" = "black", 
                                  "Alert threshold" = "red")) + 
-  ## geleneksel bir grafik oluşturun (siyah eksenli ve beyaz arka planlı)
+  ## make a traditional plot (with black axes and white background)
   theme_classic() + 
-  ## lejantın (işaret tablosunun) başlığını kaldırın  
+  ## remove title of legend 
   theme(legend.title = element_blank())
-
 
 ```
 
@@ -1305,31 +1264,30 @@ bakabilirsiniz.
 
 ```{r glrnb, warning = FALSE, message = FALSE}
 
-## kontrol ayarlarını belirleyin 
+## define control options
 ctrl <- list(
-  ## hangi zaman dilimi için eşik değer isteneceğini tanımlayın (yani 2011)
+  ## define what time period that want threshold for (i.e. 2011)
   range = which(counts_sts@epoch > weekrange),
   mu0 = list(S = 1,    ## dahil edilecek fourier terimlerinin (harmonik) sayısı
   trend = TRUE,   ## trendin dahil edilip edilmeyeceği
   refit = FALSE), ## her alarmdan sonra modelin yeniden uydurulup uydurulmayacağı 
-  ## cARL = GLR istatistiği için eşik (keyfi)
-     ## 3 ~ yanlış pozitifleri en aza indirmek için orta yol
-     ## 1, glm.nb'nin %99 tahmin aralığına uyar - zirvelerden sonraki değişikliklerle (uyarı için eşik düşürüldü)
+  ## cARL = threshold for GLR statistic (arbitrary)
+     ## 3 ~ middle ground for minimising false positives
+     ## 1 fits to the 99%PI of glm.nb - with changes after peaks (threshold lowered for alert)
    c.ARL = 2,
-   # theta = log(1.5), ## salgın vakalarında %50 artışa eşittir
+   # theta = log(1.5), ## equates to a 50% increase in cases in an outbreak
    ret = "cases"     ## vaka sayısı olarak üst sınıra dönüş eşiği
   )
 
-## glrnb yöntemini uygula
+## apply the glrnb method
 glrnbmethod <- glrnb(counts_sts, control = ctrl, verbose = FALSE)
 
-## orijinal veri setinde eşik adı verilen yeni bir değişken oluşturun
-## glrnb'den üst sınırı içeren
-## not. bu yalnızca 2011'deki haftalar içindir (bu nedenle satırları alt kümelere ayırmanız gerekir)
+## create a new variable in the original dataset called threshold
+## containing the upper bound from glrnb 
+## nb. this is only for the weeks in 2011 (so need to subset rows)
 counts[which(counts$epiweek >= cut_off & 
                !is.na(counts$case_int)),
               "threshold_glrnb"] <- glrnbmethod@upperbound
-
 
 ```
 
@@ -1338,20 +1296,19 @@ counts[which(counts$epiweek >= cut_off &
 ```{r plot_glrnb, message=F, warning=F}
 
 ggplot(counts, aes(x = epiweek)) + 
-  ## gözlemlenen vaka sayılarını bir çizgi olarak ekleyin
+  ## add in observed case counts as a line
   geom_line(aes(y = case_int, colour = "Observed")) + 
-  ## sapma algoritmasının üst sınırına ekleyin
+  ## add in upper bound of aberration algorithm
   geom_line(aes(y = threshold_glrnb, colour = "Alert threshold"), 
             linetype = "dashed", 
             linewidth = 1.5) +
-  ## renkleri belirleyin 
+  ## define colours
   scale_colour_manual(values = c("Observed" = "black", 
                                  "Alert threshold" = "red")) + 
-  ## geleneksel bir grafik oluşturun (siyah eksenli ve beyaz arka planlı)
+  ## make a traditional plot (with black axes and white background)
   theme_classic() + 
-  ## lejantın (işaret tablosunun) başlığını kaldırın  
+  ## remove title of legend 
   theme(legend.title = element_blank())
-
 
 ```
 
@@ -1381,26 +1338,26 @@ Elimizdeki tüm verileri (yani geriye dönük olarak) kullanacağımızdan, bura
 
 ```{r define_terms_interrupted}
 
-## epi hafta ve case_int değişkenlerini kullanarak fourier terimleri ekleyin
+## add in fourier terms using the epiweek and case_int variabless
 counts$fourier <- select(counts, epiweek, case_int) %>% 
   as_tsibble(index = epiweek) %>% 
   fourier(K = 1)
 
-## müdahale haftasını tanımla
+## define intervention week 
 intervention_week <- yearweek("2008-12-31")
 
-## regresyon için değişkenleri tanımlayın
+## define variables for regression 
 counts <- counts %>% 
   mutate(
-    ## formüldeki t'ye karşılık gelir
-      ## hafta sayısı (muhtemelen düz epiweeks değişkenini de kullanabilir)
+    ## corresponds to t in the formula
+      ## count of weeks (could probably also just use straight epiweeks var)
     # linear = row_number(epiweek), 
-    ## formüldeki delta(t-t0)'a karşılık gelir
-      ## müdahale öncesi veya sonrası dönem
+    ## corresponds to delta(t-t0) in the formula
+      ## pre or post intervention period
     intervention = as.numeric(epiweek >= intervention_week), 
-    ## formüldeki (t-t0)^+'a karşılık gelir
-      ## müdahale sonrası hafta sayısı
-      ## (0 ile hesaplanan değer arasındaki sayılardan daha büyük sayıyı seçin)
+    ## corresponds to (t-t0)^+ in the formula
+      ## count of weeks post intervention
+      ## (choose the larger number between 0 and whatever comes from calculation)
     time_post = pmax(0, epiweek - intervention_week + 1))
 
 ```
@@ -1412,48 +1369,50 @@ Daha sonra bu terimleri negatif bir binom regresyonuna uydurmak için kullanır�
 ```{r interrupted_regression, warning = FALSE}
 
 
-## uydurmak istediğiniz modeli tanımlayın (negatif binom)
+## define the model you want to fit (negative binomial) 
 model <- glm_nb_model(
-  ## ilgilenilen çıktı olarak vaka sayısını belirleyeni 
+  ## set number of cases as outcome of interest
   case_int ~
-    ## trendi hesaba katmak için epiweek'i kullanın
+    ## use epiweek to account for the trend
     epiweek +
-    ## mevsimselliği hesaba katmak için fourier terimlerini kullanın
+    ## use the furier terms to account for seasonality
     fourier + 
-    ## öncesi (pre-) veya sonrası (post-) dönemde ekleyin
+    ## add in whether in the pre- or post-period 
     intervention + 
-    ## müdahale sonrası zamanı ekleyin
+    ## add in the time post intervention 
     time_post
     )
 
-## sayım veri setini kullanarak modelinizi uydurun 
+## fit your model using the counts dataset
 fitted_model <- trending::fit(model, counts)
 
-## güven ve tahmin aralıklarını hesaplayın
+## calculate confidence intervals and prediction intervals 
 observed <- predict(fitted_model, simulate_pi = FALSE)
+
 ```
 
 ```{r table_regression, eval = FALSE, echo = TRUE}
-## tabloda tahminleri ve yüzde değişimini gösterin 
+
+## show estimates and percentage change in a table
 fitted_model %>% 
-  ## orijinal negatif binom regresyonunu çıkarın
+  ## extract original negative binomial regression
   get_model() %>% 
-  ## sonuçların düzenli (tidy) veri çerçevesini elde edin 
+  ## get a tidy dataframe of results
   tidy(exponentiate = TRUE, 
        conf.int = TRUE) %>% 
-  ## sadece müdahale değerini koruyun
+  ## only keep the intervention value 
   filter(term == "intervention") %>% 
-  ## tahmin ve güven aralıkları için IRR'yi yüzde değişikliğine değiştirin
+  ## change the IRR to percentage change for estimate and CIs 
   mutate(
-    ## ilgilenilen sütunların her biri için - yeni bir sütun oluşturun
+    ## for each of the columns of interest - create a new column
     across(
       all_of(c("estimate", "conf.low", "conf.high")), 
-      ## yüzde değişimini hesaplamak için formülü uygulayın
+      ## apply the formula to calculate percentage change
             .f = function(i) 100 * (i - 1), 
-      ## yeni sütun adlarına bir sonek "_perc"  ekleyin
+      ## add a suffix to new column names with "_perc"
       .names = "{.col}_perc")
     ) %>% 
-  ## yalnızca belirli sütunları tutun (ve yeniden adlandırın)
+  ## only keep (and rename) certain columns 
   select("IRR" = estimate, 
          "95%CI low" = conf.low, 
          "95%CI high" = conf.high,
@@ -1461,24 +1420,24 @@ fitted_model %>%
          "95%CI low (perc)" = conf.low_perc, 
          "95%CI high (perc)" = conf.high_perc,
          "p-value" = p.value)
-
 ```
 
 Daha önce olduğu gibi, regresyonun çıktılarını görselleştirebiliriz.
 
 ```{r plot_interrupted}
+
 estimate_res <- data.frame(observed$result)
 
 ggplot(estimate_res, aes(x = epiweek)) + 
-  ## gözlemlenen vaka sayılarını bir çizgi olarak ekle
+  ## add in observed case counts as a line
   geom_line(aes(y = case_int, colour = "Observed")) + 
-  ## model tahmini için bir satır ekleyin
+  ## add in a line for the model estimate
   geom_line(aes(y = estimate, col = "Estimate")) + 
-  ## tahmin aralıkları için bir bant ekleyin
+  ## add in a band for the prediction intervals 
   geom_ribbon(aes(ymin = lower_pi, 
                   ymax = upper_pi), 
               alpha = 0.25) + 
-  ## tahminin nerede başladığını göstermek için dikey çizgi ve etiket ekleyin
+  ## add vertical line and label to show where forecasting started
   geom_vline(
            xintercept = as.Date(intervention_week), 
            linetype = "dashed") + 
@@ -1489,14 +1448,11 @@ ggplot(estimate_res, aes(x = epiweek)) +
            angle = 90, 
            vjust = 1
            ) + 
-  ## renkleri tanımlayın
+  ## define colours
   scale_colour_manual(values = c("Observed" = "black", 
                                  "Estimate" = "red")) + 
-  ## geleneksel bir grafik oluşturun (siyah eksenli ve beyaz arka planlı)
+  ## make a traditional plot (with black axes and white background)
   theme_classic()
- 
-## Uyarı: Eksik değerler içeren 13 satır kaldırıldı (geom_path).
-
 
 ```
 

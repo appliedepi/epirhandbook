@@ -51,19 +51,19 @@ pacman::p_load(
 
 
 ```{r, echo=F}
-# импорт построчного списка в R
+# import the linelist into R
 linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds")
 ```
 
 ```{r, eval=F}
-# импорт построчного списка
+# import the linelist
 linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds")
 ```
 
 Первые 50 строк построчного списка отображены ниже.
 
 ```{r, message=FALSE, echo=F}
-# отображаем данные построчного списка в виде таблицы
+# display the linelist data as a table
 DT::datatable(head(linelist, 50), rownames = FALSE, options = list(pageLength = 5, scrollX=T) )
 ```
 
@@ -74,7 +74,7 @@ DT::datatable(head(linelist, 50), rownames = FALSE, options = list(pageLength = 
 Мы храним имена столбцов независимых переменных как текстовый вектор. На него мы будем ссылаться позже.  
 
 ```{r}
-## определяем интересующие переменные 
+## define variables of interest 
 explanatory_vars <- c("gender", "fever", "chills", "cough", "aches", "vomit")
 ```
 
@@ -86,7 +86,7 @@ explanatory_vars <- c("gender", "fever", "chills", "cough", "aches", "vomit")
 Примечание: "." ниже представляет столбец, который обрабатывается в этот момент функцией `across()`.
 
 ```{r}
-## конвертируем двоичные переменные в 0/1 
+## convert dichotomous variables to 0/1 
 linelist <- linelist %>%  
   mutate(across(                                      
     .cols = all_of(c(explanatory_vars, "outcome")),  ## для каждого указанного столбца и "outcome"
@@ -110,10 +110,10 @@ linelist <- linelist %>%
 До выполнения кода количество строк в `linelist` составляет ` nrow(linelist)`.  
 
 ```{r}
-## добавляем age_category к независимым переменным 
+## add in age_category to the explanatory vars 
 explanatory_vars <- c(explanatory_vars, "age_cat")
 
-## удаляем строки с отсутствующей информацией по интересующим переменным 
+## drop rows with missing information for variables of interest 
 linelist <- linelist %>% 
   drop_na(any_of(c("outcome", explanatory_vars)))
 
@@ -167,14 +167,14 @@ tidy(lm_results)
 
 ```{r lin_reg_res_plot}
 
-## сводим точки регрессии и наблюдаемые данные в один набор данных
+## pull the regression points and observed data in to one dataset
 points <- augment(lm_results)
 
-## строим график данных, используя возраст в качестве оси x 
+## plot the data using age as the x-axis 
 ggplot(points, aes(x = age)) + 
-  ## добавляем точки для роста 
+  ## add points for height 
   geom_point(aes(y = ht_cm)) + 
-  ## добавляем линию регрессии 
+  ## add your regression line 
   geom_line(aes(y = .fitted), colour = "red")
 
 ```
@@ -184,11 +184,11 @@ ggplot(points, aes(x = age)) +
 
 ```{r geom_smooth}
 
-## добавляем данные к графику 
+## add your data to a plot 
  ggplot(linelist, aes(x = age, y = ht_cm)) + 
-  ## показываем точки
+  ## show points
   geom_point() + 
-  ## добавляем линейную регрессию 
+  ## add a linear regression 
   geom_smooth(method = "lm", se = FALSE)
 ```
 
@@ -202,7 +202,7 @@ ggplot(points, aes(x = age)) +
 `glm()` может использоваться для однофакторной и многофакторной логистической регрессии (например, чтобы получить отношения шансов). Вот ключевые части:  
 
 ```{r, eval=F}
-# аргументы для glm()
+# arguments for glm()
 glm(formula, family, data, weights, subset, ...)
 ```
 
@@ -268,7 +268,7 @@ model <- glm(outcome ~ age_cat, family = "binomial", data = linelist) %>%
 Ниже представлена полученная на выходе таблица tibble `model`:  
 
 ```{r, message=FALSE, echo=F}
-# отображаем данные построчного списка в виде таблицы
+# display the linelist data as a table
 DT::datatable(model, rownames = FALSE, options = list(pageLength = nrow(model), scrollX=T), class = 'white-space: nowrap' )
 ```
 
@@ -297,7 +297,7 @@ counts_table <- linelist %>%
 Вот как выглядит этот датафрейм `counts_table`:  
 
 ```{r, message=FALSE, echo=F}
-# отображаем данные построчного списка в виде таблицы
+# display the linelist data as a table
 DT::datatable(counts_table, rownames = FALSE, options = list(pageLength = nrow(counts_table), scrollX=T), class = 'white-space: nowrap' )
 ```
 
@@ -345,31 +345,31 @@ explanatory_vars %>% str_c("outcome ~ ", .)
 models <- explanatory_vars %>%       # начинаем с интересующей переменной
   str_c("outcome ~ ", .) %>%         # объединяем каждую переменную в формулу ("исход (outcome) ~ интересующая переменная")
   
-  # проводим итерацию через каждую однофакторную формулу
+  # iterate through each univariate formula
   map(                               
     .f = ~glm(                       # по одной передаем формулы в glm()
       formula = as.formula(.x),      # внутри glm() формула-последовательность - это .x
       family = "binomial",           # уточняем тип glm (логистическая)
       data = linelist)) %>%          # набор данных
   
-  # приводим результаты регрессий glm, сделанных выше, в аккуратный формат
+  # tidy up each of the glm regression outputs from above
   map(
     .f = ~tidy(
       .x, 
       exponentiate = TRUE,           # возводим в степень 
       conf.int = TRUE)) %>%          # получаем доверительные интервалы
   
-  # сжимаем список выходных данных регрессии в один датафрейм
+  # collapse the list of regression outputs in to one data frame
   bind_rows() %>% 
   
-  # округляем все числовые столбцы
+  # round all numeric columns
   mutate(across(where(is.numeric), ~ round(.x, digits = 2)))
 ```
 
 В этот раз конечный объект `models` длиннее, поскольку теперь представляет объединенные результаты нескольких однофакторных регрессий. Пролистайте все строки `model`.  
 
 ```{r, message=FALSE, echo=F}
-# отображаем данные построчного списка в виде таблицы
+# display the linelist data as a table
 DT::datatable(models, rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
 ```
 
@@ -378,7 +378,7 @@ DT::datatable(models, rownames = FALSE, options = list(pageLength = 5, scrollX=T
 
 ```{r, warning=F, message=F}
 
-## для каждой независимой переменной
+## for each explanatory variable
 univ_tab_base <- explanatory_vars %>% 
   map(.f = 
     ~{linelist %>%                ## начинаем с построчного списка
@@ -392,16 +392,16 @@ univ_tab_base <- explanatory_vars %>%
         mutate(variable = as.character(variable))} ## конвертируем в текст, иначе недвоичные (категориальные) переменные выйдут, как фактор, и их нельзя будет объединить
       ) %>% 
   
-  ## сжимаем список выходных данных подсчетов в один датафрейм
+  ## collapse the list of count outputs in to one data frame
   bind_rows() %>% 
   
-  ## объединяем с выходными данными регрессии 
+  ## merge with the outputs of the regression 
   bind_cols(., models) %>% 
   
-  ## сохраняем только интересующие нас столбцы 
+  ## only keep columns interested in 
   select(term, 2:3, estimate, conf.low, conf.high, p.value) %>% 
   
-  ## округляем знаки после запятой
+  ## round decimal places
   mutate(across(where(is.numeric), ~ round(.x, digits = 2)))
 
 ```
@@ -409,7 +409,7 @@ univ_tab_base <- explanatory_vars %>%
 Ниже представлен датафрейм. См. страницу [Таблицы для презентации](tables_descriptive.ru.qmd), чтобы ознакомиться с идеями о том, как еще конвертировать эту таблицу в красивую таблицу в HTML (например, с помощью **flextable**).  
 
 ```{r, message=FALSE, echo=F}
-# отображаем данные построчного списка в виде таблицы
+# display the linelist data as a table
 DT::datatable(univ_tab_base, rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
 ```
 
@@ -441,7 +441,7 @@ univ_tab <- linelist %>%
     exponentiate = TRUE                     ## возводим в степень, чтобы получить отношения шансов (а не логарифм отношения шансов)
   )
 
-## просматриваем таблицу однофакторных результатов 
+## view univariate results table 
 univ_tab
 ```
 
@@ -494,7 +494,7 @@ glm(outcome ~ gender + age_cat * fever, family = "binomial", data = linelist)
 
 ```{r mv_regression}
 
-## выполняем регрессию со всеми интересующими переменными 
+## run a regression with all variables of interest 
 mv_reg <- explanatory_vars %>%  ## начинаем с вектора имен столбцов независимых переменных
   str_c(collapse = "+") %>%     ## объединяем все имена интересующих переменных, которые отделяются плюсом
   str_c("outcome ~ ", .) %>%    ## объединяем имена интересующих переменных с исходом в стиле формулы
@@ -519,8 +519,8 @@ lmtest::lrtest(model1, model2)
 Еще один вариант - взять объект модели и применить функцию `step()` из пакета **stats**. При построении этой модели уточните, какое направление выбора переменной вы хотите использовать.      
 
 ```{r}
-## выберите модель, используя выбор вперед на основе критерия AIC
-## вы также можете сделать выбор "назад" ("backward") или в обе стороны ("both"), исправив направление
+## choose a model using forward selection based on AIC
+## you can also do "backward" or "both" by adjusting the direction
 final_mv_reg <- mv_reg %>%
   step(direction = "forward", trace = FALSE)
 ```
@@ -561,7 +561,7 @@ DT::datatable(mv_tab_base, rownames = FALSE, options = list(pageLength = 10, scr
 (в данном случае `glm()`) и создает хорошую суммарную таблицу. 
 
 ```{r mv_regression_gt}
-## показываем таблицу результатов итоговой регрессии 
+## show results table of final regression 
 mv_tab <- tbl_regression(final_mv_reg, exponentiate = TRUE)
 ```
 
@@ -575,7 +575,7 @@ mv_tab
 `tbl_merge()`. Сейчас мы объединим результаты многофакторного анализа с помощью **gtsummary** с результатам *однофакторного* анализа, который мы создали [выше](#reg_gt_uni):  
 
 ```{r}
-## объединяем с результатами однофакторного анализа 
+## combine with univariate results 
 tbl_merge(
   tbls = list(univ_tab, mv_tab),                          # объединяем
   tab_spanner = c("**Univariate**", "**Multivariable**")) # задаем имена заголовков
@@ -592,9 +592,9 @@ tbl_merge(
 * Используем `round()`, чтобы задать два знака после запятой всем столбцам в классе Double (число двойной точности)  
 
 ```{r, warning=F, message=F}
-## объединяем однофакторную и многофакторную таблицу 
+## combine univariate and multivariable tables 
 left_join(univ_tab_base, mv_tab_base, by = "term") %>% 
-  ## выбираем столбцы и переименовываем
+  ## choose columns and rename them
   select( # новое имя =  старое имя
     "characteristic" = term, 
     "recovered"      = "0", 
@@ -640,29 +640,29 @@ left_join(univ_tab_base, mv_tab_base, by = "term") %>%
 
 ```{r ggplot_forest}
 
-## удаляем свободный член из результатов многофакторного анализа
+## remove the intercept term from your multivariable results
 mv_tab_base %>% 
   
-  #задаем порядок уровней по оси y
+  #set order of levels to appear along y-axis
   mutate(term = fct_relevel(
     term,
     "vomit", "gender", "fever", "cough", "chills", "aches",
     "age_cat5-9", "age_cat10-14", "age_cat15-19", "age_cat20-29",
     "age_cat30-49", "age_cat50-69", "age_cat70+")) %>%
   
-  # удаляем строку "intercept" из графика
+  # remove "intercept" row from plot
   filter(term != "(Intercept)") %>% 
   
-  ## строим график с переменной по оси y и оценочным показателем (ОШ) по оси x
+  ## plot with variable on the y axis and estimate (OR) on the x axis
   ggplot(aes(x = estimate, y = term)) +
   
-  ## показываем оценку как точку
+  ## show the estimate as a point
   geom_point() + 
   
-  ## добавляем столбец ошибки для доверительных интервалов
+  ## add in an error bar for the confidence intervals
   geom_errorbar(aes(xmin = conf.low, xmax = conf.high)) + 
   
-  ## показываем, где ОШ = 1 в виде пунктирной линии для справки
+  ## show where OR = 1 is for reference as a dashed line
   geom_vline(xintercept = 1, linetype = "dashed")
   
 ```
@@ -681,7 +681,7 @@ mv_tab_base %>%
 ```{r easystats_forest}
 pacman::p_load(easystats)
 
-## удаляем свободный член из результатов многофакторного анализа
+## remove the intercept term from your multivariable results
 final_mv_reg %>% 
   model_parameters(exponentiate = TRUE) %>% 
   plot()

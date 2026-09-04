@@ -62,7 +62,7 @@ linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds")
 -   `infector` 列には、感染者の `case_id` が含まれており、その感染者も症例としてラインリストに含まれています。
 
 ```{r message=FALSE, echo=F}
-# ラインリストを表で表示
+# display the population as a table
 DT::datatable(head(linelist, 50), rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
 ```
 
@@ -83,7 +83,7 @@ case_ages <- linelist %>%
 ```
 
 ```{r message=FALSE, echo=F}
-# 表として表示
+# display the shapefile as a table
 DT::datatable(head(case_ages, 50), rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
 ```
 
@@ -98,7 +98,7 @@ infectors <- linelist %>%
 ```
 
 ```{r message=FALSE, echo=F}
-# 表として表示
+# display the shapefile as a table
 DT::datatable(head(infectors, 50), rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
 ```
 
@@ -116,7 +116,7 @@ infector_ages <- infectors %>%             # 感染源のデータフレーム�
 ```
 
 ```{r message=FALSE, echo=F}
-# 表として表示
+# display the shapefile as a table
 DT::datatable(head(infector_ages, 50), rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
 ```
 
@@ -131,7 +131,7 @@ ages_complete <- case_ages %>%
 ```
 
 ```{r message=FALSE, echo=F}
-# 表として表示
+# display the shapefile as a table
 DT::datatable(head(ages_complete, 50), rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
 ```
 
@@ -151,7 +151,7 @@ long_counts <- data.frame(table(
 ```
 
 ```{r message=FALSE, echo=F}
-# 表として表示
+# display the shapefile as a table
 DT::datatable(head(long_counts, 50), rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
 ```
 
@@ -164,7 +164,7 @@ long_prop <- data.frame(prop.table(table(
 ```
 
 ```{r message=FALSE, echo=F}
-# 表として表示
+# display the shapefile as a table
 DT::datatable(head(long_prop, 50), rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
 ```
 
@@ -213,7 +213,7 @@ ggplot(data = long_prop)+       # 割合が Freq 列に格納された縦型デ�
 まず、各施設におけるマラリアに関する日々の報告のデータセットをインポートします。データには、日付、州、地区、マラリアの症例数が含まれています。これらのデータをダウンロードする方法については、[ハンドブックとデータのダウンロード](#data-used) の章を参照してください。以下は、データセットの最初の 30 行です。
 
 ```{r, echo=F}
-facility_count_data <- appliedepidata::get_data(name = "malaria_facility_count_data") %>% 
+facility_count_data <- appliedepidata::get_data(name = "malaria_facility_count_data") %>%
   select(location_name, data_date, District, malaria_tot)
 ```
 
@@ -252,10 +252,10 @@ DT::datatable(head(facility_count_data,30), rownames = FALSE, options = list(pag
 以下に順を追って説明します。
 
 ```{r, message=FALSE, warning=FALSE}
-# 週別の集計を作成する
+# Create weekly summary dataset
 agg_weeks <- facility_count_data %>% 
   
-  # データのフィルタリング
+  # filter the data as appropriate
   filter(
     District == "Spring",
     data_date < as.Date("2020-08-01")) 
@@ -267,7 +267,7 @@ agg_weeks <- facility_count_data %>%
 
 ```{r}
 agg_weeks <- agg_weeks %>% 
-  # data_date 列から week 列を作成
+  # Create week column from data_date
   mutate(
     week = lubridate::floor_date(                     # week 列を新たに作成
       data_date,                                      # 日付列
@@ -288,16 +288,17 @@ DT::datatable(head(agg_weeks,30), rownames = FALSE, options = list(pageLength = 
 ```{r, warning=F, message=F}
 agg_weeks <- agg_weeks %>%   
 
-  # 「施設 - 週」でグループ化
+  # Group into facility-weeks
   group_by(location_name, week) %>%
   
-  # グループ化されたデータに対して要約統計量の列を作成
+  # Create summary statistics columns on the grouped data
   summarize(
     n_days          = 7,                                          # 1週間の日数（7日）
     n_reports       = dplyr::n(),                                 # 「施設 - 週」 からの報告回数（7件以上の可能性あり）
     malaria_tot     = sum(malaria_tot, na.rm = T),                # 「施設 - 週」 で報告されたマラリア患者数の合計
     n_days_reported = length(unique(data_date)),                  # データが報告された「施設 - 週」における日数
     p_days_reported = round(100*(n_days_reported / n_days))) %>%  # 「施設 - 週」 の7日間のうち、データが報告された日数の割合
+
   ungroup(location_name, week)                                    # 次の処理で expand() が動作するように ungroup() を実行
 ```
 
@@ -310,7 +311,7 @@ DT::datatable(head(agg_weeks,30), rownames = FALSE, options = list(pageLength = 
 確認するために、 `right_join()` を使用して `week` 列と `location_name` の列の全ての組み合わせを含むようにデータセットを拡張します（データセットは「. 」で表されます）。詳細は、[データの縦横変換](#pivoting) の章にある `expand()` 関数のドキュメントを参照してください。このコードを実行する前の段階ではデータセットには `r  nrow(agg_weeks)` 行が含まれています。
 
 ```{r, message=F, warning=F}
-# 可能な全ての施設-週の組み合わせを作成
+# Create data frame of every possible facility-week
 expanded_weeks <- agg_weeks %>% 
   tidyr::expand(location_name, week)  # 可能な施設-週の組み合わせすべてを含んだデータフレームを作成する
 ```
@@ -324,7 +325,7 @@ DT::datatable(expanded_weeks, rownames = FALSE, options = list(pageLength = 5, s
 以下のコードを実行する前の段階では、`agg_weeks` は `r nrow(agg_weeks)` 行でした。
 
 ```{r}
-# 拡張された施設週間リストと right-join して、データの欠損を補填
+# Use a right-join with the expanded facility-week list to fill-in the missing gaps in the data
 agg_weeks <- agg_weeks %>%      
   right_join(expanded_weeks) %>%                            # 可能な全ての施設-週の組み合わせが含まれるようにする
   mutate(p_days_reported = replace_na(p_days_reported, 0))  # 欠損値を0に変換
@@ -366,7 +367,7 @@ ggplot(data = agg_weeks)+
 ```{r, message=FALSE, warning=FALSE}
 ggplot(data = agg_weeks)+ 
   
-  # データをタイルで表示
+  # show data as tiles
   geom_tile(
     aes(x = week,
         y = location_name,
@@ -378,13 +379,13 @@ ggplot(data = agg_weeks)+
     high = "darkgreen",
     na.value = "grey80")+
   
-  # 日付軸
+  # date axis
   scale_x_date(
     expand = c(0,0),             # 両端の余分なスペースを削除
     date_breaks = "2 weeks",     # 2週間ごとの日付ラベルを指定
     date_labels = "%d\n%b")+     # 月の上に日付を表示 (\n は改行を示す)
   
-  # テーマ
+  # aesthetic themes
   theme_minimal()+                                  # 背景を簡潔にする
   
   theme(
@@ -402,7 +403,7 @@ ggplot(data = agg_weeks)+
     plot.caption = element_text(hjust = 0, face = "italic")  # 脚注を右揃えにしてイタリック体にする
     )+
   
-  # 凡例
+  # plot labels
   labs(x = "Week",
        y = "Facility name",
        fill = "Reporting\nperformance (%)",           # 凡例のタイトルを指定
@@ -437,10 +438,10 @@ DT::datatable(facility_order, rownames = FALSE, options = list(pageLength = 5, s
 ここで、上で扱ったデータフレームの列（`facility_order$location_name`）を使用して、データフレーム `agg_weeks` における `location_name` の因子レベルの順序を調整します。
 
 ```{r, warning=F, message=F}
-# パッケージの読み込み
+# load package 
 pacman::p_load(forcats)
 
-# 因子を作成して、レベルを決める
+# create factor and define levels manually
 agg_weeks <- agg_weeks %>% 
   mutate(location_name = fct_relevel(
     location_name, facility_order$location_name)
@@ -452,7 +453,7 @@ agg_weeks <- agg_weeks %>%
 ```{r, message=FALSE, warning=FALSE}
 ggplot(data = agg_weeks)+ 
   
-  # データをタイルで表示
+  # show data as tiles
   geom_tile(
     aes(x = week,
         y = location_name,
@@ -464,13 +465,13 @@ ggplot(data = agg_weeks)+
     high = "darkgreen",
     na.value = "grey80")+
   
-  # 日付軸
+  # date axis
   scale_x_date(
     expand = c(0,0),             # 両端の余分なスペースを削除
     date_breaks = "2 weeks",     # 2週間ごとの日付ラベルを指定
     date_labels = "%d\n%b")+     # 月の上に日付を表示 (\n は改行を示す)
   
-  # テーマ
+  # aesthetic themes
   theme_minimal()+                                  # 背景を簡潔にする
   
   theme(
@@ -488,7 +489,7 @@ ggplot(data = agg_weeks)+
     plot.caption = element_text(hjust = 0, face = "italic")  # 脚注を右揃えにしてイタリック体にする
     )+
   
-  # 凡例
+  # plot labels
   labs(x = "Week",
        y = "Facility name",
        fill = "Reporting\nperformance (%)",           # 凡例のタイトルを指定
@@ -508,33 +509,33 @@ ggplot(data = agg_weeks)+
 ```{r, message=FALSE, warning=FALSE}
 ggplot(data = agg_weeks)+ 
   
-  # データをタイルで表示
+  # show data as tiles
   geom_tile(
     aes(x = week,
         y = location_name,
         fill = p_days_reported),      
     color = "white")+                 # 罫線を白に指定
   
-  # テキスト
+  # text
   geom_text(
     aes(
       x = week,
       y = location_name,
       label = p_days_reported))+      # タイルの上に数値を表示
   
-  # タイルの塗りつぶし
+  # fill scale
   scale_fill_gradient(
     low = "orange",
     high = "darkgreen",
     na.value = "grey80")+
   
-  # 日付軸
+  # date axis
   scale_x_date(
     expand = c(0,0),             # 両端の余分なスペースを削除
     date_breaks = "2 weeks",     # 2週間ごとの日付ラベルを指定
     date_labels = "%d\n%b")+     # 月の上に日付を表示 (\n は改行を示す)
   
-  # テーマ
+  # aesthetic themes
   theme_minimal()+                                    # 背景を簡潔にする
   
   theme(
@@ -552,7 +553,7 @@ ggplot(data = agg_weeks)+
     plot.caption = element_text(hjust = 0, face = "italic")  # 脚注を右揃えにしてイタリック体にする
     )+
   
-  # 凡例
+  # plot labels
   labs(x = "Week",
        y = "Facility name",
        fill = "Reporting\nperformance (%)",           # 凡例のタイトルを指定

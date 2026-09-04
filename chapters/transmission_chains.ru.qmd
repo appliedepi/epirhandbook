@@ -15,23 +15,23 @@ aliases:
 
 ```{r out.width=c('25%', '25%'), fig.show='hold', echo=F}
 
-# установить разрабатываемую версию epicontacts
+# install development version of epicontacts
 if(
   !"epicontacts" %in% rownames(installed.packages()) |
   packageVersion("epicontacts") != "1.2.0"
 ) remotes::install_github("reconhub/epicontacts@timeline")
 
-## установка и загрузка пакетов
+## install and load packages
 pacman::p_load(tidyverse,
                #epicontacts,
                magrittr, here, webshot, visNetwork)
 
 library(epicontacts)
 
-## загрузка построчного списка
+## load linelist
 linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds") %>%
   filter(!duplicated(case_id))
-## генерировать контакты
+## generate contacts
 contacts <- linelist %>%
   transmute(
     from = infector,
@@ -41,21 +41,21 @@ contacts <- linelist %>%
   ) %>%
   drop_na(from)
 
-## создание epicontacts
+## generate epicontacts
 epic <- epicontacts::make_epicontacts(
   linelist = linelist,
   contacts = contacts, 
   directed = TRUE
 )
 
-## объект подмножества
+## subset object
 #epic %<>% subset(
 epic_small <- epic %>% 
   subset(
     node_attribute = list(date_onset = c(as.Date(c("2014-06-01", "2014-07-01"))))) %>%
   epicontacts::thin("contacts")
 
-# график с датой начала заболевания по оси x
+# plot with date of onset as x-axis
 plot(
   epic_small,
   x_axis = "date_onset",
@@ -109,19 +109,19 @@ pacman::p_install_gh("reconhub/epicontacts@timeline")
 Мы импортируем набор данных о случаях из смоделированной эпидемии лихорадки Эбола. Если вы хотите загрузить данные, чтобы проследить за ходом работы, см. инструкции на странице [Скачивание руководства и данных]. Набор данных импортируется с помощью функции `import()` из пакета **rio**. Различные способы импорта см. на странице [Импорт и экспорт].ta.
 
 ```{r, echo=F}
-# импортировать построчный список в R
+# import the linelist into R
 linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds")
 ```
 
 ```{r, eval=F}
-# импортировать построчный список
+# import the linelist
 linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds")
 ```
 
 Ниже показаны первые 50 строк построчного списка. Особый интерес представляют столбцы `case_id`, `generation`, `infector` и `source`.  
 
 ```{r, message=FALSE, echo=F}
-# отображение данных построчного списка в виде таблицы
+# display the linelist data as a table
 DT::datatable(head(linelist, 50), rownames = FALSE, filter="top", options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
 ```
 
@@ -140,7 +140,7 @@ DT::datatable(head(linelist, 50), rownames = FALSE, filter="top", options = list
 В приведенном ниже коде **dplyr** функция `transmute` аналогична `mutate`, за исключением того, что она сохраняет только те столбцы, которые мы указали в функции. Функция `drop_na` отфильтрует все строки, в которых указанные столбцы имеют значение `NA`; в данном случае мы хотим сохранить только те строки, в которых известно заразившее лицо.
 
 ```{r transmission_chains_create_contacts,}
-## создание контактов
+## generate contacts
 contacts <- linelist %>%
   transmute(
     infector = infector,
@@ -159,7 +159,7 @@ contacts <- linelist %>%
 в значение `TRUE`, что повлияет на дальнейшие операции.
 
 ```{r transmission_chains_create_epicontacts,}
-## создание объекта epicontacts
+## generate epicontacts object
 epic <- make_epicontacts(
   linelist = linelist,
   contacts = contacts,
@@ -174,7 +174,7 @@ epic <- make_epicontacts(
 последовательность в последующих операциях обработки, визуализации и анализа.
 
 ```{r transmission_chains_view_epicontacts,}
-## просмотр объекта epicontacts
+## view epicontacts object
 epic
 ```
 
@@ -272,7 +272,7 @@ length(get_id(epic, "common"))
 включим только контакты, связанные с этими случаями, с помощью функции `thin`.
 	
 ```{r transmission_chains_basic_plot_sub,}
-## объект подмножества epicontacts
+## subset epicontacts object
 sub <- epic %>%
   subset(
     node_attribute = list(date_onset = c(as.Date(c("2014-06-30", "2014-06-01"))))
@@ -283,7 +283,7 @@ sub <- epic %>%
 После этого мы можем построить базовый интерактивный график следующим образом:
 
 ```{r transmission_chains_basic_plot,}
-## построение объекта epicontacts
+## plot epicontacts object
 plot(
   sub,
   width = 700,
@@ -512,7 +512,7 @@ webshot(url = "network.html", file = "network.png")
 
 ```{r transmission_chains_create_timeline,}
 
-## создание временных рамок
+## generate timeline
 timeline <- linelist %>%
   transmute(
     id = case_id,
@@ -539,7 +539,7 @@ timeline <- linelist %>%
 
 ```{r transmission_chains_vis_timeline,}
 
-## определение форм
+## define shapes
 shapes <- c(
   f = "female",
   m = "male",
@@ -548,68 +548,68 @@ shapes <- c(
   "NA" = "question-circle"
 )
 
-## определение цветов
+## define colours
 colours <- c(
   Death = "firebrick",
   Recover = "green",
   "NA" = "grey"
 )
 
-## создание графика
+## make plot
 plot(
   sub,
-  ## максимальная координата x к дате начала заболевания
+  ## max x coordinate to date of onset
   x_axis = "date_onset",
-  ## использовать прямоугольную форму сети
+  ## use rectangular network shape
   network_shape = "rectangle",
-  ## сопоставить формы узлов случая со столбоцом пола 
+  ## mape case node shapes to gender column
   node_shape = "gender",
-  ## мы не хотим сопоставлять цвет узла с каким-либо столбцом - это важно, поскольку
-  ## значение по умолчанию сопоставляется с id узла, что приводит к нарушению цветовой схемы
+  ## we don't want to map node colour to any columns - this is important as the
+  ## default value is to map to node id, which will mess up the colour scheme
   node_color = NULL,
-  ## установить размер узла случая равным 30 (поскольку это не символ, node_size не
-  ## отображается на столбец, но вместо этого интерпретируется как фактический размер узла)
+  ## set case node size to 30 (as this is not a character, node_size is not
+  ## mapped to a column but instead interpreted as the actual node size)
   node_size = 30,
-  ## установить ширину связи передачи равной 4 (поскольку это не символ, ширина edge_width
-  ## не отображается на столбец, а интерпретируется как фактическая ширина ребра)
+  ## set transmission link width to 4 (as this is not a character, edge_width is
+  ## not mapped to a column but instead interpreted as the actual edge width)
   edge_width = 4,
-  ## предоставить объект временной шкалы
+  ## provide the timeline object
   timeline = timeline,
-  ## сопоставить форму конечного узла со столбцом исходов в объекте временной шкалы
+  ## map the shape of the end node to the outcome column in the timeline object
   tl_end_node_shape = "outcome",
-  ## установить размер конечного узла равным 15 (поскольку это не символ, 
-  ## аргумент не сопоставляется со столбцом, а интерпретируется как фактический
-  ## размер узла)
+  ## set the size of the end node to 15 (as this is not a character, this
+  ## argument is not mapped to a column but instead interpreted as the actual
+  ## node size)
   tl_end_node_size = 15,
-  ## сопоставить цвет ребра временной шкалы со столбцом больницы
+  ## map the colour of the timeline edge to the hospital column
   tl_edge_color = "hospital",
-  ## установить ширину ребра временной шкалы равной 2 (поскольку это не символ, 
-  ## аргумент не сопоставляется со столбцом, а интерпретируется как фактическая
-  ## ширина ребра)
+  ## set the width of the timeline edge to 2 (as this is not a character, this
+  ## argument is not mapped to a column but instead interpreted as the actual
+  ## edge width)
   tl_edge_width = 2,
-  ## сопоставить метки ребер с переменной больницы
+  ## map edge labels to the hospital variable
   tl_edge_label = "hospital",
-  ## задать форму для каждого атрибута узла (см. выше)
+  ## specify the shape for everyone node attribute (defined above)
   shapes = shapes,
-  ## задать цветовую палитру (см. выше)
+  ## specify the colour palette (defined above)
   col_pal = colours,
-  ## установить размер стрелки равным 0,5
+  ## set the size of the arrow to 0.5
   arrow_size = 0.5,
-  ## использовать два столбца в легенде
+  ## use two columns in the legend
   legend_ncol = 2,
-  ## установить размер шрифта
+  ## set font size
   font_size = 15,
-  ## определение форматирования для дат
+  ## define formatting for dates
   date_labels = c("%d %b %Y"),
-  ## не отображать метки идентификаторов ниже узлов
+  ## don't plot the ID labels below nodes
   label = FALSE,
-  ## задать высоту
+  ## specify height
   height = 1000,
-  ## задать ширину
+  ## specify width
   width = 1200,
-  ## убедитесь, что каждый узел случая имеет уникальную координату y - это очень важно
-  ## при использовании временных шкал, иначе у вас будут перекрываться временные шкалы от
-  ## различных случаев
+  ## ensure each case node has a unique y-coordinate - this is very important
+  ## when using timelines, otherwise you will have overlapping timelines from
+  ## different cases
   position_dodge = TRUE
 )
 
@@ -624,7 +624,7 @@ plot(
 `summary`.
 
 ```{r transmission_chains_summarise_epicontacts,}
-## обобщить объект epicontacts
+## summarise epicontacts object
 summary(epic)
 ```
 

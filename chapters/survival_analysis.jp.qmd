@@ -30,9 +30,9 @@ knitr::include_graphics(here::here("images", "survival_analysis.png"))
 
 
 ```{r echo=F, eval=F, out.width = "80%", out.height="80%", fig.align = "center"}
-
-# Add a figure from the following chunks for the last version of the page
-# do not forget to save the output figure in "images"
+ 
+#Add a figure from the following chunks for the last version of the page
+#do not forget to save the output figure in "images"
 # knitr::include_graphics(here::here("images", "survanalysis.png"))
 
 ```  
@@ -46,21 +46,21 @@ R において生存時間解析を行うために最もよく用いられるパ
 
 このハンドブックでは、パッケージを読み込むために、pacman パッケージの p_load() を主に使用しています。p_load() は、必要に応じてパッケージをインストールし、現在の R セッションで使用するためにパッケージを読み込む関数です。また、すでにインストールされたパッケージは、R の基本パッケージである base （以下、base R）の library() を使用して読み込むこともできます。R のパッケージに関する詳細は [R の基礎](#basics) の章をご覧ください。
 
-```{r, message=FALSE, warning=FALSE}
+```{r, echo=F, message=FALSE, warning=FALSE}
 
-# この章で必要なパッケージのインストールと読込
+# install/load the different packages needed for this page
 pacman::p_load(
-     survival,      # 生存時間解析
-     survminer,     # 生存時間解析
-     rio,           # データのインポート
-     here,          # ファイルの相対パス
-     janitor,       # 表の作成
-     SemiCompRisks, # 事例データと準競合リスクデータのための発展的なツール
-     tidyverse,     # データの操作と可視化
-     Epi,           # 疫学の統計解析
-     survival,      # 生存時間解析
-     survminer, # 生存時間解析：発展的な Kaplan-Meier 曲線
-     appliedepidata # 本ハンドブックで使用するサンプルデータ
+  survival,      # survival analysis 
+  survminer,     # survival analysis
+  rio,           # importing data  
+  here,          # relative file pathways  
+  janitor,       # tabulations
+  SemiCompRisks, # dataset examples and advanced tools for working with Semi-Competing Risks data
+  tidyverse,     # data manipulation and visualization
+  Epi,           # stat analyses in Epi
+  survival,      # survival analysis
+  survminer,     # survival analysis: advanced KM curves
+  appliedepidata # example datasets used in this handbook
 )
 
 
@@ -75,12 +75,12 @@ pacman::p_load(
 エボラ出血熱の流行をシミュレートしたデータセットをインポートします。`appliedepidata::get_data(name = "linelist_cleaned_rds")` で直接読み込めます（詳細は[ハンドブックとデータのダウンロード](data_used.jp.qmd)のページを参照）。
 
 ```{r echo=F}
-# ラインリストのインポート
+# import linelist
 linelist_case_data <- appliedepidata::get_data(name = "linelist_cleaned_rds")
 ```
 
 ```{r eval=F}
-# ラインリストのインポート
+# import linelist
 linelist_case_data <- appliedepidata::get_data(name = "linelist_cleaned_rds")
 ```
 
@@ -108,33 +108,33 @@ linelist_case_data <- appliedepidata::get_data(name = "linelist_cleaned_rds")
 次に、`case_when()` を用いて3つだけ水準を持つ `age_cat_small` 列を作成します。
 
 ```{r }
-# linelist_case_data から新しいデータ linelist_surv を作成
+#create a new data called linelist_surv from the linelist_case_data
 
-linelist_surv <- linelist_case_data %>% 
+linelist_surv <-  linelist_case_data %>% 
      
-     dplyr::filter(
-          # 誤りまたは発症日かアウトカムの日付に欠測がある観測値を削除
-          date_outcome > date_onset) %>% 
-     
-     dplyr::mutate(
-          # 死亡した人を1とし右側打切りの人を0としたイベント変数を作成
-          event = ifelse(is.na(outcome) | outcome == "Recover", 0, 1), 
-          
-          # 追跡時間（日）の変数を作成
-          futime = as.double(date_outcome - date_onset), 
-          
-          # 3つだけ水準を持つ新しい年齢カテゴリ変数を作成
-          age_cat_small = dplyr::case_when( 
-               age_years < 5  ~ "0-4",
-               age_years >= 5 & age_years < 20 ~ "5-19",
-               age_years >= 20   ~ "20+"),
-          
-          # 上のステップでは age_cat_small が character 型で作成されるため
-          # factor 型に変換し、水準を指定します
-          # 値が NA のものは NA のままになり、例えば水準 "unkown" などには置換されません
-          # そのため、次の解析ではこれらを削除する必要があるので注意してください
-          age_cat_small = fct_relevel(age_cat_small, "0-4", "5-19", "20+")
-     )
+  dplyr::filter(
+       # remove observations with wrong or missing dates of onset or date of outcome
+       date_outcome > date_onset) %>% 
+  
+  dplyr::mutate(
+       # create the event var which is 1 if the patient died and 0 if he was right censored
+       event = ifelse(is.na(outcome) | outcome == "Recover", 0, 1), 
+    
+       # create the var on the follow-up time in days
+       futime = as.double(date_outcome - date_onset), 
+    
+       # create a new age category variable with only 3 strata levels
+       age_cat_small = dplyr::case_when( 
+            age_years < 5  ~ "0-4",
+            age_years >= 5 & age_years < 20 ~ "5-19",
+            age_years >= 20   ~ "20+"),
+       
+       # previous step created age_cat_small var as character.
+       # now convert it to factor and specify the levels.
+       # Note that the NA values remain NA's and are not put in a level "unknown" for example,
+       # since in the next analyses they have to be removed.
+       age_cat_small = fct_relevel(age_cat_small, "0-4", "5-19", "20+")
+       )
 ```
 
 
@@ -144,17 +144,17 @@ linelist_surv <- linelist_case_data %>%
 
 summary(linelist_surv$futime)
 
-# 作成された新しいイベント変数とアウトカム変数のクロス集計
-# 意図した通りにコードが動いているかどうかを確認する
+# cross tabulate the new event var and the outcome var from which it was created
+# to make sure the code did what it was intended to
 linelist_surv %>% 
-     tabyl(outcome, event)
+  tabyl(outcome, event)
 ```
 
 ここで、正しく分類できているかどうかを確認するために、新しい変数 `age_cat_small` と古い変数 `age_cat` のクロス集計を行います
 
 ```{r}
 linelist_surv %>% 
-     tabyl(age_cat_small, age_cat)
+  tabyl(age_cat_small, age_cat)
 ```
 
 次に、`linelist_surv` データのいくつかの変数（新しく作成された変数も含む）について、最初の10人分の観測値を確認します。 
@@ -162,8 +162,8 @@ linelist_surv %>%
 
 ```{r}
 linelist_surv %>% 
-     select(case_id, age_cat_small, date_onset, date_outcome, outcome, event, futime) %>% 
-     head(10)
+  select(case_id, age_cat_small, date_onset, date_outcome, outcome, event, futime) %>% 
+  head(10)
 ```
 
 新しい年齢分類の性別ごとのより詳細な分布を得るために、列 `age_cat_small` と `gender` のクロス集計も行うことができます。ここでは、[記述統計表の作り方](#tables-descriptive)の章で説明した **janitor** パッケージの `tabyl()` と *adorn* 関数を使用します。
@@ -173,11 +173,11 @@ linelist_surv %>%
 ```{r}
 
 linelist_surv %>% 
-     tabyl(gender, age_cat_small, show_na = F) %>% 
-     adorn_totals(where = "both") %>% 
-     adorn_percentages() %>% 
-     adorn_pct_formatting() %>% 
-     adorn_ns(position = "front")
+  tabyl(gender, age_cat_small, show_na = F) %>% 
+  adorn_totals(where = "both") %>% 
+  adorn_percentages() %>% 
+  adorn_pct_formatting() %>% 
+  adorn_ns(position = "front")
 
 ```
 
@@ -216,7 +216,7 @@ linelist_surv %>%
 
 
 ```{r survobj }
-# 右側打切りデータに Surv() 構文を使用
+# Use Suv() syntax for right-censored data
 survobj <- Surv(time = linelist_surv$futime,
                 event = linelist_surv$event)
 ```
@@ -234,14 +234,14 @@ survobj <- Surv(time = linelist_surv$futime,
 
 ```{r}
 linelist_surv %>% 
-     select(case_id, date_onset, date_outcome, futime, outcome, event) %>% 
-     head(10)
+  select(case_id, date_onset, date_outcome, futime, outcome, event) %>% 
+  head(10)
 ```
 
 さらに、`survobj` の最初の10要素を表示します。基本的には追跡時間のベクトルが表示され、右側打切りの観測値の場合は "+" も表示されます。各値が上の出力と下の出力でどのようになっているか確認してください。
 
 ```{r}
-# このベクトルの最初の10要素を表示し、どのようになっているかを確認
+#print the 50 first elements of the vector to see how it presents
 head(survobj, 10)
 ```
 
@@ -262,11 +262,11 @@ head(survobj, 10)
 以下では、上で作成した Surv 型のオブジェクト "survobj" を反応変数とした formula を用いて KM 推定値を求めます。"~ 1" は全体の生存に対するモデルを実行することを意味します。
 
 ```{r fit}
-# Surv 型オブジェクト "survobj" を反応変数としたモデル式を用いて KM 推定値を求めます
-# "~ 1" は全体の生存に対するモデルを実行することを意味します
+# fit the KM estimates using a formula where the Surv object "survobj" is the response variable.
+# "~ 1" signifies that we run the model for the overall survival  
 linelistsurv_fit <-  survival::survfit(survobj ~ 1)
 
-# 詳細をみるための要約を表示
+#print its summary for more details
 summary(linelistsurv_fit)
 
 ```
@@ -276,8 +276,8 @@ summary(linelistsurv_fit)
 
 ```{r print_spec_times}
 
-# 特定の時点における要約を表示
-summary(linelistsurv_fit, times = c(5, 10, 20, 30, 60))
+#print its summary at specific times
+summary(linelistsurv_fit, times = c(5,10,20,30,60))
 
 ```
 
@@ -288,7 +288,7 @@ summary(linelistsurv_fit, times = c(5, 10, 20, 30, 60))
 
 
 ```{r, mean_survtime}
-# linelistsurv_fit オブジェクトを平均生存時間とその標準誤差とともに表示します
+# print linelistsurv_fit object with mean survival time and its se. 
 print(linelistsurv_fit, print.rmean = TRUE)
 
 ```
@@ -322,9 +322,9 @@ KM 推定値が計算されていれば、「Kaplan-Meier 曲線」を描画で�
 
 plot(linelistsurv_fit, 
      xlab = "Days of follow-up",     # x 軸のラベル
-     ylab = "Survival Probability",  # y 軸のラベル
-     main = "Overall survival curve" # 図のタイトル
-)
+     ylab="Survival Probability",   # y-axis label
+     main= "Overall survival curve" # figure title
+     )
 
 ```
 
@@ -335,33 +335,33 @@ KM 推定値の信頼区間もデフォルトで描画されますが、`plot()`
 
 ```{r}
 
-# オリジナルのプロット
+# original plot
 plot(
-     linelistsurv_fit,
-     xlab = "Days of follow-up",       
-     ylab = "Survival Probability",       
-     mark.time = TRUE,              # 曲線上にイベントのマークを追加："+" を全てのイベント時点に表示
-     conf.int = FALSE,              # 信頼区間を非表示
-     main = "Overall survival curve and cumulative mortality"
-)
+  linelistsurv_fit,
+  xlab = "Days of follow-up",       
+  ylab = "Survival Probability",       
+  mark.time = TRUE,              # mark events on the curve: a "+" is printed at every event
+  conf.int = FALSE,              # do not plot the confidence interval
+  main = "Overall survival curve and cumulative mortality"
+  )
 
-# 元のプロットに追加の曲線を描画
+# draw an additional curve to the previous plot
 lines(
-     linelistsurv_fit,
-     lty = 3,             # 分かりやすくするために異なる線種を使用
-     fun = "event",       # 生存ではなく累積イベントを描画
-     mark.time = FALSE,
-     conf.int = FALSE
-)
+  linelistsurv_fit,
+  lty = 3,             # use different line type for clarity
+  fun = "event",       # draw the cumulative events instead of the survival 
+  mark.time = FALSE,
+  conf.int = FALSE
+  )
 
-# プロットに凡例を追加
+# add a legend to the plot
 legend(
-     "topright",                               # 凡例の位置
-     legend = c("Survival", "Cum. Mortality"), # 凡例のテキスト
-     lty = c(1, 3),                            # 凡例で用いる線種
-     cex = .85,                                # 凡例テキストのサイズを定義するパラメータ
-     bty = "n"                                 # 凡例にボックスを非表示
-)
+  "topright",                               # position of legend
+  legend = c("Survival", "Cum. Mortality"), # legend text 
+  lty = c(1, 3),                            # line types to use in the legend
+  cex = .85,                                # parametes that defines size of legend text
+  bty = "n"                                 # no box type to be drawn for the legend
+  )
 
 ```
 
@@ -381,41 +381,42 @@ legend(
 
 
 ```{r comp_surv, warning=FALSE}
-# 性別に基づいて新しい survfit オブジェクトを作成
+
+# create the new survfit object based on gender
 linelistsurv_fit_sex <-  survfit(Surv(futime, event) ~ gender, data = linelist_surv)
 ```
 
 新しいオブジェクトを作成すると、性別ごとの生存曲線を作成できます。色や凡例を決める前に、性別の列の水準の順番を見てみましょう。 
 
 ```{r}
-# 色を設定
+# set colors
 col_sex <- c("lightgreen", "darkgreen")
 
-# プロットを作成
+# create plot
 plot(
-     linelistsurv_fit_sex,
-     col = col_sex,
-     xlab = "Days of follow-up",
-     ylab = "Survival Probability")
+  linelistsurv_fit_sex,
+  col = col_sex,
+  xlab = "Days of follow-up",
+  ylab = "Survival Probability")
 
-# 凡例の追加
+# add legend
 legend(
-     "topright",
-     legend = c("Female","Male"),
-     col = col_sex,
-     lty = 1,
-     cex = .9,
-     bty = "n")
+  "topright",
+  legend = c("Female","Male"),
+  col = col_sex,
+  lty = 1,
+  cex = .9,
+  bty = "n")
 ```
 
 そして、`survdiff()` を用いて生存曲線の群間差の仮説検定を行うことができます。
 
 ```{r}
-# 生存曲線の差の仮説検定を実行
+#compute the test of the difference between the survival curves
 survival::survdiff(
-     Surv(futime, event) ~ gender, 
-     data = linelist_surv
-)
+  Surv(futime, event) ~ gender, 
+  data = linelist_surv
+  )
 
 ```
 
@@ -428,22 +429,22 @@ survival::survdiff(
 ```{r, warning=F, message=F}
 
 survminer::ggsurvplot(
-     linelistsurv_fit_sex, 
-     data = linelist_surv,          # linelistsurv_fit_sex を作成するのに用いたデータを再度指定
-     conf.int = FALSE,              # KM 推定値の信頼区間を非表示
-     surv.scale = "percent",        # y 軸の確率を % で表示
-     break.time.by = 10,            # x 軸の時間を 10 日刻みで表示
-     xlab = "Follow-up days",
-     ylab = "Survival Probability",
-     pval = T,                      # ログランク検定の p 値を表示
-     pval.coord = c(40, .91),       # 座標を指定して p 値を表示
-     risk.table = T,                # 下にリスク集合の表を表示
-     legend.title = "Gender",       # 凡例のタイトル
-     legend.labs = c("Female", "Male"),
-     font.legend = 10, 
-     palette = "Dark2",             # カラーパレットの指定
-     surv.median.line = "hv",       # 生存時間中央値の位置に縦と横の補助線を描画
-     ggtheme = theme_light()        # シンプルなテーマを使用
+    linelistsurv_fit_sex, 
+    data = linelist_surv,          # again specify the data used to fit linelistsurv_fit_sex 
+    conf.int = FALSE,              # do not show confidence interval of KM estimates
+    surv.scale = "percent",        # present probabilities in the y axis in %
+    break.time.by = 10,            # present the time axis with an increment of 10 days
+    xlab = "Follow-up days",
+    ylab = "Survival Probability",
+    pval = T,                      # print p-value of Log-rank test 
+    pval.coord = c(40,.91),        # print p-value at these plot coordinates
+    risk.table = T,                # print the risk table at bottom 
+    legend.title = "Gender",       # legend characteristics
+    legend.labs = c("Female","Male"),
+    font.legend = 10, 
+    palette = "Dark2",             # specify color palette 
+    surv.median.line = "hv",       # draw horizontal and vertical lines to the median survivals
+    ggtheme = theme_light()        # simplify plot background
 )
 
 ```
@@ -456,29 +457,29 @@ survminer::ggsurvplot(
 ```{r}
 
 linelistsurv_fit_source <-  survfit(
-     Surv(futime, event) ~ source,
-     data = linelist_surv
-)
+  Surv(futime, event) ~ source,
+  data = linelist_surv
+  )
 
-# プロット
+# plot
 ggsurvplot( 
-     linelistsurv_fit_source,
-     data = linelist_surv,
-     size = 1, linetype = "strata",   # 線種
-     conf.int = T,
-     surv.scale = "percent",  
-     break.time.by = 10, 
-     xlab = "Follow-up days",
-     ylab= "Survival Probability",
-     pval = T,
-     pval.coord = c(40, .91),
-     risk.table = T,
-     legend.title = "Source of \ninfection",
-     legend.labs = c("Funeral", "Other"),
-     font.legend = 10,
-     palette = c("#E7B800", "#3E606F"),
-     surv.median.line = "hv", 
-     ggtheme = theme_light()
+  linelistsurv_fit_source,
+  data = linelist_surv,
+  size = 1, linetype = "strata",   # line types
+  conf.int = T,
+  surv.scale = "percent",  
+  break.time.by = 10, 
+  xlab = "Follow-up days",
+  ylab= "Survival Probability",
+  pval = T,
+  pval.coord = c(40,.91),
+  risk.table = T,
+  legend.title = "Source of \ninfection",
+  legend.labs = c("Funeral", "Other"),
+  font.legend = 10,
+  palette = c("#E7B800","#3E606F"),
+  surv.median.line = "hv", 
+  ggtheme = theme_light()
 )
 
 ```
@@ -514,17 +515,18 @@ Cox 回帰モデルのオブジェクトに `summary()` を適用すると、ハ
 
 ```{r coxmodel_agesex}
 
-# Cox 回帰モデルの当てはめ
+#fitting the cox model
 linelistsurv_cox_sexage <-  survival::coxph(
-     Surv(futime, event) ~ gender + age_cat_small, 
-     data = linelist_surv
-)
+              Surv(futime, event) ~ gender + age_cat_small, 
+              data = linelist_surv
+              )
 
-# モデルの当てはめ結果の表示
+
+#printing the model fitted
 linelistsurv_cox_sexage
 
 
-# モデルの要約
+#summary of the model
 summary(linelistsurv_cox_sexage)
 
 ```
@@ -548,14 +550,14 @@ test_ph_sexage
 
 ```{r coxmodel_fit_ph,  message=FALSE}
 
-# モデルの当てはめ
+#fit the model
 linelistsurv_cox <-  coxph(
-     Surv(futime, event) ~ gender + age_years + source + days_onset_hosp,
-     data = linelist_surv
-)
+                        Surv(futime, event) ~ gender + age_years+ source + days_onset_hosp,
+                        data = linelist_surv
+                        )
 
 
-# 比例ハザード性の仮説検定
+#test the proportional hazard model
 linelistsurv_ph_test <- cox.zph(linelistsurv_cox)
 linelistsurv_ph_test
 ```
@@ -573,9 +575,9 @@ survminer::ggcoxzph(linelistsurv_ph_test)
 また、モデルの結果は感染源と全死亡率の間の正の関連も示していました。これについては、他の感染による患者は葬儀で感染した患者と比べて死亡リスクが高い（1.21倍）という結果でした。
 
 
-```{r coxmodel_summary, message=FALSE}
+```{r coxmodel_summary,  message=FALSE}
 
-# モデルの要約を表示
+#print the summary of the model
 summary(linelistsurv_cox)
 
 ```
@@ -586,9 +588,9 @@ summary(linelistsurv_cox)
 
 ```{r}
 linelist_case_data %>% 
-     tabyl(days_onset_hosp, outcome) %>% 
-     adorn_percentages() %>%  
-     adorn_pct_formatting()
+  tabyl(days_onset_hosp, outcome) %>% 
+  adorn_percentages() %>%  
+  adorn_pct_formatting()
 
 ```
 
@@ -649,7 +651,7 @@ bmt <- rowid_to_column(BMT, "my_id")
 このデータセットは以下のようになります：
 
 ```{r message=FALSE, echo=F}
-DT::datatable(bmt, rownames = FALSE, options = list(pageLength = 5, scrollX = T), class = 'white-space: nowrap' )
+DT::datatable(bmt, rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
 ```
 
 #### 患者の行の展開 {.unnumbered} 
@@ -662,13 +664,13 @@ DT::datatable(bmt, rownames = FALSE, options = list(pageLength = 5, scrollX = T)
 
 ```{r}
 td_dat <- 
-     tmerge(
-          data1 = bmt %>% select(my_id, T1, delta1), 
-          data2 = bmt %>% select(my_id, T1, delta1, TA, deltaA), 
-          id = my_id, 
-          death = event(T1, delta1),
-          agvhd = tdc(TA)
-     )
+  tmerge(
+    data1 = bmt %>% select(my_id, T1, delta1), 
+    data2 = bmt %>% select(my_id, T1, delta1, TA, deltaA), 
+    id = my_id, 
+    death = event(T1, delta1),
+    agvhd = tdc(TA)
+    )
 ```
 
 上記のコードで何が行われるのか、最初の5人の患者のデータを見てみましょう。
@@ -677,15 +679,15 @@ td_dat <-
 
 ```{r}
 bmt %>% 
-     select(my_id, T1, delta1, TA, deltaA) %>% 
-     filter(my_id %in% seq(1, 5))
+  select(my_id, T1, delta1, TA, deltaA) %>% 
+  filter(my_id %in% seq(1, 5))
 ```
 
 新しいデータセットにおける同じ患者のデータは以下のようになります：
 
 ```{r}
 td_dat %>% 
-     filter(my_id %in% seq(1, 5))
+  filter(my_id %in% seq(1, 5))
 ```
 
 このデータでは、一部の患者は2つの行を持っており、各行が新しい変数 `agvhd` に異なる値を持つ2つの区間に対応するようになっています。例えば、患者1は `agvhd` の値が0の時間0から67の区間と、`agvhd` の値が1の時間67から2081の区間の2つの行を持っています。
@@ -697,9 +699,9 @@ td_dat %>%
 
 ```{r}
 bmt_td_model = coxph(
-     Surv(time = tstart, time2 = tstop, event = death) ~ agvhd, 
-     data = td_dat
-)
+  Surv(time = tstart, time2 = tstop, event = death) ~ agvhd, 
+  data = td_dat
+  )
 
 summary(bmt_td_model)
 ```

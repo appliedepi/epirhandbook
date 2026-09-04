@@ -51,19 +51,19 @@ pacman::p_load(
 Nós iremos importar o banco de dados de casos de uma simulação de epidemia de Ebola. Carregue diretamente com `appliedepidata::get_data(name = "linelist_cleaned_rds")` (consulte a página [Baixar manual e dados](data_used.pt.qmd) para mais detalhes).
 
 ```{r, echo=F}
-# importe o banco de dados
+# import the linelist into R
 linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds")
 ```
 
 ```{r, eval=F}
-# importe o banco de dados limpo
+# import the linelist
 linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds")
 ```
 
 As primeiras 50 linhas do banco de dados são mostradas abaixo.
 
 ```{r, message=FALSE, echo=F}
-# mostre as linhas como tabela
+# display the linelist data as a table
 DT::datatable(head(linelist, 50), rownames = FALSE, filter="top", options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
 ```
 
@@ -77,20 +77,20 @@ Ao utilizar o pacote **skimr**, você pode obter um resumo detalhado e esteticam
 
 Abaixo, a função `skim()` é aplicada a todos os dados do objeto `linelist,` criado no código acima. Após execução do código, uma visão geral dos dados e um resumo de cada coluna (por classe) são gerados.
 
-```{r}
-## obtenha informações sobre cada variável no banco de dados
+```{r eval=F}
+## get information about each variable in a dataset 
 skim(linelist)
 ```
 
-```{r  eval=F, echo=F}
-# exclui a apresentação de dados com histogramas irregulares
+```{r  echo=F}
+# sparkline histograms not showing correctly, so avoiding them.
 skim_without_charts(linelist)
 ```
 
 Você também pode usar a função `summary()`, do R **base**, para obter informações sobre o banco de dados inteiro, mas os resultados obtidos podem ser mais difíceis de visualizar do que utilizando o **skimr**. O resultado da análise com `summary()` não é mostrado abaixo, visando poupar espaço na página.
 
 ```{r, eval=F}
-## obtenha informações sobre cada coluna no banco de dados
+## get information about each column in a dataset 
 summary(linelist)
 ```
 
@@ -106,7 +106,7 @@ Você pode obter e salvar uma parte específica da análise utilizando o indexad
 
 ```{r}
 summary(linelist$age_years)[[2]] # obtém apenas o resultado da análise no índice [2]
-# alternativa equivalente ao indexador [2], utilizando o nome do campo:
+# equivalent, alternative to above by element name
 # summary(linelist$age_years)[["1st Qu."]]  
 ```
 
@@ -213,7 +213,7 @@ Adicionalmente, você pode obter a tabela no tabyl e utiliza-la nas funções do
 ```{r}
 linelist %>%                                  # fonte dos dados
   tabyl(age_cat, gender) %>%                  # geração da tabela cruzada
-  adorn_totals(where = "row") %>%             # adiciona uma linha "Total", com os totais
+  adorn_totals(where = "col") %>% 
   adorn_percentages(denominator = "col") %>%  # converte as quantidades absolutas para proporções
   adorn_pct_formatting() %>%                  # converte as proporções para porcentagens
   adorn_ns(position = "front") %>% 
@@ -248,8 +248,8 @@ linelist %>%
   adorn_pct_formatting() %>% 
   adorn_ns(position = "front") %>% 
   adorn_title(
-    row_name = "Faixa-Etária",
-    col_name = "Gênero",
+    row_name = "Age Category",
+    col_name = "Gender",
     placement = "combined") %>% 
   flextable::flextable() %>%                     # converte para imagem
   flextable::autofit() %>%                       # garante apenas uma linha por coluna
@@ -456,12 +456,12 @@ summary_table %>%
   select(-c(delay_mean, delay_sd)) %>%                       # remova as duas colunas utilizadas   
   adorn_totals(where = "row") %>%                            # adiciona uma linha com os totais
   select(                                                    # reorganize e renomeie as colunas
-    "Nome do Hospital"   = hospital,
-    "Casos"           = cases,
-    "Atraso máximo"       = delay_max,
-    "Média (dp)"       = delay,
-    "Atraso 3+ dias"   = delay_3,
-    "% atrasos 3+ dias" = pct_delay_3
+    "Hospital Name"   = hospital,
+    "Cases"           = cases,
+    "Max delay"       = delay_max,
+    "Mean (sd)"       = delay,
+    "Delay 3+ days"   = delay_3,
+    "% delay 3+ days" = pct_delay_3
     )
 ```
 
@@ -470,11 +470,11 @@ summary_table %>%
 O cálculo dos *percentis* e quantis no **dplyr** merece uma menção especial. Para obter os quantis, utilize a função `quantile()` com os intervalos padrões, ou especifique os valores alterando o atributo `probs =`.
 
 ```{r}
-# obtenha os percentis padrões da variável age (0%, 25%, 50%, 75%, 100%)
+# get default percentile values of age (0%, 25%, 50%, 75%, 100%)
 linelist %>% 
   reframe(age_percentiles = quantile(age_years, na.rm = TRUE))
 
-# obtenha os percentis em diferentes níveis da mesma variável (5%, 50%, 75%, 98%)
+# get manually-specified percentile values of age (5%, 50%, 75%, 98%)
 linelist %>% 
   reframe(
     age_percentiles = quantile(
@@ -487,7 +487,7 @@ linelist %>%
 Se você quiser obter os quantis *por grupos*, você pode obter resultados longos e menos úteis se simplesmente adicionar outra coluna ao `group_by()`. Desta forma, experimente essa abordagem: crie um coluna para cada nível de quantil desejado.
 
 ```{r}
-# obtenha os valores de percentis nos níveis desejados de acordo com a variável age (5%, 50%, 75%, 98%), agrupando os dados por hospital
+# get manually-specified percentile values of age (5%, 50%, 75%, 98%)
 linelist %>% 
   group_by(hospital) %>% 
   summarise(
@@ -684,7 +684,7 @@ Esta tabela está no formato "longo/comprido", que pode ser o desejado. *Opciona
 ```{r}
 table_long %>% 
   
-  # Muda para o formato amplo e formata a tabela
+  # Pivot wider and format
   ########################
   mutate(hospital = replace_na(hospital, "Total")) %>% 
   pivot_wider(                                         # Mude de "longo" para "largo"
@@ -706,7 +706,7 @@ Após isso, você pode exportar essa tabela como uma imagem - abaixo, o resultad
 
 ```{r echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE, out.width=c('50%', '50%')}
 
-linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds") 
+linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds")
 
 border_style = officer::fp_border(color="black", width=1)
 
@@ -718,18 +718,18 @@ pacman::p_load(
   tidyverse)      # gestão dos dados, resumos, e visualização
 
 table <- linelist %>% 
-  # filtros
+  # filter
   ########
-  #filter(!is.na(outcome) & hospital != "Missing") %>%  # Exclui os casos com campos em branco nas colunas outcome ou hospital
+  #filter(!is.na(outcome) & hospital != "Missing") %>%  # Remove cases with missing outcome or hospital
   
-  # Obtenha um resumo de valores por grupos hospital-outcome
+  # Get summary values per hospital-outcome group
   ###############################################
   group_by(hospital, outcome) %>%                      # Agrupe os dados
   summarise(                                           # Crie novas colunas com resumos de indicadores de interesse
     N = n(),                                            # N° de linhas por grupo hospital-outcome     
     ct_value = median(ct_blood, na.rm=T)) %>%           # Obtenha os valores médios de CT por grupo
   
-  # adiciona a linha com os totais
+  # add totals
   ############
   bind_rows(                                           # Junte a tabela anterior com essa mini-tabela com totais
     linelist %>% 
@@ -739,7 +739,7 @@ table <- linelist %>%
         N = n(),                                       # N° de linhas do banco de dados inteiro     
         ct_value = median(ct_blood, na.rm=T))) %>%     # Valores médios do CT do banco de dados inteiro
   
-  # Transforme a tabela para o formato amplo e faça formatações
+  # Pivot wider and format
   ########################
   mutate(hospital = replace_na(hospital, "Total")) %>% 
   pivot_wider(                                         # Transforme de "longo" para "largo"
@@ -755,7 +755,7 @@ table <- linelist %>%
     N_Death, Pct_Death, ct_value_Death)  %>%             # Colunas com os óbitos
   arrange(N_Known) %>%                                 # Ordene as linhas do menor para o maior (com a linha "Total" por último)
 
-  # formatando a tabela
+  # formatting
   ############
   flextable() %>% 
   add_header_row(
@@ -763,8 +763,8 @@ table <- linelist %>%
     values = c("Hospital",     # Os valores do cabeçalho estão abaixo
                "Total cases with known outcome", 
                "Recovered",    # Este será o título para esta e as próximas duas colunas
-               "",
-               "",
+               "",             # Deixe em branco, uma vez que será unida com os "Death"
+               "",             # Deixe em branco, uma vez que será unida com os "Death"
                "Died",         # Este será o título para esta e as próximas duas colunas
                "",             # Deixe em branco, uma vez que será unida com os "Death"
                "")) %>% 
@@ -811,11 +811,6 @@ Para introduzir a função `tbl_summary()`, nós vamos primeiro demostrar seu fu
 O comportamento padrão do `tbl_summary()` é incrível - ele utiliza as colunas fornecidas e cria uma tabela resumo em apenas um comando. Esta função realiza as estatísticas apropriadas de acordo com a classe da coluna: mediana e intervalo interquartil (IQR) para colunas numéricas, e contagens (%) para colunas categóricas. Valores em branco são convertidos para "Unknown". Notas de rodapé são adicionadas para explicar as estatísticas utilizadas, enquanto a quantidade total N é mostrada no topo.
 
 ```{r, warning=F, message=F}
-
-# Use a função abaixo para que a tabela saia em portugês
-
-theme_gtsummary_language("pt")
-
 linelist %>% 
   select(age_years, gender, outcome, fever, temp, hospital) %>%  # mantenha apenas as colunas de interesse
   tbl_summary()                                                  # função no modo padrão
@@ -932,7 +927,7 @@ age_by_outcome   # exporte a tabela
 Para obter proporções, utilize a tabela acima na função `prop.table()`. Use o argumento `margins =` para especificar caso você queira que as proporções sejam calculadas das linhas (1), colunas (2), ou da tabela inteira (3). No código abaixo, encadeamos ("piped") a tabela com a função `round()`, do R **base**, especificando 2 dígitos.
 
 ```{r}
-# obtenhas as proporções da tabela definida acima, por linhas, arredondado
+# get proportions of table defined above, by rows, rounded
 prop.table(age_by_outcome, 1) %>% round(2)
 ```
 

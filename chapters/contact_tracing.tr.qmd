@@ -75,7 +75,7 @@ Aşağıda, veri kümeleri **rio** paketinden `import()` fonksiyonu kullanılara
 Bu veriler, vakaların bir tablosu ve bunlarla ilgili bilgilerdir.
 
 ```{r}
-cases <- appliedepidata::get_data(name = "cases_clean") %>% 
+cases <- appliedepidata::get_data(name = "cases_clean") %>%
   select(case_id, firstName, lastName, gender, age, age_class,
          occupation, classification, was_contact, hospitalization_typeid)
 ```
@@ -96,7 +96,7 @@ Bu veriler, tüm kişilerin ve bunlarla ilgili bilgilerin bir tablosudur. Yine, 
 
 
 ```{r}
-contacts <- appliedepidata::get_data(name = "contacts_clean") %>% 
+contacts <- appliedepidata::get_data(name = "contacts_clean") %>%
   mutate(age_class = forcats::fct_rev(age_class)) %>% 
   select(contact_id, contact_status, firstName, lastName, gender, age,
          age_class, occupation, date_of_reporting, date_of_data_entry,
@@ -118,7 +118,7 @@ Bu veriler, ilgili kişilerle "takip" etkileşimlerinin kayıtlarıdır. Her tem
 Birkaç temizleme adımını içe aktarıp gerçekleştiriyoruz. Belirli sütunları seçiyoruz ve ayrıca bir karakter sütununu tüm küçük harf değerlerine dönüştürüyoruz.  
 
 ```{r}
-followups <- appliedepidata::get_data(name = "followups_clean") %>% 
+followups <- appliedepidata::get_data(name = "followups_clean") %>%
   select(contact_id, followup_status, followup_number,
          date_of_followup, admin_2_name, admin_1_name) %>% 
   mutate(followup_status = str_to_lower(followup_status))
@@ -135,7 +135,7 @@ DT::datatable(head(followups, 50), rownames = FALSE, options = list(pageLength =
 Burada vakalar ve kişiler arasındaki ilişkiyi gösteren verileri içe aktarıyoruz. Gösterilecek belirli bir sütunu seçiyoruz. 
 
 ```{r}
-relationships <- appliedepidata::get_data(name = "relationships_clean") %>% 
+relationships <- appliedepidata::get_data(name = "relationships_clean") %>%
   select(source_visualid, source_gender, source_age, date_of_last_contact,
          date_of_data_entry, target_visualid, target_gender,
          target_age, exposure_type)
@@ -184,7 +184,7 @@ relation_age <- relationships %>%
     source_age_class = epikit::age_categories(source_age, breakers = seq(0, 80, 5)),
     target_age_class = epikit::age_categories(target_age, breakers = seq(0, 80, 5)),
     ) %>% 
-  pivot_longer(cols = contains("class"), names_to = "category", values_to = "age_class")  
+  pivot_longer(cols = contains("class"), names_to = "category", values_to = "age_class")  # pivot longer
 
 
 relation_age
@@ -210,13 +210,13 @@ apyramid::age_pyramid(
 Mesleki dağılım gibi diğer özellikleri de görebiliriz (örneğin pasta grafiği şeklinde).
 
 ```{r, warning=F, message=F}
-# Veri kümesini temizleyin ve mesleğe göre sayıları alın
+# Clean dataset and get counts by occupation
 occ_plot_data <- cases %>% 
   mutate(occupation = forcats::fct_na_value_to_level(occupation, level = "(Missing)"),  # NA eksik değerleri bir kategori yapın
          occupation = forcats::fct_infreq(occupation)) %>%   # sıklık sırasına göre sıra faktörü seviyeleri
   count(occupation)                                          # mesleğe göre sayıları alın
   
-# pasta grafiği yapın
+# Make pie chart
 ggplot(data = occ_plot_data, mapping = aes(x = "", y = n, fill = occupation))+
   geom_bar(width = 1, stat = "identity") +
   coord_polar("y", start = 0) +
@@ -279,7 +279,7 @@ Bu veriler çeşitli biçimlerde bulunabilir. Kişi başına bir satır ve takip
 Go.Data örneğimizde, bu veriler, takip etkileşimi başına bir satır ile "uzun" bir formatta olan "takipler" veri çerçevesinde depolanır. İlk 50 satır şöyle görünür:
 
 ```{r, message=FALSE, echo=FALSE}
-#ilk 50 kişi satır listesi verilerini tablo olarak gösterin
+# display the first 50 rows of contact linelist data as a table
 DT::datatable(head(followups, 50), rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
 ```
 
@@ -299,13 +299,13 @@ followups %>%
 ```{r, warning=F, message=F}
 followups_clean <- followups %>%
   
-  # yinelenenleri kaldırın
+  # De-duplicate
   group_by(contact_id, date_of_followup) %>%        # temaslı günü başına grup satırları
   arrange(contact_id, desc(date_of_followup)) %>%   # takip tarihine göre her temas günü için satırlar düzenleyin (en son en üstte)
   slice_head() %>%                                  # benzersiz kişi kimliği başına yalnızca ilk satırı tutun  
   ungroup() %>% 
   
-  # diğer temizlemeler
+  # Other cleaning
   mutate(followup_number = replace(followup_number, followup_number > 14, NA)) %>% # hatalı verileri temizle
   drop_na(contact_id)                               # eksik contact_id olan satırları kaldırın
 ```
@@ -368,7 +368,7 @@ Belki de bu takip verileri, operasyonel karar verme için günlük veya haftalı
 plot_by_region <- followups_clean %>%                                        # takip veri seti ile başlayın
   count(admin_1_name, admin_2_name, followup_status) %>%   # benzersiz bölge durumuna göre sayıları al (sayılarla 'n' sütununu oluşturur)
   
-  
+  # begin ggplot()
   ggplot(                                         # ggplot() başlatın
     mapping = aes(x = reorder(admin_2_name, n),     # 'n' sütunundaki sayısal değerlere göre yönetici faktör düzeylerini yeniden sıralayın
                   y = n,                            # 'n' sütunundan çubuğun yükseklikleri
@@ -425,10 +425,10 @@ Bunun gibi bir tabloyu nasıl oluşturacağınız, temaslı izleme verilerinizin
 Dinamik olacak ve veriler değiştikçe değişecek bir tablo oluşturacağız. Sonuçları ilginç hale getirmek için, tabloyu belirli bir günde çalıştırmayı simüle etmemize izin verecek bir "rapor_tarihi" ayarlayacağız (10 Haziran 2020'yi seçiyoruz). Veriler o tarihe kadar filtrelenir.
 
 ```{r, warning=F, message=F}
-# Raporun bu tarihten itibaren verilerle çalıştırılmasını simüle etmek için "Rapor tarihi"ni ayarlayın
+# Set "Report date" to simulate running the report with data "as of" this date
 report_date <- as.Date("2020-06-10")
 
-# Rapor tarihini yansıtacak takip verileri oluşturun.
+# Create follow-up data to reflect the report date.
 table_data <- followups_clean %>% 
   filter(date_of_followup <= report_date)
 ```
@@ -545,7 +545,7 @@ contacts_table %>%
 Yeni kişiler oluşturulduğunda, Go.Data bu ilişki bilgilerini "ilişkiler" API uç noktasında saklar ve bu veri setinin ilk 50 satırını aşağıda görebiliriz. Bu, her bir temasın kendi kaynak durumuna zaten katılmış olduğu göz önüne alındığında, nispeten az adımla bir ısı grafiği oluşturabileceğimiz anlamına gelir.
 
 ```{r, warning=F, message=F, echo=F}
-# ilişki verilerinin ilk 50 satırını tablo olarak göster
+# display the first 50 rows of relationships data as a table
 DT::datatable(head(relationships, 50), rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
 ```
 

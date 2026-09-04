@@ -12,21 +12,23 @@ La principal herramienta para manejar, analizar y visualizar las cadenas de tran
 
 ```{r out.width=c('25%', '25%'), fig.show='hold', echo=F}
 
-## instala la versión de desarrollo de epicontacts
+# install development version of epicontacts
 if(
   !"epicontacts" %in% rownames(installed.packages()) |
   packageVersion("epicontacts") != "1.2.0"
-) remotes::install_github("reconhub/epicontacts@timelines") #jfmont
+) remotes::install_github("reconhub/epicontacts@timeline")
 
-## instalar y cargar paquetes
-pacman::p_load(tidyverse, epicontacts, magrittr, here, webshot, visNetwork)
+## install and load packages
+pacman::p_load(tidyverse,
+               #epicontacts,
+               magrittr, here, webshot, visNetwork)
 
-## cargar linelist
+library(epicontacts)
+
+## load linelist
 linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds") %>%
   filter(!duplicated(case_id))
-
-
-## generar contactos
+## generate contacts
 contacts <- linelist %>%
   transmute(
     from = infector,
@@ -36,22 +38,23 @@ contacts <- linelist %>%
   ) %>%
   drop_na(from)
 
-## generar epicontactos
+## generate epicontacts
 epic <- epicontacts::make_epicontacts(
   linelist = linelist,
   contacts = contacts, 
   directed = TRUE
 )
 
-## objeto subconjunto
-epic %<>% subset(
-  node_attribute = list(date_onset = c(as.Date(c("2014-06-01", "2014-07-01"))))
-) %>%
-  thin("contacts")
+## subset object
+#epic %<>% subset(
+epic_small <- epic %>% 
+  subset(
+    node_attribute = list(date_onset = c(as.Date(c("2014-06-01", "2014-07-01"))))) %>%
+  epicontacts::thin("contacts")
 
-## gráfico con la fecha de inicio como eje-x
+# plot with date of onset as x-axis
 plot(
-  epic,
+  epic_small,
   x_axis = "date_onset",
   label = FALSE,
   node_color = "outcome",
@@ -102,19 +105,19 @@ pacman::p_install_gh("reconhub/epicontacts@timeline")
 Importamos el conjunto de datos de casos de una epidemia de ébola simulada. Si deseas descargar los datos para seguirlos paso a paso, consulta las instrucciones en la página de [descargando el manual y los datos](#download-handbook-and-data). El conjunto de datos se importa utilizando la función `import()` del paquete **rio**. Consulta la página sobre [importación y exportación](#import-and-export) para conocer las distintas formas de importar datos.
 
 ```{r, echo=F}
-# importar linelist en R
+# import the linelist into R
 linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds")
 ```
 
 ```{r, eval=F}
-# importar linelist
+# import the linelist
 linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds")
 ```
 
 A continuación se muestran las primeras 50 filas del listado. Son especialmente interesantes las columnas `case_id`, `generation`, `infector`, y `source`.    
 
 ```{r, message=FALSE, echo=F}
-# muestra los datos de linelist como una tabla
+# display the linelist data as a table
 DT::datatable(head(linelist, 50), rownames = FALSE, filter="top", options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
 ```
 
@@ -131,7 +134,7 @@ Como ya tenemos un listado, sólo tenemos que crear una lista de aristas entre l
 En el código siguiente, la función `transmute()` de **dplyr** es similar a `mutate`, excepto que sólo mantiene las columnas que hemos especificado dentro de la función. La función `drop_na` filtrará cualquier fila en la que las columnas especificadas tengan un valor `NA`; en este caso, sólo queremos mantener las filas en las que se conoce el infector.
 
 ```{r transmission_chains_create_contacts,}
-## generar contactos
+## generate contacts
 contacts <- linelist %>%
   transmute(
     infector = infector,
@@ -145,7 +148,7 @@ contacts <- linelist %>%
 Ahora podemos crear el objeto **epicontacts** utilizando la función `make_epicontacts`. Necesitamos especificar qué columna del listado apunta al identificador único del caso, así como qué columnas de los contactos apuntan a los identificadores únicos de los casos involucrados en cada enlace. Estos enlaces son direccionales en el sentido de que la infección va *del* infector *al* caso, por lo que necesitamos especificar los argumentos `from` y `to`. Por lo tanto, también establecemos el argumento `directed` a `TRUE`, que afectará a las operaciones futuras.
 
 ```{r transmission_chains_create_epicontacts,}
-## generar el objeto epicontactos
+## generate epicontacts object
 epic <- make_epicontacts(
   linelist = linelist,
   contacts = contacts,
@@ -158,7 +161,7 @@ epic <- make_epicontacts(
 Al examinar los objetos **epicontacts**, podemos ver que la columna `case_id` del listado ha sido renombrada a `id` y las columnas `case_id` e `infector` de los contactos han sido renombradas a `from` y `to`. Esto garantiza la coherencia en las operaciones posteriores de manipulación, visualización y análisis.
 
 ```{r transmission_chains_view_epicontacts,}
-## ver el objeto epicontactos
+## view epicontacts object
 epic
 ```
 
@@ -233,7 +236,7 @@ length(get_id(epic, "common"))
 Todas las visualizaciones de los objetos **epicontacts** son manejadas por la función `plot`. En primer lugar, filtraremos el objeto **epicontacts** para incluir solo los casos con fechas de inicio en junio de 2014 utilizando la función de subconjunto, y solo incluiremos los contactos vinculados a esos casos utilizando la función `thin`.
 	
 ```{r transmission_chains_basic_plot_sub,}
-## subconjunto objeto epicontactos
+## subset epicontacts object
 sub <- epic %>%
   subset(
     node_attribute = list(date_onset = c(as.Date(c("2014-06-30", "2014-06-01"))))
@@ -244,7 +247,7 @@ sub <- epic %>%
 A continuación, podemos crear el gráfico básico e interactivo de la siguiente manera:
 
 ```{r transmission_chains_basic_plot,}
-## dibuja el objeto epicontactos
+## plot epicontacts object
 plot(
   sub,
   width = 700,
@@ -426,7 +429,7 @@ También se pueden incluir líneas de tiempo en la red, que se representan en el
 
 ```{r transmission_chains_create_timeline,}
 
-## generar la línea temporal
+## generate timeline
 timeline <- linelist %>%
   transmute(
     id = case_id,
@@ -444,7 +447,7 @@ Consulta `?vis_temporal_interactive` (la función a la que se llama cuando se tr
 
 ```{r transmission_chains_vis_timeline,}
 
-## define las formas
+## define shapes
 shapes <- c(
   f = "female",
   m = "male",
@@ -453,68 +456,68 @@ shapes <- c(
   "NA" = "question-circle"
 )
 
-## define los colores
+## define colours
 colours <- c(
   Death = "firebrick",
   Recover = "green",
   "NA" = "grey"
 )
 
-## realizar el gráfico
+## make plot
 plot(
   sub,
-  ## coordenada x máxima a la fecha de inicio
+  ## max x coordinate to date of onset
   x_axis = "date_onset",
-  ## utiliza una forma de red rectangular
+  ## use rectangular network shape
   network_shape = "rectangle",
-  ## asigna las formas de los nodos a la columna de género
+  ## mape case node shapes to gender column
   node_shape = "gender",
-  ## no queremos asignar el color del nodo a ninguna columna - esto es importante ya que el
-  ## valor por defecto es asignar al id del nodo, lo que desordenará el esquema de color
+  ## we don't want to map node colour to any columns - this is important as the
+  ## default value is to map to node id, which will mess up the colour scheme
   node_color = NULL,
-  ## establecer el tamaño del nodo caso a 30 (como no es un caracter, node_size no es
-  ## asignado a una columna sino que se interpreta como el tamaño real del nodo)
+  ## set case node size to 30 (as this is not a character, node_size is not
+  ## mapped to a column but instead interpreted as the actual node size)
   node_size = 30,
-  ## establece la anchura del enlace de transmisión en 4 (como no es un carácter, edge_width 
-  ## no se asigna a una columna, sino que se interpreta como la anchura real del borde).
+  ## set transmission link width to 4 (as this is not a character, edge_width is
+  ## not mapped to a column but instead interpreted as the actual edge width)
   edge_width = 4,
-  ## proporciona el objeto timeline
+  ## provide the timeline object
   timeline = timeline,
-  ## asigna la forma del nodo final a la columna del resultado en el objeto timeline
+  ## map the shape of the end node to the outcome column in the timeline object
   tl_end_node_shape = "outcome",
-  ## establece el tamaño del nodo final en 15 (como no es un carácter, este
-  ## argumento no se asigna a una columna sino que se interpreta como el
-  ## tamaño real del nodo)
+  ## set the size of the end node to 15 (as this is not a character, this
+  ## argument is not mapped to a column but instead interpreted as the actual
+  ## node size)
   tl_end_node_size = 15,
-  ## asigna el color del borde de timeline a la columna hospital
+  ## map the colour of the timeline edge to the hospital column
   tl_edge_color = "hospital",
-  ## establece el ancho del borde de la línea de tiempo en 2 (como no es un carácter, este argumento 
-  ## argumento no se asigna a una columna, sino que se interpreta como la anchura real
-  ## del borde).
+  ## set the width of the timeline edge to 2 (as this is not a character, this
+  ## argument is not mapped to a column but instead interpreted as the actual
+  ## edge width)
   tl_edge_width = 2,
-  ## asigna las etiquetas de los bordes a la variable hospital
+  ## map edge labels to the hospital variable
   tl_edge_label = "hospital",
-  ## especifica la forma para cada atributo de nodo (definido anteriormente)
+  ## specify the shape for everyone node attribute (defined above)
   shapes = shapes,
-  ## especifica la paleta de colores (definida anteriormente)
+  ## specify the colour palette (defined above)
   col_pal = colours,
-  ## establece el tamaño de la flecha en 0.5
+  ## set the size of the arrow to 0.5
   arrow_size = 0.5,
-  ## usa dos columnas en la leyenda
+  ## use two columns in the legend
   legend_ncol = 2,
-  ## establece el tamaño de la fuente
+  ## set font size
   font_size = 15,
-  ## define el formato de las fechas
+  ## define formatting for dates
   date_labels = c("%d %b %Y"),
-  ## no muestra las etiquetas ID debajo de los nodos
+  ## don't plot the ID labels below nodes
   label = FALSE,
-  ## especifica la altura
+  ## specify height
   height = 1000,
-  ## especifica la anchura
+  ## specify width
   width = 1200,
-  ## asegura que cada nodo case tiene una única coordenada y - esto es muy importante
-  ## cuando se utilizan líneas de tiempo, de lo contrario tendrá líneas de tiempo superpuestas de
-  ## diferentes casos
+  ## ensure each case node has a unique y-coordinate - this is very important
+  ## when using timelines, otherwise you will have overlapping timelines from
+  ## different cases
   position_dodge = TRUE
 )
 
@@ -528,7 +531,7 @@ plot(
 Podemos obtener una visión general de algunas de las propiedades de la red utilizando la función `summary`.
 
 ```{r transmission_chains_summarise_epicontacts,}
-## resume el objeto epicontactos
+## summarise epicontacts object
 summary(epic)
 ```
 

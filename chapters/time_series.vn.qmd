@@ -32,7 +32,6 @@ Các chủ đề được đề cập bao gồm:
 ```{r load_packages}
 pacman::p_load(rio,          # File import
                here,         # File locator
-               tidyverse,    # data management + ggplot2 graphics
                tsibble,      # handle time series datasets
                slider,       # for calculating moving averages
                imputeTS,     # for filling in missing values
@@ -46,6 +45,7 @@ pacman::p_load(rio,          # File import
                units,        # for defining units of measurement (climate data)
                yardstick,    # for looking at model accuracy
                surveillance, # for aberration detection
+               tidyverse,    # data management + ggplot2 graphics
                appliedepidata # dữ liệu ví dụ được sử dụng trong sổ tay này
                )
 ``` 
@@ -162,7 +162,7 @@ Sử dụng mã bên dưới để nhập các tệp này vào R với package *
 
 ```{r read_climate, warning = FALSE, message = FALSE}
 
-## define path to weather folder 
+## materialise the germany_weather .nc files into a real folder on disk
 germany_weather_zip_dir <- tempfile()
 dir.create(germany_weather_zip_dir)
 appliedepidata::save_data(name = "germany_weather", path = germany_weather_zip_dir)
@@ -170,13 +170,17 @@ germany_weather_dir <- tempfile()
 dir.create(germany_weather_dir)
 utils::unzip(fs::path(germany_weather_zip_dir, "germany_weather.zip"), exdir = germany_weather_dir)
 
+## define path to weather folder
 file_paths <- list.files(
-  germany_weather_dir,
+  germany_weather_dir, # replace with your own file path
   full.names = TRUE)
-## only keep those with the current name of interest 
+
+## only keep those with the current name of interest
 file_paths <- file_paths[str_detect(file_paths, "germany")]
 
-## read in all the files as a stars object 
+## read in all the files as a stars object
+## along = "time" stacks the ten yearly files into one series; without it
+## stars cannot tell how to merge them and errors
 data <- stars::read_stars(file_paths, along = "time")
 ```
 
@@ -504,7 +508,7 @@ model <- glm_nb_model(
     fourier)
 
 ## fit your model using the counts dataset
-fitted_model <- trending::fit(model, counts)
+fitted_model <- trending::fit(model, data.frame(counts))
 
 ## calculate confidence intervals and prediction intervals 
 observed <- predict(fitted_model, simulate_pi = FALSE)
@@ -684,7 +688,7 @@ model <- glm_nb_model(
     )
 
 ## fit your model using the counts dataset
-fitted_model <- trending::fit(model, counts)
+fitted_model <- trending::fit(model, data.frame(counts))
 
 ## calculate confidence intervals and prediction intervals 
 observed <- predict(fitted_model, simulate_pi = FALSE)
@@ -700,7 +704,7 @@ observed <- predict(fitted_model, simulate_pi = FALSE)
 
 fitted_model %>% 
   ## extract original negative binomial regression
-  get_fitted_model()
+  get_fitted_model() #%>% 
   ## get a tidy dataframe of results
   #tidy(exponentiate = TRUE, 
   #     conf.int = TRUE)
@@ -709,6 +713,7 @@ fitted_model %>%
 Đánh giá nhanh mô hình cho thấy nó có thể thực hiện tốt hơn công việc ước tính số ca bệnh quan sát được.
 
 ```{r plot_nb_reg_bivar, warning=F, message=F}
+
 estimate_res <- data.frame(observed$result)
 
 ## plot your regression 
@@ -907,7 +912,7 @@ pred_data <- pluck(dat, 1) %>%
   select(case_int, epiweek, fourier)
 
 # fit model 
-fitted_model <- trending::fit(model, fitting_data)
+fitted_model <- trending::fit(model, data.frame(fitting_data))
 
 # get confint and estimates for fitted data
 observed <- fitted_model %>% 
@@ -915,7 +920,7 @@ observed <- fitted_model %>%
 
 # forecast with data want to predict with 
 forecasts <- fitted_model %>% 
-  predict(pred_data, simulate_pi = FALSE)
+  predict(data.frame(pred_data), simulate_pi = FALSE)
 
 ## combine baseline and predicted datasets
 observed <- bind_rows(observed$result, forecasts$result)
@@ -1098,9 +1103,9 @@ forecasts <- purrr::map(unique(case_roll$.id),
   
   # forecast with data want to predict with 
   forecasts <- fitted_model %>% 
-    predict(pred_data, simulate_pi = FALSE) 
-  forecasts <- data.frame(forecasts$result[[1]]) %>%   
-    ## only keep the week and the forecast estimate
+    predict(data.frame(pred_data), simulate_pi = FALSE)
+  forecasts <- data.frame(forecasts$result[[1]]) %>% 
+       ## only keep the week and the forecast estimate
     select(epiweek, estimate)
     
   }
@@ -1362,9 +1367,11 @@ fitted_model <- trending::fit(model, counts)
 
 ## calculate confidence intervals and prediction intervals 
 observed <- predict(fitted_model, simulate_pi = FALSE)
+
 ```
 
 ```{r table_regression, eval = FALSE, echo = TRUE}
+
 ## show estimates and percentage change in a table
 fitted_model %>% 
   ## extract original negative binomial regression
@@ -1397,6 +1404,7 @@ fitted_model %>%
 Như bên trên, chúng ta có thể trực quan hóa các đầu ra của mô hình hồi quy. 
 
 ```{r plot_interrupted}
+
 estimate_res <- data.frame(observed$result)
 
 ggplot(estimate_res, aes(x = epiweek)) + 

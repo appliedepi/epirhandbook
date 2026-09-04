@@ -60,8 +60,7 @@ linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds")
 As primeiras 50 linhas da linelist são exibidas abaixo. Vamos nos concentrar nas variáveis contínuas `age`, `wt_kg` (peso em quilos), `ct_blood` (valores de CT) e `days_onset_hosp` (diferença entre data de início e hospitalização). 
 
 ```{r, message=FALSE, echo=F}
-# mostra os dados da linelist como uma tabela
-
+# display the linelist data as a table
 DT::datatable(head(linelist, 50), rownames = FALSE, filter="top", options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
 ```
 
@@ -83,15 +82,14 @@ Algumas maneiras simples de prepararmos nossos dados para torná-los melhores pa
 Aqui estão alguns exemplos disso em ação.
 
 ```{r, }
-#faça uma versão visualizaçãi das colunas com nomes mais amigáveis 
-
+# make display version of columns with more friendly names
 linelist <- linelist %>%
   mutate(
     gender_disp = case_when(gender == "m" ~ "Male",        # m para Male
                             gender == "f" ~ "Female",      # f para Femimino,
-                            is.na(gender) ~ "Desconhecido"),    # NA para Desconhecido
+                            is.na(gender) ~ "Unknown"),    # NA to Unknown
     
-    outcome_disp = replace_na(outcome, "Desconhecido")          # substituir na por "Desconhecido" 
+    outcome_disp = replace_na(outcome, "Unknown")          # replace NA outcome with "unknown"
   )
 ```
 
@@ -108,20 +106,13 @@ Por exemplo, digamos que queremos fazer um gráfico de dados que estão em um fo
 
 ```{r}
 symptoms_data <- linelist %>% 
-  rename(tosse=cough,
-         febre=fever, 
-         vômito=vomit,
-         dores=aches,
-         calafrio=chills) %>%  #traduzindo
-  select(c(case_id, febre, calafrio, tosse, dores, vômito)) 
-     
+  select(c(case_id, fever, chills, cough, aches, vomit))
 ```
 
 Veja como são as primeiras 50 linhas desta mini-linelist  - veja como elas são formatadas de forma "larga" com cada sintoma como uma coluna:
 
 ```{r, message=FALSE, echo=F}
-# mostra os dados da linelist como uma tabela
-
+# display the linelist data as a table
 DT::datatable(head(symptoms_data, 50), rownames = FALSE, filter="top", options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
 ```
 
@@ -132,11 +123,10 @@ symptoms_data_long <- symptoms_data %>%    # comece com a "mini" linelist chamad
   
   pivot_longer(
     cols = -case_id,                       # pivote todas as colunas exceto case_id 
-    names_to = "nome_sintoma",             # dê o nome para a nova coluna que contém os sintomas 
-    values_to = "sintoma_esta_presente") %>%  # dê o nome para a coluna que diz se o sintoma está presente 
-
+    names_to = "symptom_name",             # assign name for new column that holds the symptoms
+    values_to = "symptom_is_present") %>%  # assign name for new column that holds the values (yes/no)
   
-  mutate(sintoma_esta_presente = replace_na(sintoma_esta_presente, "desconhecido")) # converte NA para "desconhecido"
+  mutate(symptom_is_present = replace_na(symptom_is_present, "unknown")) # convert NA to "unknown"
 
 ```
 
@@ -170,12 +160,9 @@ Os objetos de ggplot podem ser altamente complexos, mas a ordem básica das cama
 Um exemplo simples de código esqueleto é o seguinte. Vamos explicar cada componente nas seções abaixo.  
 
 ```{r, eval=F}
-# plote os dados das colunas do objeto my_data como pontos vermelhos
-
-
+# plot data from my_data columns as red points
 ggplot(data = my_data)+                   # use a base de dados "my_data"
   geom_point(                             # adicione uma camada de pontos 
-
     mapping = aes(x = col1, y = col2),    # mapeie as colunas para os eixos
     color = "red")+                       # outras especificações para o geom
   labs()+                                 # aqui você pode adicionar títulos, rótulos dos eixos, etc. 
@@ -194,7 +181,7 @@ Normalmente, o comando `ggplot()` inclui o argumento `data = ` para o gráfico. 
 Este comando terminará com um `+` após seus parênteses de fechamento. Isto deixa o comando "aberto". O ggplot só será executado/aparecerá quando o comando completo incluir uma camada final *sem* um `+` no final.  
 
 ```{r, eval=F}
-# Isso irá criar um gráfco que é um painel em branco 
+# This will create plot that is a blank canvas
 ggplot(data = linelist)
 ```
 
@@ -232,10 +219,6 @@ Depois de um `+`, os comandos de plotagem continuam. Uma forma é criada com a f
 ```{r, warning=F, message=F}
 ggplot(data = linelist, mapping = aes(x = age, y = wt_kg))+
   geom_point()
-
-# o nome dos eixos fica automaticamente com o nome da variável na base
-# que está em inglês. É possível traduzir na base ou usando a camada
-# labs() para escrever o nome dos eixos como se quer
 ```
 
 Como outro exemplo, os seguintes comandos utilizam os mesmos dados, um mapeamento um pouco diferente e um *geom* diferente. A função `geom_histogram()` requer apenas uma coluna mapeada para o eixo x, pois as contagens do eixo y são geradas automaticamente. 
@@ -283,19 +266,17 @@ Se você quiser que a estética do objeto do gráfico seja estática, ou seja - 
 
 
 ```{r, out.width=c('50%', '50%'), fig.show='hold', warning=F, message=F}
-# gráfico de dispersão
+# scatterplot
 ggplot(data = linelist, mapping = aes(x = age, y = wt_kg))+  # configurar mapeamento dos dados e eixos 
   geom_point(color = "darkgreen", size = 0.5, alpha = 0.2)   # configurar a estética estática dos pontos
 
-# histograma
+# histogram
 ggplot(data = linelist, mapping = aes(x = age))+       # configurar mapeamento dos dados e eixos 
-
   geom_histogram(              # mostra o histograma
     binwidth = 7,                # largura das classes
     color = "red",               # cor da linha da classe
     fill = "blue",               # cor de preenchimento da barra
     alpha = 0.1)                 # transparência da barra
-
 ```
 
 
@@ -313,34 +294,25 @@ Dois exemplos estão abaixo.
 
 
 ```{r, out.width=c('50%', '50%'), fig.show='hold', warning=F, message=F}
-# gráfico de dispersão
-
+# scatterplot
 ggplot(data = linelist,   # escolha os dados
        mapping = aes(     # mapeie as aesthetics para coluna de valores
          x = age,           # mapeie o eixo x para idade (coluna age)       
-
          y = wt_kg,         # mapeie o eixo y para peso (wt_kg)      
-
          color = age) # mapeie a cor segundo a idade
-
-       )+     
+       )+     # map color to age
   geom_point()         # mostre como pontos
 
-# gráfico de dispersão
+# scatterplot
 ggplot(data = linelist,   # escolha os dados
        mapping = aes(     # mapeie as aesthetics para coluna de valores
-         x = age,           # mapeie o eixo x para idade (coluna age)    
-
-         y = wt_kg,         # mapeie o eixo y para peso (wt_kg) 
-
+         x = age,           # mapeie o eixo x para idade (coluna age)       
+         y = wt_kg,         # mapeie o eixo y para peso (wt_kg)      
          color = age,       # mapeie a cor segundo a idade
-
          size = age))+      # mapeie o tamanho segundo a idade
-
   geom_point(             # mostre como pontos
     shape = "diamond",      # pontos como losangos (diamantes)
     alpha = 0.3)            # transparência do ponto a 30%
-
 
 
 ```
@@ -363,10 +335,8 @@ ggplot(data = linelist,
     size = 1,
     alpha = 0.5) +  
   geom_smooth(                  # adiciona uma linha de tendência 
-
     method = "lm",              # com um método linear
     linewidth = 2)                   # tamanho (grossura da linha) de 2
-
 ```
 
 
@@ -387,8 +357,7 @@ Da mesma forma, o parâmetro  `data = ` (do inglês dados) especificado no prime
 Assim, cada um dos seguintes comandos irá criar o mesmo gráfico:  
 
 ```{r, eval=F, warning=F, message=F}
-# Esses comandos irão criar o mesmo gráfico
-
+# These commands will produce the exact same plot
 ggplot(data = linelist, mapping = aes(x = age))+
   geom_histogram()
 
@@ -419,7 +388,7 @@ ggplot(data = linelist,
 
 
 ```{r, eval=F}
-# Este código alternativo produz o mesmo gráfico 
+# This alternative code produces the same plot
 ggplot(data = linelist,
        mapping = aes(x = age, y = wt_kg))+
   geom_point(
@@ -468,7 +437,7 @@ As facetas podem rapidamente conter uma quantidade avassaladora de informações
 A seguir, importamos e fazemos algumas modificações rápidas para simplificar: 
 
 ```{r, , warning=F, message=F}
-# Esses dados correspondem a contagens diárias de malária, por estabelecimento-dia 
+# These data are daily counts of malaria cases, by facility-day
 malaria_data <- appliedepidata::get_data(name = "malaria_facility_count_data") %>%  # importar
   select(-submitted_date, -Province, -newid)                                 # remove colunas desnecessárias
 
@@ -489,15 +458,14 @@ No momento, vamos nos concentrar nas colunas `malaria_tot` e `District`. Ignore 
 Quando adicionamos o comando `facet_wrap()`, especificamos um til e depois a coluna para facetar sobre (neste caso, `District`). Você pode colocar outra coluna no lado esquerdo do til - isto criará uma faceta para cada combinação - mas recomendamos que você faça isto com `facet_grid()` em seu lugar. Neste caso de uso, uma faceta é criada para cada valor único de `District`.  
 
 ```{r, warning=F, message=F}
-# Um gráfico com facetas por distrito 
-
+# A plot with facets by district
 ggplot(malaria_data, aes(x = data_date, y = malaria_tot)) +
   geom_col(width = 1, fill = "darkred") +       # plote a contagem como colunas 
   theme_minimal()+                              # simplifique os paineis de fundo
   labs(                                         # aficione rótulos, títulos, etc. 
-    x = "Data dos registros",
-    y = "Casos de malária",
-    title = "Casos de malária por distrito") +
+    x = "Date of report",
+    y = "Malaria cases",
+    title = "Malaria cases by district") +
   facet_wrap(~District)                       # As facetas são criadas
 ```
 
@@ -511,12 +479,12 @@ malaria_age <- malaria_data %>%
   select(-malaria_tot) %>% 
   pivot_longer(
     cols = c(starts_with("malaria_rdt_")),  # escolha as colunas que quer pivotear para o formato longo
-    names_to = "faixa_etaria",      # column names become age group
-    values_to = "num_casos"      # values to a single column (num_casos)
+    names_to = "age_group",      # column names become age group
+    values_to = "num_cases"      # values to a single column (num_cases)
   ) %>%
   mutate(
-    faixa_etaria = str_replace(faixa_etaria, "malaria_rdt_", ""),
-    faixa_etaria = forcats::fct_relevel(faixa_etaria, "5-14", after = 1))
+    age_group = str_replace(age_group, "malaria_rdt_", ""),
+    age_group = forcats::fct_relevel(age_group, "5-14", after = 1))
 ```
 
 Agora as primeiras 50 linhas dos dados aparecem assim: 
@@ -528,15 +496,15 @@ DT::datatable(head(malaria_age, 50), rownames = FALSE, filter="top", options = l
 Quando você passa as duas variáveis para `facet_grid()`, o mais fácil é utilizar notação de fórmula (por exemplo `x ~ y`) onde x corresponde às linhas e y às colunas. Aqui está o gráfico, utilizando `facet_grid()` para mostrar os gráficos para cada combinação das colunas `faixa_etaria` e `District`.
 
 ```{r, message=F, warning=F}
-ggplot(malaria_age, aes(x = data_date, y = num_casos)) +
+ggplot(malaria_age, aes(x = data_date, y = num_cases)) +
   geom_col(fill = "darkred", width = 1) +
   theme_minimal()+
   labs(
-    x = "Data dos registros",
-    y = "Casos de malária",
-    title = "Casos de malária por distrito e faixa etária"
+    x = "Date of report",
+    y = "Malaria cases",
+    title = "Malaria cases by district and age group"
   ) +
-  facet_grid(District ~ faixa_etaria)
+  facet_grid(District ~ age_group)
 ```
 
 ### Eixos livres ou fixos {.unnumbered}  
@@ -551,17 +519,14 @@ Ao utilizar somente `facet_grid`, podemos adicionar `space = "free_y"` ou `space
 
 ```{r, message=FALSE, warning=FALSE}
 
-# Eixo y livre
-
-
+# Free y-axis
 ggplot(malaria_data, aes(x = data_date, y = malaria_tot)) +
   geom_col(width = 1, fill = "darkred") +       # plote os dados de contagem como colunas
   theme_minimal()+                              # simplifique os painel de fundo
   labs(                                         # adicione rótulos, título, etc.
-
-    x = "Data de registro",
-    y = "Casos de malária",
-    title = "Casos de malária por distrito - Eixos x e y 'livres'") +
+    x = "Date of report",
+    y = "Malaria cases",
+    title = "Malaria cases by district - 'free' x and y axes") +
   facet_wrap(~District, scales = "free")        # as facetas são criadas
 ```
 
@@ -600,13 +565,11 @@ Por padrão, quando você executa um comando 'ggplot()`, o gráfico será aprese
 
 
 ```{r, warning=F, message=F}
-# Atribua o gráfico a um objeto
-
-
+# define plot
 age_by_wt <- ggplot(data = linelist, mapping = aes(x = age_years, y = wt_kg, color = age_years))+
   geom_point(alpha = 0.1)
 
-# exiba
+# print
 age_by_wt    
 ```
 
@@ -666,13 +629,12 @@ age_by_wt <- ggplot(
          color = age))+     # mapeie a cor para a idade
   geom_point()+           # mostre os dados como pontos
   labs(
-    title = "Distribuição de idade e peso",
-
-    subtitle = "Surto de Ebola fictício, 2014",
-    x = "Idade em anos",
-    y = "Peso em quilos",
-    color = "Idade",
-    caption = stringr::str_glue("Dados como em {max(linelist$date_hospitalisation, na.rm=T)}"))
+    title = "Age and weight distribution",
+    subtitle = "Fictional Ebola outbreak, 2014",
+    x = "Age in years",
+    y = "Weight in kilos",
+    color = "Age",
+    caption = stringr::str_glue("Data as of {max(linelist$date_hospitalisation, na.rm=T)}"))
 
 age_by_wt
 ```
@@ -702,22 +664,22 @@ Escreva-os com parênteses vazios.
 
 ggplot(data = linelist, mapping = aes(x = age, y = wt_kg))+  
   geom_point(color = "darkgreen", size = 0.5, alpha = 0.2)+
-  labs(title = "Tema classic")+
+  labs(title = "Theme classic")+
   theme_classic()
 
 ggplot(data = linelist, mapping = aes(x = age, y = wt_kg))+  
   geom_point(color = "darkgreen", size = 0.5, alpha = 0.2)+
-  labs(title = "Tema bw")+
+  labs(title = "Theme bw")+
   theme_bw()
 
 ggplot(data = linelist, mapping = aes(x = age, y = wt_kg))+  
   geom_point(color = "darkgreen", size = 0.5, alpha = 0.2)+
-  labs(title = "Tema minimal")+
+  labs(title = "Theme minimal")+
   theme_minimal()
 
 ggplot(data = linelist, mapping = aes(x = age, y = wt_kg))+  
   geom_point(color = "darkgreen", size = 0.5, alpha = 0.2)+
-  labs(title = "Tema gray")+
+  labs(title = "Theme gray")+
   theme_gray()
   
 
@@ -756,7 +718,6 @@ age_by_wt +
     plot.title = element_text(size = 30),          # ajusta o tamanho do título para 30
     plot.caption = element_text(hjust = 0),        # alinha a Legenda da figura a esquerda
     plot.subtitle = element_text(face = "italic"), # deixa subtítulo em itálico
-
     
     axis.text.x = element_text(color = "red", size = 15, angle = 90), # ajusta o texto o eixo x 
     axis.text.y = element_text(size = 15),         # ajusta o texto o eixo y
@@ -810,27 +771,21 @@ Esta é a aparência que pode ter:
 
 ```{r, warning=F, message=F}
 linelist %>%   # comece com a linelist
- rename(tosse=cough,
-         febre=fever, 
-         vômito=vomit,
-         dores=aches,
-         calafrio=chills) %>%  #traduzindo o nome dos sintomas pois a base está em inglês
-  select(c(case_id, febre, calafrio, tosse, dores, vômito)) %>%   # selecione as colunas
-  
+  select(c(case_id, fever, chills, cough, aches, vomit)) %>%     # select columns
   pivot_longer(                                                  # faça o pivotamento para ficar mais longo
     cols = -case_id,                                  
-    names_to = "nome_sintoma",
-    values_to = "sintoma_esta_presente") %>%
+    names_to = "symptom_name",
+    values_to = "symptom_is_present") %>%
   mutate(                                                        # substitua valores faltantes
-    sintoma_esta_presente = replace_na(sintoma_esta_presente, "desconhecido")) %>% 
+    symptom_is_present = replace_na(symptom_is_present, "unknown")) %>% 
   
   ggplot(                                                        # comece o gráfico!
-    mapping = aes(x = nome_sintoma, fill = sintoma_esta_presente))+
+    mapping = aes(x = symptom_name, fill = symptom_is_present))+
   geom_bar(position = "fill", col = "black") +                    
   theme_classic() +
   labs(
-    x = "Sintoma",
-    y = "Status do sintoma (proporção)"
+    x = "Symptom",
+    y = "Symptom status (proportion)"
   )
 ```
 
@@ -877,26 +832,26 @@ As linhas serão atribuídas a "caixas/classes" com base na sua idade numérica,
 Se não quiser especificar um número de classes para `bins = `, pode, em alternativa, especificar `binwidth = ` nas unidades do eixo. Apresentamos alguns exemplos que mostram diferentes quantidades e  larguras de classes:   
 
 ```{r fig.show='hold', message=FALSE, warning=FALSE, out.width=c('50%', '50%')}
-# A) Histograma regular
+# A) Regular histogram
 ggplot(data = linelist, aes(x = age))+  # forneça a variável do eixo x
   geom_histogram()+
-  labs(title = "A) Histograma padrão (30 classes)")
+  labs(title = "A) Default histogram (30 bins)")
 
-# B) Mais classes
+# B) More bins
 ggplot(data = linelist, aes(x = age))+  # forneça a variável do eixo x
   geom_histogram(bins = 50)+
-  labs(title = "B) Ajustado para 50 classes")
+  labs(title = "B) Set to 50 bins")
 
-# C) Menos classes
+# C) Fewer bins
 ggplot(data = linelist, aes(x = age))+  # forneça a variável do eixo x
   geom_histogram(bins = 5)+
-  labs(title = "C) Ajustado para 5 classes")
+  labs(title = "C) Set to 5 bins")
 
 
-# D) Mais classes
+# D) More bins
 ggplot(data = linelist, aes(x = age))+  # forneça a variável do eixo x
   geom_histogram(binwidth = 1)+
-  labs(title = "D) Largura da classe = 1")
+  labs(title = "D) binwidth of 1")
 
 ```
 
@@ -905,16 +860,15 @@ ggplot(data = linelist, aes(x = age))+  # forneça a variável do eixo x
 Para obter proporções suavizadas, pode utilizar `geom_density()`:  
 
 ```{r, fig.show='hold', message=FALSE, warning=FALSE, out.width=c('50%', '50%')}
-# Frequencia com eixos de proporção, suavizadas. 
+# Frequency with proportion axis, smoothed
 ggplot(data = linelist, mapping = aes(x = age)) +
   geom_density(linewidth = 2, alpha = 0.2)+
-  labs(title = "Densidade proporcional")
+  labs(title = "Proportional density")
 
-# Frequência empilhada com eixo proporcional, suavizada 
-
+# Stacked frequency with proportion axis, smoothed
 ggplot(data = linelist, mapping = aes(x = age, fill = gender)) +
   geom_density(linewidth = 2, alpha = 0.2, position = "stack")+
-  labs(title = " Densidades proporcionais 'empilhada'")
+  labs(title = "'Stacked' proportional densities")
 ```
 
 
@@ -928,26 +882,25 @@ Cada uma delas é mostrada abaixo (*notar a utilização de `color = ` vs. `fill
 
 
 ```{r, fig.show='hold', message=FALSE, warning=FALSE, out.width=c('50%', '50%')}
-# Histograma *empilhado*
-
+# "Stacked" histogram
 ggplot(data = linelist, mapping = aes(x = age, fill = gender)) +
   geom_histogram(binwidth = 2)+
-  labs(title = "histograma 'empilhado'")
+  labs(title = "'Stacked' histogram")
 
-# Frequência
+# Frequency 
 ggplot(data = linelist, mapping = aes(x = age, color = gender)) +
   geom_freqpoly(binwidth = 2, linewidth = 2)+
-  labs(title = "Polígono de frequência")
+  labs(title = "Freqpoly")
 
-# Freqüência com eixo de proporção 
+# Frequency with proportion axis
 ggplot(data = linelist, mapping = aes(x = age, y = after_stat(density), color = gender)) +
   geom_freqpoly(binwidth = 5, linewidth = 2)+
-  labs(title = "Polígono de frequência proporcional")
+  labs(title = "Proportional freqpoly")
 
-# Freqüência com eixo de proporção , suavizado
+# Frequency with proportion axis, smoothed
 ggplot(data = linelist, mapping = aes(x = age, y = after_stat(density), fill = gender)) +
   geom_density(linewidth = 2, alpha = 0.2)+
-  labs(title = "Proportional, suavizado com geom_density()")
+  labs(title = "Proportional, smoothed with geom_density()")
 ```
 
 Se você quiser se divertir, tente 'geom_density_ridges' do pacote **ggridges*** ([vinheta aqui](https://cran.r-project.org/web/packages/ggridges/vignettes/introduction.html).  
@@ -972,16 +925,16 @@ Ao utilizar `geom_boxplot()` para criar diagrama de caixas (box-plot), você ger
 Na maioria dos geoms, você cria um gráfico por grupo mapeando uma estética como `color = ` ou `fill = ` para uma coluna dentro de `aes()`. Entretanto, para box-plots, isso é conseguido atribuindo a coluna de agrupamento ao eixo não atribuído (x ou y). Abaixo está o código para um boxplot de *todos* os valores de idade no conjunto de dados, e o segundo é o código para exibir um box plot para cada sexo (não-faltante) no conjunto de dados. Observe que os valores `NA` (ausentes) aparecerão como um gráfico de caixa separado, a menos que seja removido. Neste exemplo, também definimos o `fill` para a coluna `outcome`, para que cada gráfico seja de uma cor diferente - mas isto não é necessário.  
 
 ```{r fig.show='hold', message=FALSE, warning=FALSE, out.width=c('50%', '50%')}
-# A) Boxplot geral
+# A) Overall boxplot
 ggplot(data = linelist)+  
   geom_boxplot(mapping = aes(y = age))+   # apenas o y é mapeado
-  labs(title = "A) Boxplot geral")
+  labs(title = "A) Overall boxplot")
 
-# B) Box plot por grupo
+# B) Box plot by group
 ggplot(data = linelist, mapping = aes(y = age, x = gender, fill = gender)) + 
   geom_boxplot()+                     
   theme(legend.position = "none")+   # remove a legenda
-  labs(title = "B) Box plot por sexo")      
+  labs(title = "B) Boxplot by gender")      
 ```
 
 Para obter o código para adicionar um boxplot às bordas de um gráfico de dispersão (gráficos "marginais") veja a página [Dicas para o ggplot]. 
@@ -993,31 +946,30 @@ Below is code for creating **violin plots** (`geom_violin`) and **jitter plots**
 ```{r fig.show='hold', message=FALSE, warning=FALSE, out.width=c('50%', '50%')}
 
 
-# A) Gráfico de jitter por grupo
-
+# A) Jitter plot by group
 ggplot(data = linelist %>% drop_na(outcome),      # remove valores faltantes
        mapping = aes(y = age,                     # variável contínua escolhida
            x = outcome,                           # variável de agrupamento
            color = outcome))+                     # variável para cor
   geom_jitter()+                                  # criar o gráfico ´Jitter
-  labs(title = "A) Um grafico 'jitter' por gênero" )  
+  labs(title = "A) jitter plot by gender")     
 
 
 
-# B) Gráfico de violino
-ggplot(data = linelist %>% drop_na(outcome),       # remove valores faltantes
-       mapping = aes(y = age,                      # Variável contínua
-           x = outcome,                            # Variável de agrupamento
+# B) Violin plot by group
+ggplot(data = linelist %>% drop_na(outcome),      # remove valores faltantes
+       mapping = aes(y = age,                     # variável contínua escolhida
+           x = outcome,                           # variável de agrupamento
            fill = outcome))+                       # variável de cor para preenchimento
   geom_violin()+                                   # criar o gráfico de violino
-  labs(title = "B) Gráfico de violino por gênero")    
+  labs(title = "B) violin plot by gender")    
 ```
 
 Você pode combinar os dois utilizando a função `geom_sina()` do pacote **ggforce**. Esse gráfico traça os pontos do gráfico *jitter* na forma do gráfico de violino. Quando sobrepostos (ajustando as transparências), isto pode ser mais fácil de interpretar visualmente.  
 
 ```{r, warning=F, message=F}
 
-# Um gráfico Sina por grupo
+# A) Sina plot by group
 ggplot(
   data = linelist %>% drop_na(outcome), 
   aes(y = age,           # variável numérica
@@ -1033,11 +985,11 @@ ggplot(
     values = c("Death" = "#bf5300", #óbito
               "Recover" = "#11118c")) + # recuperado
   scale_color_manual(      # defina as cores de preenchimento dos pontos
-    values = c("Death" = "#bf5300", 
-              "Recover" = "#11118c")) + 
+    values = c("Death" = "#bf5300", #óbito
+              "Recover" = "#11118c")) + # recuperado
   theme_minimal() +                                # Remove o fundo cinza
   theme(legend.position = "none") +                # Remove legendas desnecessárias
-  labs(title = "Gráfico Sina e Violino por gênero, com formtações extras")      
+  labs(title = "B) violin and sina plot by gender, with extra formatting")      
 
 
 ```
@@ -1049,17 +1001,17 @@ ggplot(
 Seguindo uma sintaxe semelhante, `geom_point()` permitirá traçar duas variáveis contínuas uma contra a outra em uma **gráfico de dispersão**. Isto é útil para mostrar os valores reais ao invés de suas distribuições. Um gráfico básico de dispersão de idade vs peso é mostrado em (A). Em (B) utilizamos novamente `facet_grid()` para mostrar a relação entre duas variáveis contínuas na linelist. 
 
 ```{r fig.show='hold', message=FALSE, warning=FALSE, out.width=c('50%', '50%')}
-#Gráfico de dispersão básico para idade e peso
+# Basic scatter plot of weight and age
 ggplot(data = linelist, 
        mapping = aes(y = wt_kg, x = age))+
   geom_point() +
-  labs(title = "A) Gráfico de dispesão para idade e peso")
+  labs(title = "A) Scatter plot of weight and age")
 
-# Gráfico de dispersão de peso e idade por gênero e desfecho para o Ebola 
+# Scatter plot of weight and age by gender and Ebola outcome
 ggplot(data = linelist %>% drop_na(gender, outcome), # filtro mantém apenas gênero e desfecho não faltantes
        mapping = aes(y = wt_kg, x = age))+
   geom_point() +
-  labs(title = "B) Gráfico de dispersão do peso por idade facetado para gênero e desfecho")+
+  labs(title = "B) Scatter plot of weight and age faceted by gender and outcome")+
   facet_grid(gender ~ outcome) 
 
 ```
@@ -1089,10 +1041,10 @@ A primeira coisa a entender sobre seus dados categóricos é se eles em sua form
 Em seguida, examine a classe das colunas que você deseja traçar. Examinamos `hospital`, primeiro com a função `class()` do R **base**,  e com `tabyl()` dO pacote **janitor**.   
 
 ```{r}
-# Veja a classe da coluna hospital - podemos ver que é um caracter
+# View class of hospital column - we can see it is a character
 class(linelist$hospital)
 
-# Veja os valores e proporções dentro dessa coluna "hospital" 
+# Look at values and proportions within hospital column
 linelist %>% 
   tabyl(hospital)
 ```
@@ -1100,7 +1052,7 @@ linelist %>%
 Podemos ver que os valores dentro são caracteres, pois se tratam de nomes de hospitais, e por padrão são ordenados alfabeticamente. Existem também "outros" e "faltam" valores, que preferimos que sejam as últimas subcategorias ao apresentarmos as subdivisões. Portanto, transformamos esta coluna em um fator e a reordenamos. Isto é tratado com mais detalhes na página [Fatores](#factors).
 
 ```{r}
-# Converte para fator e define a ordem dos níveis para que "Other" (outros) e "Missing" (faltantes) sejam os últimos a aparecer 
+# Convert to factor and define level order so "Other" and "Missing" are last
 linelist <- linelist %>% 
   mutate(
     hospital = fct_relevel(hospital, 
@@ -1129,20 +1081,20 @@ Utilize `geom_bar()` se você quiser que a altura da barra (ou a altura dos comp
 A seguir, designamos o resultado para o eixo y, mas poderia ser igualmente fácil no eixo x. Se você tiver valores de caracteres mais longos, às vezes pode parecer melhor virar as barras para o lado e colocar a legenda embaixo. Isto pode ter impacto na forma como os níveis do seu fator são ordenados - neste caso os revertemos com `fct_rev()` para colocar "Other" e "Missing" na parte inferior.  
 
 ```{r, out.width=c('50%', '50%'), fig.show='hold'}
-# A) Desfecho em todos os casos
+# A) Outcomes in all cases
 ggplot(linelist %>% drop_na(outcome)) + 
   geom_bar(aes(y = fct_rev(hospital)), width = 0.7) +
   theme_minimal()+
-  labs(title = "A) Número de casos por hospital",
+  labs(title = "A) Number of cases by hospital",
        y = "Hospital")
 
 
-# B) Desfecho em todos os casos por hospital
+# B) Outcomes in all cases by hosptial
 ggplot(linelist %>% drop_na(outcome)) + 
   geom_bar(aes(y = fct_rev(hospital), fill = outcome), width = 0.7) +
   theme_minimal()+
   theme(legend.position = "bottom") +
-  labs(title = "B) Número de casos de Ebola recuperados e de óbitos,   por hospital",
+  labs(title = "B) Number of recovered and dead Ebola cases, by hospital",
        y = "Hospital")
 
 ```
@@ -1162,12 +1114,10 @@ Digamos que temos este conjunto de dados "resultados":
 ```{r, echo = F}
 outcomes <- linelist %>% 
   drop_na() %>% 
-  mutate(outcome=ifelse(outcome=="Death","Óbito", #traduzindo
-                        ifelse(outcome=="Recover","Recuperado", outcome))) %>% 
   group_by(outcome) %>% 
   count %>% 
   ungroup() %>% # desagrupar para que proporção esteja fora do total
-  mutate(`proporcao` = n/sum(n)*100) # Calcular a porcentagem
+  mutate(proportion = n/sum(n)*100) # Caculate percentage
   
 outcomes #Visualizar a tabela completa
 ```
@@ -1177,10 +1127,10 @@ outcomes #Visualizar a tabela completa
 Abaixo está o código utilizando `geom_col` para criar gráficos de barras simples para mostrar a distribuição dos resultados dos pacientes com Ebola. Com o geom_col, tanto x como y precisam ser especificados. Aqui x é a variável categórica ao longo do eixo x, e y é a coluna de proporções geradas `proporcao`.  
 
 ```{r, fig.height = 3, fig.width=4.5}
-# Desfecho em todos os casos
+# Outcomes in all cases
 ggplot(outcomes) + 
-  geom_col(aes(x=outcome, y = proporcao)) +
-  labs(subtitle = "Número de casos recuperados e óbitos de Ebola")
+  geom_col(aes(x=outcome, y = proportion)) +
+  labs(subtitle = "Number of recovered and dead Ebola cases")
 
 ```
 
@@ -1190,10 +1140,8 @@ Para mostrarmos as detalhamentos por hospital, precisaríamos que nossa tabela c
 outcomes2 <- linelist %>% 
   drop_na(outcome) %>% 
   count(hospital, outcome) %>%  # obtém contagens para hospital e desfecho 
-
   group_by(hospital) %>%        # Agrupa para que proporção esteja fora do total do hospital 
   mutate(proportion = n/sum(n)*100) # Calcula as proporções
-
 
 head(outcomes2) # Veja uma prévia dos dados
 ```
@@ -1208,7 +1156,7 @@ Criamos então o ggplot com alguma formatação adicional:
   
 ```{r, fig.height = 4, fig.width=8}
 
-# Desfecho em todos os casos por hospital
+# Outcomes in all cases by hospital
 ggplot(outcomes2) +  
   geom_col(
     mapping = aes(
@@ -1218,10 +1166,10 @@ ggplot(outcomes2) +
     width = 0.5)+                     # barras mais finas (valores menores que 1)
   theme_minimal() +                   # Tema mínimo
   theme(legend.position = "bottom")+
-  labs(subtitle = "Número de casos recuperados e óbitos por Ebola, por hospital",
-       fill = "Desfecho",             # título da legenda
-       y = "Contagem",                # título do eixo y
-       x = "Hospital de admissão")+   # título do eixo x
+  labs(subtitle = "Number of recovered and dead Ebola cases, by hospital",
+       fill = "Outcome",             # legend title
+       y = "Count",                  # y axis title
+       x = "Hospital of admission")+ # x axis title
   scale_fill_manual(                 # escolhendo as cores manualmente
     values = c("Death"= "#3B1c8C",   # para óbito
                "Recover" = "#21908D" )) # para recuperado
