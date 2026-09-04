@@ -30,6 +30,13 @@ is 360 suspects, all judged placeholders or noise. A rise above that is what to 
 the number itself. Files without an English chapter, such as `across.*` and `first_page.*`,
 are skipped and listed; that is expected.
 
+## Do not render an English chapter with the gate
+
+`render-gate.sh` renders translated chapters only, on purpose. Rendering a main-language
+chapter in this book project makes quarto rewrite `.gitignore` and delete three tracked files
+under `site_libs/quarto-search/`; observed on 2026-09-02 and restored from HEAD. Check an
+English chapter with the fence-parity count and the R parse gate instead.
+
 ## What the checks do not cover
 
 - Meaning. A translation that says something the English does not, in prose, is invisible to
