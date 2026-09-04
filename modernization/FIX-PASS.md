@@ -195,7 +195,7 @@ repository. Removed in `712f8497`. The gate now reads `git ls-tree -r HEAD` once
 the English in 336 of 336. Heading sequence, counted with every fenced block stripped, equals
 the English in 336 of 336 after one agent per chapter aligned 11 chapters, commit `360f5ec1`,
 767,127 tokens. Three further apparent mismatches were `#` lines inside bare output fences,
-which the first count did not strip. RENDER_GATE_6_LINE
+which the first count did not strip. `render-gate.sh` on the 11 edited files: 7 pass, 0 fail, 4 skipped for inline R.
 
 **Inline-code pass.** Every \`span\` in translated prose that occurs nowhere in the English
 chapter is a suspect: 686 of about 34,000, 1.9%. One agent per batch of at most 40 sorts them
