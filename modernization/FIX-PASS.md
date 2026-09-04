@@ -77,6 +77,7 @@ no result file; they were stashed and the wave re-run from a clean tree.
 | Wall clock per wave of 14 | 8 to 11 minutes |
 | Subagent tokens, 9 odd-span batches | 506,954 |
 | Subagent tokens, 18 review agents | 2,913,765 |
+| Subagent tokens, 8 deferred-pass agents | 723,262 |
 | Codex, Turkish, two calls | 375,699 and 199,301 tokens |
 
 The owner's estimate of 2.5M tokens assumed about 30,000 per agent. The fixed overhead of an
@@ -118,6 +119,59 @@ match the English source word for word and are in `source-defects.tsv`; 4 name a
 inside a code chunk and are appended to `deferred.tsv`. This is one model family reviewing its
 own family's work, which the owner's standing rule says not to trust alone; it stands in for
 the codex calls the usage limit blocked, and the owner chose it.
+
+## Deferred pass: the code-chunk defects
+
+The owner then asked for the deferred set to be fixed with subagents. Eight opus agents at
+xhigh, one per language and at most 20 findings each, with a brief that MAY edit inside a
+code chunk of a translated file to make it do what the English chunk does, and MAY add a chunk
+the translation lacks, copied verbatim. Still forbidden: renaming a translator's own valid and
+consistent object or column name, and any edit to an English file.
+
+| Outcome | Rows |
+|---|---|
+| fixed | 67 |
+| rejected: the translation already matched the English, or the English is the defective side | 10 |
+| still deferred | 4 |
+
+The four still open: two French sentences in `grouping` where the French states dplyr's
+behaviour correctly and the English inverts it; a Vietnamese date-format list where the
+Vietnamese is right; and one Russian legend label whose rename would touch 14 note labels in
+nine other chapters. The first three are English source defects and are in
+`source-defects.tsv`, now 14 rows. `workflows/epirhandbook-fix-pass-deferred.js` is the brief,
+`findings/fix-pass/def-*.json` the verdicts, commits `a0a9ed67` to `d7f22cd4` the edits:
+42 files, 199 insertions, 89 deletions. Two batches were committed by hand because the checker
+saw the replaced line still present elsewhere in the file, where it was correct.
+
+**Gates on the code-chunk edits.** `chunk-parse-gate.py` runs `Rscript parse()` on every R
+chunk of every changed translated file, before and after, and fails when a file has more
+parse failures after. Proved red on an extra closing parenthesis. After the chunk sync below the gate reports 5 files with more parse failures than at `52442a79`, each because the English `eval=F` chunk itself does not parse; see `source-defects.tsv`.
+`render-gate.sh` on the 42 files the deferred pass touched: 40 pass, 0 fail, 2 skipped for inline R or a tracked artifact. Verified by `modernization/render-gate.sh fc2079cf HEAD`.
+
+## Chunk sync: every aligned chunk identical to the English
+
+The owner then asked whether the code chunks should not simply be copies of the English.
+Measured first, over all 65 chapter files per language: 94% of aligned chunk pairs were
+identical or differed only in comments; 459 differed in code, 160 in string literals only, and
+18 pairs had different chunk counts. Renamed objects were rare, Portuguese-only in practice,
+and half of them inconsistent within their chapter, so a copy loses nothing a reader relies on
+except translated comments.
+
+`sync-chunks.py` makes every aligned chunk the English chunk, line by line, keeping the
+translated line where its code part matches, so its comment survives, and keeping a
+comment-only line at the same aligned place. No model. Proved red and green on a copy of
+`basics.tr.qmd`. First run over-reached and replaced translated comment-only lines; corrected
+and re-run from the pre-sync files in commit `a1b59b3f`. Net result against the pre-sync files:
+187 files, 2519 insertions, 2855 deletions, 13,224 standalone comment lines before and 13,214
+after. Portuguese prose that named a renamed object was pointed back at the English name.
+
+Skipped, chunk count differs from the English: `data_used` in 5 languages, `epicurves` in 3,
+`ggplot_tips` in 3, `phylogenetic_trees.es`, `survey_analysis.es`. These are aligned by an
+agent each, then synced.
+
+**Inline-code pass.** Every \`span\` in translated prose that occurs nowhere in the English
+chapter is a suspect: 686 of about 34,000, 1.9%. One agent per batch of at most 40 sorts them
+into fix, keep and noise, and edits the fixes. INLINE_PASS_LINE
 
 **Structural sweep, all languages, no codex.** For every one of the 317 changed files, the
 counts of fence lines, `{r` chunk openers, headings and `{#anchor}` attributes before and after.
