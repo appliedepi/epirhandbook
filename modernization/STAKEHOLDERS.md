@@ -119,10 +119,15 @@ in `TRANSLATION-BACKLOG.md`.
 
 The GIS chapter returned on 2026-09-02, in English and all seven translations. Its one
 network dependency was the OpenStreetMap basemap, fetched by `openmap()` while the page
-rendered. The page now reads a saved copy of that basemap from `data/gis/osm_basemap.rds`,
-and the code the reader sees is unchanged: the `openmap()` chunk is shown but not run.
-`data/gis/osm_basemap.R` re-creates the file. The chapter renders with the `analysis`
-image, which gained **tmap**, **spdep**, **OpenStreetMap** and their dependencies.
+rendered. The page now shows committed PNG images of those maps, each with the credit
+"Map data © OpenStreetMap contributors" beneath it. The code the reader sees is
+unchanged: the `openmap()`, `openproj()` and five plotting chunks carry `eval=FALSE`.
+The OpenStreetMap tile usage policy
+(<https://operations.osmfoundation.org/policies/tiles/>) forbids offline use of the tiles,
+so the page no longer reads `data/gis/osm_basemap.rds` while it renders. That file and
+`data/gis/osm_basemap.R` are kept, so the images can be made again. The chapter renders
+with the `analysis` image, which gained **tmap**, **spdep**, **OpenStreetMap** and their
+dependencies.
 
 Three sentences in the chapter report a computed number: cases outside every clinic
 buffer, Moran's I and Lee's L. Their inline R marker had been lost in the January 2025
