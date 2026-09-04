@@ -31,8 +31,8 @@ knitr::include_graphics(here::here("images", "survival_analysis.png"))
 
 ```{r echo=F, eval=F, out.width = "80%", out.height="80%", fig.align = "center"}
  
-#Add a figure from the following chunks for the last version of the page
-#do not forget to save the output figure in "images"
+#Добавляем рисунок из следующих фрагментов для последней версии на странице
+#не забывайте сохранять выходные рисунки в "images"
 # knitr::include_graphics(here::here("images", "survanalysis.png"))
 
 ```  
@@ -48,7 +48,7 @@ knitr::include_graphics(here::here("images", "survival_analysis.png"))
 
 ```{r, echo=F, message=FALSE, warning=FALSE}
 
-# install/load the different packages needed for this page
+# устанавливаем/загружаем разные пакеты, необходимые для этой страницы
 pacman::p_load(
   survival,      # анализ выживаемости 
   survminer,     # анализ выживаемости
@@ -58,8 +58,8 @@ pacman::p_load(
   SemiCompRisks, # примеры набора данных и продвинутые инструменты для работы с Semi-Competing Risks data
   tidyverse,     # манипуляции с данными и визуализация
   Epi,           # статистический анализ в эпидемиологии
-  survival,      # анализ выживаемости 
-  survminer,     # анализ выживаемости
+  survival,      # анализ выживаемости
+  survminer, # анализ выживаемости: продвинутые кривые KM curves
   appliedepidata # примеры данных, используемые в этом руководстве
 )
 
@@ -75,12 +75,12 @@ pacman::p_load(
 Мы импортируем набор данных о случаях из имитированной эпидемии Эболы. Загрузите их напрямую с помощью `appliedepidata::get_data(name = "linelist_cleaned_rds")` (подробности см. на странице [Скачивание руководства и данных](data_used.ru.qmd)).    
 
 ```{r echo=F}
-# import linelist
+# импортируем построчный список
 linelist_case_data <- appliedepidata::get_data(name = "linelist_cleaned_rds")
 ```
 
 ```{r eval=F}
-# import linelist
+# импортируем построчный список
 linelist_case_data <- appliedepidata::get_data(name = "linelist_cleaned_rds")
 ```
 
@@ -108,31 +108,31 @@ linelist_case_data <- appliedepidata::get_data(name = "linelist_cleaned_rds")
 Затем используем `case_when()`, чтобы создать столбец `age_cat_small`, в котором будет только 3 возрастных категории.
 
 ```{r }
-#create a new data called linelist_surv from the linelist_case_data
+#создаем новые данные под названием linelist_surv из linelist_case_data
 
 linelist_surv <-  linelist_case_data %>% 
      
   dplyr::filter(
-       # remove observations with wrong or missing dates of onset or date of outcome
+       # удаляем наблюдения с неправильными или отсутствующими датами возникновения или датой исхода
        date_outcome > date_onset) %>% 
   
   dplyr::mutate(
-       # create the event var which is 1 if the patient died and 0 if he was right censored
+       # создаем переменную event (событие), которая будет равна 1, если пациент умер и 0, если было применено правое цензурирование
        event = ifelse(is.na(outcome) | outcome == "Recover", 0, 1), 
     
-       # create the var on the follow-up time in days
+       # создаем переменную по времени отслеживания в днях
        futime = as.double(date_outcome - date_onset), 
     
-       # create a new age category variable with only 3 strata levels
+       # создаем новую переменную возрастной категории только с 3 уровнями страт
        age_cat_small = dplyr::case_when( 
             age_years < 5  ~ "0-4",
             age_years >= 5 & age_years < 20 ~ "5-19",
             age_years >= 20   ~ "20+"),
        
-       # previous step created age_cat_small var as character.
-       # now convert it to factor and specify the levels.
-       # Note that the NA values remain NA's and are not put in a level "unknown" for example,
-       # since in the next analyses they have to be removed.
+       # на предыдущем шаге переменная age_cat_small была создана как текстовая.
+       # теперь конвертируем в фактор и задаем уровни
+       # Обратите внимание, что значения NA остаются NA, а не размещаются, например, в уровень "unknown" (неизвестно),
+       # поскольку при следующем анализе их нужно будет убрать
        age_cat_small = fct_relevel(age_cat_small, "0-4", "5-19", "20+")
        )
 ```
@@ -144,8 +144,8 @@ linelist_surv <-  linelist_case_data %>%
 
 summary(linelist_surv$futime)
 
-# cross tabulate the new event var and the outcome var from which it was created
-# to make sure the code did what it was intended to
+# кросс-табуляция новой переменной event и переменной outcome, из которой она была создана
+# чтобы проверить, что код сделал то, что нужно
 linelist_surv %>% 
   tabyl(outcome, event)
 ```
@@ -216,7 +216,7 @@ linelist_surv %>%
 
 
 ```{r survobj }
-# Use Suv() syntax for right-censored data
+# используем синтаксис Suv() для данных с правым цензурированием
 survobj <- Surv(time = linelist_surv$futime,
                 event = linelist_surv$event)
 ```
@@ -241,7 +241,7 @@ linelist_surv %>%
 Вот первые 10 элементов `survobj`. Они печатаются по сути как вектор времени отслеживания с "+", который отражает, было ли проведено правое цензурирование для наблюдения. Посмотрите, как соотносятся числа выше и ниже.  
 
 ```{r}
-#print the 50 first elements of the vector to see how it presents
+#печать первых 50 элементов вектора, чтобы посмотреть, как он выглядит
 head(survobj, 10)
 ```
 
@@ -262,11 +262,11 @@ head(survobj, 10)
 Мы строим оценки КМ по формуле, где объект, ранее являвшийся Surv,  "survobj", является переменной отклика. "~ 1" уточняет, что мы выполняем модель для общей выживаемости.  
 
 ```{r fit}
-# fit the KM estimates using a formula where the Surv object "survobj" is the response variable.
-# "~ 1" signifies that we run the model for the overall survival  
+# строим оценки КМ, используя формулу, где объект Surv "survobj" является переменной отклика.
+# "~ 1" указывает, что мы выполняем модель для общей выживаемости  
 linelistsurv_fit <-  survival::survfit(survobj ~ 1)
 
-#print its summary for more details
+#печать сводной информации для большей детальности
 summary(linelistsurv_fit)
 
 ```
@@ -276,7 +276,7 @@ summary(linelistsurv_fit)
 
 ```{r print_spec_times}
 
-#print its summary at specific times
+#печатаем сводную информацию на конкретные моменты времени
 summary(linelistsurv_fit, times = c(5,10,20,30,60))
 
 ```
@@ -288,7 +288,7 @@ summary(linelistsurv_fit, times = c(5,10,20,30,60))
 
 
 ```{r, mean_survtime}
-# print linelistsurv_fit object with mean survival time and its se. 
+# печать объекта linelistsurv_fit со средним временем выживания и его стандартной ошибкой 
 print(linelistsurv_fit, print.rmean = TRUE)
 
 ```
@@ -335,7 +335,7 @@ plot(linelistsurv_fit,
 
 ```{r}
 
-# original plot
+# оригинальный график
 plot(
   linelistsurv_fit,
   xlab = "Days of follow-up",       
@@ -345,7 +345,7 @@ plot(
   main = "Overall survival curve and cumulative mortality"
   )
 
-# draw an additional curve to the previous plot
+# рисуем дополнительную кривую к предыдущему графику
 lines(
   linelistsurv_fit,
   lty = 3,             # используем другой тип линии для ясности
@@ -354,7 +354,7 @@ lines(
   conf.int = FALSE
   )
 
-# add a legend to the plot
+# добавляем легенду на график
 legend(
   "topright",                               # положение легенды
   legend = c("Survival", "Cum. Mortality"), # текст легенды 
@@ -381,24 +381,24 @@ legend(
 
 ```{r comp_surv, warning=FALSE}
 
-# create the new survfit object based on gender
+# создаем новый объект survfit на основе пола
 linelistsurv_fit_sex <-  survfit(Surv(futime, event) ~ gender, data = linelist_surv)
 ```
 
 Теперь мы можем построить график кривых выживания по полу. Посмотрите на *порядок* уровней страты в столбце пол до определения цветов и легенды.  
 
 ```{r}
-# set colors
+# задаем цвета
 col_sex <- c("lightgreen", "darkgreen")
 
-# create plot
+# создаем график
 plot(
   linelistsurv_fit_sex,
   col = col_sex,
   xlab = "Days of follow-up",
   ylab = "Survival Probability")
 
-# add legend
+# добавляем легенду
 legend(
   "topright",
   legend = c("Female","Male"),
@@ -411,7 +411,7 @@ legend(
 Теперь мы можем рассчитать тест разницы между кривыми выживаемости, используя `survdiff()`
 
 ```{r}
-#compute the test of the difference between the survival curves
+#рассчитываем тест разницы между кривыми выживаемости
 survival::survdiff(
   Surv(futime, event) ~ gender, 
   data = linelist_surv
@@ -514,18 +514,18 @@ ggsurvplot(
 
 ```{r coxmodel_agesex}
 
-#fitting the cox model
+#строим модель Кокса
 linelistsurv_cox_sexage <-  survival::coxph(
               Surv(futime, event) ~ gender + age_cat_small, 
               data = linelist_surv
               )
 
 
-#printing the model fitted
+#печать построенной модели
 linelistsurv_cox_sexage
 
 
-#summary of the model
+#сводная информация по модели
 summary(linelistsurv_cox_sexage)
 
 ```
@@ -549,14 +549,14 @@ test_ph_sexage
 
 ```{r coxmodel_fit_ph,  message=FALSE}
 
-#fit the model
+#строим модель
 linelistsurv_cox <-  coxph(
                         Surv(futime, event) ~ gender + age_years+ source + days_onset_hosp,
                         data = linelist_surv
                         )
 
 
-#test the proportional hazard model
+#тестируем модель пропорциональных рисков
 linelistsurv_ph_test <- cox.zph(linelistsurv_cox)
 linelistsurv_ph_test
 ```
@@ -576,7 +576,7 @@ survminer::ggcoxzph(linelistsurv_ph_test)
 
 ```{r coxmodel_summary,  message=FALSE}
 
-#print the summary of the model
+#печатаем сводную информацию по модели
 summary(linelistsurv_cox)
 
 ```

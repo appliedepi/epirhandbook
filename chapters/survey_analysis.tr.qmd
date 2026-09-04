@@ -35,7 +35,7 @@ Burada ayrıca, github'dan henüz CRAN'da yayınlanmayan bir paketi yüklemek i�
 
 ```{r}
 
-## load packages from CRAN
+## paketleri CRAN'dan yükle
 pacman::p_load(rio,          # Dosya içe aktarma
                here,         # Dosya bulucu
                tidyverse,    # veri yönetimi + ggplot2 grafikleri
@@ -49,7 +49,7 @@ pacman::p_load(rio,          # Dosya içe aktarma
                appliedepidata # bu el kitabında kullanılan örnek veriler
                )
 
-## load packages from github
+## paketleri github'dan yükle
 pacman::p_load_gh(
      "R4EPI/sitrep"          # gözlem süresi / ağırlıklandırma fonksiyonları için
 )
@@ -76,42 +76,42 @@ Kobo, hem toplanan verileri hem de bu veri kümesi için veri sözlüğünü dı
 Veri kümesi, **rio** paketinden `import()` fonksiyonu kullanılarak içe aktarılır. Verileri içe aktarmanın çeşitli yolları için [İçe ve dışa aktarma](https://epirhandbook.com/import-and-export.html) sayfasına bakın.
 
 ```{r echo = FALSE}
-# import the survey into R
+# anket verilerini içe aktar
 survey_data <- appliedepidata::get_data(name = "survey_data")
 
-# import the dictionary into R
+# sözlüğü R’ın içine aktar
 survey_dict <- appliedepidata::get_data(name = "survey_dict")
 
-# import the population in to R 
+# nüfus verilerini R’ın içine aktar
 population <- appliedepidata::get_data(name = "population")
 ```
 
 ```{r eval = FALSE}
-# import the survey data
+# anket verilerini içe aktar
 survey_data <- appliedepidata::get_data(name = "survey_data")
 
-# import the dictionary into R
+# sözlüğü R’ın içine aktar
 survey_dict <- appliedepidata::get_data(name = "survey_dict")
 ```
 
 Anketin ilk 10 satırı aşağıda gösterilmiştir.
 
 ```{r, message = FALSE, echo = FALSE}
-# display the survey data as a table
+# anket verilerini tablo olarak göster
 DT::datatable(head(survey_data, 10), rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
 ```
 
 Uygun ağırlıklar üretebilmemiz için örneklem popülasyonundaki verileri de içe aktarmak istiyoruz. Bu veriler farklı formatlarda olabilir, ancak aşağıda görüldüğü gibi olmasını öneririz (bu sadece bir excel'e yazılabilir).
 
 ```{r read_data_pop_show, eval = FALSE}
-# import the population data
+# nüfus verilerini içe aktar
 population <- appliedepidata::get_data(name = "population")
 ```
 
 Anketin ilk 10 satırı aşağıda gösterilmiştir.
 
 ```{r message=FALSE, echo=F}
-# display the survey data as a table
+# anket verilerini tablo olarak göster
 DT::datatable(head(population, 10), rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
 ```
 
@@ -119,7 +119,7 @@ Küme anketleri için küme düzeyinde anket ağırlıkları eklemek isteyebilir
 
 ```{r cluster_counts}
 
-## define the number of households in each cluster
+## her kümedeki hane sayısını tanımla
 cluster_counts <- tibble(cluster = c("village_1", "village_2", "village_3", "village_4", 
                                      "village_5", "village_6", "village_7", "village_8",
                                      "village_9", "village_10"), 
@@ -138,32 +138,32 @@ Son olarak, tüm evet/hayır değişkenlerini DOĞRU/YANLIŞ değişkenlere yeni
 
 ```{r cleaning}
 
-## select the date variable names from the dictionary 
+## sözlükten tarih değişkeni adlarını seç 
 DATEVARS <- survey_dict %>% 
   filter(type == "date") %>% 
   filter(name %in% names(survey_data)) %>% 
   ## filter to match the column names of your data
   pull(name) # select date vars
   
-## change to dates 
+## tarihleri değiştir
 survey_data <- survey_data %>%
   mutate(across(all_of(DATEVARS), as.Date))
 
 
-## add those with only age in months to the year variable (divide by twelve)
+## yıl değişkenine yalnızca ay cinsinden yaşı olanları ekle (on ikiye böl)
 survey_data <- survey_data %>% 
   mutate(age_years = if_else(is.na(age_years), 
                              age_months / 12, 
                              age_years))
 
-## define age group variable
+## yaş grubu değişkenini tanımla
 survey_data <- survey_data %>% 
      mutate(age_group = age_categories(age_years, 
                                     breakers = c(0, 3, 15, 30, 45)
                                     ))
 
 
-## create a character variable based off groups of a different variable 
+## farklı bir değişkenin gruplarına dayalı bir karakter değişkeni oluştur
 survey_data <- survey_data %>% 
   mutate(health_district = case_when(
     cluster_number %in% c(1:5) ~ "district_a", 
@@ -171,14 +171,14 @@ survey_data <- survey_data %>%
   ))
 
 
-## select the yes/no variable names from the dictionary 
+## sözlükten evet/hayır değişken isimlerini seç
 YNVARS <- survey_dict %>% 
   filter(type == "yn") %>% 
   filter(name %in% names(survey_data)) %>% 
   ## filter to match the column names of your data
-  pull(name) # select date vars
+  pull(name) # select yn vars
   
-## change to dates 
+## tarihleri değiştir 
 survey_data <- survey_data %>%
   mutate(across(all_of(YNVARS), 
                 ~ str_detect(.x, pattern = "yes")))
@@ -201,13 +201,13 @@ Bu iki seviye benzersiz bir tanımlayıcı ile birbirine bağlanır. Bir Kobo ve
 
 ```{r merge_data_levels, eval = FALSE}
 
-## join the individual and household data to form a complete data set
+## eksiksiz bir veri seti oluşturmak için bireysel ve hane verilerini birleştir
 survey_data <- left_join(survey_data_hh, 
                          survey_data_indiv,
                          by = c("_index" = "_parent_index"))
 
 
-## create a unique identifier by combining indeces of the two levels 
+## iki düzeyin endekslerini birleştirerek benzersiz bir tanımlayıcı oluştur
 survey_data <- survey_data %>% 
      mutate(uid = str_glue("{index}_{index_y}"))
 
@@ -222,17 +222,17 @@ Bunu yapmak için önce, geri çağırma dönemi olarak da bilinen ilgilendiğim
 
 ```{r recall_period}
 
-## set the start/end of recall period
-## can be changed to date variables from dataset 
-## (e.g. arrival date & date questionnaire)
+## geri çağırma süresinin başlangıcını/sonunu ayarla
+## veri setinden tarih değişkenleri olarak değiştirilebilir
+## (örn. başlangıç tarihi & anket tarihi)
 survey_data <- survey_data %>% 
   mutate(recall_start = as.Date("2018-01-01"), 
          recall_end   = as.Date("2018-05-01")
   )
 
 
-# set inappropriate dates to NA based on rules 
-## e.g. arrivals before start, departures departures after end
+# kurallara göre uygunsuz tarihleri NA olarak ayarla
+## örneğin, başlangıçtan önce varışlar, bitişten sonra ayrılışlar
 survey_data <- survey_data %>%
       mutate(
            arrived_date = if_else(arrived_date < recall_start, 
@@ -259,10 +259,10 @@ bitiş tarihi: Geri çağırma süreniz içindeki en erken uygun ayrılma olayı
 
 ```{r observation_time}
 
-## create new variables for start and end dates/causes
+## başlangıç ve bitiş tarihleri/nedenleri için yeni değişkenler oluştur
 survey_data <- survey_data %>% 
-     ## choose earliest date entered in survey
-     ## from births, household arrivals, and camp arrivals 
+     ## ankete girilen en erken tarihi seç
+     ## doğumlardan, hane girişlerinden ve kamp varışlarından
      find_start_date("birthday_date",
                   "arrived_date",
                   period_start = "recall_start",
@@ -270,8 +270,8 @@ survey_data <- survey_data %>%
                   datecol      = "startdate",
                   datereason   = "startcause" 
                  ) %>%
-     ## choose earliest date entered in survey
-     ## from camp departures, death and end of the study
+     ## ankete girilen en erken tarihi seç
+     ## kamptan ayrılma, ölüm ve çalışmanın bitiminden
      find_end_date("left_date",
                 "death_date",
                 period_start = "recall_start",
@@ -281,24 +281,24 @@ survey_data <- survey_data %>%
                )
 
 
-## label those that were present at the start/end (except births/deaths)
+## başlangıçta/sonda olanları etiketle (doğumlar/ölümler hariç)
 survey_data <- survey_data %>% 
      mutate(
-       ## fill in start date to be the beginning of recall period (for those empty) 
+       ##geri çağırma süresinin başlangıcı olarak başlangıç tarihini gir (boş olanlar için)
        startdate = if_else(is.na(startdate), recall_start, startdate), 
-       ## set the start cause to present at start if equal to recall period 
-       ## unless it is equal to the birth date 
+       ## geri çağırma periyoduna eşitse, başlangıç nedenini başlangıçta gösterecek şekilde ayarla
+       ## doğum tarihine eşit değilse
        startcause = if_else(startdate == recall_start & startcause != "birthday_date",
                               "Present at start", startcause), 
-       ## fill in end date to be end of recall period (for those empty) 
+       ## geri çağırma süresinin bitimi için bitiş tarihini gir (boş olanlar için)
        enddate = if_else(is.na(enddate), recall_end, enddate), 
-       ## set the end cause to present at end if equall to recall end 
-       ## unless it is equal to the death date
+       ## son nedeni, geri çağırma sonuna eşitse, sonunda sunacak şekilde ayarla
+       ## ölüm tarihine eşit olmadıkça
        endcause = if_else(enddate == recall_end & endcause != "death_date", 
                             "Present at end", endcause))
 
 
-## Define observation time in days
+## Gözlem süresini gün olarak tanımla
 survey_data <- survey_data %>% 
   mutate(obstime = as.numeric(enddate - startdate))
 
@@ -316,12 +316,12 @@ Bu örnekte, bırakmak ve ayrı bir veri çerçevesinde saklamak istediğimiz du
 
 ```{r remove_unused_data}
 
-## store the cases that you drop so you can describe them (e.g. non-consenting 
-## or wrong village/cluster)
+## düşürdüğünüz vakaları tanımlayabilmek için sakla (ör.rıza dışı
+## veya yanlış köy/küme)
 dropped <- survey_data %>% 
   filter(!consent | is.na(startdate) | is.na(enddate) | village_name == "other")
 
-## use the dropped cases to remove the unused rows from the survey data set  
+## kullanılmayan satırları anket veri setinden çıkarmak için bırakılan vakaları kullan 
 survey_data <- anti_join(survey_data, dropped, by = names(dropped))
 
 ```
@@ -330,24 +330,24 @@ Yukarıda bahsedildiği gibi, üç farklı çalışma tasarımı (katmanlı, kü
 
 ```{r survey_weights}
 
-# stratified ------------------------------------------------------------------
-# create a variable called "surv_weight_strata"
-# contains weights for each individual - by age group, sex and health district
+# tabakalı ------------------------------------------------------------------
+# "surv_weight_strata" adında bir değişken oluştur
+# her birey için ağırlıklar içerir - yaş grubuna, cinsiyete ve sağlık bölgesine göre
 survey_data <- add_weights_strata(x = survey_data,
                                          p = population,
                                          surv_weight = "surv_weight_strata",
                                          surv_weight_ID = "surv_weight_ID_strata",
                                          age_group, sex, health_district)
 
-## cluster ---------------------------------------------------------------------
+## küme ---------------------------------------------------------------------
 
-# get the number of people of individuals interviewed per household
-# adds a variable with counts of the household (parent) index variable
+# hane başına görüşülen bireylerin kişi sayısını al
+# hane (ebeveyn) indeks değişkeni sayılarına sahip bir değişken ekler
 survey_data <- survey_data %>%
   add_count(index, name = "interviewed")
 
 
-## create cluster weights
+## küme ağırlıkları oluştur
 survey_data <- add_weights_cluster(x = survey_data,
                                           cl = cluster_counts,
                                           eligible = member_number,
@@ -362,8 +362,8 @@ survey_data <- add_weights_cluster(x = survey_data,
                                           ignore_household = FALSE)
 
 
-# stratified and cluster ------------------------------------------------------
-# create a survey weight for cluster and strata
+# tabakalı ve küme ---------------------------------------------------------
+# küme ve tabalalar için bir anket ağırlığı oluştur
 survey_data <- survey_data %>%
   mutate(surv_weight_cluster_strata = surv_weight_strata * surv_weight_cluster)
 
@@ -394,32 +394,32 @@ Daha önce de belirtildiği gibi, bunu yapmak için iki paket mevcuttur. Klasik 
 
 ```{r survey_design}
 
-# simple random ---------------------------------------------------------------
+# basit rastgele ---------------------------------------------------------------
 base_survey_design_simple <- svydesign(ids = ~1, # küme kimliği yok demek için 1
                    weights = NULL,               # Ağırlık eklenmedi
                    strata = NULL,                # örnekleme basitti (tabaka yok)
                    data = survey_data            # veri kümesini belirtmek zorunda
                   )
 
-## stratified ------------------------------------------------------------------
+## tabakalı --------------------------------------------------------------------
 base_survey_design_strata <- svydesign(ids = ~1,  # küme kimliği yok demek için 1
                    weights = ~surv_weight_strata, # yukarıda oluşturulan ağırlık değişkeni
                    strata = ~health_district,     # örnekleme bölgelere göre tabakalandırılmıştır
-                   data = survey_data            # veri kümesini belirtmek zorunda
+                   data = survey_data             # veri kümesini belirtmek zorunda
                   )
 
-# cluster ---------------------------------------------------------------------
+# küme -------------------------------------------------------------------------
 base_survey_design_cluster <- svydesign(ids = ~village_name, # küme kimlikleri
                    weights = ~surv_weight_cluster, # yukarıda oluşturulan ağırlık değişkeni
-                   strata = NULL,                # örnekleme basitti (tabaka yok)
-                   data = survey_data            # veri kümesini belirtmek zorunda
+                   strata = NULL,                 # örnekleme basitti (tabaka yok)
+                   data = survey_data              # veri kümesini belirtmek zorunda
                   )
 
-# stratified cluster ----------------------------------------------------------
+# tabakalı küme ----------------------------------------------------------------
 base_survey_design <- svydesign(ids = ~village_name,      # küme kimlikleri
                    weights = ~surv_weight_cluster_strata, # yukarıda oluşturulan ağırlık değişkeni
-                   strata = ~health_district,     # örnekleme bölgelere göre tabakalandırılmıştır
-                   data = survey_data            # veri kümesini belirtmek zorunda
+                   strata = ~health_district,             # örnekleme bölgelere göre tabakalandırılmıştır
+                   data = survey_data                     # veri kümesini belirtmek zorunda
                   )
 ```
 
@@ -429,26 +429,26 @@ base_survey_design <- svydesign(ids = ~village_name,      # küme kimlikleri
 **srvyr** paketiyle, yukarıdakiyle aynı argümanlara sahip olan ancak tünellere (`%>%`) izin veren `as_survey_design()` fonksiyonunu kullanabiliriz ve bu nedenle tilde (`~`) kullanmamız gerekmez.
 
 ```{r survey_design_srvyr}
-## simple random ---------------------------------------------------------------
+## basit rastgele --------------------------------------------------------------
 survey_design_simple <- survey_data %>% 
   as_survey_design(ids = 1, # küme kimliği yok demek için 1
                    weights = NULL, # Ağırlık eklenmedi
                    strata = NULL # örnekleme basitti (tabaka yok)
                   )
-## stratified ------------------------------------------------------------------
+## tabakalı --------------------------------------------------------------------
 survey_design_strata <- survey_data %>%
   as_survey_design(ids = 1, # küme kimliği yok demek için 1
                    weights = surv_weight_strata, # yukarıda oluşturulan ağırlık değişkeni
                    strata = health_district # örnekleme bölgelere göre tabakalandırılmıştır
                   )
-## cluster ---------------------------------------------------------------------
+## küme ------------------------------------------------------------------------
 survey_design_cluster <- survey_data %>%
   as_survey_design(ids = village_name, # küme kimlikleri
                    weights = surv_weight_cluster, # yukarıda oluşturulan ağırlık değişkeni
                    strata = NULL # örnekleme basitti (tabaka yok)
                   )
 
-## stratified cluster ----------------------------------------------------------
+## tabakalı küme ---------------------------------------------------------------
 survey_design <- survey_data %>%
   as_survey_design(ids = village_name, # küme kimlikleri
                    weights = surv_weight_cluster_strata, # yukarıda oluşturulan ağırlık değişkeni
@@ -479,7 +479,7 @@ Bu p değerlerinin yalnızca gösterge niteliğinde olduğunu ve kaynak popülas
 
 ```{r descriptive_sampling_bias, warning = FALSE}
 
-## counts and props of the study population
+## çalışma popülasyonunun sayıları ve orantıları
 ag <- survey_data %>% 
   group_by(age_group) %>% 
   drop_na(age_group) %>% 
@@ -487,36 +487,36 @@ ag <- survey_data %>%
   mutate(proportion = n / sum(n), 
          n_total = sum(n))
 
-## counts and props of the source population
+## kaynak popülasyonun sayıları ve orantıları
 propcount <- population %>% 
   group_by(age_group) %>%
     tally(population) %>%
     mutate(proportion = n / sum(n))
 
 ## bind together the columns of two tables, group by age, and perform a 
-## binomial test to see if n/total is significantly different from population
-## proportion.
-  ## suffix here adds to text to the end of columns in each of the two datasets
+## iki tablonun sütunlarını birbirine bağla, yaşa göre grupla ve bir
+## n/toplamın popülasyondan önemli ölçüde farklı olup olmadığını görmek için binom testi orantısı.
+  ## buradaki son ek, iki veri kümesinin her birindeki sütunların sonuna metne ekler
 left_join(ag, propcount, by = "age_group", suffix = c("", "_pop")) %>%
   group_by(age_group) %>%
-  ## broom::tidy(binom.test()) makes a data frame out of the binomial test and
-  ## will add the variables p.value, parameter, conf.low, conf.high, method, and
-  ## alternative. We will only use p.value here. You can include other
-  ## columns if you want to report confidence intervals
+  ## broom::tidy(binom.test()) binom testinden bir veri çerçevesi yapar ve
+  ## p.value, parametre, conf.low, conf.high, method ve değişkenlerini ekleyecektir.
+  ## Burada sadece p.value kullanacağız. diğerlerini dahil edebilirsiniz
+  ## güven aralıklarını bildirmek istiyorsanız sütunlar
   mutate(binom = list(broom::tidy(binom.test(n, n_total, proportion_pop)))) %>%
   unnest(cols = c(binom)) %>% # important for expanding the binom.test data frame
   mutate(proportion_pop = proportion_pop * 100) %>%
-  ## Adjusting the p-values to correct for false positives 
-  ## (because testing multiple age groups). This will only make 
-  ## a difference if you have many age categories
+  ## Yanlış pozitifleri düzeltmek için p-değerlerini ayarla
+  ## (çünkü birden fazla yaş grubunu test ediyor). Bu sadece yapacak
+  ## birçok yaş kategoriniz varsa bir fark verir
   mutate(p.value = p.adjust(p.value, method = "holm")) %>%
                       
-  ## Only show p-values over 0.001 (those under report as <0.001)
+  ## Yalnızca 0,001'in üzerindeki p değerlerini göster (<0,001 olarak rapor edilenler)
   mutate(p.value = ifelse(p.value < 0.001, 
                           "<0.001", 
                           as.character(round(p.value, 3)))) %>% 
   
-  ## rename the columns appropriately
+  ## sütunları uygun şekilde yeniden adlandır
   select(
     "Age group" = age_group,
     "Study population (n)" = n,
@@ -539,22 +539,22 @@ Yukarıda örnekleme yanlılığı bölümünde görülen resmi binom farklılı
 
 ```{r weighted_age_pyramid, warning = FALSE, message = FALSE, fig.show = "hold", fig.width = 15}
 
-## define x-axis limits and labels ---------------------------------------------
-## (update these numbers to be the values for your graph)
+## x ekseni sınırlarını ve etiketlerini tanımlayın -----------------------------
+## (bu sayıları grafiğinizin değerleri olacak şekilde güncelle)
 max_prop <- 35      # göstermek istediğiniz en yüksek orantıyı seç
 step <- 5           # etiketler arasında istediğiniz boşluğu seç
 
-## this part defines vector using the above numbers with axis breaks
+## bu kısım, vektörü yukarıdaki sayıları kullanarak eksen sonları ile tanımlar.
 breaks <- c(
     seq(max_prop/100 * -1, 0 - step/100, step/100), 
     0, 
     seq(0 + step / 100, max_prop/100, step/100)
     )
 
-## this part defines vector using the above numbers with axis limits
+## bu kısım vektörü yukarıdaki sayıları kullanarak eksen limitleri ile tanımlar.
 limits <- c(max_prop/100 * -1, max_prop/100)
 
-## this part defines vector using the above numbers with axis labels
+## bu kısım, vektörü, eksen etiketleriyle birlikte yukarıdaki sayıları kullanarak tanımlar.
 labels <-  c(
       seq(max_prop, step, -step), 
       0, 
@@ -562,12 +562,12 @@ labels <-  c(
     )
 
 
-## create plots individually  --------------------------------------------------
+## ayrı ayrı grafikler oluştur  ------------------------------------------------
 
-## plot the source population 
-## nb: this needs to be collapsed for the overall population (i.e. removing health districts)
+## kaynak popülasyonu grafiklendir 
+## not: bunun genel nüfus için daraltılması gerekiyor (yani sağlık bölgelerinin kaldırılması)
 source_population <- population %>%
-  ## ensure that age and sex are factors
+  ## yaş ve cinsiyetin faktörler olduğundan emin ol
   mutate(age_group = factor(age_group, 
                             levels = c("0-2", 
                                        "3-14", 
@@ -576,65 +576,65 @@ source_population <- population %>%
                                        "45+")), 
          sex = factor(sex)) %>% 
   group_by(age_group, sex) %>% 
-  ## add the counts for each health district together 
+  ## birlikte her sağlık bölgesi için sayıları ekle
   summarise(population = sum(population)) %>% 
-  ## remove the grouping so can calculate overall proportion
+  ## genel orantıyı hesaplayabilmek için gruplandırmayı kaldır
   ungroup() %>% 
   mutate(proportion = population / sum(population)) %>% 
-  ## plot pyramid 
+  ## piramid grafiği
   age_pyramid(
             age_group = age_group, 
             split_by = sex, 
             count = proportion, 
             proportional = TRUE) +
-  ## only show the y axis label (otherwise repeated in all three plots)
+  ## sadece y ekseni etiketini göster (aksi takdirde her üç çizimde de tekrarlanır)
   labs(title = "Source population", 
        y = "", 
        x = "Age group (years)") + 
-  ## make the x axis the same for all plots 
+  ## x eksenini tüm grafikler için aynı yap
   scale_y_continuous(breaks = breaks, 
     limits = limits, 
     labels = labels)
   
   
-## plot the unweighted sample population 
+## ağırlıksız örnek popülasyonunu grafiklendir
 sample_population <- age_pyramid(survey_data, 
                  age_group = "age_group", 
                  split_by = "sex",
                  proportion = TRUE) + 
-  ## only show the x axis label (otherwise repeated in all three plots)
+  ## sadece x ekseni etiketini göster (aksi takdirde her üç grafikte de tekrarlanır)
   labs(title = "Unweighted sample population", 
        y = "Proportion (%)", 
        x = "") + 
-  ## make the x axis the same for all plots 
+  ## x eksenini tüm grafikler için aynı yap
   scale_y_continuous(breaks = breaks, 
     limits = limits, 
     labels = labels)
 
 
-## plot the weighted sample population 
+## ağırlıklı örnek popülasyonunu grafiklendir 
 weighted_population <- survey_design %>% 
-  ## make sure the variables are factors
+  ## değişkenlerin faktör olduğundan emin ol
   mutate(age_group = factor(age_group), 
          sex = factor(sex)) %>%
   age_pyramid(
     age_group = "age_group",
     split_by = "sex", 
     proportion = TRUE) +
-  ## only show the x axis label (otherwise repeated in all three plots)
+  ## sadece x ekseni etiketini göster (aksi takdirde her üç grafikte de tekrarlanır)
   labs(title = "Weighted sample population", 
        y = "", 
        x = "")  + 
-  ## make the x axis the same for all plots 
+  ## x eksenini tüm grafikler için aynı yap
   scale_y_continuous(breaks = breaks, 
     limits = limits, 
     labels = labels)
 
-## combine all three plots  ----------------------------------------------------
-## combine three plots next to eachother using + 
+## üç grafiğin tümünü birleştir ------------------------------------------------
+## + kullanarak üç grafiği yan yana birleştir
 source_population + sample_population + weighted_population + 
-  ## only show one legend and define theme 
-  ## note the use of & for combining theme with plot_layout()
+  ## sadece bir legand göster ve temayı tanımla 
+  ## temayı plot_layout() ile birleştirmek için & kullanımına dikkat et
   plot_layout(guides = "collect") & 
   theme(legend.position = "bottom",                    # açıklamayı aşağıya taşı
         legend.title = element_blank(),                # başlığı kaldır
@@ -650,27 +650,27 @@ Bireyler için başlangıç noktalarını ve sonuçları görselleştirmek, gene
 
 ```{r visualise_population_flow}
 
-## summarize data
+## verileri özetle
 flow_table <- survey_data %>%
   count(startcause, endcause, sex) %>%  # sayımları al 
   gather_set_data(x = c("startcause", "endcause"))     # grafiklendirme için formatı değiştir
 
 
-## plot your dataset 
-  ## on the x axis is the start and end causes
-  ## gather_set_data generates an ID for each possible combination
-  ## splitting by y gives the possible start/end combos
-  ## value as n gives it as counts (could also be changed to proportion)
+## veri kümesini çiz 
+  ## x ekseninde başlangıç ve bitiş nedenleri
+  ## gather_set_data, her olası kombinasyon için bir kimlik oluşturur
+  ## y ile bölme, olası başlangıç/bitiş kombinasyonlarını verir
+  ## n'nin sayı olarak verdiği değer (orantı olarak da değiştirilebilir)
 ggplot(flow_table, aes(x, id = id, split = y, value = n)) +
-  ## colour lines by sex 
+  ## cinsiyete göre renk çizgileri
   geom_parallel_sets(aes(fill = sex), alpha = 0.5, axis.width = 0.2) +
-  ## fill in the label boxes grey
+  ## etiket kutularını gri doldur
   geom_parallel_sets_axes(axis.width = 0.15, fill = "grey80", color = "grey80") +
-  ## change text colour and angle (needs to be adjusted)
+  ## metin rengini ve açısını değiştir (ayarlanması gerekiyor)
   geom_parallel_sets_labels(color = "black", angle = 0, size = 5) +
-  ## remove axis labels
+  ## ayarlanmış y ve x eksenleri (muhtemelen daha fazla dikey alana ihtiyaç duyar)
   theme_void()+
-  ## move legend to bottom
+  ## eksen etiketlerini kaldır
   theme(legend.position = "bottom")               
 
 ```
@@ -691,13 +691,13 @@ Ağırlıklı orantılar ve beraberindeki %95 güven aralıklarını elde etmek 
 
 ```{r survey_props}
 
-## produce weighted counts 
+## ağırlıklı sayılar üretme
 svytable(~died, base_survey_design)
 
-## produce weighted proportions
+## ağırlıklı orantılar üretme
 svyciprop(~died, base_survey_design, na.rm = T)
 
-## get the design effect 
+## tasarım efektini al
 svymean(~died, base_survey_design, na.rm = T, deff = T) %>% 
   deff()
 
@@ -706,24 +706,24 @@ svymean(~died, base_survey_design, na.rm = T, deff = T) %>%
 Yukarıda gösterilen **survey** fonksiyonları, aşağıda kendimizi tanımladığımız, `svy_prop` adlı bir fonksiyonda birleştirebiliriz; ve daha sonra bu fonksiyonu **purrr** paketindeki `map()` ile birlikte birkaç değişken üzerinde [yineleme](https://epirhandbook.com/iteration-loops-and-lists.html)  yapmak ve bir tablo oluşturmak için kullanabiliriz. **purrr** hakkında ayrıntılar için el kitabı yineleme bölümüne bakabilirsiniz.
 
 ```{r survey_prop_fun}
-# Define function to calculate weighted counts, proportions, CI and design effect
-# x is the variable in quotation marks 
-# design is your survey design object
+# Ağırlıklı sayıları, oranlatıları, CI ve tasarım etkisini hesaplamak için fonksiyonu tanımla
+# x tırnak içindeki değişkendir 
+# tasarım, sizin anket tasarım nesnenizdir
 
 svy_prop <- function(design, x) {
   
-  ## put the variable of interest in a formula 
+  ## ilgilenilen değişkeni bir formüle koy
   form <- as.formula(paste0( "~" , x))
-  ## only keep the TRUE column of counts from svytable
+  ## svytable'dan yalnızca DOĞRU sayım sütununu sakla
   weighted_counts <- svytable(form, design)[[2]]
-  ## calculate proportions (multiply by 100 to get percentages)
+  ## orantıları hesapla (yüzdeleri almak için 100 ile çarpın)
   weighted_props <- svyciprop(form, design, na.rm = TRUE) * 100
-  ## extract the confidence intervals and multiply to get percentages
+  ## güven aralıklarını çıkarın ve yüzdeleri elde etmek için çarp
   weighted_confint <- confint(weighted_props) * 100
-  ## use svymean to calculate design effect and only keep the TRUE column
+  ## tasarım etkisini hesaplamak için svymean kullanın ve yalnızca DOĞRU sütununu koru
   design_eff <- deff(svymean(form, design, na.rm = TRUE, deff = TRUE))[[TRUE]]
   
-  ## combine in to one data frame
+  ## tek bir veri çerçevesinde birleştir
   full_table <- cbind(
     "Variable"        = x,
     "Count"           = weighted_counts,
@@ -732,27 +732,27 @@ svy_prop <- function(design, x) {
     "Design effect"   = design_eff
     )
   
-  ## return table as a dataframe
+  ## tabloyu veri çerçevesi olarak döndür
   full_table <- data.frame(full_table, 
              ## remove the variable names from rows (is a separate column now)
              row.names = NULL)
   
-  ## change numerics back to numeric
+  ## sayısalları tekrar sayısal olarak değiştir
   full_table[ , 2:6] <- as.numeric(full_table[, 2:6])
   
-  ## return dataframe
+  ## veri çerçevesini döndür
   full_table
 }
 
-## iterate over several variables to create a table 
+## bir tablo oluşturmak için birkaç değişken üzerinde yineleme yap
 purrr::map(
-  ## define variables of interest
+  ## ilgilenilen değişkenleri tanımla
   c("left", "died", "arrived"), 
-  ## state function using and arguments for that function (design)
+  ## durum fonksiyonu kullanımı ve bu fonksiyon için argümanlar (tasarım)
   svy_prop, design = base_survey_design) %>% 
-  ## collapse list in to a single data frame
+  ## listeyi tek bir veri çerçevesine daralt
   bind_rows() %>% 
-  ## round 
+  ## yuvarla
   mutate(across(where(is.numeric), ~ round(.x, digits = 1)))
 
 ```
@@ -764,20 +764,20 @@ purrr::map(
 
 ```{r srvyr_prop}
 
-## use the srvyr design object
+## srvyr tasarım nesnesini kullan
 survey_design %>% 
   summarise(
-    ## produce the weighted counts 
+    ## ağırlıklı sayıları üret
     counts = survey_total(died), 
-    ## produce weighted proportions and confidence intervals 
-    ## multiply by 100 to get a percentage 
+    ## ağırlıklı orantıları ve güven aralıkları üret
+    ## yüzde almak için 100 ile çarp
     props = survey_mean(died, 
                         proportion = TRUE, 
                         vartype = "ci") * 100, 
-    ## produce the design effect 
+    ## tasarım efekti üret
     deff = survey_mean(died, deff = TRUE)) %>% 
-  ## only keep the rows of interest
-  ## (drop standard errors and repeat proportion calculation)
+  ## sadece ilgi alanlarını tut
+  ## (standart hataları bırakın ve orantı hesaplamasını tekrarla)
   select(counts, props, props_low, props_upp, deff_deff)
 
 ```
@@ -786,41 +786,41 @@ Burada da **purrr** paketini kullanarak birden çok değişken üzerinde [yinele
 
 ```{r srvyr_prop_fun}
 
-# Define function to calculate weighted counts, proportions, CI and design effect
-# design is your survey design object
-# x is the variable in quotation marks 
+# Ağırlıklı sayıları, orantıları, CI ve tasarım etkisini hesaplamak için işlevi tanımla
+# tasarım, sizin anket tasarım nesnenizdir
+# x tırnak içindeki değişkendir
 
 
 srvyr_prop <- function(design, x) {
   
   summarise(
-    ## using the survey design object
+    ## anket tasarım nesnesini kullan
     design, 
-    ## produce the weighted counts 
+    ## ağırlıklı sayıları üret
     counts = survey_total(.data[[x]]), 
-    ## produce weighted proportions and confidence intervals 
-    ## multiply by 100 to get a percentage 
+    ## ağırlıklı orantıları ve güven aralıkları üret
+    ## yüzde almak için 100 ile çarp
     props = survey_mean(.data[[x]], 
                         proportion = TRUE, 
                         vartype = "ci") * 100, 
-    ## produce the design effect 
+    ## tasarım efekti üret
     deff = survey_mean(.data[[x]], deff = TRUE)) %>% 
-  ## add in the variable name
+  ## değişken adını ekle
   mutate(variable = x) %>% 
-  ## only keep the rows of interest
-  ## (drop standard errors and repeat proportion calculation)
+  ## sadece ilgi alanlarını tut
+  ## (standart hataları bırak ve orantı hesaplamasını tekrarla)
   select(variable, counts, props, props_low, props_upp, deff_deff)
   
 }
   
 
-## iterate over several variables to create a table 
+## bir tablo oluşturmak için birkaç değişken üzerinde yineleme yap
 purrr::map(
-  ## define variables of interest
+  ## ilgilenilen değişkenleri tanımla
   c("left", "died", "arrived"), 
-  ## state function using and arguments for that function (design)
+  ## durum fonksiyonu kullanımı ve bu fonksiyon için argümanlar (tasarım)
   ~srvyr_prop(.x, design = survey_design)) %>% 
-  ## collapse list in to a single data frame
+  ## listeyi tek bir veri çerçevesine daralt
   bind_rows()
   
 
@@ -836,24 +836,24 @@ purrr::map(
 
 confidence_intervals <- function(data, variable, by, ...) {
   
-  ## extract the confidence intervals and multiply to get percentages
+  ## güven aralıklarını çıkarın ve yüzdeleri elde etmek için çarp
   props <- svyciprop(as.formula(paste0( "~" , variable)),
               data, na.rm = TRUE)
   
-  ## extract the confidence intervals 
+  ## güven aralıklarını çıkar
   as.numeric(confint(props) * 100) %>% ## sayısal yap ve yüzde için çarp
     round(., digits = 1) %>%           ## bir haneye yuvarla
     c(.) %>%                           ## sayıları matristen çıkar
     paste0(., collapse = "-")          ## tek karakterle birleştir
 }
 
-## using the survey package design object
+## anket paketi tasarım nesnesini kullan
 tbl_svysummary(base_survey_design, 
                include = c(arrived, left, died),   ## dahil etmek istediğiniz değişkenleri tanımla
                statistic = list(everything() ~ c("{n} ({p}%)"))) %>% ## ilgi istatistiklerini tanımla
   add_n() %>%  ## add the weighted total 
   add_stat(fns = everything() ~ confidence_intervals) %>% ## güven aralığını ekle
-  ## modify the column headers
+  ## sütun başlıklarını değiştir
   modify_header(
     list(
       n ~ "**Weighted total (N)**",
@@ -894,7 +894,7 @@ cbind(
 ```{r srvyr_ratio}
 
 survey_design %>% 
-  ## survey ratio used to account for observation time 
+  ## gözlem süresini hesaba katmak için kullanılan anket hızı
   summarise(
     mortality = survey_ratio(
       as.numeric(died) * 10000, 

@@ -47,7 +47,7 @@ pacman::p_load(rio,          # Importación de fichero
                units,        # para definir unidades de medida (datos climáticos)
                yardstick,    # para ver la precisión del modelo
                surveillance, # para detectar aberraciones
-               tidyverse,    # gestión de datos + gráficos ggplot2
+               tidyverse,    # data management + ggplot2 graphics
                appliedepidata # datos de ejemplo utilizados en este manual
                )
 ``` 
@@ -61,19 +61,19 @@ Los datos de ejemplo utilizado en esta sección son los recuentos semanales de c
 Este conjunto de datos es una versión reducida de los datos disponibles en el paquete  [**surveillance**](https://cran.r-project.org/web/packages/surveillance/). (para más detalles, carga el paquete surveillance y consulta `?campyDE`)
 
 ```{r read_data_hide, echo=F}
-# import the counts into R
+# importar los recuentos a R
 counts <- appliedepidata::get_data(name = "campylobacter_germany")
 ```
 
 ```{r read_data_show, eval=F}
-# import the counts into R
+# importar los recuentos a R
 counts <- appliedepidata::get_data(name = "campylobacter_germany")
 ```
 
 A continuación se muestran las 10 primeras filas de los recuentos.
 
 ```{r inspect_data, message=FALSE, echo=F}
-# display the counts data as a table
+# muestra los datos de recuento en forma de tabla
 DT::datatable(head(counts, 10), rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
 ```
 
@@ -83,11 +83,11 @@ El código siguiente se asegura de que la columna de la fecha tenga el formato a
 
 ```{r clean_data}
 
-## ensure the date column is in the appropriate format
+## asegura que la columna de fecha tiene el formato apropiado
 counts$date <- as.Date(counts$date)
 
-## create a calendar week variable 
-## fitting ISO definitons of weeks starting on a monday
+## crea una variable de semana calendario 
+## ajusta las definiciones ISO de las semanas que empiezan en lunes
 counts <- counts %>% 
      mutate(epiweek = yearweek(date, week_start = 1))
 
@@ -124,13 +124,13 @@ wf_set_key(user = "XXXXX",
            key = "XXXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXX",
            service = "cds") 
 
-## run for each year of interest (otherwise server times out)
+## ejecútalo para cada año de interés (de lo contrario, el servidor dejará de funcionar)
 for (i in 2002:2011) {
   
-  ## pull together a query 
-  ## see here for how to do: https://bluegreen-labs.github.io/ecmwfr/articles/cds_vignette.html#the-request-syntax
-  ## change request to a list using addin button above (python to list)
-  ## Target is the name of the output file!!
+  ## descargarlos preparando una consulta 
+  ## ver aquí cómo hacerlo: https://bluegreen-labs.github.io/ecmwfr/articles/cds_vignette.html#the-request-syntax
+  ## cambia la consulta a una lista usando el botón addin de arriba (python to list)
+  ## ¡¡¡El objetivo es el nombre del fichero de salida!!!
   request <- request <- list(
     product_type = "reanalysis",
     format = "netcdf",
@@ -148,7 +148,7 @@ for (i in 2002:2011) {
     target = paste0("germany_weather", i, ".nc")
   )
   
-  ## download the file and store it in the current working directory
+  ## descargar el archivo y almacenarlo en el directorio de trabajo actual
   file <- wf_request(user     = "XXXXX",  # ID de usuario (para autenticación)
                      request  = request,  # la petición
                      transfer = TRUE,     # descargar el archivo
@@ -165,7 +165,7 @@ Utiliza el siguiente código para importar estos archivos en R con el paquete **
 
 ```{r read_climate, warning = FALSE, message = FALSE}
 
-## materialise the germany_weather .nc files into a real folder on disk
+## definir ruta a carpeta del tiempo 
 germany_weather_zip_dir <- tempfile()
 dir.create(germany_weather_zip_dir)
 appliedepidata::save_data(name = "germany_weather", path = germany_weather_zip_dir)
@@ -181,7 +181,7 @@ file_paths <- list.files(
 ## only keep those with the current name of interest
 file_paths <- file_paths[str_detect(file_paths, "germany")]
 
-## read in all the files as a stars object
+## leer todos los ficheros como un objeto stars 
 ## along = "time" stacks the ten yearly files into one series; without it
 ## stars cannot tell how to merge them and errors
 data <- stars::read_stars(file_paths, along = "time")
@@ -190,21 +190,21 @@ data <- stars::read_stars(file_paths, along = "time")
 Una vez importados estos archivos como datos del objeto, los convertiremos en un dataframe.
 
 ```{r}
-## change to a data frame 
+## cambiar a un dataframe 
 temp_data <- as_tibble(data) %>% 
-  ## add in variables and correct units
+  ## añadir variables y corregir unidades
   mutate(
-    ## create an calendar week variable 
+    ## crear una variable de calendario de semana actual 
     epiweek = tsibble::yearweek(time), 
-    ## create a date variable (start of calendar week)
+    ## crear una variable de fecha (inicio de la semana de calendario)
     date = as.Date(epiweek),
-    ## change temperature from kelvin to celsius
+    ## cambiar la temperatura de kelvin a celsius
     t2m = set_units(t2m, celsius), 
-    ## change precipitation from metres to millimetres 
+    ## cambiar la precipitación de metros a milímetros 
     tp  = set_units(tp, mm)) %>% 
-  ## group by week (keep the date too though)
+  ## agrupar por semanas (aunque también se mantiene la fecha)
   group_by(epiweek, date) %>% 
-  ## get the average per week
+  ## obtener la media por semana
   summarise(t2m = as.numeric(mean(t2m)), 
             tp = as.numeric(mean(tp)))
 
@@ -225,7 +225,7 @@ Si tuviéramos unos datos con recuentos semanales por provincia, por ejemplo, ta
 
 ```{r ts_object}
 
-## define time series object 
+## definir el objeto de serie temporal
 counts <- tsibble(counts, index = epiweek)
 
 ```
@@ -236,7 +236,7 @@ Se puede echar un vistazo rápido a los datos utilizando **ggplot2**. En el grá
 
 ```{r basic_plot}
 
-## plot a line graph of cases by week
+## trazar un gráfico lineal de casos por semana
 ggplot(counts, aes(x = epiweek, y = case)) + 
      geom_line()
 
@@ -254,10 +254,10 @@ Consulta la página sobre [De-duplicación](#de-duplication) para obtener más d
 
 ```{r duplicates, eval = FALSE}
 
-## get a vector of TRUE/FALSE whether rows are duplicates
+## obtener un vector de TRUE/FALSE si las filas están duplicadas
 are_duplicated(counts, index = epiweek) 
 
-## get a data frame of any duplicated rows 
+## obtener un data frame de filas duplicadas 
 duplicates(counts, index = epiweek) 
 
 ```
@@ -273,26 +273,26 @@ Otra alternativa sería calcular una media móvil para intentar suavizar estos a
 
 ```{r missings}
 
-## create a variable with missings instead of weeks with reporting issues
+## crear una variable con los faltantes en lugar de las semanas con problemas de información
 counts <- counts %>% 
      mutate(case_miss = if_else(
-          ## if epiweek contains 52, 53, 1 or 2
+          ## si epiweek contiene 52, 53, 1 ó 2
           str_detect(epiweek, "W51|W52|W53|W01|W02"), 
-          ## then set to missing 
+          ## entonces se establece como missing 
           NA_real_, 
-          ## otherwise keep the value in case
+          ## de lo contrario, mantiene el valor por si acaso
           case
      ))
 
-## alternatively interpolate missings by linear trend 
-## between two nearest adjacent points
+## alternativamente interpola los faltantes por tendencia lineal 
+## entre dos puntos adyacentes más cercanos
 counts <- counts %>% 
   mutate(case_int = imputeTS::na_interpolation(case_miss)
          )
 
-## to check what values have been imputed compared to the original
+## para comprobar qué valores se han imputado en comparación con el original
 ggplot_na_imputations(counts$case_miss, counts$case_int) + 
-  ## make a traditional plot (with black axes and white background)
+  ## hacer un gráfico tradicional (con ejes negros y fondo blanco)
   theme_classic()
 
 ```
@@ -313,17 +313,17 @@ Si los datos tienen mucho ruido (los recuentos suben y bajan), puede ser útil c
 
 ```{r moving_averages}
 
-## create a moving average variable (deals with missings)
+## crear una variable de media móvil (se ocupa de las pérdidas)
 counts <- counts %>% 
-     ## create the ma_4w variable 
-     ## slide over each row of the case variable
+     ## crear la variable ma_4w 
+     ## desplazar sobre cada fila de la variable de caso
      mutate(ma_4wk = slider::slide_dbl(case, 
-                               ## for each row calculate the name
+                               ## para cada fila calcula el nombre
                                ~ mean(.x, na.rm = TRUE),
-                               ## use the four previous weeks
+                               ## utiliza las cuatro semanas anteriores
                                .before = 4))
 
-## make a quick visualisation of the difference 
+## hacer una visualización rápida de la diferencia 
 ggplot(counts, aes(x = epiweek)) + 
      geom_line(aes(y = case)) + 
      geom_line(aes(y = ma_4wk), colour = "red")
@@ -340,16 +340,16 @@ En primer lugar, se define la función. Sus argumentos incluyen unos datos con l
 
 
 ```{r periodogram}
-## Function arguments
-#####################
-## x is a dataset
-## counts is variable with count data or rates within x 
-## start_week is the first week in your dataset
-## period is how many units in a year 
-## output is whether you want return spectral periodogram or the peak weeks
-  ## "periodogram" or "weeks"
+## Argumentos de la función
+###########################
+## x es un conjunto de datos
+## counts es una variable con datos de recuento o tasas dentro de x  
+## start_week es la primera semana del conjunto de datos
+## period es el número de unidades en un año 
+## output es si quiere devolver el periodograma espectral o las semanas de pico
+  ## "periodogram" o "weeks"
 
-# Define function
+# Define la función
 periodogram <- function(x, 
                         counts, 
                         start_week = c(2002, 1), 
@@ -357,20 +357,20 @@ periodogram <- function(x,
                         output = "weeks") {
   
 
-    ## make sure is not a tsibble, filter to project and only keep columns of interest
+    ## asegurarse de que no es un tsibble, filtrar al proyecto y mantener sólo las columnas de interés
     prepare_data <- dplyr::as_tibble(x)
     
     # prepare_data <- prepare_data[prepare_data[[strata]] == j, ]
     prepare_data <- dplyr::select(prepare_data, {{counts}})
     
-    ## create an intermediate "zoo" time series to be able to use with spec.pgram
+    ## crear una serie temporal intermedia "zoo" para poder utilizarla con spec.pgram
     zoo_cases <- zoo::zooreg(prepare_data, 
                              start = start_week, frequency = period)
     
-    ## get a spectral periodogram not using fast fourier transform 
+    ## obtener un periodograma espectral sin utilizar la transformada rápida de fourier 
     periodo <- spec.pgram(zoo_cases, fast = FALSE, plot = FALSE)
     
-    ## return the peak weeks 
+    ## devuelve las semanas de pico
     periodo_weeks <- 1 / periodo$freq[order(-periodo$spec)] * period
     
     if (output == "weeks") {
@@ -381,24 +381,24 @@ periodogram <- function(x,
     
 }
 
-## get spectral periodogram for extracting weeks with the highest frequencies 
-## (checking of seasonality) 
+## obtener el periodograma espectral para extraer las semanas con las frecuencias más altas 
+## (comprobación de la estacionalidad) 
 periodo <- periodogram(counts, 
                        case_int, 
                        start_week = c(2002, 1),
                        output = "periodogram")
 
-## pull spectrum and frequence in to a dataframe for plotting
+## extraer el espectro y la frecuencia en un dataframe para graficarlo
 periodo <- data.frame(periodo$freq, periodo$spec)
 
-## plot a periodogram showing the most frequently occuring periodicity 
+## trazar un periodograma que muestre la periodicidad más frecuente 
 ggplot(data = periodo, 
                 aes(x = 1/(periodo.freq/52),  y = log(periodo.spec))) + 
   geom_line() + 
   labs(x = "Period (Weeks)", y = "Log(density)")
 
 
-## get a vector weeks in ascending order 
+## obtener un vector semanas en orden ascendente 
 peak_weeks <- periodogram(counts, 
                           case_int, 
                           start_week = c(2002, 1), 
@@ -420,13 +420,13 @@ La descomposición clásica se utiliza para desglosar una serie temporal en vari
 
 ```{r decomposition, warning=F, message=F}
 
-## decompose the counts dataset 
+## descomponer el conjunto de datos de recuentos 
 counts %>% 
-  # using an additive classical decomposition model
+  # utilizando un modelo de descomposición clásica aditiva
   model(classical_decomposition(case_int, type = "additive")) %>% 
-  ## extract the important information from the model
+  ## extraemos la información importante del modelo
   components() %>% 
-  ## generate a plot 
+## genera un gráfico 
   autoplot()
 
 ```
@@ -443,18 +443,18 @@ El uso de la función `PACF()` (para la autocorrelación parcial) muestra el mis
 
 ```{r autocorrelation}
 
-## using the counts dataset
+## utilizando el conjunto de datos de recuentos
 counts %>% 
-  ## calculate autocorrelation using a full years worth of lags
+  ## calcula la autocorrelación utilizando retardos de un año completo
   ACF(case_int, lag_max = 52) %>% 
-  ## show a plot
+  ## muestra un gráfico
   autoplot()
 
-## using the counts data set 
+## utilizando el conjunto de datos de recuentos
 counts %>% 
-  ## calculate the partial autocorrelation using a full years worth of lags
+  ## calcular la autocorrelación parcial utilizando los retardos de un año completo
   PACF(case_int, lag_max = 52) %>% 
-  ## show a plot
+  ## muestra un gráfico
   autoplot()
 
 ```
@@ -463,7 +463,7 @@ Puedes probar formalmente la hipótesis nula de independencia en una serie tempo
 
 ```{r ljung_box}
 
-## test for independance 
+## prueba de independencia 
 Box.test(counts$case_int, type = "Ljung-Box")
 
 ```
@@ -485,7 +485,7 @@ En el código de abajo asignamos usando el `$`, ya que `fourier()` devuelve dos 
 
 ```{r fourier}
 
-## add in fourier terms using the epiweek and case_int variabless
+## añade los términos de fourier usando las variabless epiweek y case_int
 counts$fourier <- select(counts, epiweek, case_int) %>% 
   fourier(K = 1)
 ```
@@ -503,36 +503,36 @@ La otra diferencia es que primero definimos el modelo y luego lo ajustamos a los
 
 ```{r nb_reg, warning = FALSE}
 
-## define the model you want to fit (negative binomial) 
+## define el modelo que quieres ajustar (binomial negativo) 
 model <- glm_nb_model(
-  ## set number of cases as outcome of interest
+  ## establece el número de casos como resultado de interés
   case_int ~
-    ## use epiweek to account for the trend
+    ## utiliza epiweek para tener en cuenta la tendencia
     epiweek +
-    ## use the fourier terms to account for seasonality
+    ## usa los términos de fourier para tener en cuenta la estacionalidad
     fourier)
 
-## fit your model using the counts dataset
+## ajusta tu modelo utilizando el conjunto de datos de recuentos
 fitted_model <- trending::fit(model, data.frame(counts))
 
-## calculate confidence intervals and prediction intervals 
+## calcula los intervalos de confianza y de predicción  
 observed <- predict(fitted_model, simulate_pi = FALSE)
 
 estimate_res <- data.frame(observed$result)
 
-## plot your regression 
+## representar la regresión 
 ggplot(data = estimate_res, aes(x = epiweek)) + 
-  ## add in a line for the model estimate
+   ## añadir una línea para la estimación del modelo
   geom_line(aes(y = estimate),
             col = "Red") + 
-  ## add in a band for the prediction intervals 
+  ## añadir una banda para los intervalos de predicción 
   geom_ribbon(aes(ymin = lower_pi, 
                   ymax = upper_pi), 
               alpha = 0.25) + 
-  ## add in a line for your observed case counts
+  ## añade una línea para los recuentos de casos observados
   geom_line(aes(y = case_int), 
             col = "black") + 
-  ## make a traditional plot (with black axes and white background)
+  ## crea un gráfico tradicional (con ejes negros y fondo blanco)
   theme_classic()
 
 
@@ -547,41 +547,41 @@ Lo que vemos a continuación es que no estamos explicando toda la variación que
 
 ```{r, warning=F, message=F}
 
-## calculate the residuals 
+## calcular los residuos 
 estimate_res <- estimate_res %>% 
   mutate(resid = fitted_model$result[[1]]$residuals)
 
-## are the residuals fairly constant over time (if not: outbreaks? change in practice?)
+## ¿son los residuos bastante constantes a lo largo del tiempo (si no es así: brotes? ¿cambio en la práctica?)
 estimate_res %>%
   ggplot(aes(x = epiweek, y = resid)) +
   geom_line() +
   geom_point() + 
   labs(x = "epiweek", y = "Residuals")
 
-## is there autocorelation in the residuals (is there a pattern to the error?)  
+## ¿hay autocorrelación en los residuos (hay un patrón en el error?)  
 estimate_res %>% 
   as_tsibble(index = epiweek) %>% 
   ACF(resid, lag_max = 52) %>% 
   autoplot()
 
-## are residuals normally distributed (are under or over estimating?)  
+## ¿se distribuyen normalmente los residuos (se subestiman o sobreestiman?)  
 estimate_res %>%
   ggplot(aes(x = resid)) +
   geom_histogram(binwidth = 100) +
   geom_rug() +
   labs(y = "count") 
   
-## compare observed counts to their residuals 
-  ## should also be no pattern 
+## comparar los recuentos observados con sus residuos 
+  ## tampoco debería haber un patrón 
 estimate_res %>%
   ggplot(aes(x = estimate, y = resid)) +
   geom_point() +
   labs(x = "Fitted", y = "Residuals")
 
-## formally test autocorrelation of the residuals
-## H0 is that residuals are from a white-noise series (i.e. random)
-## test for independence 
-## if p value significant then non-random
+## probar formalmente la autocorrelación de los residuos
+## H0 es que los residuos proceden de una serie de ruido blanco (es decir, aleatoria)
+## prueba de independencia 
+## si el valor p es significativo entonces no es aleatorio
 Box.test(estimate_res$resid, type = "Ljung-Box")
 
 ```
@@ -598,8 +598,8 @@ Podemos unir nuestros conjuntos de datos utilizando la variable semana (epiweek)
 
 ```{r join}
 
-## left join so that we only have the rows already existing in counts
-## drop the date variable from temp_data (otherwise is duplicated)
+## left join para que sólo tengamos las filas ya existentes en counts
+## elimina la variable fecha de temp_data (de lo contrario estará duplicada)
 counts <- left_join(counts, 
                     select(temp_data, -date),
                     by = "epiweek")
@@ -614,23 +614,23 @@ En primer lugar, traza los datos para ver si hay alguna relación evidente. El s
 ```{r basic_plot_bivar}
 
 counts %>% 
-  ## keep the variables we are interested 
+  ## conservar las variables que nos interesan 
   select(epiweek, case_int, t2m) %>% 
-  ## change your data in to long format
+  ## cambiar los datos a formato largo
   pivot_longer(
-    ## use epiweek as your key
+    ## utiliza epiweek como la clave
     !epiweek,
-    ## move column names to the new "measure" column
+    ## mover los nombres de las columnas a la nueva columna "measure"
     names_to = "measure", 
-    ## move cell values to the new "values" column
+    ## mover los valores de cell a la nueva columna " values"
     values_to = "value") %>% 
-  ## create a plot with the dataset above
-  ## plot epiweek on the x axis and values (counts/celsius) on the y 
+  ## crear un gráfico con el conjunto de datos anterior
+  ## dibujar epiweek en el eje-x y valores (recuentos/celsius) en el eje-y 
   ggplot(aes(x = epiweek, y = value)) + 
-    ## create a separate plot for temperate and case counts 
-    ## let them set their own y-axes
+    ## crea un gráfico separado para los recuentos de temperaturas y casos  
+    ## dejar que establezcan sus propios ejes-y
     facet_grid(measure ~ ., scales = "free_y") +
-    ## plot both as a line
+    ## dibuja ambos como una línea
     geom_line()
 
 ```
@@ -643,16 +643,16 @@ Para comprobar formalmente qué semanas están más relacionadas entre los casos
 ```{r cross_correlation, warning=FALSE}
 
 counts %>% 
-  ## calculate cross-correlation between interpolated counts and temperature
+  ## calcular la correlación cruzada entre los recuentos interpolados y la temperatura
   CCF(case_int, t2m,
-      ## set the maximum lag to be 52 weeks
+      ## fija el desfase máximo en 52 semanas
       lag_max = 52, 
-      ## return the correlation coefficient 
+      ## devuelve el coeficiente de correlación 
       type = "correlation") %>% 
-  ## arange in decending order of the correlation coefficient 
-  ## show the most associated lags
+  ## ordena el coeficiente de correlación en orden descendente
+  ## muestra los retardos más asociados
   arrange(-ccf) %>% 
-  ## only show the top ten 
+  ## muestra sólo los diez primeros 
   slice_head(n = 10)
 
 ```
@@ -665,7 +665,7 @@ Vemos que un desfase de 4 semanas es el más correlacionado, por lo que creamos 
 ```{r lag_tempvar}
 
 counts <- counts %>% 
-  ## create a new variable for temperature lagged by four weeks
+  ## crea una nueva variable para la temperatura retardada cada cuatro semanas
   mutate(t2m_lag4 = lag(t2m, n = 4))
 
 ```
@@ -680,22 +680,22 @@ Ajustamos una regresión binomial negativa como se hizo anteriormente. Esta vez 
 
 ```{r nb_reg_bivar, warning = FALSE}
 
-## define the model you want to fit (negative binomial) 
+## define el modelo que se quiere ajustar (binomial negativo) 
 model <- glm_nb_model(
-  ## set number of cases as outcome of interest
+  ## establecer el número de casos como resultado de interés
   case_int ~
-    ## use epiweek to account for the trend
+    ## utiliza epiweek para tener en cuenta la tendencia
     epiweek +
-    ## use the fourier terms to account for seasonality
+    ## usar los términos de fourier para tener en cuenta la estacionalidad
     fourier + 
-    ## use the temperature lagged by four weeks 
+    ### usa el retraso de cuatro semanas de la temperatura
     t2m_lag4
     )
 
-## fit your model using the counts dataset
+## ajusta el modelo usando el conjunto de datos de recuentos
 fitted_model <- trending::fit(model, data.frame(counts))
 
-## calculate confidence intervals and prediction intervals 
+## calcula los intervalos de confianza y de predicción 
 observed <- predict(fitted_model, simulate_pi = FALSE)
 
 ```
@@ -708,11 +708,11 @@ Lo que esto nos muestra es que la temperatura retardada, tras controlar la tende
 ```{r results_nb_reg_bivar}
 
 fitted_model %>% 
-  ## extract original negative binomial regression
+  ## extrae la regresión binomial negativa original
   get_fitted_model() #%>% 
-  ## get a tidy dataframe of results
-  #tidy(exponentiate = TRUE, 
-  #     conf.int = TRUE)
+  ## obtiene un dataframe ordenado de los resultados
+  # tidy(exponentiate = TRUE, 
+  #      conf.int = TRUE)
 ```
 
 Una rápida inspección visual del modelo muestra que se podría hacer un mejor trabajo de estimación de los recuentos de casos observados.
@@ -721,19 +721,19 @@ Una rápida inspección visual del modelo muestra que se podría hacer un mejor 
 
 estimate_res <- data.frame(observed$result)
 
-## plot your regression 
+## traza la regresión 
 ggplot(data = estimate_res, aes(x = epiweek)) + 
-  ## add in a line for the model estimate
+  ## añade una línea para la estimación del modelo
   geom_line(aes(y = estimate),
             col = "Red") + 
-  ## add in a band for the prediction intervals 
+  ## añade una banda para los intervalos de predicción 
   geom_ribbon(aes(ymin = lower_pi, 
                   ymax = upper_pi), 
               alpha = 0.25) + 
-  ## add in a line for your observed case counts
+  ## añade una línea para los recuentos de casos observados
   geom_line(aes(y = case_int), 
             col = "black") + 
-  ## make a traditional plot (with black axes and white background)
+  ## crea un gráfico tradicional (con ejes negros y fondo blanco)
   theme_classic()
 
 
@@ -746,41 +746,41 @@ Volvemos a investigar los residuos para ver si nuestro modelo se ajusta a los da
 
 ```{r}
 
-## calculate the residuals 
+## calcular los residuos 
 estimate_res <- estimate_res %>% 
   mutate(resid = case_int - estimate)
 
-## are the residuals fairly constant over time (if not: outbreaks? change in practice?)
+## ¿son los residuos bastante constantes a lo largo del tiempo (si no es así: brotes? ¿cambio en la práctica?)
 estimate_res %>%
   ggplot(aes(x = epiweek, y = resid)) +
   geom_line() +
   geom_point() + 
   labs(x = "epiweek", y = "Residuals")
 
-## is there autocorelation in the residuals (is there a pattern to the error?)  
+## ¿hay autocorrelación en los residuos (hay un patrón en el error?)  
 estimate_res %>% 
   as_tsibble(index = epiweek) %>% 
   ACF(resid, lag_max = 52) %>% 
   autoplot()
 
-## are residuals normally distributed (are under or over estimating?)  
+## ¿se distribuyen normalmente los residuos (se subestiman o sobreestiman?)  
 estimate_res %>%
   ggplot(aes(x = resid)) +
   geom_histogram(binwidth = 100) +
   geom_rug() +
   labs(y = "count") 
   
-## compare observed counts to their residuals 
-  ## should also be no pattern 
+## compara los recuentos observados con sus residuales
+  ## tampoco debería haber un patrón
 estimate_res %>%
   ggplot(aes(x = estimate, y = resid)) +
   geom_point() +
   labs(x = "Fitted", y = "Residuals")
 
-## formally test autocorrelation of the residuals
-## H0 is that residuals are from a white-noise series (i.e. random)
-## test for independence 
-## if p value significant then non-random
+## probar formalmente la autocorrelación de los residuos
+## H0 es que los residuos proceden de una serie de ruido blanco (es decir, aleatoria)
+## prueba de independencia 
+## si el valor p es significativo entonces no es aleatorio
 Box.test(estimate_res$resid, type = "Ljung-Box")
 
 ```
@@ -809,16 +809,16 @@ Aquí definimos una fecha de inicio (cuando comenzaron nuestras observaciones) y
 
 ```{r cut_off}
 
-## define start date (when observations began)
+## define la fecha de inicio (cuando empezaron las observaciones)
 start_date <- min(counts$epiweek)
 
-## define a cut-off week (end of baseline, start of prediction period)
+## define una semana de corte (fin de la línea base, inicio del periodo de predicción)
 cut_off <- yearweek("2010-12-31")
 
-## define the last date interested in (i.e. end of prediction)
+## define la última fecha de interés (es decir, el final de la predicción)
 end_date <- yearweek("2011-12-31")
 
-## find how many weeks in period (year) of interest
+## encontrar cuántas semanas en el período (año) de interés
 num_weeks <- as.numeric(end_date - cut_off)
 
 ```
@@ -831,11 +831,11 @@ Para poder pronosticar en un formato tidyverse, necesitamos tener el número cor
 
 ```{r add_rows}
 
-## add in missing weeks till end of year 
+## añade las semanas que faltan hasta final de año  
 counts <- counts %>%
-  ## group by the region
+  ## agrupa por región
   group_by_key() %>%
-  ## for each group add rows from the highest epiweek to the end of year
+  ## para cada grupo, añade filas desde la mayor epiweek hasta el final del año
   group_modify(~add_row(.,
                         epiweek = seq(max(.$epiweek) + 1, 
                                       end_date,
@@ -855,28 +855,28 @@ Tenemos que redefinir nuestros términos de fourier, ya que queremos ajustarlos 
 ```{r fourier_terms_pred}
 
 
-## define fourier terms (sincos) 
+## define los términos de fourier (sencos) 
 counts <- counts %>% 
   mutate(
-    ## combine fourier terms for weeks prior to  and after 2010 cut-off date
-    ## (nb. 2011 fourier terms are predicted)
+    ## combina los términos de fourier para las semanas anteriores y posteriores a la fecha límite de 2010
+    ## (nb. los términos de fourier de 2011 están proyectados)
     fourier = rbind(
-      ## get fourier terms for previous years
+      ## obtiene los términos de fourier de años anteriores
       fourier(
-        ## only keep the rows before 2011
+        ## conserva sólo las filas anteriores a 2011
         filter(counts, 
                epiweek <= cut_off), 
-        ## include one set of sin cos terms 
+        ## incluye un conjunto de términos sen cos 
         K = 1
         ), 
-      ## predict the fourier terms for 2011 (using baseline data)
+      ## predice los términos de fourier para 2011 (usando datos de referencia)
       fourier(
-        ## only keep the rows before 2011
+        ## conserva sólo las filas anteriores a 2011
         filter(counts, 
                epiweek <= cut_off),
-        ## include one set of sin cos terms 
+        ## incluye un conjunto de términos sen cos 
         K = 1, 
-        ## predict 52 weeks ahead
+        ## predice con 52 semanas de antelación
         h = num_weeks
         )
       )
@@ -896,38 +896,38 @@ Consulta la página sobre [Iteración, bucles y listas](#iteration-loops-and-lis
 <span style="color: orange;">***ATENCIÓN:*** Observa el uso de `simulate_pi = FALSE` dentro del argumento  `predict()`. Esto se debe a que el comportamiento por defecto de **trending** es utilizar el paquete **ciTools** para estimar un intervalo de predicción. Esto no funciona si hay recuentos NA, y también produce intervalos más granulares. Véase `?trending::predict.trending_model_fit` para más detalles. </span>  
 
 ```{r forecast_regression, warning = FALSE}
-# split data for fitting and prediction
+# divide los datos para el ajuste y la predicción
 dat <- counts %>% 
   group_by(epiweek <= cut_off) %>%
   group_split()
 
-## define the model you want to fit (negative binomial) 
+## define el modelo que se desea ajustar (binomial negativa)  
 model <- glm_nb_model(
-  ## set number of cases as outcome of interest
+  ## establece el número de casos como resultado de interés
   case_int ~
-    ## use epiweek to account for the trend
+    ## usa epiweek para tener en cuenta la tendencia
     epiweek +
-    ## use the furier terms to account for seasonality
+    ## utiliza los términos furier para tener en cuenta la estacionalidad
     fourier
 )
 
-# define which data to use for fitting and which for predicting
+# define qué datos utilizar para el ajuste y cuáles para la predicción
 fitting_data <- pluck(dat, 2)
 pred_data <- pluck(dat, 1) %>% 
   select(case_int, epiweek, fourier)
 
-# fit model 
+# ajusta el modelo 
 fitted_model <- trending::fit(model, data.frame(fitting_data))
 
-# get confint and estimates for fitted data
+# obtiene intervalos de confianza y estimaciones para los datos ajustados
 observed <- fitted_model %>% 
   predict(simulate_pi = FALSE)
 
-# forecast with data want to predict with 
+# pronostica con los datos con los que se quiere predecir 
 forecasts <- fitted_model %>% 
   predict(data.frame(pred_data), simulate_pi = FALSE)
 
-## combine baseline and predicted datasets
+## combina los conjuntos de datos de referencia y de predicción
 observed <- bind_rows(observed$result, forecasts$result)
 
 ```
@@ -936,25 +936,25 @@ Como anteriormente, podemos visualizar nuestro modelo con **ggplot**. Resaltamos
 
 ```{r forecast_plot}
 
-## plot your regression 
+## representar la regresión 
 ggplot(data = observed, aes(x = epiweek)) + 
-  ## add in a line for the model estimate
+  ## añade una línea para la estimación del modelo
   geom_line(aes(y = estimate),
             col = "grey") + 
-  ## add in a band for the prediction intervals 
+  ## añade una banda para los intervalos de predicción 
   geom_ribbon(aes(ymin = lower_pi, 
                   ymax = upper_pi), 
               alpha = 0.25) + 
-  ## add in a line for your observed case counts
+  ## añade una línea para los recuentos de casos observados
   geom_line(aes(y = case_int), 
             col = "black") + 
-  ## plot in points for the observed counts above expected
+  ## representar en puntos los recuentos observados por encima de lo esperado
   geom_point(
     data = filter(observed, case_int > upper_pi), 
     aes(y = case_int), 
     colour = "red", 
     size = 2) + 
-  ## add vertical line and label to show where forecasting started
+  ## añade una línea vertical y una etiqueta para mostrar dónde empieza la previsión
   geom_vline(
            xintercept = as.Date(cut_off), 
            linetype = "dashed") + 
@@ -965,7 +965,7 @@ ggplot(data = observed, aes(x = epiweek)) +
            angle = 90, 
            vjust = 1
            ) + 
-  ## make a traditional plot (with black axes and white background)
+  ## realiza un gráfico tradicional (con ejes negros y fondo blanco)
   theme_classic()
 ```
 
@@ -995,46 +995,46 @@ A continuación, utilizamos la función `map()` del paquete **purrr** para recor
 
 ```{r cross_validation, warning = FALSE}
 
-## Cross validation: predicting week(s) ahead based on sliding window
+## Validación cruzada: predicción de la(s) semana(s) anterior(es) basada en una ventana deslizante.
 
-## expand your data by rolling over in 52 week windows (before + after) 
-## to predict 52 week ahead
-## (creates longer and longer chains of observations - keeps older data)
+## amplía los datos en ventanas de 52 semanas (antes + después) 
+## para predecir 52 semanas por delante
+## (crea cadenas de observaciones cada vez más largas - mantiene los datos más antiguos)
 
-## define window want to roll over
+## define la ventana que se quiere utilizar
 roll_window <- 52
 
-## define weeks ahead want to predict 
+## define las semanas que se quieren predecir 
 weeks_ahead <- 52
 
-## create a data set of repeating, increasingly long data
-## label each data set with a unique id
-## only use cases before year of interest (i.e. 2011)
+## crea un conjunto de datos repetidos, cada vez más largos
+## etiqueta cada conjunto de datos con un id único
+## utiliza sólo casos anteriores al año de interés (es decir, 2011)
 case_roll <- counts %>% 
   filter(epiweek < cut_off) %>% 
-  ## only keep the week and case counts variables
+  ## mantiene sólo las variables de semana y recuento de casos
   select(epiweek, case_int) %>% 
-    ## drop the last x observations 
-    ## depending on how many weeks ahead forecasting 
-    ## (otherwise will be an actual forecast to "unknown")
+    ## elimina las últimas x observaciones 
+    ## dependiendo de cuántas semanas se prevean 
+    ## (de lo contrario será una previsión real a "desconocido")
     slice(1:(n() - weeks_ahead)) %>%
     as_tsibble(index = epiweek) %>% 
-    ## roll over each week in x after windows to create grouping ID 
-    ## depending on what rolling window specify
+    ## desplaza cada semana en x después de las ventanas para crear ID de agrupación 
+    ## dependiendo de lo que especifique roll_window
     stretch_tsibble(.init = roll_window, .step = 1) %>% 
-  ## drop the first couple - as have no "before" cases
+  ## elimina el primer par - ya que no tiene casos "anteriores"
   filter(.id > roll_window)
 
 
-## for each of the unique data sets run the code below
+## para cada uno de los grupos de datos únicos se ejecuta el código siguiente
 forecasts <- purrr::map(unique(case_roll$.id), 
                         function(i) {
   
-  ## only keep the current fold being fit 
+  ## sólo se mantiene el conjunto actual que se está ajustando 
   mini_data <- filter(case_roll, .id == i) %>% 
     as_tibble()
   
-  ## create an empty data set for forecasting on 
+  ## crea un conjunto de datos vacío para la previsión 
   forecast_data <- tibble(
     epiweek = seq(max(mini_data$epiweek) + 1,
                   max(mini_data$epiweek) + weeks_ahead,
@@ -1043,107 +1043,107 @@ forecasts <- purrr::map(unique(case_roll$.id),
     .id = rep.int(i, weeks_ahead)
   )
   
-  ## add the forecast data to the original 
+  # añade los datos de previsión a los originales 
   mini_data <- bind_rows(mini_data, forecast_data)
   
-  ## define the cut off based on latest non missing count data 
+  ## define los puntos de corte en función de los últimos datos de recuento no faltantes 
   cv_cut_off <- mini_data %>% 
-    ## only keep non-missing rows
+    ## conserva sólo las filas no faltantes
     drop_na(case_int) %>% 
-    ## get the latest week
+    ## obtiene la última semana
     summarise(max(epiweek)) %>% 
-    ## extract so is not in a dataframe
+    ## extrae lo que no está en un dataframe
     pull()
   
-  ## make mini_data back in to a tsibble
+## convierte mini_data en un tsibble
   mini_data <- tsibble(mini_data, index = epiweek)
   
-  ## define fourier terms (sincos) 
+  ## define los términos de fourier (sencos) 
   mini_data <- mini_data %>% 
     mutate(
-    ## combine fourier terms for weeks prior to  and after cut-off date
+    ## combina los términos de fourier para las semanas anteriores y posteriores a la fecha de corte
     fourier = rbind(
-      ## get fourier terms for previous years
+      ## obtiene los términos de fourier de años anteriores
       forecast::fourier(
-        ## only keep the rows before cut-off
+        ## conserva sólo las filas anteriores a la fecha de corte
         filter(mini_data, 
                epiweek <= cv_cut_off), 
-        ## include one set of sin cos terms 
+        ## incluye un conjunto de términos sen cos 
         K = 1
         ), 
-      ## predict the fourier terms for following year (using baseline data)
+      ## predice los términos de fourier para el año siguiente (utilizando los datos de referencia)
       fourier(
-        ## only keep the rows before cut-off
+        ## conserva sólo las filas anteriores al corte
         filter(mini_data, 
                epiweek <= cv_cut_off),
-        ## include one set of sin cos terms 
+        ## incluye un conjunto de términos seno-cos 
         K = 1, 
-        ## predict 52 weeks ahead
+        ## predice con 52 semanas de antelación
         h = weeks_ahead
         )
       )
     )
   
   
-  # split data for fitting and prediction
+  # divide los datos para el ajuste y la predicción
   dat <- mini_data %>% 
     group_by(epiweek <= cv_cut_off) %>%
     group_split()
 
-  ## define the model you want to fit (negative binomial) 
+  ## define el modelo que se quiere ajustar (binomial negativa) 
   model <- glm_nb_model(
-    ## set number of cases as outcome of interest
+    ## establece el número de casos como resultado de interés
     case_int ~
-      ## use epiweek to account for the trend
+      ## utiliza epiweek para tener en cuenta la tendencia
       epiweek +
-      ## use the furier terms to account for seasonality
+      ## usa los términos de furier para tener en cuenta la estacionalidad
       fourier
   )
 
-  # define which data to use for fitting and which for predicting
+  # define qué datos utilizar para el ajuste y cuáles para la predicción
   fitting_data <- pluck(dat, 2)
   pred_data <- pluck(dat, 1)
   
-  # fit model 
+  # ajusta el modelo 
   fitted_model <- trending::fit(model, fitting_data)
   
-  # forecast with data want to predict with 
+  # proyecta con los datos que se quieren predecir 
   forecasts <- fitted_model %>% 
     predict(data.frame(pred_data), simulate_pi = FALSE)
   forecasts <- data.frame(forecasts$result[[1]]) %>% 
-       ## only keep the week and the forecast estimate
+    ## conserva sólo la semana y la estimación de la previsión
     select(epiweek, estimate)
     
   }
   )
 
-## make the list in to a data frame with all the forecasts
+## convierte la lista en un dataframe con todas las proyecciones
 forecasts <- bind_rows(forecasts)
 
-## join the forecasts with the observed
+## une las proyecciones con los datos observados
 forecasts <- left_join(forecasts, 
                        select(counts, epiweek, case_int),
                        by = "epiweek")
 
-## using {yardstick} compute metrics
-  ## RMSE: Root mean squared error
-  ## MAE:  Mean absolute error	
-  ## MASE: Mean absolute scaled error
-  ## MAPE: Mean absolute percent error
+## usando {yardstick} calcula las métricas
+  ## RMSE: Root mean squared error (error cuadrático medio)
+  ## MAE: Error medio absoluto	
+  ## MASE: Mean absolute scaled error (Error medio absoluto a escala)
+  ## MAPE: Error porcentual medio absoluto
 model_metrics <- bind_rows(
-  ## in your forcasted dataset compare the observed to the predicted
+  ## compara lo observado con lo proyectado en el conjunto de datos de previsiones
   rmse(forecasts, case_int, estimate), 
   mae( forecasts, case_int, estimate),
   mase(forecasts, case_int, estimate),
   mape(forecasts, case_int, estimate),
   ) %>% 
-  ## only keep the metric type and its output
+  ## conserva sólo el tipo de métrica y su salida
   select(Metric  = .metric, 
          Measure = .estimate) %>% 
-  ## make in to wide format so can bind rows after
+  ## convierte en formato ancho para poder enlazar filas después
   pivot_wider(names_from = Metric, values_from = Measure)
 
-## return model metrics 
+## devuelve las métricas del modelo 
 model_metrics
 
 ```
@@ -1162,20 +1162,20 @@ Para trabajar con el paquete **surveillance**, primero tenemos que definir un ob
 
 ```{r surveillance_obj}
 
-## define surveillance time series object
-## nb. you can include a denominator with the population object (see ?sts)
+## define el objeto series temporales de vigilancia
+## nota. se puede incluir un denominador con el objeto población (ver ?sts)
 counts_sts <- sts(observed = counts$case_int[!is.na(counts$case_int)],
                   start = c(
-                    ## subset to only keep the year from start_date 
+                    ## subconjunto para mantener sólo el año desde start_date 
                     as.numeric(str_sub(start_date, 1, 4)), 
-                    ## subset to only keep the week from start_date
+                    ## subconjunto para mantener sólo la semana a partir de start_date
                     as.numeric(str_sub(start_date, 7, 8))), 
-                  ## define the type of data (in this case weekly)
+                  ## define el tipo de datos (en este caso semanales)
                   freq = 52)
 
-## define the week range that you want to include (ie. prediction period)
-## nb. the sts object only counts observations without assigning a week or 
-## year identifier to them - so we use our data to define the appropriate observations
+## define el rango de semanas que se quiere incluir (es decir, el periodo de predicción)
+## nota: el objeto sts sólo cuenta las observaciones sin asignarles un identificador de semana o año. 
+## identificador de año - utilizaremos nuestros datos para definir las observaciones adecuadas
 weekrange <- cut_off - start_date
 
 ```
@@ -1189,24 +1189,24 @@ A continuación, definimos cada uno de nuestros parámetros para el método Farr
 
 ## define control
 ctrl <- list(
-  ## define what time period that want threshold for (i.e. 2011)
+  ## define para qué periodo de tiempo se quiere el umbral (por ejemplo, 2011)
   range = which(counts_sts@epoch > weekrange),
   b = 9, ## cuántos años hacia atrás para la línea base
   w = 2, ## tamaño de la ventana móvil en semanas
   weightsThreshold = 2.58, ## reponderar brotes pasados (método noufaily mejorado - original sugiere 1)
-  ## pastWeeksNotIncluded = 3, ## use all weeks available (noufaily suggests drop 26)
+  ## pastWeeksNotIncluded = 3, ## utiliza todas las semanas disponibles (noufaily sugiere dejar 26)
   trend = TRUE,
   pThresholdTrend = 1, ## 0.05 normalmente, sin embargo se aconseja 1 en el método mejorado (es decir, mantener siempre)
   thresholdMethod = "nbPlugin",
   populationOffset = TRUE
   )
 
-## apply farrington flexible method
+## aplicar el método farrington flexible
 farringtonmethod <- farringtonFlexible(counts_sts, ctrl)
 
-## create a new variable in the original dataset called threshold
-## containing the upper bound from farrington 
-## nb. this is only for the weeks in 2011 (so need to subset rows)
+## crea una nueva variable en el conjunto de datos original llamada umbral
+## que contiene el límite superior de farrington 
+## nota: esto es solo para las semanas de 2011 (por lo que hay que hacer un subconjunto de filas)
 counts[which(counts$epiweek >= cut_off & 
                !is.na(counts$case_int)),
               "threshold"] <- farringtonmethod@upperbound
@@ -1217,18 +1217,18 @@ A continuación, podemos visualizar los resultados en **ggplot** como se hizo an
 ```{r plot_farrington, warning=F, message=F}
 
 ggplot(counts, aes(x = epiweek)) + 
-  ## add in observed case counts as a line
+  ## añade los recuentos de casos observados como una línea
   geom_line(aes(y = case_int, colour = "Observed")) + 
-  ## add in upper bound of aberration algorithm
+  ## añade el límite superior del algoritmo de aberración
   geom_line(aes(y = threshold, colour = "Alert threshold"), 
             linetype = "dashed", 
             linewidth = 1.5) +
-  ## define colours
+  ## define los colores
   scale_colour_manual(values = c("Observed" = "black", 
                                  "Alert threshold" = "red")) + 
-  ## make a traditional plot (with black axes and white background)
+  ## realiza un gráfico tradicional (con ejes negros y fondo blanco)
   theme_classic() + 
-  ## remove title of legend 
+  ## elimina el título de la leyenda 
   theme(legend.title = element_blank())
 
 ```
@@ -1244,27 +1244,27 @@ Consulta la [viñeta GLRNB](https://cran.r-project.org/web/packages/surveillance
 
 ```{r glrnb, warning = FALSE, message = FALSE}
 
-## define control options
+## define las opciones de control
 ctrl <- list(
-  ## define what time period that want threshold for (i.e. 2011)
+  ## define para qué periodo de tiempo se quiere el umbral (por ejemplo, 2011)
   range = which(counts_sts@epoch > weekrange),
   mu0 = list(S = 1,    ## número de términos de fourier (armónicos) a incluir
   trend = TRUE,   ## si incluye la tendencia o no
   refit = FALSE), ## si se reajusta el modelo después de cada alarma
-  ## cARL = threshold for GLR statistic (arbitrary)
-     ## 3 ~ middle ground for minimising false positives
-     ## 1 fits to the 99%PI of glm.nb - with changes after peaks (threshold lowered for alert)
+  ## cARL = umbral para el estadístico GLR (arbitrario)
+     ## 3 ~ término medio para minimizar los falsos positivos
+     ## 1 se ajusta al 99%PI de glm.nb - con cambios después de los picos (umbral reducido para la alerta)
    c.ARL = 2,
-   # theta = log(1.5), ## equates to a 50% increase in cases in an outbreak
+   # theta = log(1.5), ## equivale a un aumento del 50% de casos en un brote
    ret = "cases"     ## devuelve el límite superior del umbral como recuento de casos
   )
 
-## apply the glrnb method
+## aplica el método glrnb
 glrnbmethod <- glrnb(counts_sts, control = ctrl, verbose = FALSE)
 
-## create a new variable in the original dataset called threshold
-## containing the upper bound from glrnb 
-## nb. this is only for the weeks in 2011 (so need to subset rows)
+## crea una nueva variable en el conjunto de datos original llamada umbral
+## que contiene el límite superior de glrnb 
+## nota: esto es solo para las semanas de 2011 (por lo que hay que hacer un subconjunto de filas)
 counts[which(counts$epiweek >= cut_off & 
                !is.na(counts$case_int)),
               "threshold_glrnb"] <- glrnbmethod@upperbound
@@ -1276,18 +1276,18 @@ Visualiza los resultados como antes.
 ```{r plot_glrnb, message=F, warning=F}
 
 ggplot(counts, aes(x = epiweek)) + 
-  ## add in observed case counts as a line
+  ## añade los recuentos de casos observados como una línea
   geom_line(aes(y = case_int, colour = "Observed")) + 
-  ## add in upper bound of aberration algorithm
+  ## añade el límite superior del algoritmo de aberración
   geom_line(aes(y = threshold_glrnb, colour = "Alert threshold"), 
             linetype = "dashed", 
             linewidth = 1.5) +
-  ## define colours
+  ## define los colores
   scale_colour_manual(values = c("Observed" = "black", 
                                  "Alert threshold" = "red")) + 
-  ## make a traditional plot (with black axes and white background)
+  ## realiza un gráfico tradicional (con ejes negros y fondo blanco)
   theme_classic() + 
-  ## remove title of legend 
+  ## elimina el título de la leyenda  
   theme(legend.title = element_blank())
 
 ```
@@ -1319,26 +1319,26 @@ Aquí tenemos que volver a calcular los términos de Fourier sin previsión, ya 
 
 ```{r define_terms_interrupted}
 
-## add in fourier terms using the epiweek and case_int variabless
+## añade los términos de fourier utilizando las variables epiweek y case_int
 counts$fourier <- select(counts, epiweek, case_int) %>% 
   as_tsibble(index = epiweek) %>% 
   fourier(K = 1)
 
-## define intervention week 
+## define la semana de intervención 
 intervention_week <- yearweek("2008-12-31")
 
-## define variables for regression 
+## define variables para la regresión 
 counts <- counts %>% 
   mutate(
-    ## corresponds to t in the formula
-      ## count of weeks (could probably also just use straight epiweeks var)
+    ## corresponde a t en la fórmula
+      ## recuento de semanas (probablemente también se podría usar directamente la variable epiweek)
     # linear = row_number(epiweek), 
-    ## corresponds to delta(t-t0) in the formula
-      ## pre or post intervention period
+    ## corresponde a delta(t-t0) en la fórmula
+      ## periodo anterior o posterior a la intervención
     intervention = as.numeric(epiweek >= intervention_week), 
-    ## corresponds to (t-t0)^+ in the formula
-      ## count of weeks post intervention
-      ## (choose the larger number between 0 and whatever comes from calculation)
+    ## corresponde a (t-t0)^+ en la fórmula
+      ## recuento de semanas posteriores a la intervención
+      ## ( elige el número mayor entre 0 y lo que resulte del cálculo)
     time_post = pmax(0, epiweek - intervention_week + 1))
 
 ```
@@ -1350,50 +1350,50 @@ A continuación, utilizamos estos términos para ajustar una regresión binomial
 ```{r interrupted_regression, warning = FALSE}
 
 
-## define the model you want to fit (negative binomial) 
+## define el modelo que se quiere ajustar (binomial negativo) 
 model <- glm_nb_model(
-  ## set number of cases as outcome of interest
+  ## establece el número de casos como resultado de interés
   case_int ~
-    ## use epiweek to account for the trend
+    ## utiliza epiweek para tener en cuenta la tendencia
     epiweek +
-    ## use the furier terms to account for seasonality
+    ## utiliza los términos furier para tener en cuenta la estacionalidad
     fourier + 
-    ## add in whether in the pre- or post-period 
+    ## añade si está en el periodo anterior o posterior 
     intervention + 
-    ## add in the time post intervention 
+    ## añade el tiempo posterior a la intervención 
     time_post
     )
 
-## fit your model using the counts dataset
+## ajusta el modelo utilizando el conjunto de datos de recuentos
 fitted_model <- trending::fit(model, counts)
 
-## calculate confidence intervals and prediction intervals 
+## calcula los intervalos de confianza y de predicción 
 observed <- predict(fitted_model, simulate_pi = FALSE)
 
 ```
 
 ```{r table_regression, eval = FALSE, echo = TRUE}
 
-## show estimates and percentage change in a table
+## muestra las estimaciones y el porcentaje de cambio en una tabla
 fitted_model %>% 
-  ## extract original negative binomial regression
+  ## extrae la regresión binomial negativa original
   get_model() %>% 
-  ## get a tidy dataframe of results
+  ## obtiene un dataframe ordenado de los resultados
   tidy(exponentiate = TRUE, 
        conf.int = TRUE) %>% 
-  ## only keep the intervention value 
+  ## conserva sólo el valor de intervención 
   filter(term == "intervention") %>% 
-  ## change the IRR to percentage change for estimate and CIs 
+  ## cambia la TIR (IRR) por el porcentaje de cambio para la estimación y los IC 
   mutate(
-    ## for each of the columns of interest - create a new column
+    ## para cada una de las columnas de interés - crea una nueva columna
     across(
       all_of(c("estimate", "conf.low", "conf.high")), 
-      ## apply the formula to calculate percentage change
+      ## aplica la fórmula para calcular el cambio porcentual
             .f = function(i) 100 * (i - 1), 
-      ## add a suffix to new column names with "_perc"
+      ## añade un sufijo a los nuevos nombres de columna con "_perc"
       .names = "{.col}_perc")
     ) %>% 
-  ## only keep (and rename) certain columns 
+  ## sólo mantiene (y renombra) ciertas columnas 
   select("IRR" = estimate, 
          "95%CI low" = conf.low, 
          "95%CI high" = conf.high,
@@ -1410,15 +1410,15 @@ Como en el caso anterior, podemos visualizar los resultados de la regresión.
 estimate_res <- data.frame(observed$result)
 
 ggplot(estimate_res, aes(x = epiweek)) + 
-  ## add in observed case counts as a line
+  ## añade los recuentos de casos observados como una línea
   geom_line(aes(y = case_int, colour = "Observed")) + 
-  ## add in a line for the model estimate
+  ## añade una línea para la estimación del modelo
   geom_line(aes(y = estimate, col = "Estimate")) + 
-  ## add in a band for the prediction intervals 
+  ## añade una banda para los intervalos de predicción 
   geom_ribbon(aes(ymin = lower_pi, 
                   ymax = upper_pi), 
               alpha = 0.25) + 
-  ## add vertical line and label to show where forecasting started
+  ## añade una línea vertical y una etiqueta para mostrar dónde empezó la predicción
   geom_vline(
            xintercept = as.Date(intervention_week), 
            linetype = "dashed") + 
@@ -1429,10 +1429,10 @@ ggplot(estimate_res, aes(x = epiweek)) +
            angle = 90, 
            vjust = 1
            ) + 
-  ## define colours
+  ## define los colores
   scale_colour_manual(values = c("Observed" = "black", 
                                  "Estimate" = "red")) + 
-  ## make a traditional plot (with black axes and white background)
+  ## realiza un gráfico tradicional (con ejes negros y fondo blanco)
   theme_classic()
 
 ```

@@ -31,8 +31,8 @@ knitr::include_graphics(here::here("images", "survival_analysis.png"))
 
 ```{r echo=F, eval=F, out.width = "80%", out.height="80%", fig.align = "center"}
  
-#Add a figure from the following chunks for the last version of the page
-#do not forget to save the output figure in "images"
+# Add a figure from the following chunks for the last version of the page
+# do not forget to save the output figure in "images"
 # knitr::include_graphics(here::here("images", "survanalysis.png"))
 
 ```  
@@ -48,7 +48,7 @@ R において生存時間解析を行うために最もよく用いられるパ
 
 ```{r, echo=F, message=FALSE, warning=FALSE}
 
-# install/load the different packages needed for this page
+# この章で必要なパッケージのインストールと読込
 pacman::p_load(
   survival,      # survival analysis 
   survminer,     # survival analysis
@@ -75,12 +75,12 @@ pacman::p_load(
 エボラ出血熱の流行をシミュレートしたデータセットをインポートします。`appliedepidata::get_data(name = "linelist_cleaned_rds")` で直接読み込めます（詳細は[ハンドブックとデータのダウンロード](data_used.jp.qmd)のページを参照）。
 
 ```{r echo=F}
-# import linelist
+# ラインリストのインポート
 linelist_case_data <- appliedepidata::get_data(name = "linelist_cleaned_rds")
 ```
 
 ```{r eval=F}
-# import linelist
+# ラインリストのインポート
 linelist_case_data <- appliedepidata::get_data(name = "linelist_cleaned_rds")
 ```
 
@@ -108,31 +108,31 @@ linelist_case_data <- appliedepidata::get_data(name = "linelist_cleaned_rds")
 次に、`case_when()` を用いて3つだけ水準を持つ `age_cat_small` 列を作成します。
 
 ```{r }
-#create a new data called linelist_surv from the linelist_case_data
+# linelist_case_data から新しいデータ linelist_surv を作成
 
 linelist_surv <-  linelist_case_data %>% 
      
   dplyr::filter(
-       # remove observations with wrong or missing dates of onset or date of outcome
+          # 誤りまたは発症日かアウトカムの日付に欠測がある観測値を削除
        date_outcome > date_onset) %>% 
   
   dplyr::mutate(
-       # create the event var which is 1 if the patient died and 0 if he was right censored
+          # 死亡した人を1とし右側打切りの人を0としたイベント変数を作成
        event = ifelse(is.na(outcome) | outcome == "Recover", 0, 1), 
     
-       # create the var on the follow-up time in days
+          # 追跡時間（日）の変数を作成
        futime = as.double(date_outcome - date_onset), 
     
-       # create a new age category variable with only 3 strata levels
+          # 3つだけ水準を持つ新しい年齢カテゴリ変数を作成
        age_cat_small = dplyr::case_when( 
             age_years < 5  ~ "0-4",
             age_years >= 5 & age_years < 20 ~ "5-19",
             age_years >= 20   ~ "20+"),
        
-       # previous step created age_cat_small var as character.
-       # now convert it to factor and specify the levels.
-       # Note that the NA values remain NA's and are not put in a level "unknown" for example,
-       # since in the next analyses they have to be removed.
+          # 上のステップでは age_cat_small が character 型で作成されるため
+          # factor 型に変換し、水準を指定します
+          # 値が NA のものは NA のままになり、例えば水準 "unkown" などには置換されません
+          # そのため、次の解析ではこれらを削除する必要があるので注意してください
        age_cat_small = fct_relevel(age_cat_small, "0-4", "5-19", "20+")
        )
 ```
@@ -144,8 +144,8 @@ linelist_surv <-  linelist_case_data %>%
 
 summary(linelist_surv$futime)
 
-# cross tabulate the new event var and the outcome var from which it was created
-# to make sure the code did what it was intended to
+# 作成された新しいイベント変数とアウトカム変数のクロス集計
+# 意図した通りにコードが動いているかどうかを確認する
 linelist_surv %>% 
   tabyl(outcome, event)
 ```
@@ -216,7 +216,7 @@ linelist_surv %>%
 
 
 ```{r survobj }
-# Use Suv() syntax for right-censored data
+# 右側打切りデータに Surv() 構文を使用
 survobj <- Surv(time = linelist_surv$futime,
                 event = linelist_surv$event)
 ```
@@ -241,7 +241,7 @@ linelist_surv %>%
 さらに、`survobj` の最初の10要素を表示します。基本的には追跡時間のベクトルが表示され、右側打切りの観測値の場合は "+" も表示されます。各値が上の出力と下の出力でどのようになっているか確認してください。
 
 ```{r}
-#print the 50 first elements of the vector to see how it presents
+# このベクトルの最初の10要素を表示し、どのようになっているかを確認
 head(survobj, 10)
 ```
 
@@ -262,11 +262,11 @@ head(survobj, 10)
 以下では、上で作成した Surv 型のオブジェクト "survobj" を反応変数とした formula を用いて KM 推定値を求めます。"~ 1" は全体の生存に対するモデルを実行することを意味します。
 
 ```{r fit}
-# fit the KM estimates using a formula where the Surv object "survobj" is the response variable.
-# "~ 1" signifies that we run the model for the overall survival  
+# Surv 型オブジェクト "survobj" を反応変数としたモデル式を用いて KM 推定値を求めます
+# "~ 1" は全体の生存に対するモデルを実行することを意味します
 linelistsurv_fit <-  survival::survfit(survobj ~ 1)
 
-#print its summary for more details
+# 詳細をみるための要約を表示
 summary(linelistsurv_fit)
 
 ```
@@ -276,7 +276,7 @@ summary(linelistsurv_fit)
 
 ```{r print_spec_times}
 
-#print its summary at specific times
+# 特定の時点における要約を表示
 summary(linelistsurv_fit, times = c(5,10,20,30,60))
 
 ```
@@ -288,7 +288,7 @@ summary(linelistsurv_fit, times = c(5,10,20,30,60))
 
 
 ```{r, mean_survtime}
-# print linelistsurv_fit object with mean survival time and its se. 
+# linelistsurv_fit オブジェクトを平均生存時間とその標準誤差とともに表示します
 print(linelistsurv_fit, print.rmean = TRUE)
 
 ```
@@ -335,7 +335,7 @@ KM 推定値の信頼区間もデフォルトで描画されますが、`plot()`
 
 ```{r}
 
-# original plot
+# オリジナルのプロット
 plot(
   linelistsurv_fit,
   xlab = "Days of follow-up",       
@@ -345,7 +345,7 @@ plot(
   main = "Overall survival curve and cumulative mortality"
   )
 
-# draw an additional curve to the previous plot
+# 元のプロットに追加の曲線を描画
 lines(
   linelistsurv_fit,
   lty = 3,             # use different line type for clarity
@@ -354,7 +354,7 @@ lines(
   conf.int = FALSE
   )
 
-# add a legend to the plot
+# プロットに凡例を追加
 legend(
   "topright",                               # position of legend
   legend = c("Survival", "Cum. Mortality"), # legend text 
@@ -382,24 +382,24 @@ legend(
 
 ```{r comp_surv, warning=FALSE}
 
-# create the new survfit object based on gender
+# 性別に基づいて新しい survfit オブジェクトを作成
 linelistsurv_fit_sex <-  survfit(Surv(futime, event) ~ gender, data = linelist_surv)
 ```
 
 新しいオブジェクトを作成すると、性別ごとの生存曲線を作成できます。色や凡例を決める前に、性別の列の水準の順番を見てみましょう。 
 
 ```{r}
-# set colors
+# 色を設定
 col_sex <- c("lightgreen", "darkgreen")
 
-# create plot
+# プロットを作成
 plot(
   linelistsurv_fit_sex,
   col = col_sex,
   xlab = "Days of follow-up",
   ylab = "Survival Probability")
 
-# add legend
+# 凡例の追加
 legend(
   "topright",
   legend = c("Female","Male"),
@@ -412,7 +412,7 @@ legend(
 そして、`survdiff()` を用いて生存曲線の群間差の仮説検定を行うことができます。
 
 ```{r}
-#compute the test of the difference between the survival curves
+# 生存曲線の差の仮説検定を実行
 survival::survdiff(
   Surv(futime, event) ~ gender, 
   data = linelist_surv
@@ -461,7 +461,7 @@ linelistsurv_fit_source <-  survfit(
   data = linelist_surv
   )
 
-# plot
+# プロット
 ggsurvplot( 
   linelistsurv_fit_source,
   data = linelist_surv,
@@ -515,18 +515,18 @@ Cox 回帰モデルのオブジェクトに `summary()` を適用すると、ハ
 
 ```{r coxmodel_agesex}
 
-#fitting the cox model
+# Cox 回帰モデルの当てはめ
 linelistsurv_cox_sexage <-  survival::coxph(
               Surv(futime, event) ~ gender + age_cat_small, 
               data = linelist_surv
               )
 
 
-#printing the model fitted
+# モデルの当てはめ結果の表示
 linelistsurv_cox_sexage
 
 
-#summary of the model
+# モデルの要約
 summary(linelistsurv_cox_sexage)
 
 ```
@@ -550,14 +550,14 @@ test_ph_sexage
 
 ```{r coxmodel_fit_ph,  message=FALSE}
 
-#fit the model
+# モデルの当てはめ
 linelistsurv_cox <-  coxph(
                         Surv(futime, event) ~ gender + age_years+ source + days_onset_hosp,
                         data = linelist_surv
                         )
 
 
-#test the proportional hazard model
+# 比例ハザード性の仮説検定
 linelistsurv_ph_test <- cox.zph(linelistsurv_cox)
 linelistsurv_ph_test
 ```
@@ -577,7 +577,7 @@ survminer::ggcoxzph(linelistsurv_ph_test)
 
 ```{r coxmodel_summary,  message=FALSE}
 
-#print the summary of the model
+# モデルの要約を表示
 summary(linelistsurv_cox)
 
 ```

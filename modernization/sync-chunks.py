@@ -61,19 +61,27 @@ def code_part(line):
 
 
 def merge(en_body, tr_body):
-    """English code, translated comments where the code line matches. Returns (lines, kept, fallback)."""
-    by_code = {}
-    for l in tr_body:
-        c = code_part(l)
-        if c.strip() and '#' in l and c not in by_code: by_code[c] = l
+    """English code, translated comments where the line aligns. Returns (lines, kept, fallback).
+
+    Lines are aligned with difflib on their code parts. In an aligned pair, a line with the
+    same code keeps the translated line (its comment survives), and a comment-only line
+    keeps the translated comment-only line. Every other line is the English line.
+    """
+    import difflib
+    ce = [code_part(l) for l in en_body]; ct = [code_part(l) for l in tr_body]
+    def is_comment_only(l): return l.strip().startswith('#')
+    pair = {}
+    for blk in difflib.SequenceMatcher(None, ce, ct, autojunk=False).get_matching_blocks():
+        for k in range(blk.size): pair[blk.a + k] = blk.b + k
     out, kept, fallback = [], 0, 0
-    for l in en_body:
-        c = code_part(l)
-        if c.strip() and c in by_code and by_code[c] != l:
-            out.append(by_code[c]); kept += 1
-        else:
-            out.append(l)
-            if '#' in l and c.strip(): fallback += 1
+    for i, l in enumerate(en_body):
+        j = pair.get(i)
+        if j is not None:
+            t = tr_body[j]
+            if ce[i].strip() and '#' in t and t != l: out.append(t); kept += 1; continue
+            if not ce[i].strip() and is_comment_only(l) and is_comment_only(t) and t != l: out.append(t); kept += 1; continue
+        out.append(l)
+        if '#' in l and (i not in pair or tr_body[pair[i]] != l): fallback += 1
     return out, kept, fallback
 
 
@@ -82,6 +90,7 @@ def main():
     ap.add_argument('--langs', default='es,fr,jp,pt,ru,tr,vn')
     ap.add_argument('--dry-run', action='store_true')
     ap.add_argument('--only', nargs='*', default=None)
+    ap.add_argument('--from-ref', default=None, help='read the translated files from this git ref instead of the working tree')
     args = ap.parse_args()
     langs = args.langs.split(',')
     files = args.only if args.only else sorted(f for l in langs for f in glob.glob('chapters/*.%s.qmd' % l))
@@ -90,7 +99,12 @@ def main():
         en = re.sub(r'\.[a-z]{2}\.qmd$', '.qmd', tr)
         if not os.path.exists(en):
             skipped.append((tr, 'no English chapter')); continue
-        te = open(en, encoding='utf-8').read(); tt = open(tr, encoding='utf-8').read()
+        te = open(en, encoding='utf-8').read()
+        if args.from_ref:
+            import subprocess
+            tt = subprocess.run(['git', 'show', '%s:%s' % (args.from_ref, tr)], capture_output=True, text=True).stdout
+        else:
+            tt = open(tr, encoding='utf-8').read()
         try:
             se, st = split(te), split(tt)
         except ValueError as e:
@@ -109,7 +123,8 @@ def main():
             if new != old: n_changed += 1; kept += kk; fallback += fb
             out.extend(new)
         new_text = '\n'.join(out)
-        if new_text != tt:
+        current = open(tr, encoding='utf-8').read()
+        if new_text != current:
             changed += 1; chunks_changed += n_changed; kept_total += kept; fallback_total += fallback
             print('%-40s chunks changed %3d, translated comments kept %3d, English comments used %3d' % (tr, n_changed, kept, fallback))
             if not args.dry_run:

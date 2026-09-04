@@ -49,12 +49,12 @@ pacman::p_load(
 Importaremos los datos de casos de una epidemia de ébola simulada. Cárguelo directamente con `appliedepidata::get_data(name = "linelist_cleaned_rds")` (véase la página [Descargando el manual y los datos](data_used.es.qmd) para más detalles).  
 
 ```{r, echo=F}
-# import the linelist into R
+# importar linelist a R
 linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds")
 ```
 
 ```{r, eval=F}
-# import the linelist
+# importar linelist
 linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds")
 ```
 
@@ -72,7 +72,7 @@ DT::datatable(head(linelist, 50), rownames = FALSE, options = list(pageLength = 
 Almacenamos en un vector de caracteres los nombres de las columnas explicativas. Esto se explicará más adelante.
 
 ```{r}
-## define variables of interest 
+## definir las variables de interés
 explanatory_vars <- c("gender", "fever", "chills", "cough", "aches", "vomit")
 ```
 
@@ -84,7 +84,7 @@ A continuación convertimos las columnas explicativas de "sí"/"no", "m"/"f", y 
 Nota: el "." que aparece a continuación representa la columna que está siendo procesada por `across()` en ese momento.
 
 ```{r}
-## convert dichotomous variables to 0/1 
+## convertir variables dicotómicas a 0/1
 linelist <- linelist %>%  
   mutate(across(                                      
     .cols = all_of(c(explanatory_vars, "outcome")),  ## para cada columna listada y "outcome"
@@ -108,10 +108,10 @@ Lo primero que debemos hacer es asegurarnos de que nuestro vector `explanatory_v
 Antes de ejecutar el código, podemos comprobar el número de filas inicial de `linelist` empleando ` nrow(linelist)`.
 
 ```{r}
-## add in age_category to the explanatory vars 
+## añadir age_category a las variables explicativas 
 explanatory_vars <- c(explanatory_vars, "age_cat")
 
-## drop rows with missing information for variables of interest 
+## eliminar las filas con información no disponible para las variables de interés 
 linelist <- linelist %>% 
   drop_na(any_of(c("outcome", explanatory_vars)))
 
@@ -162,14 +162,14 @@ También podemos utilizar esta regresión para añadirla a un **ggplot**, para h
 
 ```{r lin_reg_res_plot}
 
-## pull the regression points and observed data in to one dataset
+## extraer los puntos de regresión y los datos observados en un conjunto de datos
 points <- augment(lm_results)
 
-## plot the data using age as the x-axis 
+## representar los datos utilizando la edad como eje-x 
 ggplot(points, aes(x = age)) + 
-  ## add points for height 
+  ## añadir puntos para la altura
   geom_point(aes(y = ht_cm)) + 
-  ## add your regression line 
+  ## añadir la recta de regresión 
   geom_line(aes(y = .fitted), colour = "red")
 
 ```
@@ -178,11 +178,11 @@ También es posible añadir una recta de regresión lineal en **ggplot** utiliza
 
 ```{r geom_smooth}
 
-## add your data to a plot 
+## añade tus datos a un gráfico 
  ggplot(linelist, aes(x = age, y = ht_cm)) + 
-  ## show points
+  ## mostrar puntos
   geom_point() + 
-  ## add a linear regression 
+  ## añadir una regresión lineal 
   geom_smooth(method = "lm", se = FALSE)
 ```
 
@@ -196,7 +196,7 @@ La función `glm()` del paquete **stats** (parte de R **base**) se utiliza para 
 `glm()` puede utilizarse para la regresión logística univariante y multivariable (por ejemplo, para obtener Odds Ratios). Aquí están las partes principales:
 
 ```{r, eval=F}
-# arguments for glm()
+# argumentos para glm()
 glm(formula, family, data, weights, subset, ...)
 ```
 
@@ -261,7 +261,7 @@ model <- glm(outcome ~ age_cat, family = "binomial", data = linelist) %>%
 A continuación, se muestra el objeto tibble `model`  resultante:
 
 ```{r, message=FALSE, echo=F}
-# display the linelist data as a table
+# mostrar los datos de linelist como una tabla
 DT::datatable(model, rownames = FALSE, options = list(pageLength = nrow(model), scrollX=T), class = 'white-space: nowrap' )
 ```
 
@@ -290,7 +290,7 @@ counts_table <- linelist %>%
 Este es el aspecto de este dataframe `counts_table`: 
 
 ```{r, message=FALSE, echo=F}
-# display the linelist data as a table
+# mostrar los datos de linelist como una tabla
 DT::datatable(counts_table, rownames = FALSE, options = list(pageLength = nrow(counts_table), scrollX=T), class = 'white-space: nowrap' )
 ```
 
@@ -338,31 +338,31 @@ explanatory_vars %>% str_c("outcome ~ ", .)
 models <- explanatory_vars %>%       # comienza con las variables de interés
   str_c("outcome ~ ", .) %>%         # combina cada variable en una fórmula ("resultado ~ variable de interés")
   
-  # iterate through each univariate formula
+  # iterar a través de cada fórmula univariante
   map(                               
     .f = ~glm(                       # pasa las fórmulas una a una a glm()
       formula = as.formula(.x),      # dentro de glm(), la fórmula de cadena es .x
       family = "binomial",           # especifica el tipo de glm (logístico)
       data = linelist)) %>%          # conjunto de datos
   
-  # tidy up each of the glm regression outputs from above
+  # ordenar cada uno de los resultados de regresión glm anteriores
   map(
     .f = ~tidy(
       .x, 
       exponentiate = TRUE,           # exponenciación 
       conf.int = TRUE)) %>%          # devuelve los intervalos de confianza
   
-  # collapse the list of regression outputs in to one data frame
+  # colapsar la lista de resultados de regresión en un marco de datos
   bind_rows() %>% 
   
-  # round all numeric columns
+  # redondear todas las columnas numéricas
   mutate(across(where(is.numeric), ~ round(.x, digits = 2)))
 ```
 
 Esta vez, el objeto final `models` es más largo porque ahora representa los resultados combinados de varias regresiones univariantes. Clica para ver todas las filas de `model`.
 
 ```{r, message=FALSE, echo=F}
-# display the linelist data as a table
+# mostrar los datos de linelist como una tabla
 DT::datatable(models, rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
 ```
 
@@ -371,7 +371,7 @@ Como antes, podemos crear una tabla de recuentos a partir de `linelist` para cad
 
 ```{r, warning=F, message=F}
 
-## for each explanatory variable
+## para cada variable explicativa
 univ_tab_base <- explanatory_vars %>% 
   map(.f = 
     ~{linelist %>%                ## comienza con linelist
@@ -385,16 +385,16 @@ univ_tab_base <- explanatory_vars %>%
         mutate(variable = as.character(variable))} ## convierte a carácter, de lo contrario las variables no dicotómicas (categóricas) aparecen como factor y no se pueden combinar
       ) %>% 
   
-  ## collapse the list of count outputs in to one data frame
+  ## colapsar la lista de resultados de conteo en un dataframe
   bind_rows() %>% 
   
-  ## merge with the outputs of the regression 
+  ## combinar con los resultados de la regresión 
   bind_cols(., models) %>% 
   
-  ## only keep columns interested in 
+  ## conservar sólo las columnas de interés 
   select(term, 2:3, estimate, conf.low, conf.high, p.value) %>% 
   
-  ## round decimal places
+  ## redondear decimales
   mutate(across(where(is.numeric), ~ round(.x, digits = 2)))
 
 ```
@@ -402,7 +402,7 @@ univ_tab_base <- explanatory_vars %>%
 A continuación se muestra el aspecto del dataframe. Consulta la página sobre [Tablas para presentación](#tables-for-presentation) para obtener ideas sobre cómo convertir esta tabla en una bonita tabla HTML (por ejemplo, con **flextable**).
 
 ```{r, message=FALSE, echo=F}
-# display the linelist data as a table
+# mostrar los datos de linelist como una tabla
 DT::datatable(univ_tab_base, rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
 ```
 
@@ -434,7 +434,7 @@ univ_tab <- linelist %>%
     exponentiate = TRUE                     ## exponencia para producir odds ratios (en lugar de log odds)
   )
 
-## view univariate results table 
+## ver la tabla de resultados univariantes
 univ_tab
 ```
 
@@ -483,7 +483,7 @@ glm(outcome ~ gender + age_cat * fever, family = "binomial", data = linelist)
 
 ```{r mv_regression}
 
-## run a regression with all variables of interest 
+## ejecutar una regresión con todas las variables de interés 
 mv_reg <- explanatory_vars %>%  ## comienza con el vector de nombres de columnas explicativas
   str_c(collapse = "+") %>%     ## combina todos los nombres de las variables de interés separados por un más
   str_c("outcome ~ ", .) %>%    ## combina los nombres de las variables de interés con el resultado en forma de fórmula
@@ -508,8 +508,8 @@ lmtest::lrtest(model1, model2)
 Otra opción es tomar el objeto que contiene el modelo y aplicar la función `step()` del paquete **stats**. Especifica qué dirección de selección de variables deseas utilizar al construir el modelo.  
 
 ```{r}
-## choose a model using forward selection based on AIC
-## you can also do "backward" or "both" by adjusting the direction
+## escoger un modelo usando selección hacia adelante basada en AIC
+## también se puede hacer "hacia atrás" o "ambos" ajustando la dirección
 final_mv_reg <- mv_reg %>%
   step(direction = "forward", trace = FALSE)
 ```
@@ -549,7 +549,7 @@ DT::datatable(mv_tab_base, rownames = FALSE, options = list(pageLength = 10, scr
 El paquete **gtsummary** proporciona la función `tbl_regression()`, que toma los resultados de una regresión (`glm()` en este caso) y produce una bonita tabla resumen.
 
 ```{r mv_regression_gt}
-## show results table of final regression 
+## mostrar la tabla de resultados de la regresión final 
 mv_tab <- tbl_regression(final_mv_reg, exponentiate = TRUE)
 ```
 
@@ -562,7 +562,7 @@ mv_tab
 También puedes combinar varias tablas producidas por **gtsummary** con la función `tbl_merge()`. En este ejemplo combinaremos los resultados multivariables con los resultados *univariantes* de **gtsummary** que creamos [anteriormente](#reg_gt_uni):
 
 ```{r}
-## combine with univariate results 
+## combinar con resultados univariantes 
 tbl_merge(
   tbls = list(univ_tab, mv_tab),                          # combina
   tab_spanner = c("**Univariate**", "**Multivariable**")) # establece los nombres de las cabeceras
@@ -626,29 +626,29 @@ Antes de empezar a plotear, es posible que sea necesario  utilizar `fct_relevel(
 
 ```{r ggplot_forest}
 
-## remove the intercept term from your multivariable results
+## eliminar el término de intercepción de los resultados multivariantes
 mv_tab_base %>% 
   
-  #set order of levels to appear along y-axis
+  # establece el orden de los niveles que aparecerán en el eje-y
   mutate(term = fct_relevel(
     term,
     "vomit", "gender", "fever", "cough", "chills", "aches",
     "age_cat5-9", "age_cat10-14", "age_cat15-19", "age_cat20-29",
     "age_cat30-49", "age_cat50-69", "age_cat70+")) %>%
   
-  # remove "intercept" row from plot
+  # eliminar la fila "intercept" del gráfico
   filter(term != "(Intercept)") %>% 
   
-  ## plot with variable on the y axis and estimate (OR) on the x axis
+  ## gráfico con la variable en el eje y y la estimación (OR) en el eje-x
   ggplot(aes(x = estimate, y = term)) +
   
-  ## show the estimate as a point
+  ## muestra la estimación como un punto
   geom_point() + 
   
-  ## add in an error bar for the confidence intervals
+  ## añadir una barra de error para los intervalos de confianza
   geom_errorbar(aes(xmin = conf.low, xmax = conf.high)) + 
   
-  ## show where OR = 1 is for reference as a dashed line
+  ## mostrar como línea discontinua dónde está OR = 1 como referencia
   geom_vline(xintercept = 1, linetype = "dashed")
   
 ```
@@ -665,7 +665,7 @@ La función `model_parameters()` del paquete **parameters** hace el equivalente 
 ```{r easystats_forest}
 pacman::p_load(easystats)
 
-## remove the intercept term from your multivariable results
+## eliminar el término de intercepción de los resultados multivariantes
 final_mv_reg %>% 
   model_parameters(exponentiate = TRUE) %>% 
   plot()

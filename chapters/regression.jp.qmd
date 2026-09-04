@@ -49,19 +49,19 @@ pacman::p_load(
 
 
 ```{r, echo=F}
-# import the linelist into R
+# ラインリストを R へインポートする
 linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds")
 ```
 
 ```{r, eval=F}
-# import the linelist
+# ラインリストのインポート
 linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds")
 ```
 
 ラインリストの始めの 50 行は次のように表示されます。
 
 ```{r, message=FALSE, echo=F}
-# display the linelist data as a table
+# ラインリストを表形式で表示
 DT::datatable(head(linelist, 50), rownames = FALSE, options = list(pageLength = 5, scrollX=T) )
 ```
 
@@ -72,7 +72,7 @@ DT::datatable(head(linelist, 50), rownames = FALSE, options = list(pageLength = 
 説明変数の列名を文字ベクトルとして保存します。この文字ベクトルは後で使用します。
 
 ```{r}
-## define variables of interest 
+## 関心のある変数を定義
 explanatory_vars <- c("gender", "fever", "chills", "cough", "aches", "vomit")
 ```
 
@@ -84,7 +84,7 @@ explanatory_vars <- c("gender", "fever", "chills", "cough", "aches", "vomit")
 注釈: 下記コード中の「.」は、ある時点で `across()` 処理されている列を表します。
 
 ```{r}
-## convert dichotomous variables to 0/1 
+## 2 値変数（yes/no などが格納されている変数）を 0/1 に変換
 linelist <- linelist %>%  
   mutate(across(                                      
     .cols = all_of(c(explanatory_vars, "outcome")),  ## 各列と「アウトカム」に対する処理であることを指定
@@ -108,10 +108,10 @@ linelist <- linelist %>%
 コードを実行する前に、`linelist` オブジェクトの行数は `nrow(linelist)` で確認できます。
 
 ```{r}
-## add in age_category to the explanatory vars 
+## age_category を説明変数に追加 
 explanatory_vars <- c(explanatory_vars, "age_cat")
 
-## drop rows with missing information for variables of interest 
+## 対象となる変数の情報が欠測している行を削除
 linelist <- linelist %>% 
   drop_na(any_of(c("outcome", explanatory_vars)))
 
@@ -161,14 +161,14 @@ tidy(lm_results)
 
 ```{r lin_reg_res_plot}
 
-## pull the regression points and observed data in to one dataset
+## 回帰した点と観測データを 1 つのデータフレームにまとめる
 points <- augment(lm_results)
 
-## plot the data using age as the x-axis 
+## 年齢を x 軸としてプロット
 ggplot(points, aes(x = age)) + 
-  ## add points for height 
+  ## 身長を追加
   geom_point(aes(y = ht_cm)) + 
-  ## add your regression line 
+  ## 得られた回帰直線を追加
   geom_line(aes(y = .fitted), colour = "red")
 
 ```
@@ -177,11 +177,11 @@ ggplot(points, aes(x = age)) +
 
 ```{r geom_smooth}
 
-## add your data to a plot 
+## データをプロット
  ggplot(linelist, aes(x = age, y = ht_cm)) + 
-  ## show points
+  ## 観測データを表示
   geom_point() + 
-  ## add a linear regression 
+  ## 回帰直線を追加
   geom_smooth(method = "lm", se = FALSE)
 ```
 
@@ -195,7 +195,7 @@ ggplot(points, aes(x = age)) +
 `glm()` は単変量および多変量のロジスティック回帰に使われます（例えば、オッズ比が得られる）。核となる部分は次の通りです。
 
 ```{r, eval=F}
-# arguments for glm()
+# glm() の引数
 glm(formula, family, data, weights, subset, ...)
 ```
 
@@ -260,7 +260,7 @@ model <- glm(outcome ~ age_cat, family = "binomial", data = linelist) %>%
 以下の表は、整然化された `model` の出力です:
 
 ```{r, message=FALSE, echo=F}
-# display the linelist data as a table
+# linelist データの結果を表形式で表示
 DT::datatable(model, rownames = FALSE, options = list(pageLength = nrow(model), scrollX=T), class = 'white-space: nowrap' )
 ```
 
@@ -289,7 +289,7 @@ counts_table <- linelist %>%
 この `counts_table` データフレームは、次のように見えます:
 
 ```{r, message=FALSE, echo=F}
-# display the linelist data as a table
+# linelist データの結果を表形式で表示
 DT::datatable(counts_table, rownames = FALSE, options = list(pageLength = nrow(counts_table), scrollX=T), class = 'white-space: nowrap' )
 ```
 
@@ -337,31 +337,31 @@ explanatory_vars %>% str_c("outcome ~ ", .)
 models <- explanatory_vars %>%       # 関心のある変数から始める
   str_c("outcome ~ ", .) %>%         # 各変数を式にする（"アウトカム ~ 関心のある変数"）
   
-  # iterate through each univariate formula
+  # 各単変量の式を反復
   map(                               
     .f = ~glm(                       # 式を一つ一つ glm() に渡す
       formula = as.formula(.x),      # glm() の中で、文字列としての式は .x である
       family = "binomial",           # glm のタイプ（ロジスティック）を指定
       data = linelist)) %>%          # データセット
   
-  # tidy up each of the glm regression outputs from above
+  # 上記から得られた glm 回帰の出力を整然化
   map(
     .f = ~tidy(
       .x, 
       exponentiate = TRUE,           # 指数変換 
       conf.int = TRUE)) %>%          # 信頼区間を算出
   
-  # collapse the list of regression outputs in to one data frame
+  # 回帰の出力のリストを一つのデータフレームとして結合
   bind_rows() %>% 
   
-  # round all numeric columns
+  # 全ての数値列を四捨五入
   mutate(across(where(is.numeric), ~ round(.x, digits = 2)))
 ```
 
 今回は、複数の単変量回帰の結果を結合しているため、`models` の最終的なオブジェクトが長くなっています。クリックすると `model` の全ての行が表示されます。
 
 ```{r, message=FALSE, echo=F}
-# display the linelist data as a table
+# linelist データの結果を表形式で表示
 DT::datatable(models, rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
 ```
 
@@ -370,7 +370,7 @@ DT::datatable(models, rownames = FALSE, options = list(pageLength = 5, scrollX=T
 
 ```{r, warning=F, message=F}
 
-## for each explanatory variable
+## それぞれの説明変数に対して処理
 univ_tab_base <- explanatory_vars %>% 
   map(.f = 
     ~{linelist %>%                ## linelist から始める
@@ -384,16 +384,16 @@ univ_tab_base <- explanatory_vars %>%
         mutate(variable = as.character(variable))} ## 文字列に変換しないと、2 値でない（カテゴリカル）変数が因子として出てきてしまい結合できない
       ) %>% 
   
-  ## collapse the list of count outputs in to one data frame
+  ## 集計結果のリストを 1 つのデータフレームとして結合
   bind_rows() %>% 
   
-  ## merge with the outputs of the regression 
+  ## 回帰の結果と結合
   bind_cols(., models) %>% 
   
-  ## only keep columns interested in 
+  ## 関心のある列のみ抽出
   select(term, 2:3, estimate, conf.low, conf.high, p.value) %>% 
   
-  ## round decimal places
+  ## 四捨五入する小数点位置を指定
   mutate(across(where(is.numeric), ~ round(.x, digits = 2)))
 
 ```
@@ -401,7 +401,7 @@ univ_tab_base <- explanatory_vars %>%
 以下は、上で作成したデータフレームです。この表を綺麗な HTML 出力に変換する方法（例えば、**flextable** パッケージの使用）については、[見やすい表の作り方](#tables-presentation)の章を参照してください。
 
 ```{r, message=FALSE, echo=F}
-# display the linelist data as a table
+# linelist データの結果を表形式で表示
 DT::datatable(univ_tab_base, rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
 ```
 
@@ -433,7 +433,7 @@ univ_tab <- linelist %>%
     exponentiate = TRUE                     ## 対数オッズ比ではなくオッズ比を得るために指数変換を指定
   )
 
-## view univariate results table 
+## 単変量の結果の表を出力
 univ_tab
 ```
 
@@ -485,7 +485,7 @@ glm(outcome ~ gender + age_cat * fever, family = "binomial", data = linelist)
 
 ```{r mv_regression}
 
-## run a regression with all variables of interest 
+## 全ての関心のある変数に対して回帰を実行
 mv_reg <- explanatory_vars %>%  ## 説明変数の列名ベクトルから始める
   str_c(collapse = "+") %>%     ## 全ての関心のある説明変数名をプラス記号で区切って結合
   str_c("outcome ~ ", .) %>%    ## アウトカムと上記文字列を結合し、モデル式の形にする
@@ -510,8 +510,8 @@ lmtest::lrtest(model1, model2)
 他の方法は、各モデルのオブジェクトを受け取り、**stats** パッケージの `step()` を適用することです。この関数では、モデルを構築する際に使用したい変数選択の方向を指定します。
 
 ```{r}
-## choose a model using forward selection based on AIC
-## you can also do "backward" or "both" by adjusting the direction
+## AIC に基づいた変数増加法によりモデルを選択
+## "backward" や "both" を指定することで変数選択の方法を調整できる
 final_mv_reg <- mv_reg %>%
   step(direction = "forward", trace = FALSE)
 ```
@@ -551,7 +551,7 @@ DT::datatable(mv_tab_base, rownames = FALSE, options = list(pageLength = 10, scr
 **gtsummary** パッケージは `tbl_regression()` を提供しており、回帰の結果（この場合は `glm()`）を受け取り、美しくまとめた表を作成します。
 
 ```{r mv_regression_gt}
-## show results table of final regression 
+## 最終的な回帰モデルの結果の表を表示
 mv_tab <- tbl_regression(final_mv_reg, exponentiate = TRUE)
 ```
 
@@ -564,7 +564,7 @@ mv_tab
 また、**gtsummary** パッケージで作成したいくつかの異なる表を `tbl_merge()` で結合することができます。ここでは、多変量回帰分析の結果を、[上](#reg_gt_uni)で作成した**gtsummary** パッケージの**単変量**の結果と結合させています。
 
 ```{r}
-## combine with univariate results 
+## 単変量結果を結合 
 tbl_merge(
   tbls = list(univ_tab, mv_tab),                          # 結合
   tab_spanner = c("**Univariate**", "**Multivariable**")) # ヘッダー名を設定
@@ -581,9 +581,9 @@ tbl_merge(
 * 実数型である全ての列に対して `round()` を適用して、小数点以下 2 桁に四捨五入します。
 
 ```{r, warning=F, message=F}
-## combine univariate and multivariable tables 
+## 単変量と多変量の表を結合
 left_join(univ_tab_base, mv_tab_base, by = "term") %>% 
-  ## choose columns and rename them
+  ## 列を選択し、名前を変更
   select( # 新しい名前 = 古い名前
     "characteristic" = term, 
     "recovered"      = "0", 
@@ -627,29 +627,29 @@ left_join(univ_tab_base, mv_tab_base, by = "term") %>%
 
 ```{r ggplot_forest}
 
-## remove the intercept term from your multivariable results
+## 多変量の結果から切片項を削除
 mv_tab_base %>% 
   
-  #set order of levels to appear along y-axis
+  # y 軸上に示される変数 / レベルの順序を指定
   mutate(term = fct_relevel(
     term,
     "vomit", "gender", "fever", "cough", "chills", "aches",
     "age_cat5-9", "age_cat10-14", "age_cat15-19", "age_cat20-29",
     "age_cat30-49", "age_cat50-69", "age_cat70+")) %>%
   
-  # remove "intercept" row from plot
+  # "intercept" の行をプロットから削除
   filter(term != "(Intercept)") %>% 
   
-  ## plot with variable on the y axis and estimate (OR) on the x axis
+  ## y 軸に変数を x 軸に推定値（OR）をプロット
   ggplot(aes(x = estimate, y = term)) +
   
-  ## show the estimate as a point
+  ## 点推定値をポイントとして図示
   geom_point() + 
   
-  ## add in an error bar for the confidence intervals
+  ## 信頼区間をエラーバーとして追加
   geom_errorbar(aes(xmin = conf.low, xmax = conf.high)) + 
   
-  ## show where OR = 1 is for reference as a dashed line
+  ## OR = 1 を示す参照をダッシュ線で示す
   geom_vline(xintercept = 1, linetype = "dashed")
   
 ```
@@ -666,7 +666,7 @@ mv_tab_base %>%
 ```{r easystats_forest}
 pacman::p_load(easystats)
 
-## remove the intercept term from your multivariable results
+## 多変量の結果から切片項を削除
 final_mv_reg %>% 
   model_parameters(exponentiate = TRUE) %>% 
   plot()
