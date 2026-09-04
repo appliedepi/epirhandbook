@@ -36,6 +36,8 @@ after the first used a hard slice, reconciled against disk, and none was killed.
 
 ## What to do next
 
+**The push, which is the owner's.** Then, every few months or after an English chapter changes, `modernization/check-sync.sh`; see `SYNC-CHECKS.md`.
+
 **The push, which is the owner's.** Then the named sets in `FIX-PASS.md`: 76 deferred findings
 and 5 review rows, 65 of them defects inside code chunks; 11 English source defects; and
 30 rejected findings.
@@ -134,6 +136,7 @@ The resumed run MUST count the JSON files on disk, not the return values.
 | `TRANSLATION-BACKLOG.md` | Open translation work only, with a search token per item. |
 | `archive/PLAN-translated-data-used.md` | The method record for the `data_used` page alignment. |
 | `rebuild-tsv.py` | Rebuilds both TSVs from the JSON files. Run it after every batch. |
+| `SYNC-CHECKS.md` | **How to check the translations are still in sync, and repair drift.** Run `check-sync.sh`. |
 | `FIX-PASS.md` | The fix pass: method, result, cost, the codex verdicts, and the three named sets that need the owner. |
 | `findings/fix-pass/` | One JSON per batch with a verdict and exact old/new text per finding, plus `deferred.tsv`, `rejected.tsv`, `unextractable-spans.tsv`, `batch-index.tsv`. |
 | `extract-spans.py`, `make-batches.py`, `reconcile-fix-pass.py`, `commit-batch.sh`, `wave-args.py`, `codex-bundle.sh`, `codex-prompt.txt` | The fix-pass tooling. `FIX-PASS.md` names the order. |
