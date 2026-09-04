@@ -140,8 +140,8 @@ The largest groups:
 
 `#gis` and `#gis-basics` deserve a note. They look like they should point at the GIS
 chapter, but a `#`-only link never leaves the page it is on. Excluding the GIS chapter
-did not break them, and restoring it will not fix them. Each needs rewriting as a real
-cross-page link, or removing.
+did not break them, and restoring it on 2026-09-02 did not fix them. Each needs rewriting
+as a real cross-page link, or removing.
 
 To find them, render the site and check every `href="#x"` for a matching `id="x"` in
 the same file. Percent-decode the fragment first — hrefs are URL-encoded and `id`

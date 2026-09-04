@@ -56,8 +56,9 @@ package's own accessors.
   committed to the repository and was being republished on every deploy, putting an
   abandoned page layout and raw `.qmd` source onto the live branches. The deploy branches
   now contain rendered HTML only.
-* **Two excluded chapters moved** to `_excluded/`. `gis` and `epidemic_models` are still cut
+* **Two excluded chapters moved** to `_excluded/`. `gis` and `epidemic_models` were cut in 2.7
   (see 2.6 → 2.7 below), but their source was still being published as downloadable files.
+  `gis` returned on 2026-09-02; see "`gis` is back" below.
 * **Four translated cross-references were pointing at the wrong language** — a Russian page
   linked to the Turkish chapter, and so on. Fixed.
 
@@ -114,10 +115,20 @@ does not do. Finding that needs someone to read the translated text against the 
 whether it is true. `archive/PLAN-translated-data-used.md` keeps the full record; open translation work is
 in `TRANSLATION-BACKLOG.md`.
 
-### Still cut
+### `gis` is back; `epidemic_models` is still cut
 
-`gis` and `epidemic_models` remain excluded, for the reasons given under 2.6 → 2.7. Nothing
-in 2.8 changes their status.
+The GIS chapter returned on 2026-09-02, in English and all seven translations. Its one
+network dependency was the OpenStreetMap basemap, fetched by `openmap()` while the page
+rendered. The page now reads a saved copy of that basemap from `data/gis/osm_basemap.rds`,
+and the code the reader sees is unchanged: the `openmap()` chunk is shown but not run.
+`data/gis/osm_basemap.R` re-creates the file. The chapter renders with the `analysis`
+image, which gained **tmap**, **spdep**, **OpenStreetMap** and their dependencies.
+
+Three sentences in the chapter report a computed number: cases outside every clinic
+buffer, Moran's I and Lee's L. Their inline R marker had been lost in the January 2025
+revert, so the page showed the code instead of the number. Restored, in every language.
+
+`epidemic_models` remains excluded, for the reason given under 2.6 → 2.7.
 
 ---
 
@@ -296,7 +307,7 @@ Four warning classes now render into reader-visible output (Part B, items 2 and 
 them means editing the source beyond what's strictly required to build. **Do we accept noisier
 pages, or accept a larger diff?**
 
-#### C4. `gis` — **DECIDED: CUT**
+#### C4. `gis` — **DECIDED: CUT** (restored in 2.8 on 2026-09-02, see above)
 `gis` fetches live OpenStreetMap tiles while rendering, so it cannot be built in a hermetic CI
 job and has no 2.7 image. It is commented out of `_quarto.yml` as of this release.
 

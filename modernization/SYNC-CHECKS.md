@@ -11,13 +11,13 @@ that did the work the first time, so a drift of the same kind costs minutes, not
 ## What "in sync" means
 
 English is the reference. For every chapter listed in `_quarto.yml` and every language in
-`babelquarto.languages`:
+`babelquarto.languages` (49 chapters x 7 languages since the GIS chapter returned on 2026-09-02):
 
 | Property | Expected | Check | Remedy |
 |---|---|---|---|
-| the translated file exists | 336 of 336 | check 1 | translate the chapter |
-| code chunk count equals the English | 336 of 336 | check 1 | `workflows/epirhandbook-align-chunks.js`, one agent per chapter, then `sync-chunks.py` |
-| heading sequence equals the English, count and level, fenced blocks stripped | 336 of 336 | check 1 | `workflows/epirhandbook-align-headings.js`, one agent per chapter |
+| the translated file exists | 343 of 343 | check 1 | translate the chapter |
+| code chunk count equals the English | 343 of 343 | check 1 | `workflows/epirhandbook-align-chunks.js`, one agent per chapter, then `sync-chunks.py` |
+| heading sequence equals the English, count and level, fenced blocks stripped | 343 of 343 | check 1 | `workflows/epirhandbook-align-headings.js`, one agent per chapter |
 | every heading with an English `{#id}` carries that id | 0 headings differ, 0 dead links | check 2 | `sync-anchors.py`, no agent |
 | every aligned chunk's code equals the English, comments free | 0 chunks differ | check 3 | `sync-chunks.py`, no agent |
 | inline code spans in prose name things the English names | informational | check 4 | `workflows/epirhandbook-inline-pass.js` over the new suspects |
@@ -26,7 +26,8 @@ English is the reference. For every chapter listed in `_quarto.yml` and every la
 
 Check 4 is informational because a suspect span is often right: a placeholder the reader
 replaces, or a word the author put in code font. The baseline after the 2026-09-02 inline pass
-is 355 suspects, all judged placeholders or noise. A rise above that is what to look at, not
+is 356 suspects, all judged placeholders or noise; the GIS chapter, restored the same day,
+added one, a French verb in code font. A rise above that is what to look at, not
 the number itself. Files without an English chapter, such as `across.*` and `first_page.*`,
 are skipped and listed; that is expected.
 
