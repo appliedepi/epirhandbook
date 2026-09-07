@@ -239,45 +239,25 @@ job's exit code was 0.
 
 ### Excluded chapters
 
-Two chapters are currently excluded from the build. Both are commented out of
-`_quarto.yml`, under `book.chapters`.
+One chapter is excluded from the build: `epidemic_models`. It is commented out of
+`_quarto.yml`, under `book.chapters`, and its source files sit in `_excluded/`.
 
-* **`gis`** — it depends on an external OpenStreetMap service. That makes its
-  render network-dependent, which is not suitable for a hermetic CI build.
-* **`epidemic_models`** — it fails on a recorded EpiNow2 API break (an
-  `xy.coords()` error; see aedockerpublic's `epirhandbook/2.7/BREAKAGE.tsv`).
+The chapter fails on a recorded EpiNow2 API break, an `xy.coords()` error. See
+aedockerpublic's `epirhandbook/2.7/BREAKAGE.tsv`.
 
-**Their old URLs will stop working.** `/new_pages/gis.html` and
-`/new_pages/epidemic_models.html` still return HTTP 200 today, from the version
-built before this exclusion. They will stop resolving once this deploys. A chapter
-absent from `book.chapters` is never rendered, so it never emits the alias redirect
-stub that would otherwise keep the old URL alive.
+**Its old URL will stop working.** `/new_pages/epidemic_models.html` returns HTTP 200
+today, after a redirect to `/en/new_pages/epidemic_models.html`. It serves the version
+built before the exclusion, and it will stop resolving once this deploys. A chapter
+absent from `book.chapters` never renders, so it never emits the alias redirect stub
+that keeps the old URL alive.
 
-**Other chapters link to them, in two different ways, with two different fates.**
+No chapter links to `epidemic_models` in any language. A search for the string across
+every `.qmd` file in `chapters/` returns nothing, so the exclusion breaks no
+cross-reference.
 
-*Links to the chapter page* — 31 of them, in 21 files, across English, Japanese,
-Portuguese, Russian, Turkish and Vietnamese. They are written as `(gis.qmd)`,
-`(gis.ru.qmd)` and so on, from `basics`, `data_used`, `flexdashboard`, `importing`,
-`rmarkdown` and `survey_analysis`. These work today and stop working while the
-chapter is excluded. Leave them: they start working again the moment the target
-renders. One further link, to `epidemic_models`, behaves the same way.
-
-*Links to an anchor inside the chapter* — 26 of them, written as `(#gis)` or
-`(#gis-basics)`. **These are already broken today**, in the currently published
-site, and excluding the chapter does not change that. A same-page anchor never
-reaches another page, so restoring `gis` will not fix them either. They are
-ordinary content bugs and belong with the other prose fixes in
-[TRANSLATION-BACKLOG.md](modernization/TRANSLATION-BACKLOG.md) — the production render carries
-106 dead fragments in total, of which these are the largest single group.
-
-**What it would take to bring each back:**
-
-* `gis` needs a way to render without reaching an external network service during
-  CI — for example, a vendored or mocked tile source instead of a live OpenStreetMap
-  call.
-* `epidemic_models` needs its EpiNow2 code rewritten against the current API (the
-  chapter uses result accessors that EpiNow2 has since removed), then a verified
-  end-to-end render.
+**What it would take to bring it back.** Rewrite the chapter's EpiNow2 code against the
+current API. The chapter uses result accessors that EpiNow2 removed. Then render the
+chapter and verify the output.
 
 
 

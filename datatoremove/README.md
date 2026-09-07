@@ -7,9 +7,10 @@ judgement can be reviewed — and reversed — before anything is actually remov
 
 A COVID-19 example spreadsheet and the Fulton County ZIP-code shapefile. **Nothing
 references them.** A full-text search across every `.qmd`, `.R`, `.yml` and `.md` in the
-repository — including the retired chapters under `_excluded/` — returns no mention of
-`covid_example_data`, `FultonCounty`, or `fulton`. They are also the only files under the
-old `data/` folder with no counterpart in the **appliedepidata** package.
+repository returns no mention of `covid_example_data`, `FultonCounty`, or `fulton`. The
+search covers the retired chapter `_excluded/epidemic_models.qmd` and its translations.
+These files are also the only ones under the old `data/` folder with no counterpart in
+the **appliedepidata** package.
 
 ## Why the rest of data/ is still where it was
 
@@ -20,10 +21,11 @@ moved on that basis:
 * **Filenames get constructed.** `chapters/time_series.qmd` builds its climate filenames
   with `paste0("germany_weather", i, ".nc")`, so those ten files never appear literally
   while being very much in use. A basename search cannot see that.
-* **The retired chapters still need their data.** `_excluded/gis.qmd` and
-  `_excluded/epidemic_models.qmd` reference `data/gis/` and `data/cache/epidemic_models/`
-  624 times between them. Both chapters are cut for package reasons that may be fixed;
-  removing their data would make reinstating them harder than it needs to be.
+* **Live and retired chapters both still need their data.** `chapters/gis.qmd` and
+  `chapters/directories.qmd` read `data/gis/`, which holds 24 files. The retired
+  `_excluded/epidemic_models.qmd` reads `data/cache/epidemic_models/`, which holds 11
+  files. Deleting `data/gis/` would break two chapters that build today. Deleting
+  `data/cache/epidemic_models/` would make reinstating `epidemic_models` harder.
 * **Some files were already dead before this work.** `data/rmarkdown/` is not referenced by
   `chapters/rmarkdown.qmd` and was not referenced before the migration either. That is a
   pre-existing question, not one this migration answers.
