@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Read-only: report how far the translated chapters have drifted from the English.
 # Runs every structural check the 2026-09 fix pass used. Changes nothing. Exit 1 on any drift.
-# Usage: modernization/check-sync.sh            (structure, anchors, chunks, inline spans)
+# Usage: modernization/check-sync.sh            (structure, anchors, chunks, inline spans, internal links)
 #        modernization/check-sync.sh --render   (also the render gate on every translated chapter, ~20 min)
 # Full description of each check, expected output and remedies: modernization/SYNC-CHECKS.md
 set -uo pipefail
-cd "$(dirname "$0")/.."
+here=$(cd "$(dirname "$0")" && pwd)
+cd "$here/.."
 rc=0
 echo "== 1. Structure: every declared chapter in every language, same chunk count, same heading sequence"
 python3 - <<'PY' || rc=1
@@ -37,11 +38,11 @@ for p, why in bad: print('   DRIFT', p, why)
 sys.exit(1 if bad else 0)
 PY
 echo "== 2. Anchors: headings whose anchor id differs from the English, and dead English-style links"
-python3 modernization/sync-anchors.py --dry-run | grep -E '^dead|^headings' | sed 's/^/   /'
-python3 modernization/sync-anchors.py --dry-run | grep -q '^headings changed 0,' || rc=1
+python3 "$here/sync-anchors.py" --dry-run | grep -E '^dead|^headings' | sed 's/^/   /'
+python3 "$here/sync-anchors.py" --dry-run | grep -q '^headings changed 0,' || rc=1
 echo "== 3. Chunks: aligned chunks whose code differs from the English (sync-chunks.py --dry-run)"
-python3 modernization/sync-chunks.py --dry-run | grep -E '^files|^SKIPPED' | sed 's/^/   /'
-python3 modernization/sync-chunks.py --dry-run | grep -q '^files [0-9]*, changed 0,' || rc=1
+python3 "$here/sync-chunks.py" --dry-run | grep -E '^files|^SKIPPED' | sed 's/^/   /'
+python3 "$here/sync-chunks.py" --dry-run | grep -q '^files [0-9]*, changed 0,' || rc=1
 echo "== 4. Inline code spans in translated prose that occur nowhere in the English chapter (informational)"
 python3 - <<'PY'
 import re, glob, os, collections
@@ -58,10 +59,13 @@ for tr in sorted(glob.glob('chapters/*.[a-z][a-z].qmd')):
         if not (s2 in es or s2 in te or s2.strip('r ').strip() in te): per[tr[-6:-4]] += 1
 print('   suspect spans by language:', dict(sorted(per.items())), 'total', sum(per.values()), '(baseline 2026-09-02, after the inline and mirror passes and the return of the GIS chapter: 356, all judged placeholders or noise)')
 PY
+echo "== 5. Internal links: every internal link in the 400 declared chapter files"
+python3 "$here/check-links.py" --summary | sed 's/^/   /' \
+  || { python3 "$here/check-links.py" | sed 's/^/   /'; rc=1; }
 if [ "${1:-}" = "--render" ]; then
-  echo "== 5. Render gate on every translated chapter (quarto render --no-execute)"
+  echo "== 6. Render gate on every translated chapter (quarto render --no-execute)"
   base=$(git rev-list --max-parents=0 HEAD | tail -1)
-  modernization/render-gate.sh "$base" HEAD | tail -3 | sed 's/^/   /' || rc=1
+  "$here/render-gate.sh" "$base" HEAD | tail -3 | sed 's/^/   /' || rc=1
 fi
 echo "== result: $([ $rc -eq 0 ] && echo 'IN SYNC' || echo 'DRIFT, see above')"
 exit $rc

@@ -21,9 +21,9 @@ English is the reference. For every chapter listed in `_quarto.yml` and every la
 | every heading with an English `{#id}` carries that id | 0 headings differ, 0 dead links | check 2 | `sync-anchors.py`, no agent |
 | every aligned chunk's code equals the English, comments free | 0 chunks differ | check 3 | `sync-chunks.py`, no agent |
 | inline code spans in prose name things the English names | informational | check 4 | `workflows/epirhandbook-inline-pass.js` over the new suspects |
-| every changed chapter renders without execution, fences balanced | 0 fail | `render-gate.sh` | read the log under `/tmp/render-gate/` |
+| every changed chapter renders without execution, fences balanced | 0 fail | check 6, with `--render` | read the log under `/tmp/render-gate/` |
 | no R chunk parses worse than the English chunk | 0 files worse | `chunk-parse-gate.py <base>` | the sync, or a source defect |
-| every internal link resolves | 0 dead links in the 400 declared files; 1854 today | check 5, run on its own | point the link at the page that defines the id |
+| every internal link resolves | 0 dead links in the 400 declared files | check 5 | `rewrite-links.py`, no agent |
 
 Check 4 is informational because a suspect span is often right: a placeholder the reader
 replaces, or a word the author put in code font. The baseline after the 2026-09-02 inline pass
@@ -34,7 +34,7 @@ are skipped and listed; that is expected.
 
 ## Check 5: internal links
 
-Run `python3 modernization/check-links.py`. `check-sync.sh` does not call it yet. It reads the
+Run `python3 modernization/check-links.py`. `check-sync.sh` runs it as check 5. It reads the
 400 declared files, which are `index.qmd` and the 49 chapters, in English and in the 7
 translation languages. It prints one line for each dead link and exits 1 when it finds one.
 
@@ -64,9 +64,13 @@ The checker takes three options.
 - `--pandoc <cmd>` names the binary. The default is `quarto pandoc`, and plain `pandoc` when
   quarto is not on PATH.
 
-Baseline on 2026-09-07, over the 400 declared files: `dead 1854`, `language-mismatch 7`. Most
-dead links are cross-chapter links written as a bare `#anchor`. Spanish, French, Japanese and
-Portuguese hold about 440 each. English, Russian, Turkish and Vietnamese hold about 20 each.
+Check 5 prints the counts, from `--summary`. When a link is dead it prints the DEAD lines too,
+and `check-sync.sh` ends with `DRIFT`.
+
+The sweep of 2026-09-07 cleared the backlog. It rewrote 1,854 links in 240 of the 400 declared
+files, and the checker now reports `dead 0`. All but six were cross-chapter links written as a
+bare `#anchor`. The counts before the sweep were 450 Spanish, 445 Japanese, 444 Portuguese,
+427 French, 28 Turkish, 22 English, 20 Vietnamese and 18 Russian.
 
 `language-mismatch` counts a live link from a page of one language to a `.qmd` file of another.
 It is informational. The file exists, so the link works.
@@ -76,6 +80,25 @@ paragraph, not as a fence. The checker rewrites each chunk header to ```` ```{.r
 for line, as knitr does. Without that step every `#` comment in an R chunk becomes a heading
 with an id. It rewrites a fence line indented by fewer than four spaces, which is the CommonMark
 rule. An indented literal fence inside a paragraph changes nothing.
+
+### Remedy: rewrite-links.py
+
+`modernization/rewrite-links.py` rewrites every dead link the checker reports.
+
+1. Run `python3 modernization/check-links.py` and read the DEAD lines.
+2. Add a row to `modernization/link-map.tsv` for each target the table does not hold.
+3. Run `python3 modernization/rewrite-links.py --dry-run` for the count.
+4. Run `python3 modernization/rewrite-links.py` to write the files.
+
+The table columns are `old_id`, `stem`, `anchor` and `note`. `old_id` is the link target exactly
+as the checker reports it. `stem` is the chapter that holds the content today. `anchor` is an
+in-page id, and it stays empty unless every language version of that chapter defines that id. An
+anchor that only English defines is a dead link in the other seven languages.
+
+The script writes nothing until every file rewrites cleanly. It stops when the table holds no
+row for a reported target. It also stops when the number of links it finds in prose differs from
+the number of findings. It skips a fenced code block and an HTML comment, because pandoc reads
+no link there.
 
 ## Do not render an English chapter with the gate
 
