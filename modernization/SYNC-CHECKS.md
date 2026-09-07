@@ -23,6 +23,7 @@ English is the reference. For every chapter listed in `_quarto.yml` and every la
 | inline code spans in prose name things the English names | informational | check 4 | `workflows/epirhandbook-inline-pass.js` over the new suspects |
 | every changed chapter renders without execution, fences balanced | 0 fail | `render-gate.sh` | read the log under `/tmp/render-gate/` |
 | no R chunk parses worse than the English chunk | 0 files worse | `chunk-parse-gate.py <base>` | the sync, or a source defect |
+| every internal link resolves | 0 dead links in the 400 declared files; 1854 today | check 5, run on its own | point the link at the page that defines the id |
 
 Check 4 is informational because a suspect span is often right: a placeholder the reader
 replaces, or a word the author put in code font. The baseline after the 2026-09-02 inline pass
@@ -30,6 +31,51 @@ is 356 suspects, all judged placeholders or noise; the GIS chapter, restored the
 added one, a French verb in code font. A rise above that is what to look at, not
 the number itself. Files without an English chapter, such as `across.*` and `first_page.*`,
 are skipped and listed; that is expected.
+
+## Check 5: internal links
+
+Run `python3 modernization/check-links.py`. `check-sync.sh` does not call it yet. It reads the
+400 declared files, which are `index.qmd` and the 49 chapters, in English and in the 7
+translation languages. It prints one line for each dead link and exits 1 when it finds one.
+
+```
+DEAD chapters/basics.qmd:372 #objectstructure (no id objectstructure on this page)
+```
+
+A link is dead when its `.qmd` target does not exist, or when the target page does not define
+the `#fragment`. The line number is the first source line that holds the target. Pandoc's
+markdown reader gives no source position, so `?` after the number means the target occurs on
+more than one line.
+
+Pandoc renders each file to one standalone HTML page, `pandoc -s -f markdown -t html`. Python's
+`html.parser` reads that page once. The ids are the ones a browser sees: `id` on any element,
+and `name` on an `<a>` element. The links are the `href` of every `<a>` element.
+
+Pandoc resolves a heading, a div, a span, a metadata title, raw HTML, an HTML comment and a
+character reference into that one page. So the checker does not re-implement pandoc's identifier
+rule, and it does not read markdown itself. A link in a YAML `title` renders on the page, so it
+counts. None of the 400 declared files carries such a link today.
+
+The checker takes three options.
+
+- `--summary` prints the counts and no link lines. It gives files scanned, the pandoc binary
+  and its version, one line for each language, `language-mismatch N` and `dead N`.
+- `--fixture <dir>` uses every `*.qmd` in that directory as the file set.
+- `--pandoc <cmd>` names the binary. The default is `quarto pandoc`, and plain `pandoc` when
+  quarto is not on PATH.
+
+Baseline on 2026-09-07, over the 400 declared files: `dead 1854`, `language-mismatch 7`. Most
+dead links are cross-chapter links written as a bare `#anchor`. Spanish, French, Japanese and
+Portuguese hold about 440 each. English, Russian, Turkish and Vietnamese hold about 20 each.
+
+`language-mismatch` counts a live link from a page of one language to a `.qmd` file of another.
+It is informational. The file exists, so the link works.
+
+One step comes before the parse. Pandoc reads the knitr chunk header ```` ```{r} ```` as a
+paragraph, not as a fence. The checker rewrites each chunk header to ```` ```{.r} ````, line
+for line, as knitr does. Without that step every `#` comment in an R chunk becomes a heading
+with an id. It rewrites a fence line indented by fewer than four spaces, which is the CommonMark
+rule. An indented literal fence inside a paragraph changes nothing.
 
 ## Do not render an English chapter with the gate
 
