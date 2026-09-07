@@ -12,7 +12,7 @@ chunk count differs from the English is skipped and listed: it needs a hand alig
 Deterministic. No model, no network. Prints one line per changed file and a summary.
 
 Usage:
-    python3 modernization/sync-chunks.py [--langs es,fr,jp,pt,ru,tr,vn] [--dry-run] [--only FILE ...]
+    python3 checks/sync-chunks.py [--langs es,fr,jp,pt,ru,tr,vn] [--dry-run] [--only FILE ...]
 """
 import argparse
 import glob

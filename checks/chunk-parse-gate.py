@@ -9,7 +9,7 @@ source's pseudo-code or defect, not a regression. It prints every failing chunk 
 
 Proved red: an extra closing parenthesis is reported by parse().
 
-Usage: python3 modernization/chunk-parse-gate.py <base> [head]
+Usage: python3 checks/chunk-parse-gate.py <base> [head]
 """
 import json, os, re, subprocess, sys, tempfile
 

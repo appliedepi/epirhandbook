@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Read-only: report how far the translated chapters have drifted from the English.
 # Runs every structural check the 2026-09 fix pass used. Changes nothing. Exit 1 on any drift.
-# Usage: modernization/check-sync.sh            (structure, anchors, chunks, inline spans, internal links)
-#        modernization/check-sync.sh --render   (also the render gate on every translated chapter, ~20 min)
-# Full description of each check, expected output and remedies: modernization/SYNC-CHECKS.md
+# Usage: checks/check-sync.sh                   (structure, anchors, chunks, inline spans, internal links)
+#        checks/check-sync.sh --render          (also the render gate on every translated chapter, ~20 min)
+# Full description of each check, expected output and remedies: checks/README.md
 set -uo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 cd "$here/.."

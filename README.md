@@ -29,7 +29,7 @@ We are applied epis from around the world, writing in our spare time to offer th
 > [STAKEHOLDERS.md](modernization/STAKEHOLDERS.md) explains what changed for readers and authors in
 > 2.7 — which chapters were edited, what readers will notice, and the decisions behind two chapters
 > that are no longer included. Translators should also read
-> [TRANSLATION-BACKLOG.md](modernization/TRANSLATION-BACKLOG.md).
+> [issue 449, the translation backlog](https://github.com/appliedepi/epirhandbook/issues/449).
 
 ## How to use this handbook  
 

@@ -8,7 +8,7 @@ its own classes. Every link in any translated file that targeted the old id is r
 the English id. Prints one line per change and a before-and-after count of links, in the
 translated files, that target an English id the translation does not carry.
 
-Deterministic. No model, no network. Usage: python3 modernization/sync-anchors.py [--dry-run]
+Deterministic. No model, no network. Usage: python3 checks/sync-anchors.py [--dry-run]
 """
 import re, glob, sys
 dry = '--dry-run' in sys.argv

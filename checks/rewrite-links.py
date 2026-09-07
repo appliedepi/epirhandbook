@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Rewrite every dead internal link that check-links.py reports.
 
-The mapping table `modernization/link-map.tsv` names the target of every dead link. Its
+The mapping table `checks/link-map.tsv` names the target of every dead link. Its
 columns are `old_id`, `stem`, `anchor` and `note`. `old_id` is the link target exactly as
 check-links.py reports it. `stem` is the chapter that holds the content today. `anchor` is
 an in-page id that every language version of that chapter defines, or an empty field.
@@ -21,7 +21,7 @@ script reports the pair and writes nothing.
 
 Deterministic. No model, no network, no third-party package.
 
-Usage: python3 modernization/rewrite-links.py [--dry-run]
+Usage: python3 checks/rewrite-links.py [--dry-run]
 """
 import re, subprocess, sys
 from pathlib import Path
@@ -32,7 +32,7 @@ ROOT = HERE.parent
 FENCE = re.compile(r'^( *)(`{3,}|~{3,})(.*)$')
 COMMENT = re.compile(r'<!--.*?-->', re.S)
 DEAD = re.compile(r'^DEAD (\S+):(\d+)\??\s+(\S+)\s+\(')
-USAGE = 'Usage: python3 modernization/rewrite-links.py [--dry-run]'
+USAGE = 'Usage: python3 checks/rewrite-links.py [--dry-run]'
 
 args = sys.argv[1:]
 for a in args:

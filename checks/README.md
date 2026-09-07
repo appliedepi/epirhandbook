@@ -1,12 +1,13 @@
-# Keeping the translations in sync: the checks, and how to repeat them
+# The repository's checks: what they cover, and how to run them
 
-Run `modernization/check-sync.sh` from the repository root. It changes nothing, takes about a
+Run `checks/check-sync.sh` from the repository root. It changes nothing, takes about a
 minute, and ends with `IN SYNC` or `DRIFT`. Add `--render` for the render gate, about 20
 minutes. Repeat after any English chapter changes, and every few months regardless.
 
-Every check below was used in the 2026-09 fix pass, recorded in `FIX-PASS.md`. Each has a
-script, an expected output, and a remedy. The remedies are the same scripts and workflows
-that did the work the first time, so a drift of the same kind costs minutes, not days.
+Every check below was used in the 2026-09 fix pass. `archive/modernization` holds the record
+of that pass. Each check has a script, an expected output, and a remedy. The remedies are the
+same scripts and agent workflows that did the work the first time. A drift of the same kind
+then costs minutes, not days.
 
 ## What "in sync" means
 
@@ -16,25 +17,28 @@ English is the reference. For every chapter listed in `_quarto.yml` and every la
 | Property | Expected | Check | Remedy |
 |---|---|---|---|
 | the translated file exists | 343 of 343 | check 1 | translate the chapter |
-| code chunk count equals the English | 343 of 343 | check 1 | `workflows/epirhandbook-align-chunks.js`, one agent per chapter, then `sync-chunks.py` |
-| heading sequence equals the English, count and level, fenced blocks stripped | 343 of 343 | check 1 | `workflows/epirhandbook-align-headings.js`, one agent per chapter |
+| code chunk count equals the English | 343 of 343 | check 1 | the align-chunks agent workflow, one agent per chapter, then `sync-chunks.py` |
+| heading sequence equals the English, count and level, fenced blocks stripped | 343 of 343 | check 1 | the align-headings agent workflow, one agent per chapter |
 | every heading with an English `{#id}` carries that id | 0 headings differ, 0 dead links | check 2 | `sync-anchors.py`, no agent |
 | every aligned chunk's code equals the English, comments free | 0 chunks differ | check 3 | `sync-chunks.py`, no agent |
-| inline code spans in prose name things the English names | informational | check 4 | `workflows/epirhandbook-inline-pass.js` over the new suspects |
+| inline code spans in prose name things the English names | informational | check 4 | the inline-pass agent workflow over the new suspects |
 | every changed chapter renders without execution, fences balanced | 0 fail | check 6, with `--render` | read the log under `/tmp/render-gate/` |
 | no R chunk parses worse than the English chunk | 0 files worse | `chunk-parse-gate.py <base>` | the sync, or a source defect |
 | every internal link resolves | 0 dead links in the 400 declared files | check 5 | `rewrite-links.py`, no agent |
+
+Each agent workflow named in the Remedy column is a `.js` file in the workflows folder of
+`archive/modernization`.
 
 Check 4 is informational because a suspect span is often right: a placeholder the reader
 replaces, or a word the author put in code font. The baseline after the 2026-09-02 inline pass
 is 356 suspects, all judged placeholders or noise; the GIS chapter, restored the same day,
 added one, a French verb in code font. A rise above that is what to look at, not
-the number itself. Files without an English chapter, such as `across.*` and `first_page.*`,
-are skipped and listed; that is expected.
+the number itself. A translated file without an English chapter is skipped and listed.
+`chapters/` holds none today.
 
 ## Check 5: internal links
 
-Run `python3 modernization/check-links.py`. `check-sync.sh` runs it as check 5. It reads the
+Run `python3 checks/check-links.py`. `check-sync.sh` runs it as check 5. It reads the
 400 declared files, which are `index.qmd` and the 49 chapters, in English and in the 7
 translation languages. It prints one line for each dead link and exits 1 when it finds one.
 
@@ -83,12 +87,12 @@ rule. An indented literal fence inside a paragraph changes nothing.
 
 ### Remedy: rewrite-links.py
 
-`modernization/rewrite-links.py` rewrites every dead link the checker reports.
+`checks/rewrite-links.py` rewrites every dead link the checker reports.
 
-1. Run `python3 modernization/check-links.py` and read the DEAD lines.
-2. Add a row to `modernization/link-map.tsv` for each target the table does not hold.
-3. Run `python3 modernization/rewrite-links.py --dry-run` for the count.
-4. Run `python3 modernization/rewrite-links.py` to write the files.
+1. Run `python3 checks/check-links.py` and read the DEAD lines.
+2. Add a row to `checks/link-map.tsv` for each target the table does not hold.
+3. Run `python3 checks/rewrite-links.py --dry-run` for the count.
+4. Run `python3 checks/rewrite-links.py` to write the files.
 
 The table columns are `old_id`, `stem`, `anchor` and `note`. `old_id` is the link target exactly
 as the checker reports it. `stem` is the chapter that holds the content today. `anchor` is an
@@ -103,20 +107,22 @@ no link there.
 ## Do not render an English chapter with the gate
 
 `render-gate.sh` renders translated chapters only, on purpose. Rendering a main-language
-chapter in this book project makes quarto rewrite `.gitignore` and delete three tracked files
-under `site_libs/quarto-search/`; observed on 2026-09-02 and restored from HEAD. Check an
-English chapter with the fence-parity count and the R parse gate instead.
+chapter in this book project makes quarto rewrite `.gitignore`. On 2026-09-02 it also deleted
+the three `site_libs/quarto-search/` files the repository tracked then, and `archive` holds
+those files now. Check an English chapter with the fence-parity count and the R parse gate
+instead.
 
 ## What the checks do not cover
 
 - Meaning. A translation that says something the English does not, in prose, is invisible to
-  every check here. That was the prose sweep, `RESUME.md`, at about 100,000 tokens per
-  chapter-language pair; repeat it only for chapters whose English prose changed.
+  every check here. That was the prose sweep, at about 100,000 tokens per chapter-language
+  pair, and `archive/modernization` records it. Repeat it only for chapters whose English
+  prose changed.
 - Comments inside chunks. The sync keeps a translated comment where its code line survives
   and falls back to the English comment otherwise; nothing checks that comments are translated.
 - Plot labels and other display strings, which the sync sets to the English.
-- The 17 English source defects in `findings/fix-pass/source-defects.tsv`, which the
-  translations now mirror on purpose.
+- The 17 English source defects that the translations now mirror on purpose. The
+  source-defects table of the fix-pass record lists them, under `archive/modernization`.
 
 ## The reasoning behind the design, so it is not re-derived
 

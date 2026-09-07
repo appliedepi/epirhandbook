@@ -18,7 +18,7 @@ links to the English `.qmd` file is live, and is counted as `language-mismatch`.
 
 Deterministic. No model, no network, no third-party package. Exit 1 when any link is dead.
 
-Usage: python3 modernization/check-links.py [--summary] [--fixture <dir>] [--pandoc <cmd>]
+Usage: python3 checks/check-links.py [--summary] [--fixture <dir>] [--pandoc <cmd>]
 """
 import os, re, shutil, shlex, subprocess, sys
 from concurrent.futures import ThreadPoolExecutor

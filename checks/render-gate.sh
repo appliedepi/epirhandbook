@@ -2,7 +2,7 @@
 # Phase G, the structural render gate: quarto render --no-execute on every translated chapter
 # that changed since <base>, skipping files that carry inline R code (`r ...`), which fail under
 # --no-execute at the inline expression regardless of the prose.
-# Usage: modernization/render-gate.sh <base-commit> [head]
+# Usage: checks/render-gate.sh <base-commit> [head]
 # Writes /tmp/render-gate/<stem>.log per file and /tmp/render-gate/SUMMARY.tsv, and deletes the
 # .html and _files/ artifacts that a single-file render drops beside the source. A chapter whose
 # .html the repository tracks is skipped: rendering it overwrites a committed artifact.
