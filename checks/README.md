@@ -25,6 +25,7 @@ English is the reference. For every chapter listed in `_quarto.yml` and every la
 | every changed chapter renders without execution, fences balanced | 0 fail | check 6, with `--render` | read the log under `/tmp/render-gate/` |
 | no R chunk parses worse than the English chunk | 0 files worse | `chunk-parse-gate.py <base>` | the sync, or a source defect |
 | every internal link resolves, stays on its page and stays in its language | 0 dead, 0 same-page and 0 cross-language links in the 400 declared files | check 5 | `rewrite-links.py`, no agent |
+| no chunk that executes names the `data/` folder, outside the two chapters that teach file paths | 0 lines in the 400 declared files | check 7 | load the data with `appliedepidata::get_data()`, or set `eval=F` |
 
 Each agent workflow named in the Remedy column is a `.js` file in the workflows folder of
 `archive/modernization`.
@@ -116,6 +117,58 @@ The script writes nothing until every file rewrites cleanly. It stops when the t
 row for a reported target. It also stops when the number of links it finds in prose differs from
 the number of findings. It skips a fenced code block and an HTML comment, because pandoc reads
 no link there.
+
+## Check 7: the data folder
+
+Run `python3 checks/check-data-reads.py`. `check-sync.sh` runs it as check 7. It reads the same
+400 declared files as check 5. Three rules govern the `data/` folder.
+
+- A chunk that executes may not name `data/`. The handbook loads its data with
+  `appliedepidata::get_data()`.
+- The directories chapter and the importing chapter are the exception. They teach file paths, so
+  a reader runs them against the repository's own `data/` folder.
+- No chunk writes into `data/`, in any chapter.
+
+A chunk executes when its fence options do not set `eval=F` or `eval=FALSE`. Any chapter may show
+a `data/` path in a chunk that does not execute.
+
+The checker strips the `#` comment from each line of an executing chunk. It then matches three
+lexical forms.
+
+- `here("data"`, `here::here("data"`, `file.path("data"`, `fs::path("data"` or `path("data"`
+- a string that starts `data/`
+- a string that starts `../data/`
+
+It prints one line for each line it rejects, and exits 1 when it finds one.
+
+```
+DATA-READ chapters/standardization.fr.qmd:147
+DATA-WRITE chapters/importing.es.qmd:412
+```
+
+`DATA-READ` names a line outside the two chapters that teach file paths. `DATA-WRITE` names a
+line inside those two that also calls a function that writes. Those functions are `export`,
+`write*`, `save`, `saveRDS`, `st_write`, `file.copy`, `file.create`, `dir.create`,
+`dir_create`, `file_create`, `download.file` and `unzip`. Either line makes `check-sync.sh`
+end with `DRIFT`.
+
+The checker takes two options.
+
+- `--summary` prints the counts and no detail lines. It gives files scanned, one line for each
+  language, and `data-reads N`. That count holds both kinds of line.
+- `--fixture <dir>` uses every `*.qmd` in that directory as the file set. It reads the language of
+  each file from the name.
+
+The check is lexical. It reads the source line, and it does not follow a path through a variable.
+A chunk that builds a path on one line and reads it on another passes.
+
+### Remedy
+
+1. Load the data with `appliedepidata::get_data()`.
+2. Set `eval=F` on a chunk whose subject is the path itself, not the data.
+3. Delete a chunk that writes into `data/`.
+
+The root `CLAUDE.md` carries the same rule, for an agent that edits a chapter.
 
 ## Do not render an English chapter with the gate
 

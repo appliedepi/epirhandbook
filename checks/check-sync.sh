@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Read-only: report how far the translated chapters have drifted from the English.
 # Runs every structural check the 2026-09 fix pass used. Changes nothing. Exit 1 on any drift.
-# Usage: checks/check-sync.sh                   (structure, anchors, chunks, inline spans, internal links)
+# Usage: checks/check-sync.sh                   (structure, anchors, chunks, inline spans, internal links, data folder)
 #        checks/check-sync.sh --render          (also the render gate on every translated chapter, ~20 min)
 # Full description of each check, expected output and remedies: checks/README.md
 set -uo pipefail
@@ -62,6 +62,9 @@ PY
 echo "== 5. Internal links: every internal link in the 400 declared chapter files"
 python3 "$here/check-links.py" --summary | sed 's/^/   /' \
   || { python3 "$here/check-links.py" | sed 's/^/   /'; rc=1; }
+echo "== 7. Data folder: R chunks that execute and name the repository's data/ folder"
+python3 "$here/check-data-reads.py" --summary | sed 's/^/   /' \
+  || { python3 "$here/check-data-reads.py" | sed 's/^/   /'; rc=1; }
 if [ "${1:-}" = "--render" ]; then
   echo "== 6. Render gate on every translated chapter (quarto render --no-execute)"
   base=$(git rev-list --max-parents=0 HEAD | tail -1)
