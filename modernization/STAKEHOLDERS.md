@@ -4,10 +4,9 @@
 It is cumulative and kept up to date as releases land. Newest release first. It says what
 changed and what it means for you; it is not build output and not a commit log.
 
-**It is not a to-do list.** Open translation work lives in
-[TRANSLATION-BACKLOG.md](TRANSLATION-BACKLOG.md), which holds only what is still outstanding —
-with a search token and target wording per item. This file records what changed; that file
-records what is left. Nothing belongs in both.
+**It is not a to-do list.** The open translation work is recorded under `archive/`, with a
+search token and target wording per item. This file records what changed. That record holds
+what is left. Nothing belongs in both.
 
 ---
 
@@ -112,8 +111,7 @@ no stray code markers.
 throughout that the pages were well-formed and rendered cleanly — and every real defect passed
 those checks. A page can be perfectly valid and still tell the reader to do something the code
 does not do. Finding that needs someone to read the translated text against the original and ask
-whether it is true. `archive/PLAN-translated-data-used.md` keeps the full record; open translation work is
-in `TRANSLATION-BACKLOG.md`.
+whether it is true. The full record and the open translation work are both under `archive/`.
 
 ### `gis` is back; `epidemic_models` is still cut
 
@@ -355,16 +353,16 @@ tracked separately.
 
 ### Part E — Translator backlog
 
-**Moved to [TRANSLATION-BACKLOG.md](TRANSLATION-BACKLOG.md).**
+**Moved to the translator backlog under `archive/`.**
 
 The upgrade fixed the *code* in all 9 languages, but some surrounding *prose* still explains code
 that no longer exists — 5 passages, roughly 54 edits once every language is counted. Nothing there
 breaks the build; all 49 chapters render. It is a translator's job, not an engineering one.
 
-`TRANSLATION-BACKLOG.md` carries the full list with a search token per item, what each currently
-says and what it should say, a list of things that look related but are already correct, and an
-appendix of the site's pre-existing dead anchors. It is kept there so the work list has one home
-and cannot drift from this document.
+That backlog carries the full list with a search token per item, what each currently says and
+what it should say, a list of things that look related but are already correct, and an appendix
+of the site's pre-existing dead anchors. It is kept under `archive/` so the work list has one
+home and cannot drift from this document.
 
 ### Appendix — the 5 packages that no longer exist
 

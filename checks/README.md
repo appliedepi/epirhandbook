@@ -24,7 +24,7 @@ English is the reference. For every chapter listed in `_quarto.yml` and every la
 | inline code spans in prose name things the English names | informational | check 4 | the inline-pass agent workflow over the new suspects |
 | every changed chapter renders without execution, fences balanced | 0 fail | check 6, with `--render` | read the log under `/tmp/render-gate/` |
 | no R chunk parses worse than the English chunk | 0 files worse | `chunk-parse-gate.py <base>` | the sync, or a source defect |
-| every internal link resolves | 0 dead links in the 400 declared files | check 5 | `rewrite-links.py`, no agent |
+| every internal link resolves, stays on its page and stays in its language | 0 dead, 0 same-page and 0 cross-language links in the 400 declared files | check 5 | `rewrite-links.py`, no agent |
 
 Each agent workflow named in the Remedy column is a `.js` file in the workflows folder of
 `archive/modernization`.
@@ -40,16 +40,26 @@ the number itself. A translated file without an English chapter is skipped and l
 
 Run `python3 checks/check-links.py`. `check-sync.sh` runs it as check 5. It reads the
 400 declared files, which are `index.qmd` and the 49 chapters, in English and in the 7
-translation languages. It prints one line for each dead link and exits 1 when it finds one.
+translation languages. It prints one line for each link it rejects, and exits 1 when it finds
+one. It rejects three link forms.
 
 ```
 DEAD chapters/basics.qmd:372 #objectstructure (no id objectstructure on this page)
+SAME-PAGE chapters/basics.qmd:372 basics.qmd#objects
+LANGUAGE-MISMATCH chapters/packages_suggested.es.qmd:158 data_used.qmd
 ```
 
 A link is dead when its `.qmd` target does not exist, or when the target page does not define
 the `#fragment`. The line number is the first source line that holds the target. Pandoc's
 markdown reader gives no source position, so `?` after the number means the target occurs on
 more than one line.
+
+Two rules cover the other two forms.
+
+- Write a link to a section of the same page as `#id`. The long form `file.qmd#id` is
+  `same-page`. It resolves, and it breaks as soon as the file is renamed.
+- A link never crosses languages. A link from a page of one language to a `.qmd` file of
+  another is `language-mismatch`. Point it at the target in its own language.
 
 Pandoc renders each file to one standalone HTML page, `pandoc -s -f markdown -t html`. Python's
 `html.parser` reads that page once. The ids are the ones a browser sees: `id` on any element,
@@ -63,21 +73,24 @@ counts. None of the 400 declared files carries such a link today.
 The checker takes three options.
 
 - `--summary` prints the counts and no link lines. It gives files scanned, the pandoc binary
-  and its version, one line for each language, `language-mismatch N` and `dead N`.
-- `--fixture <dir>` uses every `*.qmd` in that directory as the file set.
+  and its version, one line for each language, `same-page N`, `language-mismatch N` and
+  `dead N`.
+- `--fixture <dir>` uses every `*.qmd` in that directory as the file set. It reads the language
+  of each file from the name, so a fixture can carry a cross-language link.
 - `--pandoc <cmd>` names the binary. The default is `quarto pandoc`, and plain `pandoc` when
   quarto is not on PATH.
 
-Check 5 prints the counts, from `--summary`. When a link is dead it prints the DEAD lines too,
-and `check-sync.sh` ends with `DRIFT`.
+Check 5 prints the counts, from `--summary`. When it rejects a link it prints the detail lines
+too, and `check-sync.sh` ends with `DRIFT`.
 
 The sweep of 2026-09-07 cleared the backlog. It rewrote 1,854 links in 240 of the 400 declared
 files, and the checker now reports `dead 0`. All but six were cross-chapter links written as a
 bare `#anchor`. The counts before the sweep were 450 Spanish, 445 Japanese, 444 Portuguese,
 427 French, 28 Turkish, 22 English, 20 Vietnamese and 18 Russian.
 
-`language-mismatch` counts a live link from a page of one language to a `.qmd` file of another.
-It is informational. The file exists, so the link works.
+The pass of 2026-09-08 cleared 21 same-page links and 7 cross-language links, in the 400
+declared files. It also made the checker fail on either form. Both counts were informational
+before that date.
 
 One step comes before the parse. Pandoc reads the knitr chunk header ```` ```{r} ```` as a
 paragraph, not as a fence. The checker rewrites each chunk header to ```` ```{.r} ````, line

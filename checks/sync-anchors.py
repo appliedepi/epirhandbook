@@ -11,6 +11,12 @@ translated files, that target an English id the translation does not carry.
 Deterministic. No model, no network. Usage: python3 checks/sync-anchors.py [--dry-run]
 """
 import re, glob, sys
+
+USAGE = __doc__.strip().split('Usage: ')[1].strip()
+unknown = [a for a in sys.argv[1:] if a != '--dry-run']
+if unknown:
+    print('unknown argument %s\nUsage: %s' % (unknown[0], USAGE), file=sys.stderr)
+    sys.exit(2)
 dry = '--dry-run' in sys.argv
 decl = re.findall(r'^\s*-\s*chapters/([A-Za-z0-9_]+)\.qmd', open('_quarto.yml').read(), re.M)
 LANGS = ['es', 'fr', 'jp', 'pt', 'ru', 'tr', 'vn']

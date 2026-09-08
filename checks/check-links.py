@@ -13,10 +13,14 @@ pandoc's identifier rule, and it never reads markdown itself.
 
 A link is dead when its `.qmd` target does not exist, or when the target page does not define
 the `#fragment` it asks for. Fragments resolve against the same page when the target is a bare
-`#fragment`. External links and targets that are not `.qmd` are ignored. A translation that
-links to the English `.qmd` file is live, and is counted as `language-mismatch`.
+`#fragment`. External links and targets that are not `.qmd` are ignored.
 
-Deterministic. No model, no network, no third-party package. Exit 1 when any link is dead.
+Two more link forms fail. Write a link to a section of the same page as `#id`, never as
+`file.qmd#id`. The checker counts the long form as `same-page`. A link never crosses languages.
+The checker counts a link from one language to a `.qmd` file of another as `language-mismatch`.
+
+Deterministic. No model, no network, no third-party package. Exit 1 on a link that is dead,
+same-page in long form, or across languages.
 
 Usage: python3 checks/check-links.py [--summary] [--fixture <dir>] [--pandoc <cmd>]
 """
@@ -30,6 +34,7 @@ ROOT = Path(__file__).resolve().parent.parent
 POOL = 8
 FENCE = re.compile(r'^( *)(`{3,}|~{3,})(.*)$')
 SCHEME = re.compile(r'^(?:[A-Za-z][A-Za-z0-9+.\-]*:|//)')
+LANGS = ['es', 'fr', 'jp', 'pt', 'ru', 'tr', 'vn']
 
 args = sys.argv[1:]
 summary = '--summary' in args
@@ -66,6 +71,17 @@ def declared():
     out = [(s + '.qmd', 'en') for s in stems]
     out += [(s + '.' + l + '.qmd', l) for s in stems for l in langs]
     return sorted(out), langs
+
+
+def declared_languages():
+    """The languages `_quarto.yml` declares, or LANGS when the file is unreadable."""
+    try:
+        y = (ROOT / '_quarto.yml').read_text(encoding='utf-8')
+        out = re.search(r'languages:\s*\[([^\]]*)\]', y).group(1)
+        out = [x.strip().strip("'\"") for x in out.split(',') if x.strip()]
+        return out or LANGS
+    except Exception:
+        return LANGS
 
 
 def language(path, langs):
@@ -160,8 +176,8 @@ def first_line(lines, target):
 
 base = Path(fixture) if fixture else ROOT
 if fixture:
-    files = [(p.name, 'en') for p in sorted(Path(fixture).glob('*.qmd'))]
-    langs = []
+    langs = declared_languages()
+    files = [(p.name, language(p.name, langs)) for p in sorted(Path(fixture).glob('*.qmd'))]
 else:
     files, langs = declared()
 
@@ -188,7 +204,7 @@ for f, _ in files:
 with ThreadPoolExecutor(POOL) as ex:
     parsed.update(zip(sorted(extra), ex.map(lambda f: parse(base / f), sorted(extra))))
 
-dead, mismatch = [], []
+dead, samepage, mismatch = [], [], []
 for f, lang in files:
     for t in parsed[f][1]:
         if not t or SCHEME.match(t):
@@ -205,6 +221,8 @@ for f, lang in files:
         if not (base / q).exists():
             dead.append((f, lang, t, 'no such file'))
             continue
+        if q == f and frag:
+            samepage.append((f, lang, t))
         if language(q, langs) != lang:
             mismatch.append((f, lang, t))
         if frag and frag not in parsed[q][0]:
@@ -212,10 +230,20 @@ for f, lang in files:
 
 if not summary:
     out, src = [], {}
-    for f, lang, t, why in dead:
+
+    def at(f, t):
         lines = src.setdefault(f, (base / f).read_text(encoding='utf-8').split('\n'))
-        n, many = first_line(lines, t)
+        return first_line(lines, t)
+
+    for f, lang, t, why in dead:
+        n, many = at(f, t)
         out.append((f, n, t, 'DEAD %s:%d%s %s (%s)' % (f, n, '?' if many else '', t, why)))
+    for f, lang, t in samepage:
+        n, many = at(f, t)
+        out.append((f, n, t, 'SAME-PAGE %s:%d%s %s' % (f, n, '?' if many else '', t)))
+    for f, lang, t in mismatch:
+        n, many = at(f, t)
+        out.append((f, n, t, 'LANGUAGE-MISMATCH %s:%d%s %s' % (f, n, '?' if many else '', t)))
     for _, _, _, line in sorted(out):
         print(line)
 
@@ -223,12 +251,16 @@ else:
     print('files scanned: %d' % scanned)
     print('pandoc: %s, version %s' % (' '.join(pandoc), pandoc_version()))
     for l in ['en'] + sorted(langs):
-        print('lang %s: files %d, dead %d, language-mismatch %d'
-              % (l, sum(1 for _, x in files if x == l), sum(1 for r in dead if r[1] == l),
+        n = sum(1 for _, x in files if x == l)
+        if not n:
+            continue
+        print('lang %s: files %d, dead %d, same-page %d, language-mismatch %d'
+              % (l, n, sum(1 for r in dead if r[1] == l), sum(1 for r in samepage if r[1] == l),
                  sum(1 for r in mismatch if r[1] == l)))
     if extra:
         print('targets parsed outside the declared set: %d' % len(extra))
+    print('same-page %d' % len(samepage))
     print('language-mismatch %d' % len(mismatch))
     print('dead %d' % len(dead))
 
-sys.exit(1 if dead or missing else 0)
+sys.exit(1 if dead or samepage or mismatch or missing else 0)

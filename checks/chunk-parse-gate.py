@@ -13,6 +13,10 @@ Usage: python3 checks/chunk-parse-gate.py <base> [head]
 """
 import json, os, re, subprocess, sys, tempfile
 
+USAGE = __doc__.strip().split('Usage: ')[1].strip()
+if len(sys.argv) < 2:
+    print('Usage: %s' % USAGE, file=sys.stderr)
+    sys.exit(2)
 base = sys.argv[1]; head = sys.argv[2] if len(sys.argv) > 2 else 'HEAD'
 files = [f for f in subprocess.run(['git', 'diff', '--name-only', base, head, '--', 'chapters/'], capture_output=True, text=True).stdout.split() if re.search(r'\.[a-z]{2}\.qmd$', f)]
 FENCE_OPEN = re.compile(r'^\s*(`{3,})\s*\{r[ ,}]')
