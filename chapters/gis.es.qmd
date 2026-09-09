@@ -200,7 +200,7 @@ Ahora vamos a hacer lo siguiente para guardar el shapefile del nivel administrat
 2.  Limpiar los nombres de las columnas
 3.  Filtrar las filas para mantener sólo las áreas de interés
 
-Para cargar el shapefile utilizamos `get_data()` de **appliedepidata**, que lo devuelve como un objeto **sf**. Para leer tu propio shapefile utiliza `read_sf()` de **sf** con su ruta de archivo (véanse [Importación y exportación](importing.es.qmd) y [Proyectos en R](r_projects.es.qmd)).
+Para leer tu propio shapefile utiliza `read_sf()` de **sf** con su ruta de archivo (véanse [Importación y exportación](importing.es.qmd) y [Proyectos en R](r_projects.es.qmd)).
 
 ```{r}
 sle_adm3_raw <- appliedepidata::get_data(name = "sle_adm3")
@@ -236,7 +236,7 @@ sle_adm3_pop <- appliedepidata::get_data(name = "sle_admpop_adm3_2020") %>%
 ```
 
 
-Este es el aspecto del archivo de población. *Desplázate a la derecha* para ver cómo cada jurisdicción tiene columnas con la población `male`, `female`, y la población `total` y el desglose de la población en columnas por grupos de edad.
+Este es el aspecto del archivo de población. *Desplázate a la derecha* para ver las columnas de población `male`, `female` y `total` de cada jurisdicción. Las demás columnas desglosan la población por grupos de edad.
 
 ```{r message=FALSE, echo=F}
 # muestra la población en forma de tabla
@@ -249,7 +249,7 @@ DT::datatable(head(sle_adm3_pop, 50), rownames = FALSE, options = list(pageLengt
 
 La localización de los centros sanitarios procede del HDX [aquí](https://data.humdata.org/dataset/hotosm_sierra_leone_health_facilities). El capítulo la carga con `get_data()` de **appliedepidata**, como se explica en la página [descarga de manuales y datos](data_used.es.qmd).
 
-Cargamos los puntos de las instalaciones con `get_data()`. Limpiamos de nuevo los nombres de las columnas y filtramos para mantener sólo los puntos etiquetados como "hospital", "clinic" o "doctors".
+Limpiamos de nuevo los nombres de las columnas y filtramos para mantener sólo los puntos etiquetados como "hospital", "clinic" o "doctors".
 
 ```{r}
 # Archivo shapefile OSM de centros sanitarios
@@ -355,7 +355,7 @@ linelist_adm <- linelist_sf %>%
   sf::st_join(sle_adm3, join = st_intersects)
 ```
 
-¡Todas las columnas de `sle_adms` se han añadido a linelist! Cada caso tiene ahora columnas que detallan los niveles administrativos a los que pertenece. En este ejemplo, sólo queremos mantener dos de las nuevas columnas (las de nivel administrativo 3), así que haremos `select()` de los nombres de las columnas antiguas de la linelist, y sólo las dos adicionales de interés:
+¡Todas las columnas de `sle_adm3` se han añadido a linelist! Cada caso tiene ahora columnas que detallan los niveles administrativos a los que pertenece. En este ejemplo, sólo queremos mantener dos de las nuevas columnas (las de nivel administrativo 3), así que haremos `select()` de los nombres de las columnas antiguas de la linelist, y sólo las dos adicionales de interés:
 
 ```{r, warning=F, message=F}
 linelist_adm <- linelist_sf %>%
@@ -495,9 +495,9 @@ tm_shape(sle_hf) +                    # trazar las instalaciones clínicas en gr
 ```{r, warning=F, message=F}
 # Intersecta los casos con los buffers
 linelist_sf_hf_2k <- linelist_sf_hf %>%
-  st_join(sle_hf_2k, join = st_intersects, left = TRUE) %>%
-  filter(osm_id.x==osm_id.y | is.na(osm_id.y)) %>%
-  select(case_id, osm_id.x, nearest_clinic, amenity.x, osm_id.y)
+  st_join(sle_hf_2k, join = st_intersects, left = TRUE) %>%          # una fila por caso y por cada buffer que lo contiene; osm_id.y es NA si no lo contiene ninguno
+  select(case_id, osm_id.x, nearest_clinic, amenity.x, osm_id.y) %>%
+  distinct(case_id, .keep_all = TRUE)                                # una fila por caso, así un caso queda fuera solo si ningún buffer lo contiene
 ```
 
 Ahora podemos contabilizar cuántos de nuestros casos no estan dentro de ningun buffer (sus puntos no se *cruzan* con ningún buffer): `r nrow(linelist_sf_hf_2k[is.na(linelist_sf_hf_2k$osm_id.y),])`. Con este código vemos que falta información para este valor (estamos buscando `NA`), y por tanto, inferimos que estos casos viven a más de 30 minutos a pie del centro sanitario más cercano.

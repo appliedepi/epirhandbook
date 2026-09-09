@@ -203,7 +203,7 @@ Now we are going to do the following to save the Admin Level 3 shapefile in R:
 2) Clean the column names  
 3) Filter rows to keep only areas of interest  
 
-To load the shapefile we use `get_data()` from **appliedepidata**, which returns it as an **sf** object. To read your own shapefile use `read_sf()` from **sf** with its file path (see [Import and export](importing.qmd) and [R projects](r_projects.qmd)).  
+To read your own shapefile use `read_sf()` from **sf** with its file path (see [Import and export](importing.qmd) and [R projects](r_projects.qmd)).  
 
 ```{r}
 sle_adm3_raw <- appliedepidata::get_data(name = "sle_adm3")
@@ -240,7 +240,7 @@ sle_adm3_pop <- appliedepidata::get_data(name = "sle_admpop_adm3_2020") %>%
   janitor::clean_names()
 ```
 
-Here is what the population file looks like. Scroll to the right to see how each jurisdiction has columns with `male` population, `female` population, `total` population, and the population break-down in columns by age group.  
+Here is what the population file looks like. Scroll to the right to see the `male`, `female` and `total` population columns for each jurisdiction. Further columns break the population down by age group.  
 
 ```{r message=FALSE, echo=F}
 # display the population as a table
@@ -254,7 +254,7 @@ DT::datatable(head(sle_adm3_pop, 50), rownames = FALSE, options = list(pageLengt
 
 The health facility locations come from HDX [website here](https://data.humdata.org/dataset/hotosm_sierra_leone_health_facilities). The chapter loads them with `get_data()` from **appliedepidata**, as explained in the [Download handbook and data](data_used.qmd) page.   
 
-We load the facility points with `get_data()`. We again clean the column names, then filter to keep only the points tagged as either "hospital", "clinic", or "doctors".  
+We again clean the column names, then filter to keep only the points tagged as either "hospital", "clinic", or "doctors".  
 
 
 ```{r}
@@ -370,7 +370,7 @@ linelist_adm <- linelist_sf %>%
   sf::st_join(sle_adm3, join = st_intersects)
 ```
 
-All the columns from `sle_adms` have been added to the linelist! Each case now has columns detailing the administrative levels that it falls within. In this example, we only want to keep two of the new columns (admin level 3), so we `select()` the old column names and just the two additional of interest:  
+All the columns from `sle_adm3` have been added to the linelist! Each case now has columns detailing the administrative levels that it falls within. In this example, we only want to keep two of the new columns (admin level 3), so we `select()` the old column names and just the two additional of interest:  
 
 ```{r, warning=F, message=F}
 linelist_adm <- linelist_sf %>%
@@ -514,9 +514,9 @@ tm_shape(sle_hf) +                    # plot clinic facilities in large red dots
 ```{r, warning=F, message=F}
 # Intersect the cases with the buffers
 linelist_sf_hf_2k <- linelist_sf_hf %>%
-  st_join(sle_hf_2k, join = st_intersects, left = TRUE) %>%
-  filter(osm_id.x==osm_id.y | is.na(osm_id.y)) %>%
-  select(case_id, osm_id.x, nearest_clinic, amenity.x, osm_id.y)
+  st_join(sle_hf_2k, join = st_intersects, left = TRUE) %>%          # one row per case and per buffer it falls in; osm_id.y is NA when it falls in none
+  select(case_id, osm_id.x, nearest_clinic, amenity.x, osm_id.y) %>%
+  distinct(case_id, .keep_all = TRUE)                                # one row per case, so a case is outside only when it falls in no buffer
 ```
 
 Now we can count the results: `r nrow(linelist_sf_hf_2k[is.na(linelist_sf_hf_2k$osm_id.y),])` out of 1000 cases did not intersect with any buffer (that value is missing), and so live more than 30 mins walk from the nearest health facility.

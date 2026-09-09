@@ -199,7 +199,7 @@ Agora faremos o seguinte para salvar no R o shapefile do nível administrativo 3
 2) Limpar o nome das colunas
 3) Filtar linhas para manter apenas as áreas de interesse
 
-Para carregar o shapefile usamos `get_data()` do **appliedepidata**, que o retorna como um objeto **sf**. Para ler seu próprio shapefile use `read_sf()` do **sf** com o caminho do arquivo (veja as páginas [Importar e exportar](importing.pt.qmd) e [Projetos R](r_projects.pt.qmd)).
+Para ler seu próprio shapefile use `read_sf()` do **sf** com o caminho do arquivo (veja as páginas [Importar e exportar](importing.pt.qmd) e [Projetos R](r_projects.pt.qmd)).
 
 
 ```{r}
@@ -237,7 +237,7 @@ sle_adm3_pop <- appliedepidata::get_data(name = "sle_admpop_adm3_2020") %>%
   janitor::clean_names()
 ```
 
-Essa é a aparência do arquivo de população. Role para a direita para ver como cada jurisdição tem colunas com a população masculina (`male`), feminina (`female`), e a população `total`, e as subdivisões nas colunas columns por grupo de idade.
+Essa é a aparência do arquivo de população. Role para a direita para ver as colunas de população masculina (`male`), feminina (`female`) e `total` de cada jurisdição. As demais colunas subdividem a população por grupo de idade.
 
 ```{r message=FALSE, echo=F}
 # mostra a população como uma tabela
@@ -251,7 +251,7 @@ DT::datatable(head(sle_adm3_pop, 50), rownames = FALSE, options = list(pageLengt
 
 Os locais das unidades de saúde vêm do HDX [aqui](https://data.humdata.org/dataset/hotosm_sierra_leone_health_facilities). O capítulo os carrega com `get_data()` do **appliedepidata**, conforme explicado na página [manual de Download e dados](data_used.pt.qmd).   
 
-Nós carregamos os pontos das unidades com `get_data()`. Novamente limpamos os nomes das colunas e depois filtramos para manter apenas os pontos marcados com "hospital", clínica ("clinic"), ou doutores ("doctors").  
+Novamente limpamos os nomes das colunas e depois filtramos para manter apenas os pontos marcados com "hospital", clínica ("clinic"), ou doutores ("doctors").  
 
 
 ```{r}
@@ -367,7 +367,7 @@ linelist_adm <- linelist_sf %>%  # faça join do arquivo com as fronteiras admin
   sf::st_join(sle_adm3, join = st_intersects)
 ```
 
-Todas as colunas de `sle_adms` foram adicionadas à linelist! Agora cada caso possui colunas detalhando os níveis administativos onde eles se encontram. Nesse exemplo, queremos manter apenas duas das novas colunas (admin level 3), então usamos `select()` nos nomes das colunas antigas e apenas nas duas novas que temos interesse:  
+Todas as colunas de `sle_adm3` foram adicionadas à linelist! Agora cada caso possui colunas detalhando os níveis administativos onde eles se encontram. Nesse exemplo, queremos manter apenas duas das novas colunas (admin level 3), então usamos `select()` nos nomes das colunas antigas e apenas nas duas novas que temos interesse:  
 
 ```{r, warning=F, message=F}
 linelist_adm <- linelist_sf %>%   # faça join do arquivo com as fronteiras administrativas com o da linelist, baseado na intersecção espacial
@@ -511,9 +511,9 @@ tm_shape(sle_hf) +                    # adiciona as clínicas ao gráfico como g
 ```{r, warning=F, message=F}
 # Intersecta os casos com as áreas de influência
 linelist_sf_hf_2k <- linelist_sf_hf %>%
-  st_join(sle_hf_2k, join = st_intersects, left = TRUE) %>%
-  filter(osm_id.x==osm_id.y | is.na(osm_id.y)) %>%
-  select(case_id, osm_id.x, nearest_clinic, amenity.x, osm_id.y)
+  st_join(sle_hf_2k, join = st_intersects, left = TRUE) %>%          # uma linha por caso e por área de influência que o contém; osm_id.y é NA se nenhuma o contém
+  select(case_id, osm_id.x, nearest_clinic, amenity.x, osm_id.y) %>%
+  distinct(case_id, .keep_all = TRUE)                                # uma linha por caso, assim um caso fica fora apenas se nenhuma área de influência o contém
 ```
 
 Agora podemos contar os resultados: `r nrow(linelist_sf_hf_2k[is.na(linelist_sf_hf_2k$osm_id.y),])` dos 1000 casos não intersectam com nenhuma área de influência (esses valores estão faltando), e então residem a mais de 30 min a pé da da unidade de saúde mais próxima.
