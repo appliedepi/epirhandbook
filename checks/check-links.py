@@ -19,8 +19,15 @@ Two more link forms fail. Write a link to a section of the same page as `#id`, n
 `file.qmd#id`. The checker counts the long form as `same-page`. A link never crosses languages.
 The checker counts a link from one language to a `.qmd` file of another as `language-mismatch`.
 
+One form pandoc cannot report is the unterminated link, `[text](#target` with no closing
+parenthesis. Pandoc reads no link there, so the page carries no `<a>` element and the target is
+never checked. The checker reads the raw source for that form and counts it as
+`unterminated-link`. A blank line ends the search, because an inline link cannot cross one. So a
+link whose destination sits on the next line still passes, which CommonMark allows. The checker
+skips a fenced code block, an HTML comment and a code span.
+
 Deterministic. No model, no network, no third-party package. Exit 1 on a link that is dead,
-same-page in long form, or across languages.
+same-page in long form, across languages, or unterminated.
 
 Usage: python3 checks/check-links.py [--summary] [--fixture <dir>] [--pandoc <cmd>]
 """
@@ -153,6 +160,111 @@ def plain_fences(text):
     return '\n'.join(out)
 
 
+def blank_comments(text):
+    """The text with every HTML comment blanked, one space per character, newlines kept.
+
+    Pandoc reads no link inside an HTML comment. Blanking keeps every line number.
+    """
+    return re.sub(r'<!--.*?-->', lambda m: ''.join(c if c == '\n' else ' ' for c in m.group(0)),
+                  text, flags=re.S)
+
+
+def blank_code_spans(line):
+    """The line with every backtick code span blanked, one space per character.
+
+    A span opens on a run of backticks and closes on a run of the same length, as CommonMark
+    says. An unclosed run is left alone. Pandoc reads no link inside a code span.
+    """
+    out, i, n = list(line), 0, len(line)
+    while i < n:
+        if line[i] != '`':
+            i += 1
+            continue
+        j = i
+        while j < n and line[j] == '`':
+            j += 1
+        run, k, end = j - i, j, None
+        while k < n:
+            if line[k] != '`':
+                k += 1
+                continue
+            m = k
+            while m < n and line[m] == '`':
+                m += 1
+            if m - k == run:
+                end = m
+                break
+            k = m
+        if end is None:
+            i = j
+            continue
+        for x in range(i, end):
+            out[x] = ' '
+        i = end
+    return ''.join(out)
+
+
+def unterminated_links(text):
+    """Every `](` in prose whose link target does not close before the next blank line.
+
+    Returns [(line number, the source line)]. An inline link cannot cross a blank line, so the
+    blank line bounds the search. The scan counts nested parentheses, so a URL that holds a
+    balanced pair passes, and a destination written on the next line passes too. The scan skips
+    a fenced code block, an HTML comment and a code span.
+    """
+    raws = text.split('\n')
+    found, fence, block = [], None, []
+
+    def flush():
+        if not block:
+            return
+        joined = '\n'.join(l for _, l in block)
+        at = []
+        for n, l in block:
+            at.extend([n] * (len(l) + 1))
+        for hit in re.finditer(r'\]\(', joined):
+            if hit.start() and joined[hit.start() - 1] == '\\':
+                continue
+            depth, j, closed = 1, hit.end(), False
+            while j < len(joined):
+                c = joined[j]
+                if c == '\\':
+                    j += 2
+                    continue
+                if c == '(':
+                    depth += 1
+                elif c == ')':
+                    depth -= 1
+                    if depth == 0:
+                        closed = True
+                        break
+                j += 1
+            if not closed:
+                n = at[hit.start()]
+                found.append((n, raws[n - 1].rstrip()))
+        block.clear()
+
+    for n, l in enumerate(blank_comments(text).split('\n'), 1):
+        m = FENCE.match(l)
+        code = m is None or len(m.group(1)) > 3
+        if fence is None:
+            if not code:
+                flush()
+                fence = m.group(2)
+                continue
+        else:
+            if not code and m.group(2)[0] == fence[0] and len(m.group(2)) >= len(fence) \
+                    and not m.group(3).strip():
+                fence = None
+            continue
+        if not l.strip():
+            flush()
+            continue
+        block.append((n, blank_code_spans(l)))
+    flush()
+    return sorted(found)
+
+
 def parse(path):
     """Return (ids, link targets) for one file, from the page pandoc renders."""
     src = plain_fences(Path(path).read_text(encoding='utf-8'))
@@ -204,7 +316,10 @@ for f, _ in files:
 with ThreadPoolExecutor(POOL) as ex:
     parsed.update(zip(sorted(extra), ex.map(lambda f: parse(base / f), sorted(extra))))
 
-dead, samepage, mismatch = [], [], []
+dead, samepage, mismatch, unterminated = [], [], [], []
+for f, lang in files:
+    for n, line in unterminated_links((base / f).read_text(encoding='utf-8')):
+        unterminated.append((f, lang, n, line))
 for f, lang in files:
     for t in parsed[f][1]:
         if not t or SCHEME.match(t):
@@ -244,6 +359,8 @@ if not summary:
     for f, lang, t in mismatch:
         n, many = at(f, t)
         out.append((f, n, t, 'LANGUAGE-MISMATCH %s:%d%s %s' % (f, n, '?' if many else '', t)))
+    for f, lang, n, line in unterminated:
+        out.append((f, n, line, 'UNTERMINATED-LINK %s:%d %s' % (f, n, line.strip())))
     for _, _, _, line in sorted(out):
         print(line)
 
@@ -261,6 +378,7 @@ else:
         print('targets parsed outside the declared set: %d' % len(extra))
     print('same-page %d' % len(samepage))
     print('language-mismatch %d' % len(mismatch))
+    print('unterminated-links %d' % len(unterminated))
     print('dead %d' % len(dead))
 
-sys.exit(1 if dead or samepage or mismatch or missing else 0)
+sys.exit(1 if dead or samepage or mismatch or unterminated or missing else 0)

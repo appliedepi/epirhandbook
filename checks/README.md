@@ -1,8 +1,20 @@
 # The repository's checks: what they cover, and how to run them
 
-Run `checks/check-sync.sh` from the repository root. It changes nothing, takes about a
-minute, and ends with `IN SYNC` or `DRIFT`. Add `--render` for the render gate, about 20
-minutes. Repeat after any English chapter changes, and every few months regardless.
+Run `checks/check-sync.sh` from the repository root. It changes nothing, takes about half a
+minute, and ends with `IN SYNC` or `DRIFT`. Repeat after any English chapter changes, and every
+few months regardless.
+
+Checks 6 and 8 need a base commit, and they do not run without one. Add `--base <sha>` to run
+them over the files changed since `<sha>`. Add `--render` to run them over the whole tree, which
+takes about 20 minutes.
+
+The result line names what ran. It reads `IN SYNC` when checks 6 and 8 ran, and
+`IN SYNC (checks 6 and 8 not run)` when they did not. The script exits 0 on `IN SYNC`, 1 on
+`DRIFT`, and 2 when `--base` names something that is not a commit.
+`.github/workflows/translation-sync.yml` passes `--base` on every push and every pull request.
+
+Every check writes its full output under `/tmp/check-sync/`. The lines the script prints come
+from those files.
 
 Every check below was used in the 2026-09 fix pass. `archive/modernization` holds the record
 of that pass. Each check has a script, an expected output, and a remedy. The remedies are the
@@ -22,9 +34,9 @@ English is the reference. For every chapter listed in `_quarto.yml` and every la
 | every heading with an English `{#id}` carries that id | 0 headings differ, 0 dead links | check 2 | `sync-anchors.py`, no agent |
 | every aligned chunk's code equals the English, comments free | 0 chunks differ | check 3 | `sync-chunks.py`, no agent |
 | inline code spans in prose name things the English names | informational | check 4 | the inline-pass agent workflow over the new suspects |
-| every changed chapter renders without execution, fences balanced | 0 fail | check 6, with `--render` | read the log under `/tmp/render-gate/` |
-| no R chunk parses worse than the English chunk | 0 files worse | `chunk-parse-gate.py <base>` | the sync, or a source defect |
-| every internal link resolves, stays on its page and stays in its language | 0 dead, 0 same-page and 0 cross-language links in the 400 declared files | check 5 | `rewrite-links.py`, no agent |
+| every changed chapter renders without execution, fences balanced | 0 FAIL | check 6, with `--base` or `--render` | read the log under `/tmp/render-gate/` |
+| no R chunk parses worse than the English chunk | 0 files worse | check 8, with `--base` or `--render` | the sync, or a source defect |
+| every internal link resolves, stays on its page and stays in its language | 0 dead, 0 same-page, 0 cross-language and 0 unterminated links in the 400 declared files | check 5 | `rewrite-links.py`, no agent |
 | no chunk that executes names the `data/` folder, outside the two chapters that teach file paths | 0 lines in the 400 declared files | check 7 | load the data with `appliedepidata::get_data()`, or set `eval=F` |
 
 Each agent workflow named in the Remedy column is a `.js` file in the workflows folder of
@@ -42,12 +54,13 @@ the number itself. A translated file without an English chapter is skipped and l
 Run `python3 checks/check-links.py`. `check-sync.sh` runs it as check 5. It reads the
 400 declared files, which are `index.qmd` and the 49 chapters, in English and in the 7
 translation languages. It prints one line for each link it rejects, and exits 1 when it finds
-one. It rejects three link forms.
+one. It rejects four link forms.
 
 ```
 DEAD chapters/basics.qmd:372 #objectstructure (no id objectstructure on this page)
 SAME-PAGE chapters/basics.qmd:372 basics.qmd#objects
 LANGUAGE-MISMATCH chapters/packages_suggested.es.qmd:158 data_used.qmd
+UNTERMINATED-LINK chapters/basics.pt.qmd:925 ... na seção [Importar e exportar](#importing.
 ```
 
 A link is dead when its `.qmd` target does not exist, or when the target page does not define
@@ -55,12 +68,24 @@ the `#fragment`. The line number is the first source line that holds the target.
 markdown reader gives no source position, so `?` after the number means the target occurs on
 more than one line.
 
-Two rules cover the other two forms.
+Three rules cover the other three forms.
 
 - Write a link to a section of the same page as `#id`. The long form `file.qmd#id` is
   `same-page`. It resolves, and it breaks as soon as the file is renamed.
 - A link never crosses languages. A link from a page of one language to a `.qmd` file of
   another is `language-mismatch`. Point it at the target in its own language.
+- Close every link. A `](` whose destination never closes is `unterminated-link`.
+
+The unterminated form is the one pandoc cannot report. Pandoc reads no link in
+`[text](#target`, so the page carries no `<a>` element and nothing checks the target. That
+form sat in `chapters/basics.pt.qmd` for years and every run said `dead 0`. So the checker
+reads the raw source for this form alone.
+
+The search for the closing parenthesis stops at the next blank line, because an inline link
+cannot cross one. A destination written on the next line therefore passes, which CommonMark
+allows, and three links in the corpus use that shape. The search counts nested parentheses, so
+a URL that holds a balanced pair passes. It skips a fenced code block, an HTML comment and a
+code span.
 
 Pandoc renders each file to one standalone HTML page, `pandoc -s -f markdown -t html`. Python's
 `html.parser` reads that page once. The ids are the ones a browser sees: `id` on any element,
@@ -74,8 +99,8 @@ counts. None of the 400 declared files carries such a link today.
 The checker takes three options.
 
 - `--summary` prints the counts and no link lines. It gives files scanned, the pandoc binary
-  and its version, one line for each language, `same-page N`, `language-mismatch N` and
-  `dead N`.
+  and its version, one line for each language, `same-page N`, `language-mismatch N`,
+  `unterminated-links N` and `dead N`.
 - `--fixture <dir>` uses every `*.qmd` in that directory as the file set. It reads the language
   of each file from the name, so a fixture can carry a cross-language link.
 - `--pandoc <cmd>` names the binary. The default is `quarto pandoc`, and plain `pandoc` when
@@ -170,6 +195,62 @@ A chunk that builds a path on one line and reads it on another passes.
 
 The root `CLAUDE.md` carries the same rule, for an agent that edits a chapter.
 
+## Check 6: the render gate
+
+Run `checks/render-gate.sh <base> [head]`. `check-sync.sh` runs it as check 6, with the base it
+was given. It runs `quarto render --no-execute` on every translated chapter that changed since
+`<base>`. It needs quarto and git. It runs no R, because `--no-execute` skips the knitr engine.
+
+Each file renders as a temporary copy beside the original,
+`chapters/<stem>.render-gate-tmp.<lang>.qmd`. In that copy every inline R expression
+`` `r ... ` `` outside a fenced block becomes the placeholder `INLINE_R`. `quarto render
+--no-execute` stops at an inline R expression, so the placeholder is what lets the gate read a
+file that holds one. The copy sits in the `chapters/` folder, so `_quarto.yml` and every
+relative path resolve as they do for the original. A trap deletes every copy and every artifact
+beside it, on success and on failure, in `chapters/` and in the project's `html_outputs/` folder.
+
+The search for the end of an inline R expression stops at the next blank line, because an inline
+expression cannot cross one. Without that bound the match runs to the next backtick anywhere in
+the file, and one unterminated expression swallows whole paragraphs into the placeholder. The
+gate then reads a copy that is missing prose the original carries. An expression that does not
+close inside its paragraph now stops the gate with `FAIL-placeholder`. The 400 declared files
+hold 81 inline R expressions, and none of them crosses a line break.
+
+The gate stops with exit 2, before it renders anything, in four cases.
+
+- A base or a head that is not a commit.
+- A `git diff` that fails.
+- A temporary copy path that the repository tracks.
+- A temporary copy path that already exists.
+
+The gate skipped a file with inline R until 2026-09-09, and 17 of the 99 files then in the
+changed set carried one. A broken YAML header in `chapters/gis.es.qmd` passed that gate,
+because the gate never read the file.
+
+A file with an odd number of fence lines FAILS before the render. Pandoc renders an unclosed
+fence with exit 0, so the render alone cannot see that class.
+
+Per-file output goes to `/tmp/render-gate/<stem>.log`, and the result of each file to
+`/tmp/render-gate/SUMMARY.tsv`.
+
+## Check 8: the chunk parse gate
+
+Run `python3 checks/chunk-parse-gate.py <base> [head]`. `check-sync.sh` runs it as check 8, with
+the base it was given. It parses every R chunk of every changed translated chapter with R, in
+the version at `<base>` and in the version in the working tree.
+
+It compares the two versions chunk index by chunk index. A chunk index that fails after and did
+not fail before is a regression, unless the English chunk at that index fails too. A count
+comparison reads `same` when one chunk breaks and another is repaired in the same file, so the
+gate compares indices instead.
+
+The gate stops with exit 2 in four cases.
+
+- A base or a head that is not a commit.
+- A `git` command that fails.
+- `Rscript` that is not on PATH.
+- `Rscript` that returns non-zero. The gate prints `Rscript`'s own stderr.
+
 ## Do not render an English chapter with the gate
 
 `render-gate.sh` renders translated chapters only, on purpose. Rendering a main-language
@@ -215,5 +296,5 @@ instead.
 2. Chunk count or heading sequence first, with the alignment workflows. The syncs pair by
    position and need the counts to match.
 3. `sync-chunks.py`, then `sync-anchors.py`.
-4. `chunk-parse-gate.py <base>` and `render-gate.sh <base>` on the changed files.
+4. `check-sync.sh --base <base>`, which adds check 8 and check 6 on the changed files.
 5. Commit each step on its own, signed, and run `check-sync.sh` again.
