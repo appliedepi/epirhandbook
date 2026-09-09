@@ -132,4 +132,11 @@ done
 echo "rendered: pass $pass, FAIL $fail, deleted $gone, of ${#files[@]} changed translated files"
 echo "skipped inline-r 0: the gate renders inline R through the INLINE_R placeholder; $inline of these files carry inline R"
 grep -P '\tFAIL' "$out/SUMMARY.tsv" || true
+# A FAIL without its reason is unreadable in CI, where /tmp/render-gate is gone when the job ends.
+# Print the last lines of the first failing render log, prefixed so the caller can pass them on.
+first=$(grep -P '\tFAIL\t' "$out/SUMMARY.tsv" | head -1 | cut -f1)
+if [ -n "$first" ]; then
+  echo "FAIL-LOG $first (last 25 lines):"
+  tail -25 "$out/$(basename "${first%.qmd}").log" | sed 's/^/FAIL-LOG   /'
+fi
 [ "$fail" -eq 0 ]
