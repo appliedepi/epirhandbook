@@ -15,6 +15,12 @@ on:
   pull_request:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      base:
+        description: "Commit to diff against for checks 6 and 8. Empty means the root commit (whole tree)."
+        required: false
+        default: ""
 jobs:
   check-sync:
     runs-on: ubuntu-latest
@@ -43,6 +49,7 @@ jobs:
           EVENT: ${{ github.event_name }}
           PR_BASE: ${{ github.event.pull_request.base.sha }}
           PUSH_BEFORE: ${{ github.event.before }}
+          DISPATCH_BASE: ${{ github.event.inputs.base }}
         run: |
           set -uo pipefail
           root=$(git rev-list --max-parents=0 HEAD | tail -1)
@@ -52,7 +59,14 @@ jobs:
               && git cat-file -e "$1^{commit}" 2>/dev/null \
               && git merge-base --is-ancestor "$1" HEAD
           }
-          if [ "$EVENT" = "pull_request" ]; then
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            # A manual run names its own base, or gets the whole tree.
+            if usable "${DISPATCH_BASE:-}"; then
+              base="$DISPATCH_BASE"; why="the base given to workflow_dispatch"
+            else
+              base="$root"; why="the root commit, because workflow_dispatch gave no usable base"
+            fi
+          elif [ "$EVENT" = "pull_request" ]; then
             # On a pull request origin/main is the target branch, not this head, so merge-base
             # gives the fork point. That is the right fallback here and only here.
             if usable "${PR_BASE:-}"; then
