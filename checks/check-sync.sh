@@ -97,7 +97,7 @@ python3 "$here/check-data-reads.py" --summary | sed 's/^/   /' \
 if [ -n "$base" ]; then
   echo "== 6. Render gate on every translated chapter changed since $base (quarto render --no-execute)"
   "$here/render-gate.sh" "$base" HEAD > "$log/render.txt" 2>&1 || rc=1
-  grep -E '^(rendered:|skipped inline-r)|FAIL' "$log/render.txt" | sed 's/^/   /'
+  grep -E '^(rendered:|skipped inline-r)|FAIL' "$log/render.txt" | grep -v '^FAIL-LOG' | sed 's/^/   /'
   grep -E '^FAIL-LOG' "$log/render.txt" | sed 's/^/   /'
   echo "   full output: $log/render.txt, per file: /tmp/render-gate/SUMMARY.tsv"
   echo "== 8. Chunk parse gate on every translated chapter changed since $base"
