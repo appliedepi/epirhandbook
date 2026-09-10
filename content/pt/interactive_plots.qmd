@@ -1,0 +1,267 @@
+---
+aliases:
+  - /new_pages/interactive_plots.pt.html
+---
+
+# Gráficos interativos {#interactive-plots}  
+A visualização de dados é cada vez mais necessária para questionamento do público. Consequentemente, a criação de gráficos interativos torna-se algo comum. Há várias formas de torná-los interativos, sendo as duas mais comuns: **plotly** e **shiny**. 
+
+Nesta página iremos focar na conversão de um gráfico já existente no `ggplot()`  em um gráfico interativo, utilizando o **plotly**. Para saber mais sobre o **shiny**, veja na no capítulo [Paineis com  Shiny](shiny_basics.qmd). Importante lembrar que este formato de gráfico interativo tem limitações, utilizados apenas em documentos do R Markdown em formato HTML*, não sendo possível em documentos com formatos em PDF ou Word.
+
+No exemplo abaixo, tem-se um gráfico de  curva epidêmica, que foi transformado para ser interativo,  usando a integração de **ggplot2** e **plotly**(_Passe o mouse sobre o grafico, amplie ou clique nos itens na legenda_). 
+
+ 
+```{r plotly_demo, out.width=c('75%'), out.height=c('500px'), echo=F, warning=F, message=F}
+pacman::p_load(plotly, rio, here, ggplot2, dplyr, lubridate)
+linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds")
+
+## esses botões são supérfluos/distrações
+plotly_buttons_remove <- list('zoom2d','pan2d','lasso2d', 'select2d','zoomIn2d',
+                              'zoomOut2d','autoScale2d','hoverClosestCartesian',
+                              'toggleSpikelines','hoverCompareCartesian')
+
+p <- linelist %>% 
+  mutate(outcome = if_else(is.na(outcome), "Unknown", outcome),
+         date_earliest = if_else(is.na(date_infection), date_onset, date_infection),
+         week_earliest = floor_date(date_earliest, unit = "week",week_start = 1))%>% 
+  count(week_earliest, outcome) %>% 
+  ggplot()+
+  geom_col(aes(week_earliest, n, fill = outcome))+
+  xlab("Week of infection/onset") + ylab("Cases per week")+
+  theme_minimal()
+
+p %>% 
+  ggplotly() %>% 
+  partial_bundle() %>% 
+  config(displaylogo = FALSE, modeBarButtonsToRemove = plotly_buttons_remove)
+
+```
+
+
+<!-- ======================================================= -->
+## Preparação {  }
+
+### Carregando os pacotes  {.unnumbered} 
+
+Esta parte de código(chunk) mostra o carregamento de pacotes necessários para as análises, com destaque `p_load()` do **pacman**, que instala o pacote se necessário e o carrega para uso. Você também pode carregar utilizando a função `library()` - "R base". Para mais informações sobre pacotes consulte o capítulo [Introdução ao R](basics.qmd). 
+
+```{r}
+pacman::p_load(
+  rio,       # importar e exportar dados
+  here,      # especificar caminho dos dados
+  lubridate, # trabalhar dados
+  plotly,    # graficos interativos
+  scales,    # percents
+  tidyverse, # manuseio e visualização
+  appliedepidata # example datasets used in this handbook
+  ) 
+```
+
+### Comece com um `ggplot()` {.unnumbered}  
+
+Nessa seção, assumimos que que você está começando com um gráfico `ggplot()` que pretende tornar interativo. Vamos contruir então, vários gráficos usando o `linelist` de casos, exemplo utilizado em outros capítulos deste manual.
+
+### Importar os dados {.unnumbered}
+
+Para começar, importe a lista de casos (limpa/organizada) de uma epidemia simulada de Ebola. Carregue diretamente com `appliedepidata::get_data(name = "linelist_cleaned_rds")` (consulte a página [Baixar manual e dados](data_used.qmd) para mais detalhes).
+
+
+
+
+```{r, echo=F}
+# importar o arquivo linelist para o R
+linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds")
+```
+
+
+```{r, eval=F}
+# Importar os casos linelist (Ébola)
+linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds")
+```
+
+
+As primeiras 50 linhas da lista de linhas são exibidas abaixo.
+
+```{r, message=FALSE, echo=F}
+# Visualização dos dados em forma de tabela
+DT::datatable(head(linelist, 50), rownames = FALSE, filter="top", options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+
+  
+<!-- ======================================================= -->
+## Gráfico com `ggplotly()` {  }
+
+A função `ggplotly()` do pacote **plotly** facilita a conversão de um `ggplot()` para ser interativo.  Só precisa salvar o seu `ggplot()` e na sequência direciona-lo para a função do `ggplotly()`.  
+
+
+Abaixo, é traçada uma linha simples no gráfico representando a proporção de casos que morreram em uma determinada semana: 
+
+Para começar, necessário cria um conjunto de dados resumido de cada semana epidemiológica e a porcentagem de casos com desfecho conhecido que morreram. 
+
+```{r}
+weekly_deaths <- linelist %>%
+  group_by(epiweek = floor_date(date_onset, "week")) %>%  # criar e agrupar dados por coluna *epiweek*
+  summarise(                                              # criar um novo da Data Frame resumido
+    n_known_outcome = sum(!is.na(outcome), na.rm=T),      # número de casos por grupo(com resultados conhecidos)
+    n_death  = sum(outcome == "Death", na.rm=T),          # número de casos que foram a óbitos
+    pct_death = 100*(n_death / n_known_outcome)           # percentual de casos que foram a obitos com resultados conhecidos
+  )
+```
+Aqui estão as primeiras 50 linhas do conjunto `weekly_deaths`.  
+
+```{r message=FALSE, echo=F}
+DT::datatable(head(weekly_deaths, 50), rownames = FALSE, options = list(pageLength = 5, scrollX=T), class = 'white-space: nowrap' )
+```
+Na sequência criamos o gráfico com  **ggplot2**, usando o `geom_line()`.  
+
+```{r, warning=F, message=F}
+deaths_plot <- ggplot(data = weekly_deaths)+            # começar com o registro de óbito semanal
+  geom_line(mapping = aes(x = epiweek, y = pct_death))  # criar a linha no gráfico
+
+deaths_plot   # visualizar
+```
+
+Para torná-lo interativo, basta passar esse gráfico para `ggplotly()`, como abaixo. Passe o mouse sobre a linha para mostrar os valores x e y. Você pode ampliar o gráfico e arrastá-lo. Você também pode ver os ícones no canto superior direito do gráfico. Em ordem, eles permitem que você:  
+
+* Baixar a visualização atual como uma imagem PNG  
+* Ampliar com uma caixa de seleção  
+* "Pan", ou mova-se pelo gráfico clicando e arrastando  
+* Ampliar, reduzir ou retornar ao zoom padrão 
+* Redefinir os eixos para os padrões 
+* Ative/desative as “Spike Lines” que são linhas pontilhadas do ponto interativo que se estendem até os eixos x e y
+* Ajustes para mostrar os dados quando você não está navegando na linha
+
+
+```{r}
+deaths_plot %>% plotly::ggplotly()
+```
+
+Dados agrupados também funcionam com o `ggplotly()`. Abaixo, é feita uma epicurva semanal, agrupada por resultado. As barras empilhadas são interativas. Tente clicar nos diferentes itens da legenda (eles irão aparecer/desaparecer). 
+
+
+```{r plot_show, eval=F}
+#Produzir a curva com o pacote incidence2 verificar se tem instalado
+p <- incidence2::incidence(
+  linelist,
+  date_index = date_onset,
+  interval = "weeks",
+  groups = outcome) %>% plot(fill = outcome)
+```
+
+```{r, echo=T, eval=F}
+# Gráfico interativo 
+p %>% plotly::ggplotly()
+```
+  
+```{r, warning = F, message = F, , out.width=c('95%'), out.height=c('500px'), echo=FALSE}
+p %>% 
+  ggplotly() %>% 
+  partial_bundle() 
+```
+  
+<!-- ======================================================= -->
+## Modificações{  }
+
+### Tamanho do arquivo {.unnumbered}  
+
+Ao exportar em HTML gerado pelo R Markdown (como este livro!), você irá desejar o gráfico com o menor tamanho de dados possível (sem efeitos colaterais negativos na maioria dos casos). Para isso, basta direcionar a plotagem interativa para `partial_bundle()`, também do **plotly**.  
+
+```{r plot_tidyshow, eval=F}
+p <- p %>% 
+  plotly::ggplotly() %>%
+  plotly::partial_bundle()
+```
+
+### Botões {.unnumbered}  
+
+Alguns dos botões em uma plotagem padrão são supérfluos e podem ser uma distração, então você pode removê-los. Você pode fazer isso simplesmente direcionando a saída  `config()` do **plotly** e especificando quais botões  devem ser removidos. No exemplo abaixo, os nomes dos botões a serem removidos foram expecificados previamente  e fornecido o argumento `modeBarButtonsToRemove = `. Também definiu-se a remoção do logotipo do plotly com o  `displaylogo = FALSE`.
+
+```{r plot_tidyshow2, eval=F}
+##Esses botões são distrações e podem ser removidos
+plotly_buttons_remove <- list('zoom2d','pan2d','lasso2d', 'select2d','zoomIn2d',
+                              'zoomOut2d','autoScale2d','hoverClosestCartesian',
+                              'toggleSpikelines','hoverCompareCartesian')
+
+p <- p %>%          # redefinir o grafico interativo com esses botões
+  plotly::config(displaylogo = FALSE, modeBarButtonsToRemove = plotly_buttons_remove)
+```
+
+
+
+<!-- ======================================================= -->
+## Gráfico -Blocos  de calor {  }
+
+Você pode tornar quase qualquer gráfico do `ggplot()` interativo, incluindo o gráfico de calor. Na página [Gráficos de calor](heatmaps.qmd), você pode ler como criar o gráfico a seguir, que mostra a proporção de dias por semana que certas instalações reportaram dados à sua província.
+
+Aqui está o código, embora não descrito em profundidade neste tópico. 
+
+```{r  message=F, warning=F}
+# Importar os dados de malária
+facility_count_data <- appliedepidata::get_data(name = "malaria_facility_count_data")
+
+# Dados agregados por semana para o distrito durante a primavera
+agg_weeks <- facility_count_data %>% 
+  filter(District == "Spring",
+         data_date < as.Date("2020-08-01")) %>% 
+  mutate(week = aweek::date2week(
+    data_date,
+    start_date = "Monday",
+    floor_day = TRUE,
+    factor = TRUE)) %>% 
+  group_by(location_name, week, .drop = F) %>%
+  summarise(
+    n_days          = 7,
+    n_reports       = n(),
+    malaria_tot     = sum(malaria_tot, na.rm = T),
+    n_days_reported = length(unique(data_date)),
+    p_days_reported = round(100*(n_days_reported / n_days))) %>% 
+  ungroup(location_name, week) %>% 
+  right_join(tidyr::expand(., week, location_name)) %>% 
+  mutate(week = aweek::week2date(week))
+
+# Criar gráfico
+metrics_plot <- ggplot(agg_weeks,
+       aes(x = week,
+           y = location_name,
+           fill = p_days_reported))+
+  geom_tile(colour="white")+
+  scale_fill_gradient(low = "orange", high = "darkgreen", na.value = "grey80")+
+  scale_x_date(expand = c(0,0),
+               date_breaks = "2 weeks",
+               date_labels = "%d\n%b")+
+  theme_minimal()+ 
+  theme(
+    legend.title = element_text(size=12, face="bold"),
+    legend.text  = element_text(size=10, face="bold"),
+    legend.key.height = grid::unit(1,"cm"),
+    legend.key.width  = grid::unit(0.6,"cm"),
+    axis.text.x = element_text(size=12),
+    axis.text.y = element_text(vjust=0.2),
+    axis.ticks = element_line(linewidth=0.4),
+    axis.title = element_text(size=12, face="bold"),
+    plot.title = element_text(hjust=0,size=14,face="bold"),
+    plot.caption = element_text(hjust = 0, face = "italic")
+    )+
+  labs(x = "Week",
+       y = "Facility name",
+       fill = "Reporting\nperformance (%)",
+       title = "Percent of days per week that facility reported data",
+       subtitle = "District health facilities, April-May 2019",
+       caption = "7-day weeks beginning on Mondays.")
+
+metrics_plot # mostrar gráfico
+```
+
+Abaixo, o gráfico foi transformado no modo interativo e o tamanho do arquivo, assim como os botões modificados para formas mais simples.
+
+```{r,  out.width=c('95%'), out.height=c('500px')}
+metrics_plot %>% 
+  plotly::ggplotly() %>% 
+  plotly::partial_bundle() %>% 
+  plotly::config(displaylogo = FALSE, modeBarButtonsToRemove = plotly_buttons_remove)
+```
+
+<!-- ======================================================= -->
+## Recursos {  }
+
+Plotly não é apenas para R, também funciona bem com Python (e qualquer linguagem de ciência de dados, por ser construído em JavaScript). Você pode ler mais sobre o tema no [Website plotly](https://plotly.com/r/)
