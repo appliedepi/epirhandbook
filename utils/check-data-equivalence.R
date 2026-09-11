@@ -25,9 +25,9 @@ d <- read.delim(
   stringsAsFactors = FALSE
 )
 gd <- d[d$access == "get_data", ]
-gd$chapter[gd$chapter == "chapters/gis.qmd"] <- "_excluded/gis.qmd"
+gd$chapter[gd$chapter == "content/en/gis.qmd"] <- "_excluded/gis.qmd"
 gd$chapter[
-  gd$chapter == "chapters/epidemic_models.qmd"
+  gd$chapter == "content/en/epidemic_models.qmd"
 ] <- "_excluded/epidemic_models.qmd"
 
 extract_path <- function(expr) {

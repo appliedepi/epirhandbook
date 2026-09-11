@@ -19,9 +19,9 @@ titles <- c(
   "ru" = "Справочник эпидемиолога R"
 )
 
-# Define the folder path
+# Define the folder path. Each language's chapter files live in content/<lang>/.
 subfolder <- "offline_long"
-chapters_folder <- "chapters"
+content_folder <- "content"
 
 #! Adding content to file is dangerous, check carefully. 
 # Loop through each language
@@ -57,7 +57,7 @@ for (lang in languages) {
   
   # Loop through each chapter and append the include statement to the index file if it doesn't already exist
   for (chapter in chapter_list) {
-    chapter_include <- paste0("{{< include ", sub(".qmd", paste0(".", lang, ".qmd"), chapter), " >}}")
+    chapter_include <- paste0("{{< include ", chapter, " >}}")
     if (!chapter_include %in% existing_content) {
       writeLines(chapter_include, con)
     }
@@ -174,7 +174,8 @@ handle_language <- function(lang) {
     dir_copy("data", file.path(temporary_directory, "data"))
   }
 
-  # Set the file suffix
+  # Set the file suffix. It names the index file in offline_long/, and nothing else:
+  # every chapter file is <stem>.qmd inside its own content/<lang>/ folder.
   suffix <- if (lang == "en") "" else paste0(".", lang)
 
   # Copy the index file to the temporary directory
@@ -185,7 +186,7 @@ handle_language <- function(lang) {
 
   # Loop through each chapter and copy the chapter file to the temporary directory
   for (chapter in chapter_list) {
-    chapter_file <- file.path("chapters", sub(".qmd", paste0(suffix, ".qmd"), chapter))
+    chapter_file <- file.path(content_folder, lang, chapter)
     if (file_exists(chapter_file)) {
       file_copy(chapter_file, temporary_directory)
     }
@@ -193,7 +194,7 @@ handle_language <- function(lang) {
 
   # Edit specific files as per the instructions
   for (file_name in names(content_to_add)) {
-    file_path <- file.path(temporary_directory, sub(".qmd", paste0(suffix, ".qmd"), file_name))
+    file_path <- file.path(temporary_directory, file_name)
 
     if (file_exists(file_path)) {
       file_content <- readLines(file_path)
@@ -208,8 +209,7 @@ handle_language <- function(lang) {
 
   # Replace specific lines in transmission_chains.qmd and others
   for (file_name in c("transmission_chains.qmd", chapter_list)) {
-    file_path <- file.path(temporary_directory, sub(".qmd", paste0(suffix, ".qmd"), file_name))
-    replace_specific_lines(file_path)
+    replace_specific_lines(file.path(temporary_directory, file_name))
   }
 
   # Save the path of the temporary directory for rendering
@@ -248,215 +248,3 @@ render_and_copy("pt")
 render_and_copy("tr")
 render_and_copy("ru")
 
-
-# #! Old script --------------------------------------------------------------------------------
-
-# # Function to replace specific lines in a file
-# replace_specific_lines <- function(file_path) {
-#   if (file_exists(file_path)) {
-#     file_content <- readLines(file_path)
-#     file_content <- gsub("f = table", "f = function(a, b) table(a, b)", file_content)
-#     file_content <- gsub("select\\(Country, everything\\(\\)\\)", "dplyr::select(Country, everything())", file_content) # Specifically replace select(Country, everything())
-#     writeLines(file_content, file_path)
-#   }
-# }
-
-# # Loop through each language
-# for (lang in languages) {
-#   # Create a temporary directory for this language
-#   temporary_directory <- withr::local_tempdir()
-
-#   # Copy the images and data folders to the temporary directory
-#   if (dir_exists("images")) {
-#     dir_copy("images", file.path(temporary_directory, "images"))
-#   }
-#   if (dir_exists("data")) {
-#     dir_copy("data", file.path(temporary_directory, "data"))
-#   }
-
-#   # Copy the index file to the temporary directory
-#   index_file <- file.path("offline_long", paste0("index.", lang, ".qmd"))
-#   if (file_exists(index_file)) {
-#     file_copy(index_file, temporary_directory)
-#   }
-
-#   # Loop through each chapter and copy the chapter file to the temporary directory
-#   for (chapter in chapter_list) {
-#     chapter_file <- file.path("chapters", sub(".qmd", paste0(".", lang, ".qmd"), chapter))
-#     if (file_exists(chapter_file)) {
-#       file_copy(chapter_file, temporary_directory)
-#     }
-#   }
-
-#   # Edit specific files as per the instructions
-#   for (file_name in names(content_to_add)) {
-#     file_path <- file.path(temporary_directory, sub(".qmd", paste0(".", lang, ".qmd"), file_name))
-
-#     if (file_exists(file_path)) {
-#       file_content <- readLines(file_path)
-
-#       # Add content only if it's not already there
-#       if (!all(content_to_add[[file_name]] %in% file_content)) {
-#         new_content <- c(content_to_add[[file_name]], file_content)
-#         writeLines(new_content, file_path)
-#       }
-#     }
-#   }
-
-#   # Replace specific lines in transmission_chains.qmd and others
-#   for (file_name in c("transmission_chains.qmd", chapter_list)) {
-#     file_path <- file.path(temporary_directory, sub(".qmd", paste0(".", lang, ".qmd"), file_name))
-#     replace_specific_lines(file_path)
-#   }
-
-#   # Save the path of the temporary directory for rendering
-#   assign(paste0("temp_dir_", lang), temporary_directory)
-  
-#   # Print the path to the temporary directory for verification
-#   print(paste("Temporary directory for", lang, "with copied files is located at:", temporary_directory))
-# }
-
-# # Render the book for French
-# with_dir(get("temp_dir_fr"), {
-#   render_command <- "quarto render index.fr.qmd"
-#   system(render_command)
-# })
-
-# # Copy the output file back to the original offline_long folder
-# output_file <- file.path(get("temp_dir_fr"), "index.fr.html")
-# if (file_exists(output_file)) {
-#   file_copy(output_file, "offline_long")
-# }
-
-# # Render the book for Spanish
-# with_dir(get("temp_dir_es"), {
-#   render_command <- "quarto render index.es.qmd"
-#   system(render_command)
-# })
-
-# # Copy the output file back to the original offline_long folder
-# output_file <- file.path(get("temp_dir_es"), "index.es.html")
-# if (file_exists(output_file)) {
-#   file_copy(output_file, "offline_long")
-# }
-
-# # Render the book for Vietnamese
-# with_dir(get("temp_dir_vn"), {
-#   render_command <- "quarto render index.vn.qmd"
-#   system(render_command)
-# })
-
-# # Copy the output file back to the original offline_long folder
-# output_file <- file.path(get("temp_dir_vn"), "index.vn.html")
-# if (file_exists(output_file)) {
-#   file_copy(output_file, "offline_long")
-# }
-
-# # Render the book for Japanese
-# with_dir(get("temp_dir_jp"), {
-#   render_command <- "quarto render index.jp.qmd"
-#   system(render_command)
-# })
-
-# # Copy the output file back to the original offline_long folder
-# output_file <- file.path(get("temp_dir_jp"), "index.jp.html")
-# if (file_exists(output_file)) {
-#   file_copy(output_file, "offline_long")
-# }
-
-# # Render the book for Portuguese
-# with_dir(get("temp_dir_pt"), {
-#   render_command <- "quarto render index.pt.qmd"
-#   system(render_command)
-# })
-
-# # Copy the output file back to the original offline_long folder
-# output_file <- file.path(get("temp_dir_pt"), "index.pt.html")
-# if (file_exists(output_file)) {
-#   file_copy(output_file, "offline_long")
-# }
-
-# # Render the book for Turkish
-# with_dir(get("temp_dir_tr"), {
-#   render_command <- "quarto render index.tr.qmd"
-#   system(render_command)
-# })
-
-# # Copy the output file back to the original offline_long folder
-# output_file <- file.path(get("temp_dir_tr"), "index.tr.html")
-# if (file_exists(output_file)) {
-#   file_copy(output_file, "offline_long")
-# }
-
-# # Render the book for Russian
-# with_dir(get("temp_dir_ru"), {
-#   render_command <- "quarto render index.ru.qmd"
-#   system(render_command)
-# })
-
-# # Copy the output file back to the original offline_long folder
-# output_file <- file.path(get("temp_dir_ru"), "index.ru.html")
-# if (file_exists(output_file)) {
-#   file_copy(output_file, "offline_long")
-# }
-
-# #! For English file only ----------------------------------------------------------------------
-
-# # Create a temporary directory for English files
-# temporary_directory <- withr::local_tempdir()
-
-# # Copy the images and data folders to the temporary directory
-# if (dir_exists("images")) {
-#   dir_copy("images", file.path(temporary_directory, "images"))
-# }
-# if (dir_exists("data")) {
-#   dir_copy("data", file.path(temporary_directory, "data"))
-# }
-
-# # Copy the index file to the temporary directory
-# index_file <- file.path("offline_long", "index.qmd")
-# if (file_exists(index_file)) {
-#   file_copy(index_file, temporary_directory)
-# }
-
-# # Loop through each chapter and copy the chapter file to the temporary directory
-# for (chapter in chapter_list) {
-#   chapter_file <- file.path("chapters", chapter)
-#   if (file_exists(chapter_file)) {
-#     file_copy(chapter_file, temporary_directory)
-#   }
-# }
-
-# # Edit specific files as per the instructions
-# for (file_name in names(content_to_add)) {
-#   file_path <- file.path(temporary_directory, file_name)
-
-#   if (file_exists(file_path)) {
-#     file_content <- readLines(file_path)
-
-#     # Add content only if it's not already there
-#     if (!all(content_to_add[[file_name]] %in% file_content)) {
-#       new_content <- c(content_to_add[[file_name]], file_content)
-#       writeLines(new_content, file_path)
-#     }
-#   }
-# }
-
-# # Replace specific lines in transmission_chains.qmd
-# transmission_file_path <- file.path(temporary_directory, "transmission_chains.qmd")
-# replace_specific_lines(transmission_file_path)
-
-# # Change the directory to the temporary directory and render the book for English
-# with_dir(temporary_directory, {
-#   render_command <- "quarto render index.qmd"
-#   system(render_command)
-# })
-
-# # Copy the output file back to the original offline_long folder
-# output_file <- file.path(temporary_directory, "index.html")
-# if (file_exists(output_file)) {
-#   file_copy(output_file, "offline_long")
-# }
-
-# # Print the path to the temporary directory
-# print(paste("Temporary directory with copied files is located at:", temporary_directory))

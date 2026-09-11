@@ -2,17 +2,20 @@
 """Make every R code chunk of every translated chapter identical in code to the English chunk,
 keeping the translated comments where the code line is the same.
 
-For each chapters/<chapter>.<lang>.qmd whose chunk count equals the English chapter's, walk the
+For each content/<lang>/<stem>.qmd whose chunk count equals the English chapter's, walk the
 chunks in order. For each chunk, the output is the English chunk, line by line, except that a
 line whose code part (the text before any # comment, right-stripped) equals the code part of a
 line in the translated chunk keeps the translated line, so the translator's comment survives.
 The fence line with the chunk options is taken from the English. A translated file whose
 chunk count differs from the English is skipped and listed: it needs a hand alignment.
 
+The landing page, content/<lang>/index.qmd, is outside the file set. Each language writes its
+own landing page, so its chunks are not a copy of the English chunks.
+
 Deterministic. No model, no network. Prints one line per changed file and a summary.
 
 Usage:
-    python3 checks/sync-chunks.py [--langs es,fr,jp,pt,ru,tr,vn] [--dry-run] [--only FILE ...]
+    python3 checks/sync-chunks.py [--langs fr,es,vn,jp,pt,tr,ru] [--dry-run] [--only FILE ...]
 """
 import argparse
 import glob
@@ -21,6 +24,15 @@ import re
 import sys
 
 FENCE = re.compile(r'^(\s*)(`{3,})\s*\{r[ ,}]')
+LANDING = 'index.qmd'
+
+
+def languages():
+    """The main language code and the translation codes, from `languages.yml`."""
+    y = open('languages.yml', encoding='utf-8').read()
+    main = re.search(r'^main:\s*([A-Za-z0-9_]+)', y, re.M).group(1)
+    codes = re.findall(r'^\s*-\s*code:\s*([A-Za-z0-9_]+)', y, re.M)
+    return main, [c for c in codes if c != main]
 
 
 def split(text):
@@ -86,17 +98,20 @@ def merge(en_body, tr_body):
 
 
 def main():
+    main_lang, translations = languages()
     ap = argparse.ArgumentParser()
-    ap.add_argument('--langs', default='es,fr,jp,pt,ru,tr,vn')
+    ap.add_argument('--langs', default=','.join(translations))
     ap.add_argument('--dry-run', action='store_true')
     ap.add_argument('--only', nargs='*', default=None)
     ap.add_argument('--from-ref', default=None, help='read the translated files from this git ref instead of the working tree')
     args = ap.parse_args()
     langs = args.langs.split(',')
-    files = args.only if args.only else sorted(f for l in langs for f in glob.glob('chapters/*.%s.qmd' % l))
+    files = args.only if args.only else sorted(
+        f for l in langs for f in glob.glob('content/%s/*.qmd' % l)
+        if os.path.basename(f) != LANDING)
     changed, chunks_changed, kept_total, fallback_total, skipped = 0, 0, 0, 0, []
     for tr in files:
-        en = re.sub(r'\.[a-z]{2}\.qmd$', '.qmd', tr)
+        en = 'content/%s/%s' % (main_lang, os.path.basename(tr))
         if not os.path.exists(en):
             skipped.append((tr, 'no English chapter')); continue
         te = open(en, encoding='utf-8').read()

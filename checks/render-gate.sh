@@ -3,13 +3,18 @@
 # that changed since <base>.
 # Usage: checks/render-gate.sh <base-commit> [head]
 #
-# Each file renders as a temporary copy beside the original, chapters/<stem>.render-gate-tmp.<lang>.qmd.
-# In that copy every inline R expression `r ...` outside a fenced block becomes the placeholder
-# INLINE_R. quarto render --no-execute stops at an inline R expression, so the placeholder is what
-# lets the gate read a file that holds one. The copy sits in the chapters/ folder, so _quarto.yml
-# and every relative path resolve as they do for the original. A trap deletes every copy and every
-# artifact beside it, in chapters/ and in the project's html_outputs/ folder, on success and on
-# failure.
+# A translated chapter is a file under content/<lang>/ whose language is not the main language
+# that languages.yml declares. Each one renders as a temporary copy beside the original,
+# content/<lang>/<stem>.render-gate-tmp.qmd. In that copy every inline R expression `r ...`
+# outside a fenced block becomes the placeholder INLINE_R. quarto render --no-execute stops at an
+# inline R expression, so the placeholder is what lets the gate read a file that holds one. The
+# copy sits in the language folder, so content/<lang>/_quarto.yaml and every relative path resolve
+# as they do for the original.
+#
+# A trap deletes every copy and every artifact beside it, on success and on failure. It also
+# deletes the content/<lang>/html_outputs/ and content/<lang>/.quarto/ folders that the render
+# creates, and only those: the gate records at start which of them are already there, and leaves
+# every one of those alone. In a fresh clone the gate therefore leaves no file at all.
 #
 # Exit 0 when every file renders, 1 when a file FAILS, 2 when the gate cannot run: a base or head
 # that is not a commit, a git diff that fails, or a copy path that already exists or is tracked.
@@ -24,16 +29,32 @@ if [ $# -lt 1 ]; then echo "Usage: checks/render-gate.sh <base-commit> [head]" >
 base="$1"; head="${2:-HEAD}"
 out=/tmp/render-gate; rm -rf "$out"; mkdir -p "$out"
 
+main=$(sed -n 's/^main:[[:space:]]*\([A-Za-z0-9_][A-Za-z0-9_]*\).*/\1/p' languages.yml | head -1)
+if [ -z "$main" ]; then
+  echo "render-gate: languages.yml declares no main language" >&2; exit 2
+fi
+
+# Record which build folders are absent now. The trap deletes the ones the render creates and
+# leaves every folder that was already here.
+absent=()
+for d in content/*/; do
+  d="${d%/}"
+  [ -e "$d/html_outputs" ] || absent+=("$d/html_outputs")
+  [ -e "$d/.quarto" ] || absent+=("$d/.quarto")
+done
+
 cleanup() {
-  rm -f chapters/*.render-gate-tmp.*.qmd chapters/*.render-gate-tmp.*.html
-  rm -rf chapters/*.render-gate-tmp.*_files
-  rm -rf html_outputs/chapters/*.render-gate-tmp.*
+  rm -f content/*/*.render-gate-tmp.qmd content/*/*.render-gate-tmp.html
+  rm -rf content/*/*.render-gate-tmp_files
+  rm -rf content/*/html_outputs/*.render-gate-tmp*
+  if [ "${#absent[@]}" -gt 0 ]; then rm -rf "${absent[@]}"; fi
 }
-# The cleanup deletes every path that matches the temporary-copy pattern. Refuse to run at all
-# when the repository tracks one, rather than delete a tracked file.
-tracked=$(git ls-files -- 'chapters/*.render-gate-tmp.*' 'html_outputs/chapters/*.render-gate-tmp.*')
+# The cleanup deletes every path that matches the temporary-copy pattern, and every build folder
+# it created. Refuse to run at all when the repository tracks one, rather than delete a tracked
+# file.
+tracked=$(git ls-files -- 'content/*/*.render-gate-tmp*' 'content/*/html_outputs/*' 'content/*/.quarto/*')
 if [ -n "$tracked" ]; then
-  echo "render-gate: the repository tracks a render-gate temporary path; refusing to delete it:" >&2
+  echo "render-gate: the repository tracks a path this gate deletes; refusing to delete it:" >&2
   echo "$tracked" >&2
   exit 2
 fi
@@ -45,10 +66,11 @@ for c in "$base" "$head"; do
     echo "render-gate: '$c' is not a commit in this repository" >&2; exit 2
   fi
 done
-if ! git diff --name-only "$base" "$head" -- 'chapters/*.qmd' > "$out/diff.txt" 2>"$out/diff.err"; then
+if ! git diff --name-only "$base" "$head" -- 'content/' > "$out/diff.txt" 2>"$out/diff.err"; then
   echo "render-gate: git diff $base $head failed:" >&2; cat "$out/diff.err" >&2; exit 2
 fi
-mapfile -t files < <(grep -E '\.[a-z]{2}\.qmd$' "$out/diff.txt" | sort)
+mapfile -t files < <(grep -E '^content/[^/]+/[^/]+\.qmd$' "$out/diff.txt" \
+  | grep -v "^content/$main/" | sort)
 
 pass=0; fail=0; gone=0; inline=0
 printf 'file\tresult\tseconds\n' > "$out/SUMMARY.tsv"
@@ -60,9 +82,9 @@ for f in "${files[@]}"; do
     printf '%s\tFAIL-fence-parity\t0\n' "$f" >> "$out/SUMMARY.tsv"; fail=$((fail+1)); continue
   fi
   grep -q '`r ' "$f" && inline=$((inline+1))
-  stem="${f%.qmd}"                       # chapters/gis.es
-  lang="${stem##*.}"                     # es
-  copy="${stem%.*}.render-gate-tmp.$lang.qmd"
+  stem="${f%.qmd}"                       # content/es/gis
+  id="${stem#content/}"; id="${id//\//.}"  # es.gis, the per-file log name
+  copy="$stem.render-gate-tmp.qmd"
   if git ls-files --error-unmatch "$copy" >/dev/null 2>&1; then
     echo "render-gate: $copy is tracked; refusing to write over it" >&2; exit 2
   fi
@@ -123,20 +145,22 @@ PY
     printf '%s\tFAIL-placeholder\t0\n' "$f" >> "$out/SUMMARY.tsv"; fail=$((fail+1)); continue
   fi
   t0=$(date +%s)
-  if timeout 180 quarto render "$copy" --no-execute --to html > "$out/$(basename "$stem").log" 2>&1
+  if timeout 180 quarto render "$copy" --no-execute --to html > "$out/$id.log" 2>&1
   then r=pass; pass=$((pass+1)); else r=FAIL; fail=$((fail+1)); fi
   printf '%s\t%s\t%s\n' "$f" "$r" "$(( $(date +%s) - t0 ))" >> "$out/SUMMARY.tsv"
-  rm -f "$copy" "${copy%.qmd}.html"; rm -rf "${copy%.qmd}_files"
-  rm -rf html_outputs/"${copy%.qmd}".html html_outputs/"${copy%.qmd}"_files
+  d=$(dirname "$f"); b=$(basename "${copy%.qmd}")
+  rm -f "$copy" "$d/$b.html"; rm -rf "$d/${b}_files"
+  rm -rf "$d/html_outputs/$b.html" "$d/html_outputs/${b}_files"
 done
-echo "rendered: pass $pass, FAIL $fail, deleted $gone, of ${#files[@]} changed translated files"
+echo "rendered: $pass pass, $fail FAIL, $gone deleted, of ${#files[@]} changed translated files"
 echo "skipped inline-r 0: the gate renders inline R through the INLINE_R placeholder; $inline of these files carry inline R"
 grep -P '\tFAIL' "$out/SUMMARY.tsv" || true
 # A FAIL without its reason is unreadable in CI, where /tmp/render-gate is gone when the job ends.
 # Print the last lines of the first failing render log, prefixed so the caller can pass them on.
 first=$(grep -P '\tFAIL\t' "$out/SUMMARY.tsv" | head -1 | cut -f1)
 if [ -n "$first" ]; then
+  fid="${first#content/}"; fid="${fid%.qmd}"; fid="${fid//\//.}"
   echo "FAIL-LOG $first (last 25 lines):"
-  tail -25 "$out/$(basename "${first%.qmd}").log" | sed 's/^/FAIL-LOG   /'
+  tail -25 "$out/$fid.log" | sed 's/^/FAIL-LOG   /'
 fi
 [ "$fail" -eq 0 ]

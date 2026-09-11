@@ -5,8 +5,8 @@ The handbook loads its data with `appliedepidata::get_data()`. Two chapters are 
 directories chapter and the importing chapter teach file paths, so a reader runs them against
 the repository's own `data/` folder. Those two may read `data/`. Nothing may write into it.
 
-The file set is every chapter declared in `_quarto.yml` (`index.qmd` and `chapters/<stem>.qmd`)
-in English and in every language under `babelquarto.languages`: 400 files.
+The file set is `content/<lang>/<stem>.qmd` for every language in `languages.yml` and every
+stem in `content/en/_quarto.yaml`: 400 files.
 
 A chunk executes when its fence options do not set `eval=F` or `eval=FALSE`. The checker strips
 the `#` comment from each line of such a chunk, then matches three lexical forms:
@@ -30,7 +30,6 @@ import os, re, sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-LANGS = ['es', 'fr', 'jp', 'pt', 'ru', 'tr', 'vn']
 
 # The two chapters that teach file paths. Their subject is the repository's own `data/` folder,
 # so their chunks name it on purpose and a reader needs that folder to run them. Every other
@@ -62,38 +61,47 @@ def opt(name):
 fixture = opt('--fixture')
 
 
+def languages():
+    """The codes `languages.yml` declares, in file order, and the main language.
+
+    The order is the declared one. `main:` names the reference language, and it is a code in
+    that list, not a position in it.
+    """
+    y = (ROOT / 'languages.yml').read_text(encoding='utf-8')
+    main = re.search(r'^main:\s*([A-Za-z0-9_]+)', y, re.M).group(1)
+    codes = re.findall(r'^\s*-\s*code:\s*([A-Za-z0-9_]+)', y, re.M)
+    return codes, main
+
+
 def declared():
-    """Every declared chapter file: [(path relative to root, language)]."""
-    y = (ROOT / '_quarto.yml').read_text(encoding='utf-8')
-    stems = ['index'] + ['chapters/' + s for s in re.findall(r'^\s*-\s*chapters/([A-Za-z0-9_]+)\.qmd', y, re.M)]
-    langs = re.search(r'languages:\s*\[([^\]]*)\]', y).group(1)
-    langs = [x.strip().strip("'\"") for x in langs.split(',') if x.strip()]
-    out = [(s + '.qmd', 'en') for s in stems]
-    out += [(s + '.' + l + '.qmd', l) for s in stems for l in langs]
-    return sorted(out), langs
+    """Every declared chapter file: [(path relative to root, language)].
+
+    `languages.yml` names the languages. `content/<main>/_quarto.yaml` names the stems, and
+    `index` is the first of them.
+    """
+    langs, main = languages()
+    ref = ROOT / 'content' / main / '_quarto.yaml'
+    if not ref.exists():
+        # Without the reference project file there is no stem list, so this check cannot run.
+        # Stop with one line, not a traceback. Check 9 of check-sync.sh reports the file.
+        sys.exit('%s: missing. Check 9 of checks/check-sync.sh reports it.' % ref)
+    y = ref.read_text(encoding='utf-8')
+    stems = re.findall(r'^\s*-\s*([A-Za-z0-9_]+)\.qmd', y, re.M)
+    return sorted(('content/%s/%s.qmd' % (l, s), l) for l in langs for s in stems), langs
 
 
-def declared_languages():
-    """The languages `_quarto.yml` declares, or LANGS when the file is unreadable."""
-    try:
-        y = (ROOT / '_quarto.yml').read_text(encoding='utf-8')
-        out = re.search(r'languages:\s*\[([^\]]*)\]', y).group(1)
-        out = [x.strip().strip("'\"") for x in out.split(',') if x.strip()]
-        return out or LANGS
-    except Exception:
-        return LANGS
+def language(path):
+    """The language of a chapter file: the folder that holds it.
+
+    Every declared file is `content/<lang>/<stem>.qmd`, so the language is the second path
+    segment. A fixture drops the `content/` prefix and keeps the language folder.
+    """
+    return os.path.basename(os.path.dirname(str(path)))
 
 
-def language(path, langs):
-    m = re.search(r'\.([a-z]{2})\.qmd$', path)
-    return m.group(1) if m and m.group(1) in langs else 'en'
-
-
-def stem(path, langs):
-    """The chapter name, with the language suffix and the extension removed."""
-    name = os.path.basename(path)[:-len('.qmd')]
-    m = re.search(r'\.([a-z]{2})$', name)
-    return name[:m.start()] if m and m.group(1) in langs else name
+def stem(path):
+    """The chapter name, with the extension removed."""
+    return os.path.basename(str(path))[:-len('.qmd')]
 
 
 def executing_chunks(text):
@@ -154,8 +162,8 @@ def scan(path, chapter):
 
 base = Path(fixture) if fixture else ROOT
 if fixture:
-    langs = declared_languages()
-    files = [(p.name, language(p.name, langs)) for p in sorted(Path(fixture).glob('*.qmd'))]
+    files = [(str(p.relative_to(base)), language(p)) for p in sorted(base.glob('*/*.qmd'))]
+    langs = sorted({l for _, l in files})
 else:
     files, langs = declared()
 
@@ -166,12 +174,12 @@ files = [(f, l) for f, l in files if f not in missing]
 
 rows = []
 for f, lang in files:
-    for n, kind in scan(base / f, stem(f, langs)):
+    for n, kind in scan(base / f, stem(f)):
         rows.append((f, lang, n, kind))
 
 if summary:
     print('files scanned %d' % len(files))
-    for l in ['en'] + sorted(langs):
+    for l in langs:
         n = sum(1 for _, x in files if x == l)
         if n:
             print('lang %s: files %d, data-reads %d' % (l, n, sum(1 for r in rows if r[1] == l)))

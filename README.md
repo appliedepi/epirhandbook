@@ -79,18 +79,23 @@ as the English original, so it needs the same packages.
 
 To move one chapter to a different image version, change that one line.
 
-The language list is **not** in this manifest. It lives in `_quarto.yml`'s
-`babelquarto:` block, which is the single source of truth for which languages ship.
+The language list is **not** in this manifest. It lives in `languages.yml`.
 
 ### How languages are handled
 
-English is the main language. It renders at the site root.
+`languages.yml` declares each language: its code, its display label and its book title. Every
+check in `checks/check-sync.sh` reads it. English is the main language.
 
-Every other language renders from its own `.<lang>.qmd` files (e.g.
-`time_series.fr.qmd`) and lands under `<lang>/` (e.g. `/fr/`).
+Each language owns one folder, `content/<lang>/`. That folder holds the language's chapter
+files, named `<stem>.qmd`, and one Quarto book project, `content/<lang>/_quarto.yaml`. The
+project file declares the language, the title and the chapter list. Each language renders under
+its own site path: `/en/`, `/fr/`, and so on.
 
-Old `/new_pages/...` URLs still work. Every chapter file carries an `aliases:` entry
-in its front matter, and Quarto turns that into a redirect stub at the old path:
+The eight project files declare the same 50 stems in the same order. Check 9 of
+`checks/check-sync.sh` reports a language that drifts from that.
+
+Old `/new_pages/...` URLs still work. Every chapter file except `index.qmd` carries an
+`aliases:` entry in its front matter. Quarto turns that into a redirect stub at the old path:
 
 ```
 ---
@@ -99,9 +104,17 @@ aliases:
 ---
 ```
 
-The alias value must be root-relative — it must start with a leading `/`. Without
-the leading slash, Quarto writes the redirect stub in the wrong place, and the old
-link stays broken.
+English writes `/new_pages/<stem>.html`. Every other language writes
+`/new_pages/<stem>.<lang>.html`, so French writes `/new_pages/time_series.fr.html`. Check 9 of
+`checks/check-sync.sh` enforces it. A chapter file that lacks the alias, or carries the wrong
+one, is a drift.
+
+A chapter that also replaces a second old URL carries a second alias line.
+`content/en/transition_to_r.qmd` is today's one example. It carries
+`/new_pages/transition_to_R.html` as well, the old spelling with a capital R.
+
+The alias value must be root-relative: it must start with a leading `/`. Without the leading
+slash, Quarto writes the redirect stub in the wrong place, and the old link stays broken.
 
 ### The three environments
 
@@ -164,13 +177,16 @@ group images rather than maintained by hand, so it cannot drift from what CI use
 container therefore renders any chapter, which is what you want while editing and what
 you do not want in CI, where a smaller image is faster.
 
-To render a single chapter inside the container:
+To render a single chapter inside the container, work from that chapter's language folder:
 
 ```bash
-quarto render chapters/epicurves.qmd
+cd content/en
+quarto render epicurves.qmd
 ```
 
-Rendering the whole book in all nine languages is CI's job, not something to do locally.
+Quarto reads `content/en/_quarto.yaml` from that folder, so every relative path in the chapter
+resolves. Rendering the whole book in all eight languages is CI's job, not something to do
+locally.
 
 **If you add a package**, that is a change to
 [appliedepi/aedockerpublic](https://github.com/appliedepi/aedockerpublic), not to this
@@ -205,7 +221,8 @@ in step 5, so what goes live is exactly what was reviewed.
 
 | To change... | Edit... |
 |---|---|
-| A chapter's prose | this repository, in `chapters/` |
+| A chapter's prose | this repository, in `content/<lang>/` |
+| Which languages ship | `languages.yml`, in this repository |
 | A chapter's R packages | [appliedepi/aedockerpublic](https://github.com/appliedepi/aedockerpublic) |
 | Which image a chapter uses | `docker-images.yml`, in this repository |
 
@@ -215,15 +232,18 @@ in step 5, so what goes live is exactly what was reviewed.
 point at the new image tag. Every other chapter keeps its own tag and is
 unaffected.
 
-**Add a new chapter.** Four things, across both repositories:
+**Add a new chapter.** Five things, across both repositories:
 
-1. A `.qmd` file here, in `chapters/` (plus translated `.qmd` files, if any).
-2. An image in aedockerpublic — a new one, or an existing one that already has the
-   right packages.
+1. A `.qmd` file in `content/en/`, and a translated file in each other `content/<lang>/`.
+2. An image in aedockerpublic: a new one, or an existing one that already has the right
+   packages.
 3. A new row in `docker-images.yml`, in this repository.
-4. A new entry in `_quarto.yml`, in this repository, under `book.chapters`.
-5. If the chapter replaces an old URL, an `aliases:` entry in the chapter's own
-   front matter — not in `_quarto.yml`. The value needs a leading `/`.
+4. A new entry under `book.chapters` in every `content/<lang>/_quarto.yaml`, at the same
+   position in each.
+5. The standard alias in the chapter's own front matter: `/new_pages/<stem>.html` under
+   `content/en/`, `/new_pages/<stem>.<lang>.html` elsewhere. The value needs a leading `/`.
+
+Run `checks/check-sync.sh` afterwards. Check 9 reports a language you missed.
 
 ### Debugging a failed render
 
@@ -238,8 +258,9 @@ job's exit code was 0.
 
 ### Excluded chapters
 
-One chapter is excluded from the build: `epidemic_models`. It is commented out of
-`_quarto.yml`, under `book.chapters`, and its source files sit in `_excluded/`.
+One chapter is excluded from the build: `epidemic_models`. Every
+`content/<lang>/_quarto.yaml` comments it out under `book.chapters`. Its source files sit in
+`_excluded/`.
 
 The chapter fails on a recorded EpiNow2 API break, an `xy.coords()` error. See
 aedockerpublic's `epirhandbook/2.7/BREAKAGE.tsv`.
@@ -250,9 +271,8 @@ built before the exclusion, and it will stop resolving once this deploys. A chap
 absent from `book.chapters` never renders, so it never emits the alias redirect stub
 that keeps the old URL alive.
 
-No chapter links to `epidemic_models` in any language. A search for the string across
-every `.qmd` file in `chapters/` returns nothing, so the exclusion breaks no
-cross-reference.
+No chapter links to `epidemic_models` in any language. A search for the string across every
+`.qmd` file under `content/` returns nothing, so the exclusion breaks no cross-reference.
 
 **What it would take to bring it back.** Rewrite the chapter's EpiNow2 code against the
 current API. The chapter uses result accessors that EpiNow2 removed. Then render the

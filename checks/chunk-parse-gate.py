@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Parse every R code chunk of every changed translated chapter with R, before and after.
 
-For each chapters/<chapter>.<lang>.qmd changed between BASE and HEAD, extract the ```{r ...}
+A translated chapter is a file under content/<lang>/ whose language is not the main language
+that languages.yml declares. For each one changed between BASE and HEAD, extract the ```{r ...}
 chunks from both versions, parse every chunk in ONE R process, and compare the two versions
 chunk index by chunk index. The gate FAILS when a chunk index fails to parse after and did not
 fail before, unless the English chunk at that index fails too: that is the source's pseudo-code
@@ -20,6 +21,8 @@ is not a commit, a git command that fails, or a missing or failing Rscript.
 Usage: python3 checks/chunk-parse-gate.py <base> [head]
 """
 import os, re, shutil, subprocess, sys, tempfile
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 USAGE = __doc__.strip().split('Usage: ')[1].strip()
 if len(sys.argv) < 2:
@@ -47,10 +50,18 @@ rscript = shutil.which('Rscript')
 if rscript is None:
     die('Rscript is not on PATH. This gate parses every chunk with R.')
 
-d = git(['diff', '--name-only', base, head, '--', 'chapters/'])
+y = open(os.path.join(ROOT, 'languages.yml'), encoding='utf-8').read()
+main = re.search(r'^main:\s*([A-Za-z0-9_]+)', y, re.M)
+if main is None:
+    die('languages.yml declares no main language')
+main = main.group(1)
+
+d = git(['diff', '--name-only', base, head, '--', 'content/'])
 if d.returncode != 0:
     die('git diff %s %s failed' % (base, head), d.stderr)
-files = [f for f in d.stdout.split() if re.search(r'\.[a-z]{2}\.qmd$', f)]
+CHAPTER = re.compile(r'^content/([^/]+)/[^/]+\.qmd$')
+files = [f for f in d.stdout.split()
+         if CHAPTER.match(f) and CHAPTER.match(f).group(1) != main]
 FENCE_OPEN = re.compile(r'^\s*(`{3,})\s*\{r[ ,}]')
 
 
@@ -67,7 +78,10 @@ def chunks(text):
 
 tmp = tempfile.mkdtemp(prefix='parse-gate-')
 index = []  # (file, version, i, path)
+# The temporary name carries the language and the stem. Two languages share a stem, so a name
+# built from the stem alone makes one language overwrite the other language's chunks.
 for f in files:
+    key = '%s.%s' % (CHAPTER.match(f).group(1), os.path.splitext(os.path.basename(f))[0])
     show = git(['show', '%s:%s' % (base, f)])
     if show.returncode != 0:
         # A file added since base has no version at base, and that is not an error.
@@ -78,11 +92,11 @@ for f in files:
     else:
         old = show.stdout
     new = open(f, encoding='utf-8').read() if os.path.exists(f) else ''
-    en_path = re.sub(r'\.[a-z]{2}\.qmd$', '.qmd', f)
+    en_path = os.path.join('content', main, os.path.basename(f))
     english = open(en_path, encoding='utf-8').read() if os.path.exists(en_path) else ''
     for version, text in (('before', old), ('after', new), ('english', english)):
         for i, c in enumerate(chunks(text)):
-            p = os.path.join(tmp, '%s__%s__%d.R' % (os.path.basename(f), version, i))
+            p = os.path.join(tmp, '%s__%s__%d.R' % (key, version, i))
             open(p, 'w', encoding='utf-8').write(c); index.append((f, version, i, p))
 listing = os.path.join(tmp, 'files.txt'); open(listing, 'w').write('\n'.join(p for _, _, _, p in index))
 r_code = '''

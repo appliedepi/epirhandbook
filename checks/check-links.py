@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Report every internal link in the declared chapters that pandoc leaves dead.
 
-The file set is every chapter declared in `_quarto.yml` (`index.qmd` and `chapters/<stem>.qmd`)
-in English and in every language under `babelquarto.languages`: 400 files. Pandoc renders each
-file to one standalone HTML page, and Python's `html.parser` reads that page once. The ids are
-the ones a browser sees: `id` on any element, and `name` on an `<a>` element. The links are the
-`href` of every `<a>` element.
+The file set is `content/<lang>/<stem>.qmd` for every language in `languages.yml` and every
+stem in `content/en/_quarto.yaml`: 400 files. Pandoc renders each file to one standalone HTML
+page, and Python's `html.parser` reads that page once. The ids are the ones a browser sees:
+`id` on any element, and `name` on an `<a>` element. The links are the `href` of every `<a>`
+element.
 
 Pandoc does the hard part. It resolves a heading, a div, a span, a metadata title, raw HTML, an
 HTML comment and a character reference into one document. So the checker never re-implements
@@ -17,7 +17,8 @@ the `#fragment` it asks for. Fragments resolve against the same page when the ta
 
 Two more link forms fail. Write a link to a section of the same page as `#id`, never as
 `file.qmd#id`. The checker counts the long form as `same-page`. A link never crosses languages.
-The checker counts a link from one language to a `.qmd` file of another as `language-mismatch`.
+A file's language is the folder that holds it, and a link target's language is the language of
+its resolved path. So `../en/basics.qmd` written in a French chapter is a `language-mismatch`.
 
 One form pandoc cannot report is the unterminated link, `[text](#target` with no closing
 parenthesis. Pandoc reads no link there, so the page carries no `<a>` element and the target is
@@ -41,7 +42,6 @@ ROOT = Path(__file__).resolve().parent.parent
 POOL = 8
 FENCE = re.compile(r'^( *)(`{3,}|~{3,})(.*)$')
 SCHEME = re.compile(r'^(?:[A-Za-z][A-Za-z0-9+.\-]*:|//)')
-LANGS = ['es', 'fr', 'jp', 'pt', 'ru', 'tr', 'vn']
 
 args = sys.argv[1:]
 summary = '--summary' in args
@@ -69,31 +69,43 @@ def pandoc_version():
     return m.group(1) if m else 'unknown'
 
 
+def languages():
+    """The codes `languages.yml` declares, in file order, and the main language.
+
+    The order is the declared one. `main:` names the reference language, and it is a code in
+    that list, not a position in it.
+    """
+    y = (ROOT / 'languages.yml').read_text(encoding='utf-8')
+    main = re.search(r'^main:\s*([A-Za-z0-9_]+)', y, re.M).group(1)
+    codes = re.findall(r'^\s*-\s*code:\s*([A-Za-z0-9_]+)', y, re.M)
+    return codes, main
+
+
 def declared():
-    """Every declared chapter file: [(path relative to root, language)]."""
-    y = (ROOT / '_quarto.yml').read_text(encoding='utf-8')
-    stems = ['index'] + ['chapters/' + s for s in re.findall(r'^\s*-\s*chapters/([A-Za-z0-9_]+)\.qmd', y, re.M)]
-    langs = re.search(r'languages:\s*\[([^\]]*)\]', y).group(1)
-    langs = [x.strip().strip("'\"") for x in langs.split(',') if x.strip()]
-    out = [(s + '.qmd', 'en') for s in stems]
-    out += [(s + '.' + l + '.qmd', l) for s in stems for l in langs]
-    return sorted(out), langs
+    """Every declared chapter file: [(path relative to root, language)].
+
+    `languages.yml` names the languages. `content/<main>/_quarto.yaml` names the stems, and
+    `index` is the first of them. Every language declares the same stems in the same order:
+    check 9 of `checks/check-sync.sh` reports a language that does not.
+    """
+    langs, main = languages()
+    ref = ROOT / 'content' / main / '_quarto.yaml'
+    if not ref.exists():
+        # Without the reference project file there is no stem list, so this check cannot run.
+        # Stop with one line, not a traceback. Check 9 of check-sync.sh reports the file.
+        sys.exit('%s: missing. Check 9 of checks/check-sync.sh reports it.' % ref)
+    y = ref.read_text(encoding='utf-8')
+    stems = re.findall(r'^\s*-\s*([A-Za-z0-9_]+)\.qmd', y, re.M)
+    return sorted(('content/%s/%s.qmd' % (l, s), l) for l in langs for s in stems), langs
 
 
-def declared_languages():
-    """The languages `_quarto.yml` declares, or LANGS when the file is unreadable."""
-    try:
-        y = (ROOT / '_quarto.yml').read_text(encoding='utf-8')
-        out = re.search(r'languages:\s*\[([^\]]*)\]', y).group(1)
-        out = [x.strip().strip("'\"") for x in out.split(',') if x.strip()]
-        return out or LANGS
-    except Exception:
-        return LANGS
+def language(path):
+    """The language of a chapter file: the folder that holds it.
 
-
-def language(path, langs):
-    m = re.search(r'\.([a-z]{2})\.qmd$', path)
-    return m.group(1) if m and m.group(1) in langs else 'en'
+    Every declared file is `content/<lang>/<stem>.qmd`, so the language is the second path
+    segment. A fixture drops the `content/` prefix and keeps the language folder.
+    """
+    return os.path.basename(os.path.dirname(str(path)))
 
 
 class PageParser(HTMLParser):
@@ -288,8 +300,8 @@ def first_line(lines, target):
 
 base = Path(fixture) if fixture else ROOT
 if fixture:
-    langs = declared_languages()
-    files = [(p.name, language(p.name, langs)) for p in sorted(Path(fixture).glob('*.qmd'))]
+    files = [(str(p.relative_to(base)), language(p)) for p in sorted(base.glob('*/*.qmd'))]
+    langs = sorted({l for _, l in files})
 else:
     files, langs = declared()
 
@@ -338,7 +350,7 @@ for f, lang in files:
             continue
         if q == f and frag:
             samepage.append((f, lang, t))
-        if language(q, langs) != lang:
+        if language(q) != lang:
             mismatch.append((f, lang, t))
         if frag and frag not in parsed[q][0]:
             dead.append((f, lang, t, 'no id %s in %s' % (frag, q)))
@@ -367,7 +379,7 @@ if not summary:
 else:
     print('files scanned: %d' % scanned)
     print('pandoc: %s, version %s' % (' '.join(pandoc), pandoc_version()))
-    for l in ['en'] + sorted(langs):
+    for l in langs:
         n = sum(1 for _, x in files if x == l)
         if not n:
             continue

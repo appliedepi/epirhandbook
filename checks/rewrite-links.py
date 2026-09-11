@@ -6,10 +6,9 @@ columns are `old_id`, `stem`, `anchor` and `note`. `old_id` is the link target e
 check-links.py reports it. `stem` is the chapter that holds the content today. `anchor` is
 an in-page id that every language version of that chapter defines, or an empty field.
 
-A rewritten link points at a file, never at a bare fragment. A link in a chapter becomes
-`stem.qmd`, and a link in a translated chapter becomes `stem.<lang>.qmd`. A link in an
-`index` file gains the `chapters/` prefix. The `anchor` field, where the table gives one,
-follows as `#anchor`.
+A rewritten link points at a file, never at a bare fragment. Every declared file sits in
+`content/<lang>/`, so a link target is `<stem>.qmd` in the same folder, `index.qmd` included.
+The `anchor` field, where the table gives one, follows as `#anchor`.
 
 Pandoc percent-encodes a link target, so the reported `old_id` and the source text can
 differ. The script looks for both forms.
@@ -39,19 +38,6 @@ for a in args:
     if a != '--dry-run':
         sys.exit('unknown argument %s. %s' % (a, USAGE))
 dry = '--dry-run' in args
-
-
-def languages():
-    """Every translation language code, from `_quarto.yml`."""
-    y = (ROOT / '_quarto.yml').read_text(encoding='utf-8')
-    codes = re.search(r'languages:\s*\[([^\]]*)\]', y).group(1)
-    return [x.strip().strip("'\"") for x in codes.split(',') if x.strip()]
-
-
-def language(path, langs):
-    """The language of one declared file. `en` for a file with no language suffix."""
-    m = re.search(r'\.([a-z]{2})\.qmd$', path)
-    return m.group(1) if m and m.group(1) in langs else 'en'
 
 
 def table():
@@ -117,25 +103,23 @@ def prose(text):
     return ok
 
 
-def link(path, lang, stem, anchor):
-    """The new link target, relative to the file that holds the link."""
-    suffix = '' if lang == 'en' else '.' + lang
-    if path.startswith('chapters/'):
-        rel = '../index%s.qmd' % suffix if stem == 'index' else '%s%s.qmd' % (stem, suffix)
-    else:
-        rel = 'index%s.qmd' % suffix if stem == 'index' else 'chapters/%s%s.qmd' % (stem, suffix)
-    return rel + ('#' + anchor if anchor else '')
+def link(stem, anchor):
+    """The new link target, relative to the file that holds the link.
+
+    Every declared file sits in `content/<lang>/`, and every chapter of one language sits in
+    that one folder. So the target is `<stem>.qmd`, with no folder part and no language part.
+    """
+    return '%s.qmd' % stem + ('#' + anchor if anchor else '')
 
 
-def rewrite(path, wanted, tbl, langs):
+def rewrite(path, wanted, tbl):
     """The new text of one file, and the number of links it rewrites."""
     text = (ROOT / path).read_text(encoding='utf-8')
     ok = prose(text)
-    lang = language(path, langs)
     edits = []
     for target, n in sorted(wanted.items()):
         stem, anchor = tbl[target]
-        new = '](%s)' % link(path, lang, stem, anchor)
+        new = '](%s)' % link(stem, anchor)
         found = []
         for form in dict.fromkeys([unquote(target), target]):
             old = '](%s)' % form
@@ -157,7 +141,6 @@ def rewrite(path, wanted, tbl, langs):
     return ''.join(out), len(edits)
 
 
-langs = languages()
 tbl = table()
 found = findings()
 absent = sorted({t for _, t in found if t not in tbl})
@@ -170,7 +153,7 @@ for (f, t), n in found.items():
 
 fresh, total = {}, 0
 for f in sorted(per):
-    fresh[f], n = rewrite(f, per[f], tbl, langs)
+    fresh[f], n = rewrite(f, per[f], tbl)
     total += n
 
 if not dry:

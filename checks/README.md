@@ -6,7 +6,7 @@ few months regardless.
 
 Checks 6 and 8 need a base commit, and they do not run without one. Add `--base <sha>` to run
 them over the files changed since `<sha>`. Add `--render` to run them over the whole tree, which
-takes about 20 minutes.
+takes about 20 minutes. Every other check, check 9 included, runs without a base commit.
 
 The result line names what ran. It reads `IN SYNC` when checks 6 and 8 ran, and
 `IN SYNC (checks 6 and 8 not run)` when they did not. The script exits 0 on `IN SYNC`, 1 on
@@ -23,8 +23,14 @@ then costs minutes, not days.
 
 ## What "in sync" means
 
-English is the reference. For every chapter listed in `_quarto.yml` and every language in
-`babelquarto.languages` (49 chapters x 7 languages since the GIS chapter returned on 2026-09-02):
+The repository declares its layout in two files. `languages.yml` names the eight languages, and
+`content/en/_quarto.yaml` names the 50 stems. Every chapter file is `content/<lang>/<stem>.qmd`,
+so a file's language is the folder that holds it.
+
+English is the reference. Checks 1 to 3 pair each translated chapter with
+`content/en/<stem>.qmd`. That set is 49 chapters and 7 translation languages: the landing page
+`index.qmd` and English itself stay out of it. 49 x 7 has held since the GIS chapter returned
+on 2026-09-02.
 
 | Property | Expected | Check | Remedy |
 |---|---|---|---|
@@ -38,6 +44,7 @@ English is the reference. For every chapter listed in `_quarto.yml` and every la
 | no R chunk parses worse than the English chunk | 0 files worse | check 8, with `--base` or `--render` | the sync, or a source defect |
 | every internal link resolves, stays on its page and stays in its language | 0 dead, 0 same-page, 0 cross-language and 0 unterminated links in the 400 declared files | check 5 | `rewrite-links.py`, no agent |
 | no chunk that executes names the `data/` folder, outside the two chapters that teach file paths | 0 lines in the 400 declared files | check 7 | load the data with `appliedepidata::get_data()`, or set `eval=F` |
+| the eight language folders, project files, chapter files, manifest rows and alias lines agree | `8 languages, 50 stems, 393 aliases, drifted: 0` | check 9 | edit the file the DRIFT line names |
 
 Each agent workflow named in the Remedy column is a `.js` file in the workflows folder of
 `archive/modernization`.
@@ -46,8 +53,10 @@ Check 4 is informational because a suspect span is often right: a placeholder th
 replaces, or a word the author put in code font. The baseline after the 2026-09-02 inline pass
 is 356 suspects, all judged placeholders or noise; the GIS chapter, restored the same day,
 added one, a French verb in code font. A rise above that is what to look at, not
-the number itself. A translated file without an English chapter is skipped and listed.
-`chapters/` holds none today.
+the number itself. Check 4 measures the declared set: the 49 chapters in the 7 translation
+languages. A file that `content/en/_quarto.yaml` does not declare is not measured here, and
+check 9 reports it. A declared file that is missing gets a one-line note, and check 9 reports
+that too.
 
 ## Check 5: internal links
 
@@ -57,10 +66,10 @@ translation languages. It prints one line for each link it rejects, and exits 1 
 one. It rejects four link forms.
 
 ```
-DEAD chapters/basics.qmd:372 #objectstructure (no id objectstructure on this page)
-SAME-PAGE chapters/basics.qmd:372 basics.qmd#objects
-LANGUAGE-MISMATCH chapters/packages_suggested.es.qmd:158 data_used.qmd
-UNTERMINATED-LINK chapters/basics.pt.qmd:925 ... na seção [Importar e exportar](#importing.
+DEAD content/en/basics.qmd:372 #objectstructure (no id objectstructure on this page)
+SAME-PAGE content/en/basics.qmd:372 basics.qmd#objects
+LANGUAGE-MISMATCH content/es/packages_suggested.qmd:158 ../en/data_used.qmd
+UNTERMINATED-LINK content/pt/basics.qmd:925 ... na seção [Importar e exportar](#importing.
 ```
 
 A link is dead when its `.qmd` target does not exist, or when the target page does not define
@@ -72,13 +81,14 @@ Three rules cover the other three forms.
 
 - Write a link to a section of the same page as `#id`. The long form `file.qmd#id` is
   `same-page`. It resolves, and it breaks as soon as the file is renamed.
-- A link never crosses languages. A link from a page of one language to a `.qmd` file of
-  another is `language-mismatch`. Point it at the target in its own language.
+- A link never crosses languages. A file's language is the folder that holds it, and a link
+  target's language is the language of its resolved path. So `../en/basics.qmd` written in a
+  French chapter is `language-mismatch`. Point it at `<stem>.qmd` in the same folder.
 - Close every link. A `](` whose destination never closes is `unterminated-link`.
 
 The unterminated form is the one pandoc cannot report. Pandoc reads no link in
 `[text](#target`, so the page carries no `<a>` element and nothing checks the target. That
-form sat in `chapters/basics.pt.qmd` for years and every run said `dead 0`. So the checker
+form sat in `content/pt/basics.qmd` for years and every run said `dead 0`. So the checker
 reads the raw source for this form alone.
 
 The search for the closing parenthesis stops at the next blank line, because an inline link
@@ -101,8 +111,8 @@ The checker takes three options.
 - `--summary` prints the counts and no link lines. It gives files scanned, the pandoc binary
   and its version, one line for each language, `same-page N`, `language-mismatch N`,
   `unterminated-links N` and `dead N`.
-- `--fixture <dir>` uses every `*.qmd` in that directory as the file set. It reads the language
-  of each file from the name, so a fixture can carry a cross-language link.
+- `--fixture <dir>` uses every `<lang>/*.qmd` under that directory as the file set. The folder
+  gives each file its language, so a fixture can carry a cross-language link.
 - `--pandoc <cmd>` names the binary. The default is `quarto pandoc`, and plain `pandoc` when
   quarto is not on PATH.
 
@@ -167,8 +177,8 @@ lexical forms.
 It prints one line for each line it rejects, and exits 1 when it finds one.
 
 ```
-DATA-READ chapters/standardization.fr.qmd:147
-DATA-WRITE chapters/importing.es.qmd:412
+DATA-READ content/fr/standardization.qmd:147
+DATA-WRITE content/es/importing.qmd:412
 ```
 
 `DATA-READ` names a line outside the two chapters that teach file paths. `DATA-WRITE` names a
@@ -181,8 +191,8 @@ The checker takes two options.
 
 - `--summary` prints the counts and no detail lines. It gives files scanned, one line for each
   language, and `data-reads N`. That count holds both kinds of line.
-- `--fixture <dir>` uses every `*.qmd` in that directory as the file set. It reads the language of
-  each file from the name.
+- `--fixture <dir>` uses every `<lang>/*.qmd` under that directory as the file set. The folder
+  gives each file its language.
 
 The check is lexical. It reads the source line, and it does not follow a path through a variable.
 A chunk that builds a path on one line and reads it on another passes.
@@ -201,13 +211,18 @@ Run `checks/render-gate.sh <base> [head]`. `check-sync.sh` runs it as check 6, w
 was given. It runs `quarto render --no-execute` on every translated chapter that changed since
 `<base>`. It needs quarto and git. It runs no R, because `--no-execute` skips the knitr engine.
 
-Each file renders as a temporary copy beside the original,
-`chapters/<stem>.render-gate-tmp.<lang>.qmd`. In that copy every inline R expression
+A translated chapter is a file under `content/<lang>/` whose language is not the main language
+in `languages.yml`. Each one renders as a temporary copy beside the original,
+`content/<lang>/<stem>.render-gate-tmp.qmd`. In that copy every inline R expression
 `` `r ... ` `` outside a fenced block becomes the placeholder `INLINE_R`. `quarto render
 --no-execute` stops at an inline R expression, so the placeholder is what lets the gate read a
-file that holds one. The copy sits in the `chapters/` folder, so `_quarto.yml` and every
-relative path resolve as they do for the original. A trap deletes every copy and every artifact
-beside it, on success and on failure, in `chapters/` and in the project's `html_outputs/` folder.
+file that holds one. The copy sits in the language folder, so `content/<lang>/_quarto.yaml` and
+every relative path resolve as they do for the original.
+
+A trap deletes every copy and every artifact beside it, on success and on failure. It also
+deletes the `content/<lang>/html_outputs/` and `content/<lang>/.quarto/` folders the render
+creates. It deletes only those: the gate records at start which of them are already there. In a
+fresh clone the gate leaves no file at all.
 
 The search for the end of an inline R expression stops at the next blank line, because an inline
 expression cannot cross one. Without that bound the match runs to the next backtick anywhere in
@@ -224,7 +239,7 @@ The gate stops with exit 2, before it renders anything, in four cases.
 - A temporary copy path that already exists.
 
 The gate skipped a file with inline R until 2026-09-09, and 17 of the 99 files then in the
-changed set carried one. A broken YAML header in `chapters/gis.es.qmd` passed that gate,
+changed set carried one. A broken YAML header in `content/es/gis.qmd` passed that gate,
 because the gate never read the file.
 
 A file with an odd number of fence lines FAILS before the render. Pandoc renders an unclosed
@@ -250,6 +265,67 @@ The gate stops with exit 2 in four cases.
 - A `git` command that fails.
 - `Rscript` that is not on PATH.
 - `Rscript` that returns non-zero. The gate prints `Rscript`'s own stderr.
+
+## Check 9: the layout
+
+`check-sync.sh` runs check 9 itself, and it needs no base commit. It reads `languages.yml`, the
+eight `content/<lang>/_quarto.yaml` project files, `docker-images.yml` and the front matter of
+the 400 declared files. Regular expressions read every one of them, because the
+translation-sync runner carries no yaml module.
+
+It prints one summary line, and one `DRIFT` line for each finding:
+
+```
+   layout: 8 languages, 50 stems, 393 aliases, drifted: 0
+```
+
+A finding sets the DRIFT exit. Check 9 reports nine kinds.
+
+- A language `languages.yml` declares with no `content/<code>/_quarto.yaml`.
+- A `content/<x>/` folder that holds `.qmd` files for a code `languages.yml` does not declare.
+- A project file whose flattened chapter list differs from `content/en/_quarto.yaml` in set or
+  in order, or whose part count differs.
+- A project file whose `lang` is not its own folder, or whose `book.title` differs from the
+  title `languages.yml` gives that code.
+- A declared stem with no file in one of the eight language folders. `index` is a declared
+  stem, so every folder needs its own landing page.
+- A `docker-images.yml` that does not hold exactly one row per declared stem, or that holds a
+  row for something else.
+- A `docker-images.yml` row under `chapters:` with no `stem:` key, or with no `image:` key.
+  The `stem:` key names the chapter, and the `image:` key names the image CI renders it in.
+- A `.qmd` file in a language folder that `content/en/_quarto.yaml` does not declare,
+  `index.qmd` aside.
+- A chapter file, `index.qmd` aside, whose aliases are not the ones the layout wants. English
+  wants `/new_pages/<stem>.html`, and every other language wants
+  `/new_pages/<stem>.<lang>.html`.
+
+The alias keeps the chapter's old `/new_pages/` URL alive, so it spells the stem the way that
+page spelled it. `transition_to_r` is the one stem the old page spelled differently, as
+`transition_to_R`, so its alias keeps the capital R in all eight languages. The English chapter
+shipped under both spellings, so it wants two aliases: `/new_pages/transition_to_R.html` and
+`/new_pages/transition_to_r.html`. Check 9 compares the aliases case-sensitively, because a URL
+path is case-sensitive. Two identical lines are not two aliases.
+
+Check 9 reads the aliases from the block list under the front matter's top-level `aliases:`
+key. A list under another key counts for nothing, and neither does a list below the front
+matter.
+
+A missing file never stops check 9. It reports the file, skips the comparisons that need it,
+and still reports what it can see. A missing `content/en/_quarto.yaml`, a missing
+`docker-images.yml` and a missing `languages.yml` each give check 9 one `DRIFT` line and no
+traceback.
+
+Checks 1, 4, 5 and 7 read `languages.yml` without a guard. Delete that file and each of the
+four raises a traceback, above check 9's own `DRIFT languages.yml` line.
+
+Checks 1, 5 and 7 read the stem list from `content/en/_quarto.yaml`. Without that file each one
+stops with a one-line message, and check 9 names the file to restore.
+
+### Remedy
+
+Edit the file the `DRIFT` line names. A drifted chapter list is the common finding. You add a
+chapter to seven of the eight project files and miss one. Nothing else in the repository
+notices.
 
 ## Do not render an English chapter with the gate
 

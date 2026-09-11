@@ -1,4 +1,4 @@
-# Cross-language consistency check for the chapters that _quarto.yml declares.
+# Cross-language consistency check for the chapters that content/en/_quarto.yaml declares.
 #
 # The check compares each English chapter against each translation on three axes.
 #
@@ -55,24 +55,27 @@
 #   names it as a placeholder, not as a defect.
 #
 # Three input rules decide the counts.
-#   1. Read book.chapters from _quarto.yml. Keep the .qmd entries only. The same
-#      structure also holds the part titles in 9 languages.
-#   2. Keep the .qmd entries under chapters/ only. index.qmd sits at the repo
-#      root. It is the book landing page and it has no translations in
-#      chapters/. The report prints the entry it skips.
-#   3. Read babelquarto.languages, which holds 7 languages. The check MUST NOT
-#      read babelquarto.languagecodes, which holds 9 entries and adds de and en.
-#      The German chapters live under _excluded/de/.
+#   1. Read book.chapters from content/<main>/_quarto.yaml, where <main> is the
+#      main language in languages.yml. Keep the .qmd entries only.
+#   2. Drop the index entry. It is the book landing page, each language writes
+#      its own, and it is not a translation. The report prints the entry it
+#      skips.
+#   3. Read the codes from languages.yml and drop the main language. That
+#      leaves 7 translation languages. German is not declared there: the German
+#      chapters live under _excluded/de/.
+#
+# A regular expression reads each file. The translation-sync runner carries no
+# yaml package, and checks/check-sync.sh reads the same two files the same way.
 #
 # Nothing runs this script automatically. A human types the command.
 #
 # Run from the repo root: Rscript utils/check-language-consistency.R
-# Pass a chapters directory as the first argument to check a copy:
-#   Rscript utils/check-language-consistency.R /tmp/scratch/chapters
-# Requires: yaml, appliedepidata.
+# Pass a content directory as the first argument to check a copy:
+#   Rscript utils/check-language-consistency.R /tmp/scratch/content
+# Requires: appliedepidata.
 
 args <- commandArgs(trailingOnly = TRUE)
-chapters_dir <- if (length(args) >= 1) args[[1]] else "chapters"
+content_dir <- if (length(args) >= 1) args[[1]] else "content"
 
 FENCE_OPEN <- "^[ \t]*`{3,}\\{r[},[:space:]]"
 FENCE_RUN <- "`{3,}"
@@ -237,18 +240,38 @@ get_data_names_in_chunks <- function(path) {
 
 # --- inputs -------------------------------------------------------------
 
-cfg <- yaml::read_yaml("_quarto.yml")
-declared <- unlist(cfg$book$chapters, use.names = FALSE)
-declared_qmd <- declared[grepl("\\.qmd$", declared)]
-declared_here <- declared_qmd[grepl("^chapters/", declared_qmd)]
-declared_elsewhere <- setdiff(declared_qmd, declared_here)
-stems <- sub("\\.qmd$", "", basename(declared_here))
-langs <- unlist(cfg$babelquarto$languages, use.names = FALSE)
+LANDING <- "index"
+
+languages_yml <- read_lines_utf8("languages.yml")
+main_lang <- sub(
+  "^main:[[:space:]]*([A-Za-z0-9_]+).*$", "\\1",
+  grep("^main:", languages_yml, value = TRUE)[[1]]
+)
+langs <- sub(
+  "^[[:space:]]*-[[:space:]]*code:[[:space:]]*([A-Za-z0-9_]+).*$", "\\1",
+  grep("^[[:space:]]*-[[:space:]]*code:", languages_yml, value = TRUE)
+)
+langs <- setdiff(langs, main_lang)
+
+project_file <- file.path(content_dir, main_lang, "_quarto.yaml")
+declared_qmd <- sub(
+  "^[[:space:]]*-[[:space:]]*([A-Za-z0-9_]+\\.qmd)[[:space:]]*$", "\\1",
+  grep(
+    "^[[:space:]]*-[[:space:]]*[A-Za-z0-9_]+\\.qmd[[:space:]]*$",
+    read_lines_utf8(project_file),
+    value = TRUE
+  )
+)
+stems <- sub("\\.qmd$", "", declared_qmd)
+declared_elsewhere <- declared_qmd[stems == LANDING]
+stems <- stems[stems != LANDING]
 catalogue <- appliedepidata::list_data()$name
 
-english_path <- function(stem) file.path(chapters_dir, paste0(stem, ".qmd"))
+english_path <- function(stem) {
+  file.path(content_dir, main_lang, paste0(stem, ".qmd"))
+}
 translated_path <- function(stem, lang) {
-  file.path(chapters_dir, paste0(stem, ".", lang, ".qmd"))
+  file.path(content_dir, lang, paste0(stem, ".qmd"))
 }
 
 # --- comparison ---------------------------------------------------------
@@ -430,19 +453,19 @@ outside_chunk <- name_rows[name_rows$in_chunk, , drop = FALSE]
 # --- report -------------------------------------------------------------
 
 cat("=== Cross-language code and chunk-header consistency ===\n")
-cat("chapters directory:", chapters_dir, "\n")
+cat("content directory:", content_dir, "\n")
 cat(
-  "declared .qmd entries in _quarto.yml book.chapters:",
+  "declared .qmd entries in", paste0(project_file, " book.chapters:"),
   length(declared_qmd),
   "\n"
 )
 cat(
-  "  under chapters/ and checked:",
+  "  chapters checked:",
   length(stems),
   "\n"
 )
 cat(
-  "  outside chapters/ and skipped:",
+  "  landing pages skipped:",
   length(declared_elsewhere),
   if (length(declared_elsewhere) > 0) {
     paste0("(", paste(declared_elsewhere, collapse = ", "), ")")
@@ -452,7 +475,7 @@ cat(
   "\n"
 )
 cat(
-  "languages from babelquarto.languages:",
+  "languages from languages.yml, main", paste0(main_lang, ":"),
   length(langs),
   paste0("(", paste(langs, collapse = ", "), ")"),
   "\n"
