@@ -29,14 +29,14 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # A GitHub Actions matrix must be static YAML or come from a prior job's
-  # output -- so this job's only purpose is reading babelquarto's language
-  # list out of _quarto.yml (the single source of truth for which languages
-  # ship) and handing it to `render` as JSON. The language list is NEVER
+  # A GitHub Actions matrix must be static YAML, or come from a prior job's
+  # output. So this job's only purpose is reading the language list out of
+  # languages.yml and handing it to `render` as JSON. languages.yml is the
+  # one file that declares which languages ship. The list is NEVER
   # hard-coded in this file.
   languages:
     runs-on: ubuntu-latest
-    # Read-only. This job only parses _quarto.yml; nothing here needs to write.
+    # Read-only. This job only parses languages.yml; nothing here needs to write.
     permissions:
       contents: read
     outputs:
@@ -55,33 +55,44 @@ jobs:
       - name: Install PyYAML
         run: pip install --quiet pyyaml
 
-      - name: Read babelquarto languages from _quarto.yml
+      - name: Read the language list from languages.yml
         id: read
         run: |
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
           import json
+          import os
           import re
           import sys
           import yaml
 
-          with open("_quarto.yml") as fh:
-              cfg = yaml.safe_load(fh)
-          bq = cfg.get("babelquarto") or {}
-          main = bq.get("mainlanguage")
-          others = bq.get("languages") or []
+          PATH = "languages.yml"
+          if not os.path.isfile(PATH):
+              sys.exit(f"::error::{PATH} is missing; it declares every language that ships")
+          with open(PATH) as fh:
+              cfg = yaml.safe_load(fh) or {}
+          main = cfg.get("main")
+          entries = cfg.get("languages") or []
           if not main:
-              sys.exit("::error::_quarto.yml is missing babelquarto.mainlanguage")
-          if not others:
-              sys.exit("::error::_quarto.yml is missing babelquarto.languages")
-          all_langs = [main] + list(others)
-          # _quarto.yml is PR-controlled, and these values reach a shell and
+              sys.exit(f"::error::{PATH} is missing `main`")
+          if not entries:
+              sys.exit(f"::error::{PATH} declares no `languages`")
+          # These are the codes in the file's own order. The main language
+          # is one of them, so it is never prepended.
+          all_langs = [e.get("code") if isinstance(e, dict) else e for e in entries]
+          # languages.yml is PR-controlled, and these values reach a shell and
           # select which Docker image gets executed on the runner. Constrain
           # them to a shape that cannot carry shell metacharacters.
-          bad = [x for x in all_langs if not re.fullmatch(r"[a-z]{2,3}", str(x))]
+          bad = [x for x in all_langs + [main] if not re.fullmatch(r"[a-z]{2,3}", str(x))]
           if bad:
-              sys.exit(f"::error::_quarto.yml declares invalid language code(s) {bad!r}; expected 2-3 lowercase letters")
+              sys.exit(f"::error::{PATH} declares invalid language code(s) {bad!r}; expected 2-3 lowercase letters")
           if len(set(all_langs)) != len(all_langs):
-              sys.exit("::error::_quarto.yml declares a duplicate language code")
+              sys.exit(f"::error::{PATH} declares a duplicate language code")
+          # Every language nests under its own <code>/, the main one
+          # included, and the site root redirects to the main language. A
+          # `main` outside the list would redirect to a directory that no
+          # render leg produces.
+          if main not in all_langs:
+              sys.exit(f"::error::{PATH} declares main={main!r}, which is not one of the codes {all_langs!r}")
           print(f"mainlanguage={main}")
           print(f"all={json.dumps(all_langs)}")
           PY
@@ -92,8 +103,9 @@ jobs:
   # separate workspaces ... and MAY be processed in parallel with each
   # other"). Within a language, build_all_chapters.sh itself renders
   # sequentially and does the two-pass cross-reference fix internally (see
-  # its "for lang in ALL_LANGS" loop calling render_pass ... 1 then ... 2) --
-  # this workflow does not reimplement that, only calls the script.
+  # its `for lang in "${RENDER_LANGS[@]}"` loop calling render_pass ... 1
+  # then ... 2). This workflow does not reimplement that, only calls the
+  # script.
   render:
     needs: languages
     strategy:
@@ -204,8 +216,8 @@ jobs:
         env:
           PREFIX: ${{ steps.registry.outputs.prefix }}
         run: |
-          docker pull "$PREFIX/epirhandbook-common:2.8"
-          docker run --rm "$PREFIX/epirhandbook-common:2.8" \
+          docker pull "$PREFIX/epirhandbook-common:2.9"
+          docker run --rm "$PREFIX/epirhandbook-common:2.9" \
             cat /usr/local/bin/build_all_chapters.sh > build_all.sh
           chmod +x build_all.sh
 
@@ -220,8 +232,9 @@ jobs:
       # and does both cross-reference passes internally (its render_pass ... 1
       # then ... 2). Under --only-lang the language's site lands at the ROOT of
       # the output dir, with no <lang>/ nesting -- there is nothing to nest it
-      # under, because no other language was rendered. So this leg uploads
-      # html_outputs as-is and Job 2 decides where it lands.
+      # under, because no other language was rendered. That leg also writes no
+      # images/ copy and no root redirect stub. So it uploads html_outputs
+      # as-is, and assemble-deploy nests it and writes both.
       #
       # --no-inject is REQUIRED here, not an optimisation.
       # inject_language_links.R reuses an existing <ul id="languages-links">
@@ -260,24 +273,75 @@ jobs:
         with:
           path: downloaded
 
-      # English (mainlanguage) at the tree root, every other language at
-      # <lang>/ -- the exact shape inject_language_links.R assumes (its own
-      # header: "the main language's pages sit directly at <site_dir>/*.html
-      # ... every other language's pages sit at <site_dir>/<lang>/*.html").
+      # Every language lands under its own <lang>/, the main language
+      # included. The site root holds images/ and a redirect stub to the main
+      # language, and no page of any language. That is the shape
+      # build_all_chapters.sh produces for a whole-book render.
+      #
+      # This step reads downloaded/ and never writes to it. The artifacts are
+      # the render legs' only output, and a second run of this step must see
+      # what the first one saw.
       - name: Assemble one site tree
         env:
           MAINLANGUAGE: ${{ needs.languages.outputs.mainlanguage }}
+          ALL_LANGS: ${{ needs.languages.outputs.all }}
         run: |
-          mkdir -p site
           mainlanguage="$MAINLANGUAGE"
-          cp -a "downloaded/site-$mainlanguage/." site/
-          for dir in downloaded/site-*; do
-            lang="$(basename "$dir" | sed 's/^site-//')"
-            if [ "$lang" != "$mainlanguage" ]; then
-              mkdir -p "site/$lang"
-              cp -a "$dir/." "site/$lang/"
+          # ALL_LANGS is the JSON list the languages job printed, for example
+          # ["en", "fr"]. Every code in it already matched [a-z]{2,3} there.
+          langs="$(printf '%s' "$ALL_LANGS" | tr -d '[]" ' | tr ',' ' ')"
+          if [ -z "$langs" ]; then
+            echo "::error::ALL_LANGS is empty; the languages job declared no language" >&2
+            exit 1
+          fi
+
+          # A declared language with no artifact means a render leg produced
+          # nothing. Deploying the rest would drop that language from the site
+          # silently, and the switcher would still link to it.
+          for lang in $langs; do
+            if [ ! -d "downloaded/site-$lang" ]; then
+              echo "::error::languages.yml declares '$lang', but no artifact site-$lang was downloaded" >&2
+              exit 1
             fi
           done
+
+          # The other direction. An artifact for a code languages.yml does not
+          # declare would publish a directory the switcher never links to.
+          mkdir -p site
+          for dir in downloaded/site-*; do
+            code="$(basename "$dir")"
+            code="${code#site-}"
+            case " $langs " in
+              *" $code "*) ;;
+              *) echo "::error::artifact site-$code is not a language languages.yml declares ($langs)" >&2; exit 1 ;;
+            esac
+            mkdir -p "site/$code"
+            cp -a "$dir/." "site/$code/"
+          done
+
+          # The pages link to images/ at the site root, and no render leg
+          # copies it. So it is copied once here, from this job's checkout.
+          mkdir -p site/images
+          cp -a images/. site/images/
+
+          # Each page carries the ../../images/ of content/<lang>/_quarto.yaml,
+          # which is relative to that language's project directory. From
+          # site/<lang>/ it points outside the site. Rewrite it to the
+          # root-absolute /images/, which is correct at every depth.
+          # build_all_chapters.sh does not do this, so a local whole-book
+          # render still carries ../../images/.
+          find site -type f -name '*.html' -exec \
+            sed -i -E 's#(src|href)="(\./)?\.\./\.\./images/#\1="/images/#g' {} +
+
+          # The root redirect stub, byte-for-byte what build_all_chapters.sh
+          # writes for a whole-book render. Four lines, and the only page at
+          # the site root.
+          printf '%s\n' \
+            '<!DOCTYPE html>' \
+            "<html lang=\"$mainlanguage\"><head><meta charset=\"utf-8\"><title>Redirect to $mainlanguage/</title>" \
+            "<meta http-equiv=\"refresh\" content=\"0;URL='$mainlanguage/'\"><link rel=\"canonical\" href=\"$mainlanguage/\"></head>" \
+            '<body></body></html>' \
+            > site/index.html
 
       # Same GITHUB_TOKEN login as the render job, and non-fatal for the same
       # reason: the image is public, so this only buys rate-limit headroom.
@@ -318,20 +382,20 @@ jobs:
           PY
 
       # The mandatory post-render pass: the switcher is never produced by
-      # rendering, only by this, run once over the FULLY assembled,
-      # all-8-language tree, using this job's OWN fresh checkout of
-      # _quarto.yml (pristine -- never patched, unlike each render leg's
-      # job-local copy).
+      # rendering, only by this. It runs once, over the FULLY assembled tree,
+      # with every language in it. languages.yml carries the codes and the
+      # display labels, and comes from this job's own fresh checkout. It is
+      # mounted read-only, so the injector cannot write to it.
       - name: Inject language-switcher links
         env:
           PREFIX: ${{ steps.registry.outputs.prefix }}
         run: |
-          docker pull "$PREFIX/epirhandbook-common:2.8"
+          docker pull "$PREFIX/epirhandbook-common:2.9"
           docker run --rm \
             -v "$PWD/site:/site" \
-            -v "$PWD/_quarto.yml:/quarto/_quarto.yml:ro" \
-            -w /site "$PREFIX/epirhandbook-common:2.8" \
-            inject_language_links.sh /site /quarto/_quarto.yml
+            -v "$PWD/languages.yml:/quarto/languages.yml:ro" \
+            -w /site "$PREFIX/epirhandbook-common:2.9" \
+            inject_language_links.sh /site /quarto/languages.yml
 
       # Deploy technique copied from the reference build-deploy.yml
       # (appliedepi/websitetimecourse): force-push an orphan branch.
