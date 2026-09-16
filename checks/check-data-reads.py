@@ -67,9 +67,19 @@ def languages():
     The order is the declared one. `main:` names the reference language, and it is a code in
     that list, not a position in it.
     """
-    y = (ROOT / 'languages.yml').read_text(encoding='utf-8')
-    main = re.search(r'^main:\s*([A-Za-z0-9_]+)', y, re.M).group(1)
+    path = ROOT / 'languages.yml'
+    if not path.is_file():
+        sys.exit(f"{sys.argv[0]}: no {path}. That file is the one declaration of which "
+                 "languages ship, and without it this check has no file set.")
+    y = path.read_text(encoding='utf-8')
+    found = re.search(r'^main:\s*([A-Za-z0-9_]+)', y, re.M)
+    if found is None:
+        sys.exit(f"{sys.argv[0]}: {path} has no 'main:' line naming the reference language.")
+    main = found.group(1)
     codes = re.findall(r'^\s*-\s*code:\s*([A-Za-z0-9_]+)', y, re.M)
+    if not codes:
+        sys.exit(f"{sys.argv[0]}: {path} declares no language. An empty list would check nothing "
+                 "and report a clean tree.")
     return codes, main
 
 
@@ -163,7 +173,10 @@ def scan(path, chapter):
 base = Path(fixture) if fixture else ROOT
 if fixture:
     files = [(str(p.relative_to(base)), language(p)) for p in sorted(base.glob('*/*.qmd'))]
-    langs = sorted({l for _, l in files})
+    # First-seen order, not alphabetical. A fixture exists to reproduce the real run, and
+    # the real run reports in the order languages.yml declares. Sorting here made a fixture
+    # report a different order from the tree it was standing in for.
+    langs = list(dict.fromkeys(l for _, l in files))
 else:
     files, langs = declared()
 

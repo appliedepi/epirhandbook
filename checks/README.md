@@ -51,8 +51,8 @@ Each agent workflow named in the Remedy column is a `.js` file in the workflows 
 
 Check 4 is informational because a suspect span is often right: a placeholder the reader
 replaces, or a word the author put in code font. The baseline after the 2026-09-02 inline pass
-is 356 suspects, all judged placeholders or noise; the GIS chapter, restored the same day,
-added one, a French verb in code font. A rise above that is what to look at, not
+is 356 suspects. All were judged placeholders or noise. The GIS chapter, restored the same
+day, added one more: a French verb in code font. A rise above that is what to look at, not
 the number itself. Check 4 measures the declared set: the 49 chapters in the 7 translation
 languages. A file that `content/en/_quarto.yaml` does not declare is not measured here, and
 check 9 reports it. A declared file that is missing gets a one-line note, and check 9 reports
@@ -245,7 +245,7 @@ because the gate never read the file.
 A file with an odd number of fence lines FAILS before the render. Pandoc renders an unclosed
 fence with exit 0, so the render alone cannot see that class.
 
-Per-file output goes to `/tmp/render-gate/<stem>.log`, and the result of each file to
+Per-file output goes to `/tmp/render-gate/<lang>.<stem>.log`, and the result of each file to
 `/tmp/render-gate/SUMMARY.tsv`.
 
 ## Check 8: the chunk parse gate
@@ -362,8 +362,8 @@ instead.
   small, and the mechanical count afterwards is the proof, not the agent's report.
 - Every check was proved red before it was trusted: a corrupted span, an extra parenthesis, a
   broken YAML front matter, an unclosed fence, a demoted heading. Check 3 was proved both ways
-  on 2026-09-02: one changed code token inside a Turkish chunk reports DRIFT; a changed or added
-  comment inside a chunk stays IN SYNC. That is the rule: code exact, comments free. A check
+  on 2026-09-02. One changed code token inside a Turkish chunk reports DRIFT. A changed or
+  added comment inside a chunk stays IN SYNC. That is the rule: code exact, comments free. A check
   that has not been seen to fail is not a check.
 
 ## Order, when several things drift at once
@@ -412,3 +412,23 @@ it, so nothing caught it.
 Expected output: `missing from images/: 0`.
 
 Remedy: add the image, correct the name, or delete the line.
+
+## 12. Clean failure
+
+`checks/check-clean-failure.py`. Every check must report a missing input, not crash on it.
+
+A check that dies with a `FileNotFoundError` traceback still blocks, so the repository is not
+unsafe. It is unusable: the reader gets a stack trace instead of the one sentence naming the
+missing file. Two boxes of issue 455 were this, and one crashed four checks at once.
+
+It also covers the worse case. A check whose input is EMPTY rather than absent reports a clean
+tree and exits 0. Nothing is measured and the result says success.
+
+For each check and each required input it builds a fixture without that input, then asserts the
+run exits non-zero, prints no traceback, and names the missing thing. It does NOT pass
+`--fixture`: that flag makes a check derive its file set by globbing, which bypasses
+`languages.yml` and would exercise a path the repository never runs.
+
+Expected output: `checks that do not fail cleanly: 0`.
+
+Remedy: guard the read. Say which file is missing and why the check needs it.

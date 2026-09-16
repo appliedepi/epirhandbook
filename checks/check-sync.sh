@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Read-only: report how far the translated chapters have drifted from the English.
 # Runs every structural check the 2026-09 fix pass used. Changes nothing. Exit 1 on any drift.
-# Usage: checks/check-sync.sh                 (checks 1, 2, 3, 4, 5, 7, 9, 10 and 11; about two minutes)
+# Usage: checks/check-sync.sh                 (checks 1, 2, 3, 4, 5, 7, 9, 10, 11 and 12; about two minutes)
 #        checks/check-sync.sh --base <sha>    (also checks 6 and 8, over the files changed since <sha>)
 #        checks/check-sync.sh --render        (also checks 6 and 8, over the whole tree, ~20 min)
 # Checks 6 and 8 are the render gate and the chunk parse gate. Both need a base commit. Without
@@ -332,6 +332,9 @@ python3 "$here/check-unparsed-links.py" --summary | sed 's/^/   /' \
 echo "== 11. Image names: every images/ file a chapter names, commented lines included"
 python3 "$here/check-image-names.py" --summary | sed 's/^/   /' \
   || { python3 "$here/check-image-names.py" | sed 's/^/   /'; rc=1; }
+echo "== 12. Clean failure: every check names a missing input instead of crashing on it"
+python3 "$here/check-clean-failure.py" --summary | sed 's/^/   /' \
+  || { python3 "$here/check-clean-failure.py" | sed 's/^/   /'; rc=1; }
 if [ -n "$base" ]; then
   echo "== 6. Render gate on every translated chapter changed since $base (quarto render --no-execute)"
   "$here/render-gate.sh" "$base" HEAD > "$log/render.txt" 2>&1 || rc=1

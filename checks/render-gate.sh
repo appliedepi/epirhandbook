@@ -19,7 +19,7 @@
 # Exit 0 when every file renders, 1 when a file FAILS, 2 when the gate cannot run: a base or head
 # that is not a commit, a git diff that fails, or a copy path that already exists or is tracked.
 #
-# Writes /tmp/render-gate/<stem>.log per file and /tmp/render-gate/SUMMARY.tsv.
+# Writes /tmp/render-gate/<lang>.<stem>.log per file and /tmp/render-gate/SUMMARY.tsv.
 # A file with an odd number of fence lines FAILS before render. Pandoc renders an unclosed
 # fence with exit 0, so the render alone cannot see that class. YAML damage does exit 1.
 # The gate needs quarto and git. It runs no R: --no-execute skips the knitr engine.
