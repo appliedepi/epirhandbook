@@ -534,6 +534,133 @@ jobs:
               print(f"  {code}: {resolved[code]} reference(s) resolving inside site/{code}/images/, {len(shared)} image file(s)")
           PY
 
+      # The offline download. Each language folder is already a complete site,
+      # so a zip of it opens from the filesystem with working navigation, links
+      # and images. Quarto's search box is the one thing that does not survive:
+      # quarto-search.js does fetch("search.json"), and a browser refuses that
+      # on a file:// page. The download page says so in every language.
+      #
+      # PUBLISHING IS GATED ON PROVENANCE, NOT ON A STRING. inputs.branch is
+      # supplied by the caller, and for a pull_request event the caller's own
+      # workflow file comes from the PR head, so a same-repository PR could
+      # edit preview.yml to pass 'staging'. github.ref is set by the event and
+      # a PR cannot forge it: it is refs/pull/<n>/merge there, never
+      # refs/heads/main. Both conditions, on both steps.
+      #
+      # This runs BEFORE the deploy step, which checks out an orphan branch and
+      # deletes site/. The zips live under /tmp, which that step does not touch.
+      - name: Zip each language for the offline download
+        if: inputs.branch == 'staging' && github.ref == 'refs/heads/main'
+        env:
+          ALL_LANGS: ${{ needs.languages.outputs.all }}
+        run: |
+          rm -rf /tmp/offline-zips /tmp/offline-pkg
+          mkdir -p /tmp/offline-zips /tmp/offline-pkg
+          langs="$(printf '%s' "$ALL_LANGS" | tr -d '[]" ' | tr ',' ' ')"
+
+          # A symlink in a zip is not a file a static host or a Windows reader
+          # can open, and Info-ZIP's handling of one depends on flags this step
+          # does not set. Refuse rather than ship an archive whose behaviour
+          # depends on the unzipping tool.
+          odd="$(find site -mindepth 1 \( -type l -o \! -type f -a \! -type d \) -print)"
+          if [ -n "$odd" ]; then
+            echo "::error::site/ holds a symlink or a special file, which does not belong in an offline zip:" >&2
+            printf '%s\n' "$odd" >&2
+            exit 1
+          fi
+
+          for lang in $langs; do
+            # The top entry in the zip is the folder name the reader sees after
+            # unzipping. Name it, rather than leaving a bare "en".
+            pkg="epirhandbook-$lang"
+            cp -a "site/$lang" "/tmp/offline-pkg/$pkg"
+            ( cd /tmp/offline-pkg && zip -qr "/tmp/offline-zips/$pkg.zip" "$pkg" )
+            rm -rf "/tmp/offline-pkg/$pkg"
+          done
+
+          # Check the artefact against its SOURCE, not against a floor. A zip
+          # holding index.html and one image satisfies any "is it plausible"
+          # test while missing every chapter. So compare the member list with
+          # the tree it was built from: same relative paths, same count.
+          python3 - "$langs" <<'PY'
+          import pathlib
+          import sys
+          import zipfile
+
+          import yaml
+
+          langs = sys.argv[1].split()
+
+          # languages.yml is the one file that declares which languages ship.
+          # An empty or short ALL_LANGS would otherwise check nothing and pass.
+          declared = [str(entry["code"]) for entry in
+                      yaml.safe_load(pathlib.Path("languages.yml").read_text(encoding="utf-8"))["languages"]]
+          if sorted(langs) != sorted(declared):
+              sys.exit(f"::error::ALL_LANGS is {sorted(langs)}, languages.yml declares {sorted(declared)}")
+
+          site = pathlib.Path("site")
+          out = pathlib.Path("/tmp/offline-zips")
+          for lang in langs:
+              z = out / f"epirhandbook-{lang}.zip"
+              if not z.is_file():
+                  sys.exit(f"::error::{z.name} was not written")
+              with zipfile.ZipFile(z) as zf:
+                  corrupt = zf.testzip()
+                  if corrupt is not None:
+                      sys.exit(f"::error::{z.name} is corrupt, first bad entry {corrupt}")
+                  entries = zf.namelist()
+              names = [n for n in entries if not n.endswith("/")]
+
+              root = f"epirhandbook-{lang}/"
+              tops = {n.split("/", 1)[0] for n in entries}
+              if tops != {f"epirhandbook-{lang}"}:
+                  sys.exit(f"::error::{z.name} has top-level entries {sorted(tops)}, expected one folder epirhandbook-{lang}")
+              if f"{root}index.html" not in names:
+                  sys.exit(f"::error::{z.name} has no {root}index.html, which is the file the download page names")
+
+              source = {str(p.relative_to(site / lang)) for p in (site / lang).rglob("*") if p.is_file()}
+              packed = {n[len(root):] for n in names}
+              packed_full = set(names)
+              lost = sorted(source - packed)
+              extra = sorted(packed - source)
+              if lost:
+                  sys.exit(f"::error::{z.name} is missing {len(lost)} file(s) present in site/{lang}, first: {lost[:5]}")
+              if extra:
+                  sys.exit(f"::error::{z.name} holds {len(extra)} file(s) absent from site/{lang}, first: {extra[:5]}")
+
+              # The manifest above proves the zip matches site/<lang>. It cannot
+              # prove site/<lang> is complete: a render leg that dropped half
+              # the book would zip faithfully and pass. So check the zip
+              # against what the language DECLARES, which is the chapter list
+              # in its own project file.
+              # Parsed with PyYAML, installed by an earlier step in this job.
+              # book.chapters nests: a part is a dict carrying its own chapters.
+              project = pathlib.Path("content") / lang / "_quarto.yaml"
+
+              def stems(items):
+                  found = []
+                  for item in items:
+                      if isinstance(item, str) and item.endswith(".qmd"):
+                          found.append(item[:-4])
+                      elif isinstance(item, dict) and "chapters" in item:
+                          found.extend(stems(item["chapters"]))
+                  return found
+
+              declared_chapters = stems(yaml.safe_load(project.read_text(encoding="utf-8"))["book"]["chapters"])
+              if not declared_chapters:
+                  sys.exit(f"::error::no chapter list parsed from {project}")
+              absent = sorted(s for s in declared_chapters if f"{root}{s}.html" not in packed_full)
+              if absent:
+                  sys.exit(
+                      f"::error::{z.name} is missing {len(absent)} declared chapter(s) of "
+                      f"{len(declared_chapters)}, first: {absent[:5]}"
+                  )
+
+              pages = [n for n in names if n.endswith(".html")]
+              images = [n for n in names if n.startswith(f"{root}images/")]
+              print(f"  {z.name}: {len(names)} file(s) = site/{lang}, {len(pages)} page(s), {len(images)} image(s), {z.stat().st_size // 1048576} MB")
+          PY
+
       # Deploy technique copied from the reference build-deploy.yml
       # (appliedepi/websitetimecourse): force-push an orphan branch.
       - name: Deploy to branch
@@ -575,3 +702,73 @@ jobs:
           # Commit and force push
           git commit -m "Deploy site from ${GITHUB_SHA}"
           git push origin "$DEPLOY_BRANCH" --force
+
+      # One rolling release, tag "offline", whose assets are replaced on every
+      # staging build. The download link in every data_used.qmd names that tag
+      # directly, so the URL never changes and the download cannot silently
+      # rot. The artefact it replaces, offline_long/, last rendered on
+      # 2026-07-24 and five of its eight advertised links were dead.
+      #
+      # KNOWN AND ACCEPTED: this tracks staging, so it tracks main. Production
+      # is a separate promotion, so after a push to main the download is ahead
+      # of the production site until that promotion runs. The download page
+      # says the zip follows the latest version of the handbook. It does not
+      # claim to match whichever page the reader is on.
+      #
+      # --latest=false keeps this out of the way if the repository later adopts
+      # versioned releases; the fixed-tag URL does not depend on "latest".
+      # The tag stays on the commit that first created it, so the release's
+      # automatic source archives do NOT track the assets. Readers are pointed
+      # at the named assets, never at those archives.
+      #
+      # --repo is explicit because the deploy step above left the checkout on an
+      # orphan branch, and gh otherwise reads the repository from local git.
+      - name: Publish the offline downloads to the rolling release
+        if: inputs.branch == 'staging' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          ALL_LANGS: ${{ needs.languages.outputs.all }}
+        run: |
+          if ! gh release view offline --repo "$REPO" >/dev/null 2>&1; then
+            gh release create offline --repo "$REPO" \
+              --title "Offline downloads" \
+              --target "$GITHUB_SHA" \
+              --latest=false \
+              --notes "One zip per language, each a complete offline copy of the handbook. Unzip, then open index.html. Rebuilt automatically from the latest version of the handbook. Quarto's search box needs a web server, so it does not work offline: use Ctrl+f (Cmd+f) on the page you are reading."
+          fi
+          gh release upload offline --repo "$REPO" --clobber /tmp/offline-zips/*.zip
+
+          # gh upload replaces assets one at a time, and this job can be
+          # cancelled by a newer staging run. So confirm what the release
+          # actually carries afterwards: every declared language, at the size
+          # this run built. A partial replacement fails the build instead of
+          # leaving readers on mixed generations with nothing to notice it.
+          gh release view offline --repo "$REPO" --json assets > /tmp/release-assets.json
+          python3 - "$ALL_LANGS" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          langs = [c.strip() for c in sys.argv[1].strip("[] ").replace('"', "").split(",")]
+          langs = [c for c in langs if c]
+          if not langs:
+              sys.exit("::error::ALL_LANGS named no language")
+
+          remote = {a["name"]: a for a in json.loads(pathlib.Path("/tmp/release-assets.json").read_text())["assets"]}
+          wrong = []
+          for lang in langs:
+              name = f"epirhandbook-{lang}.zip"
+              local = pathlib.Path("/tmp/offline-zips") / name
+              if name not in remote:
+                  wrong.append(f"{name}: not on the release")
+              elif remote[name]["size"] != local.stat().st_size:
+                  wrong.append(f"{name}: release has {remote[name]['size']} bytes, this run built {local.stat().st_size}")
+          if wrong:
+              sys.exit("::error::the release does not carry what this run built: " + "; ".join(wrong))
+
+          print(f"the 'offline' release carries all {len(langs)} language(s) at this run's sizes:")
+          for lang in langs:
+              a = remote[f"epirhandbook-{lang}.zip"]
+              print(f"  {a['name']}  {a['size'] // 1048576} MB  updated {a['updatedAt']}")
+          PY
