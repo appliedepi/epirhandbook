@@ -374,3 +374,41 @@ instead.
 3. `sync-chunks.py`, then `sync-anchors.py`.
 4. `check-sync.sh --base <base>`, which adds check 8 and check 6 on the changed files.
 5. Commit each step on its own, signed, and run `check-sync.sh` again.
+
+## 10. Unparsed links
+
+`checks/check-unparsed-links.py`. Reports markdown that looks like a link but that pandoc never
+parsed into one.
+
+Check 5 asks pandoc which links it found, then checks their targets. Anything that never parses
+is invisible to it. Four defect forms came out of that blind spot, all found by reading:
+
+| form | example |
+|---|---|
+| reference link with no definition | `[R project][r_projects]` |
+| bracket and paren transposed | `[R project(r_projects.qmd)]` |
+| opening bracket missing | `R project](r_projects.qmd)` |
+| two bare `$` pairing as TeX math | `table(d$col)` ... `[link](x.qmd)` ... `table(d$other)` |
+
+The rule is one line: a link that parsed leaves no brackets behind. Render the chapter, then look
+for a residual `](`, `][`, or a bracketed span whose content looks like a link target. Fenced code,
+HTML comments, inline R and rendered `<code>` are removed first, because each produces that
+signature without being a defect.
+
+Expected output: `unparsed links: 0`.
+
+Remedy: fix the link. A reference link needs either a `[label]: target` definition or conversion to
+an inline link. A `$` swallowing a link means bare R code needs backticks.
+
+## 11. Image names
+
+`checks/check-image-names.py`. Every `images/` file a chapter names must exist.
+
+Reads `knitr::include_graphics(here::here("images", ...))` and plain markdown image links.
+**Commented lines count.** The defect this was written for lived inside an R comment in all eight
+languages: `images/survanalysis.png`, absent, named by `survival_analysis.qmd`. Nothing rendered
+it, so nothing caught it.
+
+Expected output: `missing from images/: 0`.
+
+Remedy: add the image, correct the name, or delete the line.
