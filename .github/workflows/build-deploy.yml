@@ -275,9 +275,8 @@ jobs:
 
       # Every language lands under its own <lang>/, the main language
       # included. Each one carries its own images/ copy, so a language folder
-      # is a complete site on its own. The site root holds a second images/
-      # copy for pre-layout links, a redirect stub to the main language, and
-      # no page of any language.
+      # is a complete site on its own. The site root holds a redirect stub to
+      # the main language and nothing else: no page, and no images/ copy.
       #
       # This step reads downloaded/ and never writes to it. The artifacts are
       # the render legs' only output, and a second run of this step must see
@@ -331,13 +330,20 @@ jobs:
             cp -a images/. "site/$lang/images"/
           done
 
-          # A second copy at the site root, for links that predate the
-          # per-language layout. Under a blanket root-to-/<mainlanguage>/
-          # redirect this copy is unreachable and MAY be dropped. It is kept
-          # because the redirect rule lives in Cloudflare, not in this
-          # repository, so its exact shape cannot be checked here.
-          mkdir -p site/images
-          cp -a images/. site/images/
+          # There is deliberately NO images/ copy at the site root. Cloudflare
+          # 301s every root path into /<mainlanguage>/, verified against the
+          # live site on 2026-09-16:
+          #   /images/Applied_Epi_logo.png
+          #     -> 301 -> /en/images/Applied_Epi_logo.png -> 200
+          # So a link that predates this layout is redirected into a language
+          # folder and served from that language's own copy. A root copy could
+          # never be reached.
+          #
+          # Leaving one out also makes a whole class of bug impossible rather
+          # than merely detected: with a root copy present, a page path with
+          # one ../ too many resolves to a real file, so it passes an existence
+          # check while the browser still requests /images/. Without it, that
+          # path resolves to nothing.
 
           # Each page carries the ../../images/ of content/<lang>/_quarto.yaml,
           # which is relative to that language's project directory. Rewrite it
