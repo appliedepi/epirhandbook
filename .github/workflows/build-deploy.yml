@@ -274,9 +274,10 @@ jobs:
           path: downloaded
 
       # Every language lands under its own <lang>/, the main language
-      # included. The site root holds images/ and a redirect stub to the main
-      # language, and no page of any language. That is the shape
-      # build_all_chapters.sh produces for a whole-book render.
+      # included. Each one carries its own images/ copy, so a language folder
+      # is a complete site on its own. The site root holds a second images/
+      # copy for pre-layout links, a redirect stub to the main language, and
+      # no page of any language.
       #
       # This step reads downloaded/ and never writes to it. The artifacts are
       # the render legs' only output, and a second run of this step must see
@@ -319,19 +320,64 @@ jobs:
             cp -a "$dir/." "site/$code/"
           done
 
-          # The pages link to images/ at the site root, and no render leg
-          # copies it. So it is copied once here, from this job's checkout.
+          # Every language folder is self-contained: it carries its own
+          # images/ copy, and its pages reach that copy relatively. No page
+          # holds a root-absolute path, so the Cloudflare rule that redirects
+          # root paths into /<mainlanguage>/ never sees an image request. It
+          # also makes one language folder a standalone site, which is what
+          # the offline zip needs.
+          for lang in $langs; do
+            mkdir -p "site/$lang/images"
+            cp -a images/. "site/$lang/images"/
+          done
+
+          # A second copy at the site root, for links that predate the
+          # per-language layout. Under a blanket root-to-/<mainlanguage>/
+          # redirect this copy is unreachable and MAY be dropped. It is kept
+          # because the redirect rule lives in Cloudflare, not in this
+          # repository, so its exact shape cannot be checked here.
           mkdir -p site/images
           cp -a images/. site/images/
 
           # Each page carries the ../../images/ of content/<lang>/_quarto.yaml,
-          # which is relative to that language's project directory. From
-          # site/<lang>/ it points outside the site. Rewrite it to the
-          # root-absolute /images/, which is correct at every depth.
-          # build_all_chapters.sh does not do this, so a local whole-book
-          # render still carries ../../images/.
-          find site -type f -name '*.html' -exec \
-            sed -i -E 's#(src|href)="(\./)?\.\./\.\./images/#\1="/images/#g' {} +
+          # which is relative to that language's project directory. Rewrite it
+          # to a path relative to the page's OWN depth under site/<lang>/: a
+          # chapter at site/en/gis.html gets images/, an alias stub at
+          # site/en/new_pages/gis.en.html gets ../images/.
+          #
+          # This step only rewrites. The check is a separate step, after the
+          # switcher injection, because that injection is the last thing that
+          # rewrites a page.
+          #
+          # build_all_chapters.sh still writes one root images/ copy and does
+          # no rewrite, so a local whole-book render does not match this tree.
+          # Bringing it into line needs a new image line: epirhandbook#455,
+          # box F50.
+          python3 - "$langs" <<'PY'
+          import pathlib
+          import re
+          import sys
+
+          langs = sys.argv[1].split()
+          site = pathlib.Path("site")
+
+          # Any number of ../ before images/ names the shared assets folder.
+          # The handbook has no other directory of that name.
+          emitted = re.compile(r'(src|href)="(?:\./)?(?:\.\./)+images/')
+
+          rewritten = 0
+          for lang in langs:
+              root = site / lang
+              for page in root.rglob("*.html"):
+                  depth = len(page.relative_to(root).parts) - 1
+                  prefix = "../" * depth
+                  before = page.read_text(encoding="utf-8", errors="surrogateescape")
+                  after = emitted.sub(lambda m: f'{m.group(1)}="{prefix}images/', before)
+                  if after != before:
+                      page.write_text(after, encoding="utf-8", errors="surrogateescape")
+                      rewritten += 1
+          print(f"rewrote the images path on {rewritten} page(s)")
+          PY
 
           # The root redirect stub, byte-for-byte what build_all_chapters.sh
           # writes for a whole-book render. Four lines, and the only page at
@@ -396,6 +442,97 @@ jobs:
             -v "$PWD/languages.yml:/quarto/languages.yml:ro" \
             -w /site "$PREFIX/epirhandbook-common:2.9" \
             inject_language_links.sh /site /quarto/languages.yml
+
+      # The gate runs HERE, not inside the assemble step, because the
+      # injection above is the LAST thing that rewrites a page.
+      # inject_language_links.R parses each page with xml2::read_html() and
+      # writes it back with xml2::write_html(), so libxml2 re-serialises the
+      # whole document, every image attribute included. A gate that ran before
+      # that would grade a tree nobody deploys.
+      #
+      # The invariant is CONTAINMENT, not existence. A reference on a page
+      # under site/<lang>/ MUST resolve inside site/<lang>/images/. Existence
+      # alone is not enough: the root site/images/ compatibility copy makes a
+      # path with one ../ too many resolve to a real file, so a page that
+      # still reaches the site root would pass an existence check while the
+      # browser requests exactly the /images/ path this layout removes.
+      - name: Check every image reference in the tree about to be deployed
+        env:
+          ALL_LANGS: ${{ needs.languages.outputs.all }}
+        run: |
+          python3 - "$ALL_LANGS" <<'PY'
+          import pathlib
+          import re
+          import sys
+          from urllib.parse import unquote
+
+          langs = [c.strip() for c in sys.argv[1].strip("[] ").replace('"', "").split(",")]
+          langs = [c for c in langs if c]
+          if not langs:
+              sys.exit("::error::ALL_LANGS named no language")
+
+          site = pathlib.Path("site").resolve()
+          shared = sorted(p.name for p in pathlib.Path("images").rglob("*") if p.is_file())
+
+          reference = re.compile(r'(?:src|href)="((?:\.\./)*images/[^"]+)"')
+          # Deliberately wider than the form Quarto emits: a single quote, a
+          # space around the =, or a change of case must not slip past.
+          absolute = re.compile(r'(?i)(?:src|href)\s*=\s*["\']?/images/')
+
+          rooted = []
+          escaped = []
+          missing = []
+          resolved = {code: 0 for code in langs}
+
+          for page in sorted(site.rglob("*.html")):
+              text = page.read_text(encoding="utf-8", errors="surrogateescape")
+              shown = page.relative_to(site)
+              if absolute.search(text):
+                  rooted.append(str(shown))
+              parts = shown.parts
+              code = parts[0] if len(parts) > 1 and parts[0] in resolved else None
+              own = (site / code / "images").resolve() if code else None
+              for match in reference.finditer(text):
+                  path = unquote(match.group(1).split("#")[0].split("?")[0])
+                  target = (page.parent / path).resolve()
+                  if code is None:
+                      escaped.append(f"{shown} -> {match.group(1)}")
+                  elif own not in target.parents:
+                      escaped.append(f"{shown} -> {match.group(1)}")
+                  elif not target.is_file():
+                      missing.append(f"{shown} -> {match.group(1)}")
+                  else:
+                      resolved[code] += 1
+
+          if rooted:
+              sys.exit("::error::a root-absolute /images/ survives on: " + ", ".join(rooted[:10]))
+          if escaped:
+              sys.exit("::error::an images/ reference leaves its own language folder: " + "; ".join(escaped[:10]))
+          if missing:
+              sys.exit("::error::an images/ reference resolves to no file: " + "; ".join(missing[:10]))
+
+          # Per language, not per site. A site-wide floor of one reference
+          # passes while seven of the eight languages have lost their images.
+          for code in langs:
+              copy = site / code / "images"
+              if not copy.is_dir():
+                  sys.exit(f"::error::site/{code}/images is missing -- that language has no images copy")
+              links = sorted(str(p.relative_to(site)) for p in copy.rglob("*") if p.is_symlink())
+              if links:
+                  sys.exit("::error::symlinked image asset(s), which a static host does not serve as files: " + ", ".join(links[:10]))
+              here = sorted(p.name for p in copy.rglob("*") if p.is_file())
+              if here != shared:
+                  sys.exit(
+                      f"::error::site/{code}/images holds {len(here)} file(s), the repository's "
+                      f"images/ holds {len(shared)} -- the copy is incomplete"
+                  )
+              if resolved[code] == 0:
+                  sys.exit(f"::error::no page under site/{code}/ references images/ -- the rewrite matched nothing there")
+
+          print(f"checked {sum(resolved.values())} images/ reference(s) across {len(langs)} language(s)")
+          for code in langs:
+              print(f"  {code}: {resolved[code]} reference(s) resolving inside site/{code}/images/, {len(shared)} image file(s)")
+          PY
 
       # Deploy technique copied from the reference build-deploy.yml
       # (appliedepi/websitetimecourse): force-push an orphan branch.
