@@ -432,3 +432,8 @@ run exits non-zero, prints no traceback, and names the missing thing. It does NO
 Expected output: `checks that do not fail cleanly: 0`.
 
 Remedy: guard the read. Say which file is missing and why the check needs it.
+
+**What it does not cover.** Check 9 is inline python inside `check-sync.sh`, not a separate
+script, so check 12 never runs it. Check 9 was verified by hand on 2026-09-16 to degrade to a
+DRIFT line for a missing `languages.yml` and for a missing `docker-images.yml`. Any new check
+written inline rather than as `checks/<name>.py` is outside this gate for the same reason.
