@@ -437,3 +437,25 @@ Remedy: guard the read. Say which file is missing and why the check needs it.
 script, so check 12 never runs it. Check 9 was verified by hand on 2026-09-16 to degrade to a
 DRIFT line for a missing `languages.yml` and for a missing `docker-images.yml`. Any new check
 written inline rather than as `checks/<name>.py` is outside this gate for the same reason.
+
+## 13. Language copies
+
+`checks/check-language-copies.py`. Every second copy of the language list must agree with
+`languages.yml`.
+
+`languages.yml` is the one file that declares which languages ship, and everything that renders
+or deploys reads it. `banner.html` is the exception: its `const translations = {...}` object
+carries one key per language, hard-coded, because the banner text is prose and there is nowhere
+else to put it.
+
+A deliberate second copy is exactly the thing that drifts. Add a ninth language and every other
+part of the system picks it up while the banner silently has no text for it.
+
+`offline_long/standalone_html.R` was a third copy, with its own language vector and title map
+that nothing checked. It excluded `en`, which is one of the two faults that made it unable to
+run at all. Deleted on 2026-09-16.
+
+Expected output: `disagreements: 0`.
+
+Remedy: add or remove the key in `banner.html`. If the banner ever stops carrying its own copy,
+delete this check rather than weakening it.

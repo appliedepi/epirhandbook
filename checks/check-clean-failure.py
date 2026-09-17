@@ -36,6 +36,7 @@ CASES = {
     'check-data-reads.py': ['languages.yml', 'content'],
     'check-unparsed-links.py': ['content'],
     'check-image-names.py': ['content', 'images'],
+    'check-language-copies.py': ['languages.yml', 'banner.html'],
 }
 
 summary = '--summary' in sys.argv[1:]
@@ -53,6 +54,8 @@ def build(tmp):
     (tmp / 'images' / 'real.png').write_bytes(b'PNG')
     (tmp / 'languages.yml').write_text(
         'main: en\nlanguages:\n  - code: en\n    label: "English"\n    title: "T"\n', encoding='utf-8')
+    (tmp / 'banner.html').write_text(
+        "<script>\n  const translations = {\n    en: 'a'\n  };\n</script>\n", encoding='utf-8')
     shutil.copytree(HERE, tmp / 'checks')
 
 
