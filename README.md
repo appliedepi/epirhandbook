@@ -131,7 +131,7 @@ created, so both were removed on 2026-09-17.
 **A fork pull request now renders, but still cannot publish a preview.** Be clear about which
 half of that changed.
 
-The 2.8 images are public, so the build authenticates to nothing and every image pull is
+The 2.9 images are public, so the build authenticates to nothing and every image pull is
 anonymous. A fork PR therefore gets all the way through the render, where it previously died
 at a login step it could never pass. That is genuinely useful: it proves the contributor's
 chapters build.
@@ -158,7 +158,7 @@ names the image:
 ```json
 {
   "name": "epirhandbook",
-  "image": "ghcr.io/appliedepi/aedockerpublic/epirhandbook-monolith:2.8"
+  "image": "ghcr.io/appliedepi/aedockerpublic/epirhandbook-monolith:2.9"
 }
 ```
 
@@ -189,7 +189,7 @@ locally.
 **If you add a package**, that is a change to
 [appliedepi/aedockerpublic](https://github.com/appliedepi/aedockerpublic), not to this
 repository. Add the package to the chapter's group list there, rerun
-`epirhandbook/2.8/generate_groups.py`, and commit — the group images and the monolith
+`epirhandbook/2.9/generate_groups.py`, and commit — the group images and the monolith
 are regenerated from the same source, so they cannot disagree.
 
 ### Publishing an update, end to end

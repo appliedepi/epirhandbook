@@ -459,3 +459,25 @@ Expected output: `disagreements: 0`.
 
 Remedy: add or remove the key in `banner.html`. If the banner ever stops carrying its own copy,
 delete this check rather than weakening it.
+
+## 14. Image versions in prose
+
+`checks/check-image-version-refs.py`. Every image version the documentation names must be one
+the repository actually uses.
+
+`docker-images.yml` and `.devcontainer.json` decide which image line is live. Prose does not, so
+prose rots silently. After the 2.9 migration `README.md` still said 2.8 in three places, one of
+them a code block claiming to show the contents of `.devcontainer.json`, which by then said 2.9.
+A contributor copying that block opened the repository in the wrong image.
+
+Live versions come from image DECLARATIONS in those two files, not from any `2.<n>` in them.
+Both carry narrative comments naming past lines, and counting those as live made every
+superseded version acceptable forever. The first version of this check did exactly that and
+could not have caught the defect it was written for.
+
+A version named in a `docker-images.yml` comment counts as live. The manifest documents pinning
+a chapter back to an older image, and that is a real option.
+
+Expected output: `stale: 0`.
+
+Remedy: update the prose. If a version is genuinely live, declare it in one of the two files.

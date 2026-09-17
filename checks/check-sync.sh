@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Read-only: report how far the translated chapters have drifted from the English.
 # Runs every structural check the 2026-09 fix pass used. Changes nothing. Exit 1 on any drift.
-# Usage: checks/check-sync.sh                 (checks 1, 2, 3, 4, 5, 7, 9, 10, 11, 12 and 13; about two minutes)
+# Usage: checks/check-sync.sh                 (checks 1, 2, 3, 4, 5, 7, 9, 10, 11, 12, 13 and 14; about two minutes)
 #        checks/check-sync.sh --base <sha>    (also checks 6 and 8, over the files changed since <sha>)
 #        checks/check-sync.sh --render        (also checks 6 and 8, over the whole tree, ~20 min)
 # Checks 6 and 8 are the render gate and the chunk parse gate. Both need a base commit. Without
@@ -335,6 +335,9 @@ python3 "$here/check-image-names.py" --summary | sed 's/^/   /' \
 echo "== 13. Language copies: every second copy of the language list agrees with languages.yml"
 python3 "$here/check-language-copies.py" --summary | sed 's/^/   /' \
   || { python3 "$here/check-language-copies.py" | sed 's/^/   /'; rc=1; }
+echo "== 14. Image versions in prose: every 2.<n> the docs name is one the repository uses"
+python3 "$here/check-image-version-refs.py" --summary | sed 's/^/   /' \
+  || { python3 "$here/check-image-version-refs.py" | sed 's/^/   /'; rc=1; }
 echo "== 12. Clean failure: every check names a missing input instead of crashing on it"
 python3 "$here/check-clean-failure.py" --summary | sed 's/^/   /' \
   || { python3 "$here/check-clean-failure.py" | sed 's/^/   /'; rc=1; }
