@@ -112,7 +112,7 @@ for lang in langs:
         for span in SPAN.findall(strip(tt)):
             s2 = span.strip()
             if not (s2 in es or s2 in te or s2.strip('r ').strip() in te): per[lang] += 1
-print('   suspect spans by language:', dict(sorted(per.items())), 'total', sum(per.values()), '(baseline 2026-09-02, after the inline and mirror passes and the return of the GIS chapter: 356, all judged placeholders or noise)')
+print('   suspect spans by language:', dict(sorted(per.items())), 'total', sum(per.values()), '(baseline 2026-09-17: 357, all judged placeholders or noise. Was 356 from 2026-09-02; the extra one is es/transition_to_r.qmd, where bare R code was wrapped in backticks to stop two dollars pairing as TeX maths)')
 PY
 echo "== 5. Internal links: every internal link in the 400 declared chapter files"
 python3 "$here/check-links.py" --summary | sed 's/^/   /' \

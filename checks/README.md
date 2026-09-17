@@ -50,8 +50,7 @@ Each agent workflow named in the Remedy column is a `.js` file in the workflows 
 `archive/modernization`.
 
 Check 4 is informational because a suspect span is often right: a placeholder the reader
-replaces, or a word the author put in code font. The baseline after the 2026-09-02 inline pass
-is 356 suspects. All were judged placeholders or noise. The GIS chapter, restored the same
+replaces, or a word the author put in code font. The baseline is 357 suspects as of 2026-09-17. All were judged placeholders or noise. The GIS chapter, restored the same
 day, added one more: a French verb in code font. A rise above that is what to look at, not
 the number itself. Check 4 measures the declared set: the 49 chapters in the 7 translation
 languages. A file that `content/en/_quarto.yaml` does not declare is not measured here, and
