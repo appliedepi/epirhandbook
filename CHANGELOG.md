@@ -8,6 +8,51 @@ of it, and that is expected of a changelog. Read it as a record, never as curren
 
 ---
 
+## 2026-09-17: the seven translated home pages keep their old URL
+
+Found while checking alias coverage before the first production promotion (issue #456).
+
+### The problem
+
+The live site serves each translated home page at `/<lang>/index.<lang>.html`, for example
+`/fr/index.fr.html`. The `/<lang>/index.html` path is a redirect stub that points at it. Search
+engines index the `.<lang>.html` form, because that is the page with the content.
+
+The new `content/<lang>/` layout publishes the home page at `/<lang>/index.html` only. Nothing
+produced the old path. The first promotion would have returned 404 for seven live URLs, one per
+translated language. English was never affected: it had no `.en.html` form.
+
+The cause was a stated rule, not an oversight in a file. `CLAUDE.md` required an `aliases:` entry
+on every chapter file "except `index.qmd`", and check 9 in `checks/check-sync.sh` skips
+`index.qmd` for the same reason. Eight home pages sat outside the one mechanism that keeps an old
+URL alive.
+
+### What changed
+
+- Each of `content/{es,fr,jp,pt,ru,tr,vn}/index.qmd` now carries front matter declaring one alias,
+  `/index.<lang>.html`. Quarto writes a redirect stub at that path.
+- `checks/README.md`: the documented check-9 alias count moved from 393 to 400.
+
+### How the gap was found
+
+The live URL set came from `search.json` on each of the eight languages: 408 distinct page URLs.
+The same set was derived a second way, from the links on each language home page, and the two
+agreed. The staging set came from the built tree on `origin/staging`.
+
+The `aliases:` keys were not trusted on their own. Every one of the 393 alias stubs in the built
+tree was parsed, its `var redirects` target resolved against the tree, and every target exists.
+
+Two gaps remained. The seven home pages above are fixed here. The eight `epidemic_models` URLs are
+not: that chapter stays excluded, and Richard accepted the 404 on 2026-09-17.
+
+### What a reader should know
+
+A Quarto alias stub is a JavaScript redirect, not an HTTP 301. It carries the hash and the query
+string. A crawler that does not run JavaScript sees an empty page, so no link equity passes
+through it.
+
+---
+
 ## 2026-09-02: the GIS chapter returns
 
 Restored to the build after being cut in the 2.7 upgrade. Written up the same day, converted

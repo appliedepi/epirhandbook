@@ -44,7 +44,7 @@ on 2026-09-02.
 | no R chunk parses worse than the English chunk | 0 files worse | check 8, with `--base` or `--render` | the sync, or a source defect |
 | every internal link resolves, stays on its page and stays in its language | 0 dead, 0 same-page, 0 cross-language and 0 unterminated links in the 400 declared files | check 5 | `rewrite-links.py`, no agent |
 | no chunk that executes names the `data/` folder, outside the two chapters that teach file paths | 0 lines in the 400 declared files | check 7 | load the data with `appliedepidata::get_data()`, or set `eval=F` |
-| the eight language folders, project files, chapter files, manifest rows and alias lines agree | `8 languages, 50 stems, 393 aliases, drifted: 0` | check 9 | edit the file the DRIFT line names |
+| the eight language folders, project files, chapter files, manifest rows and alias lines agree | `8 languages, 50 stems, 400 aliases, drifted: 0` | check 9 | edit the file the DRIFT line names |
 
 Each agent workflow named in the Remedy column is a `.js` file in the workflows folder of
 `archive/modernization`.
@@ -275,7 +275,7 @@ translation-sync runner carries no yaml module.
 It prints one summary line, and one `DRIFT` line for each finding:
 
 ```
-   layout: 8 languages, 50 stems, 393 aliases, drifted: 0
+   layout: 8 languages, 50 stems, 400 aliases, drifted: 0
 ```
 
 A finding sets the DRIFT exit. Check 9 reports nine kinds.
