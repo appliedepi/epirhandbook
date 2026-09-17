@@ -28,7 +28,7 @@ The repository declares its layout in two files. `languages.yml` names the eight
 so a file's language is the folder that holds it.
 
 English is the reference. Checks 1 to 3 pair each translated chapter with
-`content/en/<stem>.qmd`. That set is 49 chapters and 7 translation languages: the landing page
+`content/en/<stem>.qmd`. That set is 49 chapters and 7 translation languages. The landing page
 `index.qmd` and English itself stay out of it. 49 x 7 has held since the GIS chapter returned
 on 2026-09-02.
 
@@ -348,19 +348,19 @@ instead.
 
 ## The reasoning behind the design, so it is not re-derived
 
-- Code chunks are copied, not reviewed, because 94% of aligned chunks were identical or
-  differed only in comments, and the 459 that differed in code held defects far more often
-  than deliberate choices. Renamed objects were rare, Portuguese-only, and half inconsistent.
-- Comments are merged by line, not translated, because a translation pass over 4,500 comments
-  would cost more than the whole prose sweep and add risk; a comment on a code line the
-  translator got wrong falls back to English.
-- Anchors take the English id because cross-links are written English-style throughout the
-  corpus and a divergent id is a dead link; only one link in the corpus ever targeted a
-  translation's own id.
-- Heading and chunk alignment use one agent per chapter because the edit is structural and
-  small, and the mechanical count afterwards is the proof, not the agent's report.
-- Every check was proved red before it was trusted: a corrupted span, an extra parenthesis, a
-  broken YAML front matter, an unclosed fence, a demoted heading. Check 3 was proved both ways
+- Code chunks are copied, not reviewed. 94% of aligned chunks were identical, or differed
+  only in comments. Of the 459 that differed in code, most held defects rather than
+  deliberate choices. Renamed objects were rare, Portuguese-only, and half inconsistent.
+- Comments are merged by line, not translated. A translation pass over 4,500 comments would
+  cost more than the whole prose sweep, and add risk. A comment on a code line the translator
+  got wrong falls back to English.
+- Anchors take the English id. Cross-links are written English-style throughout the corpus,
+  so a divergent id is a dead link. Only one link in the corpus ever targeted a translation's
+  own id.
+- Heading and chunk alignment use one agent per chapter, because the edit is structural and
+  small. The mechanical count afterwards is the proof, not the agent's report.
+- Every check was proved red before it was trusted. The inputs were a corrupted span, an
+  extra parenthesis, a broken YAML front matter, an unclosed fence and a demoted heading. Check 3 was proved both ways
   on 2026-09-02. One changed code token inside a Turkish chunk reports DRIFT. A changed or
   added comment inside a chunk stays IN SYNC. That is the rule: code exact, comments free. A check
   that has not been seen to fail is not a check.
@@ -423,10 +423,10 @@ missing file. Two boxes of issue 455 were this, and one crashed four checks at o
 It also covers the worse case. A check whose input is EMPTY rather than absent reports a clean
 tree and exits 0. Nothing is measured and the result says success.
 
-For each check and each required input it builds a fixture without that input, then asserts the
-run exits non-zero, prints no traceback, and names the missing thing. It does NOT pass
-`--fixture`: that flag makes a check derive its file set by globbing, which bypasses
-`languages.yml` and would exercise a path the repository never runs.
+For each check and each required input, it builds a fixture without that input. It then
+asserts that the run exits non-zero, prints no traceback, and names the missing thing. It does
+NOT pass `--fixture`. That flag makes a check derive its file set by globbing. Globbing
+bypasses `languages.yml`, and would exercise a path the repository never runs.
 
 Expected output: `checks that do not fail cleanly: 0`.
 
@@ -443,9 +443,9 @@ written inline rather than as `checks/<name>.py` is outside this gate for the sa
 `languages.yml`.
 
 `languages.yml` is the one file that declares which languages ship, and everything that renders
-or deploys reads it. `banner.html` is the exception: its `const translations = {...}` object
-carries one key per language, hard-coded, because the banner text is prose and there is nowhere
-else to put it.
+or deploys reads it. `banner.html` is the exception. Its `const translations = {...}` object
+carries one key per language, hard-coded. The banner text is prose, and there is nowhere else
+to put it.
 
 A deliberate second copy is exactly the thing that drifts. Add a ninth language and every other
 part of the system picks it up while the banner silently has no text for it.
@@ -465,8 +465,8 @@ delete this check rather than weakening it.
 the repository actually uses.
 
 `docker-images.yml` and `.devcontainer.json` decide which image line is live. Prose does not, so
-prose rots silently. After the 2.9 migration `README.md` still said 2.8 in three places, one of
-them a code block claiming to show the contents of `.devcontainer.json`, which by then said 2.9.
+prose rots silently. After the 2.9 migration, `README.md` still said 2.8 in three places. One was
+a code block claiming to show the contents of `.devcontainer.json`, which by then said 2.9.
 A contributor copying that block opened the repository in the wrong image.
 
 Live versions come from image DECLARATIONS in those two files, not from any `2.<n>` in them.

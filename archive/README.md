@@ -47,5 +47,12 @@ https://github.com/appliedepi/epirhandbook/issues/449
 
 ## Running the fix-pass scripts
 
-Run the fix-pass scripts from `archive/modernization/`. Their relative paths, such as
-`findings/fix-pass/` and `workflows/`, again point at the record that sits beside them.
+Run the fix-pass scripts from `archive/`. Their default paths start `modernization/`, such as
+`modernization/findings/fix-pass/` and `modernization/workflows/`, so they resolve from
+`archive/` and from nowhere else.
+
+Three scripts locate themselves from `__file__` and run correctly from any directory:
+`modernization/agent-cost.py`, `modernization/commit-batch.sh` and
+`modernization/reconcile-fix-pass.py`. Two read the current directory and MUST be run from
+`archive/`: `modernization/extract-spans.py` and `modernization/rebuild-tsv.py`. Both take
+`--src` and `--out-dir`, so an absolute path overrides the default.
