@@ -8,6 +8,50 @@ of it, and that is expected of a changelog. Read it as a record, never as curren
 
 ---
 
+## 2026-09-17: the directories chapter teaches a regular expression, not a glob
+
+Triage of issue #457, the follow-ups flagged while closing #450 and #451.
+
+### The problem
+
+`content/<lang>/directories.qmd` showed `list.files(pattern = ".csv")` in all 8 languages. The
+surrounding prose called it "a specific pattern to look for". `pattern =` takes a regular
+expression. The dot matches any character, and the expression is not anchored, so the call also
+matches names like `notes.csv.bak` and `xcsvy.txt`.
+
+The example folder held only real `.csv` files, so both forms returned the same 7 names. No check
+could go red on it.
+
+Separately, `modernization/STAKEHOLDERS.md` cited six backing files that this repository has never
+held. Two of them carried the verification table's strongest claims.
+
+### What changed
+
+The chunk now reads `pattern = "\\.csv$"`, and the prose says that `pattern =` takes a regular
+expression. `checks/sync-chunks.py` propagated the code to the 7 translations and kept their
+comments. The commented-out `dir()` line was edited by hand. `sync-chunks.py` compares the
+code before any `#`. That is empty on a fully commented line, so the gate never syncs one.
+
+`STAKEHOLDERS.md` no longer names `BREAKAGE.tsv`, `DIFFERENCES.tsv`, `forward-port.patch`,
+`FORWARD-PORT.tsv`, `verify_render_26.04.tsv` or `verify_render_multiling.tsv`. None is tracked
+today. None was tracked at `621c4b05`. None appears anywhere in history. The render claims now
+state that the run record was not retained.
+
+The file also lost its 22 over-limit sentences, bringing it under the 25-word house limit.
+
+`utils/data-callsites.tsv` row 24 and `utils/data-map.tsv` rows 83 and 84 said
+`content/en/data_table.qmd:53` must remain a file-based read. That chapter now calls
+`appliedepidata::get_data(name = "linelist_cleaned_excel")`.
+
+### What a reader should know
+
+The `data_table` chapter resolved its gap by substitution, not by closing it. It used to read
+`data/linelist_cleaned.xlsx`, sha `800b7786`, which has no `appliedepidata` equivalent. It now
+reads the byte-distinct `case_linelists/linelist_cleaned.xlsx`. The chapter therefore loads
+different bytes than before. The gap in the package is still open.
+
+---
+
 ## 2026-09-17: the seven translated home pages keep their old URL
 
 Found while checking alias coverage before the first production promotion (issue #456).

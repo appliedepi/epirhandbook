@@ -5,9 +5,9 @@ It is cumulative and kept up to date as releases land. Newest release first. It 
 changed and what it means for you; it is not build output and not a commit log.
 
 **It is not a to-do list.** This file records what changed. The translator backlog that held
-what was left became GitHub issue 449. That issue is closed, and closed without doing the work:
-the native-speaker review was declined, and its one remaining item moved to issue 450, which
-closed as a decline too. So the Part E passages below are accepted as they stand, not fixed. No
+what was left became GitHub issue 449. That issue is closed, and closed without doing
+the work. The native-speaker review was declined. Its one remaining item moved to issue 450,
+which closed as a decline too. So the Part E passages below are accepted as they stand, not fixed. No
 translation work is tracked. The backlog itself is preserved in the
 [fix-pass record](https://github.com/appliedepi/epirhandbook/tree/621c4b053a1b8cba0d969dad13fb5c2a6e9155a8/archive/modernization/TRANSLATION-BACKLOG.md).
 
@@ -31,9 +31,9 @@ Two changes, one visible to readers, one only to contributors.
 ### What readers will notice
 
 Very little, deliberately. Chapters render the same content. What changes is the code shown
-on the page: where a chapter used to show a file being read from a `data/` folder that
-readers did not have, it now shows the dataset being fetched from the **appliedepidata**
-package, which readers can install. **Code shown in the handbook is now code a reader can
+on the page. A chapter used to show a file read from a `data/` folder that readers did not
+have. It now shows the dataset fetched from the **appliedepidata** package, which readers
+can install. **Code shown in the handbook is now code a reader can
 actually run.**
 
 Download links that pointed at files in the handbook's own repository are replaced by the
@@ -51,12 +51,12 @@ package's own accessors.
 
 ### What changed underneath
 
-* **49 Docker images became 8.** One image per chapter became one per navbar section —
-  basics, data management, analysis, data visualisation, reports, miscellaneous — plus a
-  shared base and a monolith holding everything, generated from the six.
+* **49 Docker images became 8.** One image per chapter became one per navbar
+  section: basics, data management, analysis, data visualisation, reports and miscellaneous.
+  A shared base and a monolith holding everything are generated from the six.
 * **Rendered output is no longer committed.** A stale copy of the built site had been
-  committed to the repository and was being republished on every deploy, putting an
-  abandoned page layout and raw `.qmd` source onto the live branches. The deploy branches
+  committed to the repository. Every deploy republished it, putting an abandoned page layout
+  and raw `.qmd` source onto the live branches. The deploy branches
   now contain rendered HTML only.
 * **Two excluded chapters moved** to `_excluded/`. `gis` and `epidemic_models` were cut in 2.7
   (see 2.6 → 2.7 below), but their source was still being published as downloadable files.
@@ -92,16 +92,16 @@ Three code defects would have errored if run — a positional `get_data("...")`,
 **appliedepidata** takes `name = `. The pages were also malformed: code blocks spliced into the
 middle of sentences, so Quarto never parsed them and readers saw literal `{r, eval=F}` in prose.
 
-Review also surfaced defects **older than this migration**: a Quarto formatting instruction a
-translator had translated, so one heading was numbered when its fifteen siblings were not; a
-Russian sentence corrupted into non-words; a Vietnamese section titled "survival analysis" when
-it is about survey analysis; and English fragments left in translated pages.
+Review also surfaced defects **older than this migration**. A translator had translated a
+Quarto formatting instruction, so one heading was numbered when its fifteen siblings were not.
+A Russian sentence was corrupted into non-words. A Vietnamese section is titled "survival
+analysis" when it is about survey analysis. English fragments were left in translated pages.
 
 Two further findings, not about translation:
 
-* **Fork pull requests do not publish previews.** The README claimed they did. A fork now
-  renders — that part is new and real — but GitHub gives a fork a read-only token, so the deploy
-  fails and the run goes red on a contribution that is fine. Documented honestly, including what
+* **Fork pull requests do not publish previews.** The README claimed they did. A fork now renders,
+  which is new and real. GitHub gives a fork a read-only token, so the deploy fails and the run
+  goes red on a contribution that is fine. Documented honestly, including what
   a red check on a fork actually means.
 * **The image manifest is less constrained than it looked.** Only the registry prefix is pinned,
   so a pull request can name any public image in that namespace and have it executed. Recorded in
@@ -145,14 +145,14 @@ revert, so the page showed the code instead of the number. Restored, in every la
 ## 2.6 → 2.7
 
 **Status: the content forward-port is COMPLETE and render-verified in all 9 languages.**
-This section covers the *content* migration only. Building the 2.7 product images and pinning
-the package set for shipping are a separate release step, deliberately out of scope here — see
-"What is and is not verified" below before quoting this section. `epidemic_models` is cut (see
-C5). Backing data: `BREAKAGE.tsv` (what errored), `DIFFERENCES.tsv` (what rendered differently),
-`forward-port.patch` (every source change), `FORWARD-PORT.tsv` (per-change accounting),
-`verify_render_26.04.tsv` (49 English chapters), `verify_render_multiling.tsv` (136 non-English).
-Run on **Ubuntu 26.04 LTS / R 4.6.0**: **49 of 49 English chapters render**, the **17 edited
-chapters render in all 8 other languages (136/136)**, and 468 of 473 packages load. Earlier
+This section covers the *content* migration only. Building the 2.7 product images is a
+separate release step, as is pinning the package set for shipping. Both are out of scope here.
+Read "What is and is not verified" below before quoting this section. `epidemic_models` is cut (see
+C5). The six backing files this section once named were written in a scratch workspace and were
+never committed here. They are not recoverable. The numbers below stand on the render run itself,
+not on a retained artefact.
+Run on **Ubuntu 26.04 LTS / R 4.6.0**. **49 of 49 English chapters render.** The **17 edited
+chapters render in all 8 other languages (136/136)**. 468 of 473 packages load. Earlier
 22.04 and 24.04 builds are superseded. Written for stakeholders, not as build output.
 
 #### What is and is not verified
@@ -160,8 +160,8 @@ chapters render in all 8 other languages (136/136)**, and 468 of 473 packages lo
 | Claim | Status |
 |---|---|
 | The 4 fixes + 2 section cuts reach all 9 languages | **Verified by patch inspection AND by render** — see below |
-| 49 English chapters render without error | **Verified by render** (`verify_render_26.04.tsv`, 49/49 rc=0) |
-| The 17 edited chapters render in all 8 non-English languages | **Verified by render** (`verify_render_multiling.tsv`, 136/136 rc=0, 136 HTML files produced) |
+| 49 English chapters render without error | **Verified by render** (49/49 rc=0; run record not retained) |
+| The 17 edited chapters render in all 8 non-English languages | **Verified by render** (136/136 rc=0, 136 HTML files produced; run record not retained) |
 | The content changes are complete and correct | **Verified** |
 | The 2.7 per-chapter product images work | **OUT OF SCOPE for this phase.** Building them is a separate release step |
 | The 2026 package set is reproducible for shipping | **OUT OF SCOPE for this phase.** 7 GitHub deps resolve at branch HEAD — correct for discovery, must be pinned before release |
@@ -239,8 +239,8 @@ the code.
 
 ### Part B — What readers will notice (no source change)
 
-None of these are errors. They are the visible cost of two years of package updates, and
-they will appear on the published site whether or not we touch the source.
+None of these are errors. They are the visible cost of two years of package updates. They
+will appear on the published site whether or not we touch the source.
 
 **1. Every page title is reordered.** Caused by the Quarto upgrade, not by R packages:
 ```
@@ -249,8 +249,8 @@ they will appear on the published site whether or not we touch the source.
 ```
 
 **2. A new warning box appears on most pages.** (Measured as 28 of the 45 pages that rendered
-during the initial discovery scan, before the fixes landed; the ratio, not the count, is the
-point.) The single most widespread change, on
+during the initial discovery scan, before the fixes landed. The ratio is the point, not the
+count.) The single most widespread change, on
 every page that imports data:
 > `Warning: Missing 'trust' will be set to FALSE by default for RDS in 2.0.0.`
 
@@ -258,8 +258,8 @@ This is noisy and reader-visible. **Silencing it is a source change** — a deli
 not something to drift into.
 
 **3. Tables look different.** In gtsummary/gt tables the group size moves onto its own line
-(`Death` / `N = 2,582` instead of `Death, N = 2,582`), and a footnote about missing values
-was dropped by gtsummary. Affects `stat_tests`, `regression`, `tables_descriptive` and others.
+(`Death` / `N = 2,582` instead of `Death, N = 2,582`). gtsummary also dropped a footnote about
+missing values. Affects `stat_tests`, `regression`, `tables_descriptive` and others.
 
 **4. Console messages are longer.** dplyr's grouping message went from one line to five,
 and it prints into the page.
@@ -322,20 +322,21 @@ pages, or accept a larger diff?**
 job and has no 2.7 image. It is commented out of `_quarto.yml` as of this release.
 
 An earlier draft of this section said `gis` "was already excluded before this upgrade". That was
-true of the 2.6 baseline but not of the branch this release was cut from, where `gis` was still a
-declared chapter — which is why it surfaced late, as a chapter with no image to render it.
+true of the 2.6 baseline. It was not true of the branch this release was cut from, where `gis`
+was still a declared chapter. That is why it surfaced late, as a chapter with no image to
+render it.
 
 **Its published URL stops resolving.** A chapter absent from `book.chapters` is never rendered, so
-it emits no redirect stub either. 31 links from six other chapters (`basics`, `data_used`,
-`flexdashboard`, `importing`, `rmarkdown`, `survey_analysis`, across en/jp/pt/ru/tr/vn) point at
-it; they are deliberately left in place and start working again the moment the chapter returns.
+it emits no redirect stub either. 31 links from six other chapters point at it: `basics`, `data_used`,
+`flexdashboard`, `importing`, `rmarkdown` and `survey_analysis`, across en/jp/pt/ru/tr/vn.
+They are deliberately left in place. They start working again the moment the chapter returns.
 Bringing it back needs a render that does not reach an external service.
 
 #### C5. `epidemic_models` — EpiNow2's result API was removed — **DECIDED: CUT**
 The chapter does not merely *plot* an EpiNow2 result — it reads the fitted object's internals
-throughout. Those accessors were removed in the 1.4 → 1.9 rewrite. This is not a plotting fix;
-restoring the chapter means re-teaching the chapter against EpiNow2's new interface, which is a
-rewrite by a subject-matter author, not an upgrade task.
+throughout. Those accessors were removed in the 1.4 → 1.9 rewrite. This is not a plotting fix.
+Restoring the chapter means re-teaching it against EpiNow2's new interface. That is a rewrite by
+a subject-matter author, not an upgrade task.
 
 **Decision: cut `epidemic_models` from 2.7.** The 2.7 book has **49 chapters, not 50.**
 
@@ -363,13 +364,13 @@ tracked separately.
 **Moved to the translator backlog, then to GitHub issue 449, which closed as a decline. The
 passages below stand as they are.**
 
-The upgrade fixed the *code* in all 9 languages, but some surrounding *prose* still explains code
-that no longer exists — 5 passages, roughly 54 edits once every language is counted. Nothing there
+The upgrade fixed the *code* in all 9 languages. Some surrounding *prose* still explains code
+that no longer exists: 5 passages, roughly 54 edits once every language is counted. Nothing there
 breaks the build; all 49 chapters render. It is a translator's job, not an engineering one.
 
-That backlog carries the full list with a search token per item, what each currently says and
-what it should say, a list of things that look related but are already correct, and an appendix
-of the site's pre-existing dead anchors. It is preserved in the
+That backlog carries the full list, with a search token per item and what each currently says
+against what it should say. It also lists things that look related but are already correct, and
+appends the site's pre-existing dead anchors. It is preserved in the
 [fix-pass record](https://github.com/appliedepi/epirhandbook/blob/621c4b053a1b8cba0d969dad13fb5c2a6e9155a8/archive/modernization/TRANSLATION-BACKLOG.md). The work it listed became GitHub issue 449,
 which closed without action.
 
@@ -388,12 +389,12 @@ Only `dsr` affects published content.
 **Not in this list, despite earlier appearances — now resolved.** `terra`, `tmap`, `raster`,
 `leafem` and `OpenStreetMap` are all alive on CRAN. They failed only because our build image was
 based on Ubuntu 22.04, whose GDAL (3.4.1) is too old for the 2026 geospatial stack. We rebuilt the
-base on **Ubuntu 26.04 LTS (GDAL 3.12.2)** and all five now install and load:
-`terra` 1.9.34, `raster` 3.6.32, `tmap` 4.4.1, `leafem` 0.2.5, `OpenStreetMap` 0.4.1.
+base on **Ubuntu 26.04 LTS (GDAL 3.12.2)**. All five now install and load: `terra` 1.9.34,
+`raster` 3.6.32, `tmap` 4.4.1, `leafem` 0.2.5 and `OpenStreetMap` 0.4.1.
 This was a build-image problem, never a content problem.
 
 **Why 26.04 and not 24.04.** Both install the same 468 of 473 packages, so this is a longevity
-choice rather than a correctness one. 24.04 shipped in April 2024; pairing it with a 2026 package
-set would repeat, in miniature, the very mismatch that broke `terra` — an operating system
-meaningfully older than the packages it must compile. 26.04 is the LTS contemporary with these
+choice rather than a correctness one. 24.04 shipped in April 2024. Pairing it with a 2026 package
+set would repeat the mismatch that broke `terra`. The operating system would be meaningfully
+older than the packages it must compile. 26.04 is the LTS contemporary with these
 packages, which pushes the next "system library too old" problem out by roughly two more years.
