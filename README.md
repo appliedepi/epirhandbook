@@ -116,19 +116,17 @@ A chapter that also replaces a second old URL carries a second alias line.
 The alias value must be root-relative: it must start with a leading `/`. Without the leading
 slash, Quarto writes the redirect stub in the wrong place, and the old link stays broken.
 
-### The three environments
+### The two environments
 
-Three environments publish from this repository:
+Two environments publish from this repository:
 
 * **`preview`** — one build per pull request.
 * **`staging`** — builds on every push to `main`.
-* **`production`** — updated only when a release is published, by promoting
-  staging. Nothing is rendered at release time.
 
-**Production is a promotion of staging, not a rebuild.** Cutting a release force-pushes
-the already-built `staging` artifact to `production`. Nothing is rebuilt at release
-time. What goes live is exactly what was already reviewed on staging — not a fresh
-render that might behave differently.
+**Neither is the live site.** epirhandbook.com is served independently of this repository
+and is not updated by anything here. A `production` branch and a `Promote to Production`
+workflow used to be documented; the workflow never ran once and the branch was never
+created, so both were removed on 2026-09-17.
 
 **A fork pull request now renders, but still cannot publish a preview.** Be clear about which
 half of that changed.
@@ -207,10 +205,9 @@ changes, translations included, all go through it.
    URL. **Check it before merging.**
 5. Merge the pull request into `main`. That triggers a build to the **`staging`**
    branch. Check the build succeeded.
-6. If staging is good, create a GitHub release, following the versioning conventions.
-   That pulls `staging` into `production`, and a webhook updates the live site.
+6. Check the staging site. That is the last environment this repository publishes to.
 
-Only rendered HTML reaches `preview`, `staging` and `production`. They are orphan
+Only rendered HTML reaches `preview` and `staging`. They are orphan
 branches: CI force-pushes them, nothing is ever merged into them, and they contain no
 `.qmd` source. The source lives on `main` and nowhere else.
 
