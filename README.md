@@ -116,17 +116,22 @@ A chapter that also replaces a second old URL carries a second alias line.
 The alias value must be root-relative: it must start with a leading `/`. Without the leading
 slash, Quarto writes the redirect stub in the wrong place, and the old link stays broken.
 
-### The two environments
+### The three environments
 
-Two environments publish from this repository:
+Three environments publish from this repository:
 
 * **`preview`** — one build per pull request.
 * **`staging`** — builds on every push to `main`.
+* **`production`** — updated only when a release is published, by promoting
+  staging. Nothing is rendered at release time.
 
-**Neither is the live site.** epirhandbook.com is served independently of this repository
-and is not updated by anything here. A `production` branch and a `Promote to Production`
-workflow used to be documented. The workflow never ran once and the branch was never
-created. Both were removed on 2026-09-17.
+**Production is a promotion of staging, not a rebuild.** Cutting a release force-pushes
+the already-built `staging` artifact to `production`. Nothing is rebuilt at release
+time. What goes live is exactly what was already reviewed on staging, not a fresh
+render that might behave differently.
+
+**`production` has not been used yet.** The branch does not exist on the remote and
+`production.yml` has never run. It is kept ready for the first promotion.
 
 **A fork pull request now renders, but still cannot publish a preview.** Be clear about which
 half of that changed.
@@ -205,9 +210,10 @@ changes, translations included, all go through it.
    URL. **Check it before merging.**
 5. Merge the pull request into `main`. That triggers a build to the **`staging`**
    branch. Check the build succeeded.
-6. Check the staging site. That is the last environment this repository publishes to.
+6. If staging is good, create a GitHub release, following the versioning conventions.
+   That pulls `staging` into `production`, and a webhook updates the live site.
 
-Only rendered HTML reaches `preview` and `staging`. They are orphan
+Only rendered HTML reaches `preview`, `staging` and `production`. They are orphan
 branches: CI force-pushes them, nothing is ever merged into them, and they contain no
 `.qmd` source. The source lives on `main` and nowhere else.
 
