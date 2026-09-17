@@ -78,6 +78,21 @@ def merge(en_body, tr_body):
     Lines are aligned with difflib on their code parts. In an aligned pair, a line with the
     same code keeps the translated line (its comment survives), and a comment-only line
     keeps the translated comment-only line. Every other line is the English line.
+
+    A FULLY COMMENTED LINE NEVER SYNCS FROM ENGLISH, INCLUDING COMMENTED-OUT CODE.
+    Its code part is the empty string on both sides, so the two always compare equal and the
+    translated line always wins. That rule exists to protect a translator's prose comment, and
+    it cannot tell prose from code that happens to be commented out. The caller is told the
+    chunk changed, so a file can report as synced while such a line stays stale.
+
+    This is deliberate, not a bug to fix here. Deciding it needs R: only a parse of the comment
+    body separates `# nodos (circulos)`, which is a correct translation, from
+    `# dir(path = here("data"), pattern = ".csv")`, which must follow English. See issue #458
+    for the count (about 12 lines handbook-wide) and why the machinery was judged not worth it.
+    Edit such a line by hand in every language.
+
+    Deletion is not affected: output is built from en_body, so a line removed from English
+    disappears from every translation.
     """
     import difflib
     ce = [code_part(l) for l in en_body]; ct = [code_part(l) for l in tr_body]
