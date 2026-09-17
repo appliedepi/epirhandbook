@@ -130,7 +130,7 @@ The OpenStreetMap tile usage policy
 so the page no longer reads `data/gis/osm_basemap.rds` while it renders. That file and
 `data/gis/osm_basemap.R` were deleted with the rest of `data/gis/` on 2026-09-17, under issue
 451. To make the images again, take them from the
-[tree at 621c4b05](https://github.com/appliedepi/epirhandbook/tree/621c4b053a1b8cba0d969dad13fb5c2a6e9155a8/data/gis). The chapter renders
+[tree at 621c4b05](https://github.com/appliedepi/epirhandbook/tree/d7d6c7c6/data/gis). The chapter renders
 with the `analysis` image, which gained **tmap**, **spdep**, **OpenStreetMap** and their
 dependencies.
 
