@@ -10,10 +10,14 @@ neither gates anything. No check reads them.
 
 Do not treat either as authority over what `data/` holds today. Both are already wrong:
 
-- `data-map.tsv` names 12 files that no longer exist, among them the whole
-  `data/covid_example_data/` tree and two `data/flexdashboard/` sources.
-- Two of those 12, `data/flexdashboard/outbreak_dashboard_shiny.Rmd` and
-  `outbreak_dashboard_test.Rmd`, carry `disposition = keep` and were deleted anyway.
+- `data-map.tsv` names 12 files that are not at the paths it gives, among them the whole
+  `data/covid_example_data/` tree and two `data/flexdashboard/` sources. All 12 were moved into
+  `archive/` during the migration: 9 to `archive/datatoremove/`, 3 to `archive/data/`. The
+  `archive/` folder was itself deleted on 2026-09-17, so those 12 now survive only in git
+  history.
+- Two of the 12, `data/flexdashboard/outbreak_dashboard_shiny.Rmd` and
+  `outbreak_dashboard_test.Rmd`, carry `disposition = keep` and were moved out of `data/`
+  anyway. A `keep` row has been overridden before.
 - `data-callsites.tsv` row 24 says `content/en/data_table.qmd:53` "must remain a file-based
   read". That chapter now calls `appliedepidata::get_data(name = "linelist_cleaned_excel")`.
 

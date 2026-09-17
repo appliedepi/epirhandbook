@@ -5,9 +5,11 @@ It is cumulative and kept up to date as releases land. Newest release first. It 
 changed and what it means for you; it is not build output and not a commit log.
 
 **It is not a to-do list.** This file records what changed. The translator backlog that held
-what was left became GitHub issue 449, and that issue is closed: the native-speaker review it
-proposed is not wanted. The backlog itself is preserved in the
-[fix-pass record](https://github.com/appliedepi/epirhandbook/blob/621c4b053a1b8cba0d969dad13fb5c2a6e9155a8/archive/modernization/TRANSLATION-BACKLOG.md).
+what was left became GitHub issue 449. That issue is closed, and closed without doing the work:
+the native-speaker review was declined, and its one remaining item moved to issue 450, which
+closed as a decline too. So the Part E passages below are accepted as they stand, not fixed. No
+translation work is tracked. The backlog itself is preserved in the
+[fix-pass record](https://github.com/appliedepi/epirhandbook/tree/621c4b053a1b8cba0d969dad13fb5c2a6e9155a8/archive/modernization/TRANSLATION-BACKLOG.md).
 
 ---
 
@@ -112,8 +114,9 @@ no stray code markers.
 throughout that the pages were well-formed and rendered cleanly — and every real defect passed
 those checks. A page can be perfectly valid and still tell the reader to do something the code
 does not do. Finding that needs someone to read the translated text against the original and ask
-whether it is true. The full record is the [fix-pass record](https://github.com/appliedepi/epirhandbook/tree/621c4b053a1b8cba0d969dad13fb5c2a6e9155a8/archive/modernization). No translation work is
-open: GitHub issue 449 closed it without action.
+whether it is true. The full record is the [fix-pass record](https://github.com/appliedepi/epirhandbook/tree/621c4b053a1b8cba0d969dad13fb5c2a6e9155a8/archive/modernization). No
+translation work is tracked. Issue 449 closed as a decline, so the Part E passages stand as
+they are.
 
 ### `gis` is back; `epidemic_models` is still cut
 
@@ -125,7 +128,9 @@ unchanged: the `openmap()`, `openproj()` and five plotting chunks carry `eval=FA
 The OpenStreetMap tile usage policy
 (<https://operations.osmfoundation.org/policies/tiles/>) forbids offline use of the tiles,
 so the page no longer reads `data/gis/osm_basemap.rds` while it renders. That file and
-`data/gis/osm_basemap.R` are kept, so the images can be made again. The chapter renders
+`data/gis/osm_basemap.R` were deleted with the rest of `data/gis/` on 2026-09-17, under issue
+451. To make the images again, take them from the
+[tree at 621c4b05](https://github.com/appliedepi/epirhandbook/tree/621c4b053a1b8cba0d969dad13fb5c2a6e9155a8/data/gis). The chapter renders
 with the `analysis` image, which gained **tmap**, **spdep**, **OpenStreetMap** and their
 dependencies.
 
@@ -347,7 +352,7 @@ tracked separately.
 - Structure and navigation. Chapter ordering is unchanged except that
   `epidemic_models` is removed (C5).
 - Teaching prose, except in the 4 chapters we edited — and note the stale passages in
-  **Part E**, which still need a translator's attention.
+  **Part E**. Those were declined under issue 449 and stand as they are.
 - Computed values and statistical results, apart from the genuinely random ones
   (unseeded simulations, which differed between any two renders in 2024 as well).
 
@@ -355,7 +360,8 @@ tracked separately.
 
 ### Part E — Translator backlog
 
-**Moved to the translator backlog, then to GitHub issue 449, which closed without action.**
+**Moved to the translator backlog, then to GitHub issue 449, which closed as a decline. The
+passages below stand as they are.**
 
 The upgrade fixed the *code* in all 9 languages, but some surrounding *prose* still explains code
 that no longer exists — 5 passages, roughly 54 edits once every language is counted. Nothing there

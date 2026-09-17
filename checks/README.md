@@ -46,8 +46,10 @@ on 2026-09-02.
 | no chunk that executes names the `data/` folder, outside the two chapters that teach file paths | 0 lines in the 400 declared files | check 7 | load the data with `appliedepidata::get_data()`, or set `eval=F` |
 | the eight language folders, project files, chapter files, manifest rows and alias lines agree | `8 languages, 50 stems, 400 aliases, drifted: 0` | check 9 | edit the file the DRIFT line names |
 
-Each agent workflow named in the Remedy column is a `.js` file in the
-[`workflows` folder of the fix-pass record](https://github.com/appliedepi/epirhandbook/tree/621c4b053a1b8cba0d969dad13fb5c2a6e9155a8/archive/modernization/workflows).
+Each agent workflow named in the Remedy column is a `.js` file in `checks/workflows/`. A
+remedy is a current procedure, so it lives in the tree beside the check it repairs. The other
+ten workflows of the 2026-09 fix pass ran once and are history: they are in the
+[fix-pass record](https://github.com/appliedepi/epirhandbook/tree/621c4b053a1b8cba0d969dad13fb5c2a6e9155a8/archive/modernization/workflows).
 
 Check 4 is informational because a suspect span is often right: a placeholder the reader
 replaces, or a word the author put in code font. The baseline is 357 suspects as of 2026-09-17. All were judged placeholders or noise. The GIS chapter, restored the same
@@ -330,8 +332,8 @@ notices.
 
 `render-gate.sh` renders translated chapters only, on purpose. Rendering a main-language
 chapter in this book project makes quarto rewrite `.gitignore`. On 2026-09-02 it also deleted
-the three `site_libs/quarto-search/` files the repository tracked then, and `archive` holds
-those files now. Check an English chapter with the fence-parity count and the R parse gate
+the three `site_libs/quarto-search/` files the repository tracked then. Those files are in
+the [archived tree](https://github.com/appliedepi/epirhandbook/tree/621c4b053a1b8cba0d969dad13fb5c2a6e9155a8/archive/site_libs/quarto-search). Check an English chapter with the fence-parity count and the R parse gate
 instead.
 
 ## What the checks do not cover
