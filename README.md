@@ -125,8 +125,8 @@ Two environments publish from this repository:
 
 **Neither is the live site.** epirhandbook.com is served independently of this repository
 and is not updated by anything here. A `production` branch and a `Promote to Production`
-workflow used to be documented; the workflow never ran once and the branch was never
-created, so both were removed on 2026-09-17.
+workflow used to be documented. The workflow never ran once and the branch was never
+created. Both were removed on 2026-09-17.
 
 **A fork pull request now renders, but still cannot publish a preview.** Be clear about which
 half of that changed.
@@ -172,7 +172,7 @@ The image is **public** — no `docker login`, no token, no Applied Epi account.
 **Why the monolith.** CI renders each chapter in its own group image, holding only that
 group's packages. The monolith holds all of them at once. It is generated from the six
 group images rather than maintained by hand, so it cannot drift from what CI uses. One
-container therefore renders any chapter, which is what you want while editing and what
+container therefore renders any chapter. That is what you want while editing. It is what
 you do not want in CI, where a smaller image is faster.
 
 To render a single chapter inside the container, work from that chapter's language folder:
