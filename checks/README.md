@@ -16,8 +16,8 @@ The result line names what ran. It reads `IN SYNC` when checks 6 and 8 ran, and
 Every check writes its full output under `/tmp/check-sync/`. The lines the script prints come
 from those files.
 
-Every check below was used in the 2026-09 fix pass. `archive/modernization` holds the record
-of that pass. Each check has a script, an expected output, and a remedy. The remedies are the
+Every check below was used in the 2026-09 fix pass. The record of that pass is the
+[`archive/modernization` tree](https://github.com/appliedepi/epirhandbook/tree/621c4b053a1b8cba0d969dad13fb5c2a6e9155a8/archive/modernization), pinned at the last commit that carried it. Each check has a script, an expected output, and a remedy. The remedies are the
 same scripts and agent workflows that did the work the first time. A drift of the same kind
 then costs minutes, not days.
 
@@ -46,8 +46,8 @@ on 2026-09-02.
 | no chunk that executes names the `data/` folder, outside the two chapters that teach file paths | 0 lines in the 400 declared files | check 7 | load the data with `appliedepidata::get_data()`, or set `eval=F` |
 | the eight language folders, project files, chapter files, manifest rows and alias lines agree | `8 languages, 50 stems, 400 aliases, drifted: 0` | check 9 | edit the file the DRIFT line names |
 
-Each agent workflow named in the Remedy column is a `.js` file in the workflows folder of
-`archive/modernization`.
+Each agent workflow named in the Remedy column is a `.js` file in the
+[`workflows` folder of the fix-pass record](https://github.com/appliedepi/epirhandbook/tree/621c4b053a1b8cba0d969dad13fb5c2a6e9155a8/archive/modernization/workflows).
 
 Check 4 is informational because a suspect span is often right: a placeholder the reader
 replaces, or a word the author put in code font. The baseline is 357 suspects as of 2026-09-17. All were judged placeholders or noise. The GIS chapter, restored the same
@@ -338,13 +338,13 @@ instead.
 
 - Meaning. A translation that says something the English does not, in prose, is invisible to
   every check here. That was the prose sweep, at about 100,000 tokens per chapter-language
-  pair, and `archive/modernization` records it. Repeat it only for chapters whose English
-  prose changed.
+  pair, and the [fix-pass record](https://github.com/appliedepi/epirhandbook/tree/621c4b053a1b8cba0d969dad13fb5c2a6e9155a8/archive/modernization) records it. Repeat it only for chapters whose
+  English prose changed.
 - Comments inside chunks. The sync keeps a translated comment where its code line survives
   and falls back to the English comment otherwise; nothing checks that comments are translated.
 - Plot labels and other display strings, which the sync sets to the English.
 - The 17 English source defects that the translations now mirror on purpose. The
-  source-defects table of the fix-pass record lists them, under `archive/modernization`.
+  source-defects table of the [fix-pass record](https://github.com/appliedepi/epirhandbook/tree/621c4b053a1b8cba0d969dad13fb5c2a6e9155a8/archive/modernization) lists them.
 
 ## The reasoning behind the design, so it is not re-derived
 

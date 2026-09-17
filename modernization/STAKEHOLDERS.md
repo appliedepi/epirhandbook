@@ -4,9 +4,10 @@
 It is cumulative and kept up to date as releases land. Newest release first. It says what
 changed and what it means for you; it is not build output and not a commit log.
 
-**It is not a to-do list.** The open translation work is recorded under `archive/`, with a
-search token and target wording per item. This file records what changed. That record holds
-what is left. Nothing belongs in both.
+**It is not a to-do list.** This file records what changed. The translator backlog that held
+what was left became GitHub issue 449, and that issue is closed: the native-speaker review it
+proposed is not wanted. The backlog itself is preserved in the
+[fix-pass record](https://github.com/appliedepi/epirhandbook/blob/621c4b053a1b8cba0d969dad13fb5c2a6e9155a8/archive/modernization/TRANSLATION-BACKLOG.md).
 
 ---
 
@@ -111,7 +112,8 @@ no stray code markers.
 throughout that the pages were well-formed and rendered cleanly — and every real defect passed
 those checks. A page can be perfectly valid and still tell the reader to do something the code
 does not do. Finding that needs someone to read the translated text against the original and ask
-whether it is true. The full record and the open translation work are both under `archive/`.
+whether it is true. The full record is the [fix-pass record](https://github.com/appliedepi/epirhandbook/tree/621c4b053a1b8cba0d969dad13fb5c2a6e9155a8/archive/modernization). No translation work is
+open: GitHub issue 449 closed it without action.
 
 ### `gis` is back; `epidemic_models` is still cut
 
@@ -353,7 +355,7 @@ tracked separately.
 
 ### Part E — Translator backlog
 
-**Moved to the translator backlog under `archive/`.**
+**Moved to the translator backlog, then to GitHub issue 449, which closed without action.**
 
 The upgrade fixed the *code* in all 9 languages, but some surrounding *prose* still explains code
 that no longer exists — 5 passages, roughly 54 edits once every language is counted. Nothing there
@@ -361,8 +363,9 @@ breaks the build; all 49 chapters render. It is a translator's job, not an engin
 
 That backlog carries the full list with a search token per item, what each currently says and
 what it should say, a list of things that look related but are already correct, and an appendix
-of the site's pre-existing dead anchors. It is kept under `archive/` so the work list has one
-home and cannot drift from this document.
+of the site's pre-existing dead anchors. It is preserved in the
+[fix-pass record](https://github.com/appliedepi/epirhandbook/blob/621c4b053a1b8cba0d969dad13fb5c2a6e9155a8/archive/modernization/TRANSLATION-BACKLOG.md). The work it listed became GitHub issue 449,
+which closed without action.
 
 ### Appendix — the 5 packages that no longer exist
 
