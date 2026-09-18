@@ -24,27 +24,32 @@ then costs minutes, not days.
 ## What "in sync" means
 
 The repository declares its layout in two files. `languages.yml` names the eight languages, and
-`content/en/_quarto.yaml` names the 50 stems. Every chapter file is `content/<lang>/<stem>.qmd`,
+`content/en/_quarto.yaml` names the 52 stems. Every chapter file is `content/<lang>/<stem>.qmd`,
 so a file's language is the folder that holds it.
 
+The landing page hero says 49 chapters. That is a narrower count, and both are right. It is the
+52 stems less `index`, `about` and `acknowledgements`. Those three are pages of the book, not
+chapters of it.
+
 English is the reference. Checks 1 to 3 pair each translated chapter with
-`content/en/<stem>.qmd`. That set is 49 chapters and 7 translation languages. The landing page
-`index.qmd` and English itself stay out of it. 49 x 7 has held since the GIS chapter returned
-on 2026-09-02.
+`content/en/<stem>.qmd`. That set is 51 non-index stems and 7 translation languages. The landing
+page `index.qmd` and English itself stay out of it. The set was 49 x 7 from 2026-09-02, when
+the GIS chapter returned. It became 51 x 7 on 2026-09-18, when `about.qmd` and
+`acknowledgements.qmd` split off the landing page.
 
 | Property | Expected | Check | Remedy |
 |---|---|---|---|
-| the translated file exists | 343 of 343 | check 1 | translate the chapter |
-| code chunk count equals the English | 343 of 343 | check 1 | the align-chunks agent workflow, one agent per chapter, then `sync-chunks.py` |
-| heading sequence equals the English, count and level, fenced blocks stripped | 343 of 343 | check 1 | the align-headings agent workflow, one agent per chapter |
+| the translated file exists | 357 of 357 | check 1 | translate the chapter |
+| code chunk count equals the English | 357 of 357 | check 1 | the align-chunks agent workflow, one agent per chapter, then `sync-chunks.py` |
+| heading sequence equals the English, count and level, fenced blocks stripped | 357 of 357 | check 1 | the align-headings agent workflow, one agent per chapter |
 | every heading with an English `{#id}` carries that id | 0 headings differ, 0 dead links | check 2 | `sync-anchors.py`, no agent |
 | every aligned chunk's code equals the English, comments free | 0 chunks differ | check 3 | `sync-chunks.py`, no agent |
 | inline code spans in prose name things the English names | informational | check 4 | the inline-pass agent workflow over the new suspects |
 | every changed chapter renders without execution, fences balanced | 0 FAIL | check 6, with `--base` or `--render` | read the log under `/tmp/render-gate/` |
 | no R chunk parses worse than the English chunk | 0 files worse | check 8, with `--base` or `--render` | the sync, or a source defect |
-| every internal link resolves, stays on its page and stays in its language | 0 dead, 0 same-page, 0 cross-language and 0 unterminated links in the 400 declared files | check 5 | `rewrite-links.py`, no agent |
-| no chunk that executes names the `data/` folder, outside the two chapters that teach file paths | 0 lines in the 400 declared files | check 7 | load the data with `appliedepidata::get_data()`, or set `eval=F` |
-| the eight language folders, project files, chapter files, manifest rows and alias lines agree | `8 languages, 50 stems, 400 aliases, drifted: 0` | check 9 | edit the file the DRIFT line names |
+| every internal link resolves, stays on its page and stays in its language | 0 dead, 0 same-page, 0 cross-language and 0 unterminated links in the 416 declared files | check 5 | `rewrite-links.py`, no agent |
+| no chunk that executes names the `data/` folder, outside the two chapters that teach file paths | 0 lines in the 416 declared files | check 7 | load the data with `appliedepidata::get_data()`, or set `eval=F` |
+| the eight language folders, project files, chapter files, manifest rows and alias lines agree | `8 languages, 52 stems, 416 aliases, drifted: 0` | check 9 | edit the file the DRIFT line names |
 
 Each agent workflow named in the Remedy column is a `.js` file in `checks/workflows/`. A
 remedy is a current procedure, so it lives in the tree beside the check it repairs. The other
@@ -54,7 +59,7 @@ ten workflows of the 2026-09 fix pass ran once and are history: they are in the
 Check 4 is informational because a suspect span is often right: a placeholder the reader
 replaces, or a word the author put in code font. The baseline is 357 suspects as of 2026-09-17. All were judged placeholders or noise. The GIS chapter, restored the same
 day, added one more: a French verb in code font. A rise above that is what to look at, not
-the number itself. Check 4 measures the declared set: the 49 chapters in the 7 translation
+the number itself. Check 4 measures the declared set: the 51 non-index stems in the 7 translation
 languages. A file that `content/en/_quarto.yaml` does not declare is not measured here, and
 check 9 reports it. A declared file that is missing gets a one-line note, and check 9 reports
 that too.
@@ -62,7 +67,7 @@ that too.
 ## Check 5: internal links
 
 Run `python3 checks/check-links.py`. `check-sync.sh` runs it as check 5. It reads the
-400 declared files, which are `index.qmd` and the 49 chapters, in English and in the 7
+416 declared files, which are `index.qmd` and the 51 other stems, in English and in the 7
 translation languages. It prints one line for each link it rejects, and exits 1 when it finds
 one. It rejects four link forms.
 
@@ -105,7 +110,7 @@ and `name` on an `<a>` element. The links are the `href` of every `<a>` element.
 Pandoc resolves a heading, a div, a span, a metadata title, raw HTML, an HTML comment and a
 character reference into that one page. So the checker does not re-implement pandoc's identifier
 rule, and it does not read markdown itself. A link in a YAML `title` renders on the page, so it
-counts. None of the 400 declared files carries such a link today.
+counts. None of the 416 declared files carries such a link today.
 
 The checker takes three options.
 
@@ -157,7 +162,7 @@ no link there.
 ## Check 7: the data folder
 
 Run `python3 checks/check-data-reads.py`. `check-sync.sh` runs it as check 7. It reads the same
-400 declared files as check 5. Three rules govern the `data/` folder.
+416 declared files as check 5. Three rules govern the `data/` folder.
 
 - A chunk that executes may not name `data/`. The handbook loads its data with
   `appliedepidata::get_data()`.
@@ -229,7 +234,7 @@ The search for the end of an inline R expression stops at the next blank line, b
 expression cannot cross one. Without that bound the match runs to the next backtick anywhere in
 the file, and one unterminated expression swallows whole paragraphs into the placeholder. The
 gate then reads a copy that is missing prose the original carries. An expression that does not
-close inside its paragraph now stops the gate with `FAIL-placeholder`. The 400 declared files
+close inside its paragraph now stops the gate with `FAIL-placeholder`. The 416 declared files
 hold 81 inline R expressions, and none of them crosses a line break.
 
 The gate stops with exit 2, before it renders anything, in four cases.
@@ -271,13 +276,13 @@ The gate stops with exit 2 in four cases.
 
 `check-sync.sh` runs check 9 itself, and it needs no base commit. It reads `languages.yml`, the
 eight `content/<lang>/_quarto.yaml` project files, `docker-images.yml` and the front matter of
-the 400 declared files. Regular expressions read every one of them, because the
+the 416 declared files. Regular expressions read every one of them, because the
 translation-sync runner carries no yaml module.
 
 It prints one summary line, and one `DRIFT` line for each finding:
 
 ```
-   layout: 8 languages, 50 stems, 400 aliases, drifted: 0
+   layout: 8 languages, 52 stems, 416 aliases, drifted: 0
 ```
 
 A finding sets the DRIFT exit. Check 9 reports nine kinds.

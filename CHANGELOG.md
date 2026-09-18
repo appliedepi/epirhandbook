@@ -8,6 +8,101 @@ of it, and that is expected of a changelog. Read it as a record, never as curren
 
 ---
 
+## 2026-09-18: the landing page becomes a hero, and the Welcome page splits in three
+
+Phase 2 of the Applied Epi redesign. Phase 1 added the theme. This phase replaces the landing
+page, and moves the prose that used to sit under it.
+
+### The problem
+
+`content/<lang>/index.qmd` was one long page in eight copies. It carried:
+
+- a banner image
+- a usage claim
+- an offer of tutorials
+- a hardcoded list of seven `epirhandbook.com` URLs
+- the Applied Epi logo lockup and the contact bullets
+- the acknowledgements, and the terms of use
+
+Nothing tied the eight copies together, so each was free to drift.
+
+### What changed
+
+Every landing page now renders one hero from one markup source. `utils/landing-hero.R` builds the
+HTML. `landing.yml` holds the strings, keyed by language code. A key a language does not declare
+falls back to English, so a new language reads in English rather than showing an empty box.
+
+`index.qmd` keeps four things: its `aliases:`, its `<meta name="description">`, its unnumbered
+`# Welcome` heading and one R chunk. The chunk is byte-identical in all eight languages, and it
+reads its own language from the working directory. The heading stays because a Quarto book
+numbers a chapter that has no unnumbered heading, which would renumber all 49 chapters. The hero
+hides it and carries the visible title.
+
+The prose moved to two new chapters in every language:
+
+- `about.qmd` takes the "R for applied epidemiology and public health" heading, the Objective
+  paragraph and the "How to use this handbook" section. Portuguese also carries its call for
+  help with the translation, which no hero element replaces.
+- `acknowledgements.qmd` takes Acknowledgements and Terms of Use and Contribution, with their six
+  sub-sections, verbatim.
+
+These blocks are superseded, each by a hero element:
+
+- the banner image
+- the usage line
+- the tutorials offer
+- the hardcoded language list
+- the "written by epidemiologists" line
+- the logo lockup with its nonprofit prose
+- the contact bullets with the live-training pitch
+- the live PayPal donation form
+
+The real language switcher supersedes the hardcoded list. It sits in the app bar, and
+`inject_language_links.R` builds it from `languages.yml`.
+
+The donation form is gone, and no hero element replaces it. It was the one part of the old page
+that took money. Richard read that and decided to remove it, so the landing page now collects no
+donations. The form posted to `paypal.com/donate` with a hidden button id, a donate button image
+and a tracking pixel. Read the pre-plan file at `a5b7317d` to recover any of it.
+
+No hero string is translated yet. All eight landing pages read in English, through the fallback.
+`landing.yml` carries an empty block for each of the seven other codes, which is where a
+translated string goes.
+
+### The counts that moved together
+
+52 stems, 51 non-index stems, 357 translated pairs and 416 aliases. `docker-images.yml` gained a
+row for each new stem, on the basics image, which already covers the "About this book" part.
+Without those rows `check_manifest_covers_book()` stops the build before it renders anything.
+
+The hero's chapter count is computed, never written down. It is the 52 stems less `index`,
+`about` and `acknowledgements`, which is 49. The language count comes from `languages.yml`.
+
+### Corrections to the draft markup
+
+The search box in the draft was an `<input>` wired to nothing. It now drives the one
+`#quarto-search` that the app bar hosts. Quarto builds two different widgets there. Below 992px
+it builds a button, `.aa-DetachedSearchButton`, and a click on that button is the only thing that
+opens the overlay. Above 991px it builds an inline input with `openOnFocus`. The hero box takes
+the button first and the input second.
+
+`theme-ael.scss` gained the landing component layer. Three rules differ from the draft:
+
+- the duplicated `.ael-hsearch` declaration is gone
+- `.nplockup` collapses with `grid-template-columns`, not an inert `flex-direction`
+- the four uppercase rules read `--ael-caps` and `--ael-track`, like the rest of the file
+
+The usage stat reads "3 million+ times". An earlier draft added the base, "by 850,000 people",
+so that the number described itself. Richard cut it: the hero is a finished design, and the page
+it replaces was cluttered. The full claim stays in the pre-plan file and in this record.
+
+All three stat labels are lower case, so each one reads as a phrase with its own number:
+"3 million+ times", "49 chapters", "8 languages". The uppercase rule in `theme-ael.scss` reads
+`--ael-caps`, which `:lang(jp)`, `:lang(vn)` and `:lang(ru)` set to `none`. Mixed case would have
+shown on those three pages alone.
+
+---
+
 ## 2026-09-17: the directories chapter teaches a regular expression, not a glob
 
 Triage of issue #457, the follow-ups flagged while closing #450 and #451.

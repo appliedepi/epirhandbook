@@ -91,8 +91,10 @@ files, named `<stem>.qmd`, and one Quarto book project, `content/<lang>/_quarto.
 project file declares the language, the title and the chapter list. Each language renders under
 its own site path: `/en/`, `/fr/`, and so on.
 
-The eight project files declare the same 50 stems in the same order. Check 9 of
-`checks/check-sync.sh` reports a language that drifts from that.
+The eight project files declare the same 52 stems in the same order. Check 9 of
+`checks/check-sync.sh` reports a language that drifts from that. Three of the 52 are not
+chapters: `index.qmd`, `about.qmd` and `acknowledgements.qmd`. That is why the landing page
+hero counts 49 chapters.
 
 Old `/new_pages/...` URLs still work. Every chapter file except `index.qmd` carries an
 `aliases:` entry in its front matter. Quarto turns that into a redirect stub at the old path:
@@ -228,6 +230,7 @@ in step 5, so what goes live is exactly what was reviewed.
 | Which languages ship | `languages.yml`, in this repository |
 | A chapter's R packages | [appliedepi/aedockerpublic](https://github.com/appliedepi/aedockerpublic) |
 | Which image a chapter uses | `docker-images.yml`, in this repository |
+| The landing page's hero text | `landing.yml`, in this repository. Its markup is `utils/landing-hero.R` |
 
 ### Routine maintenance
 
