@@ -505,12 +505,13 @@ inputs:
 - `languages.yml`, for the code list
 - `landing.yml`, for the strings
 - `utils/landing-hero.R`, for the keys the hero reads
-- each `content/<code>/_quarto.yaml`, for the theme wiring
+- each `content/<code>/_quarto.yaml`, for the theme wiring. Rule 9 reads `content/en/_quarto.yaml`
+  a second time, for the chapter count the hero shows.
 
 Reading the key set from the consumer is what makes "complete" checkable. Rename a key in the
 hero, and English no longer declares it.
 
-Eight rules run by default:
+Rules 1 to 8 run by default:
 
 1. Every code `languages.yml` declares has a block in `landing.yml`.
 2. Every block in `landing.yml` names a code `languages.yml` declares.
@@ -524,6 +525,10 @@ Eight rules run by default:
 8. Every `content/<code>/_quarto.yaml` names `../../ael-extras.html` under
    `format.html.include-after-body`, and names both token layers and `../../theme-ael.scss`
    under `format.html.theme.light` and `format.html.theme.dark`.
+
+Rule 10 runs by default as well, and it has its own section below. Rule 9 is the one rule
+that needs a rendered page. A number names a rule, never the order it runs in: rule 10 came
+last, so its number sits after the render rule.
 
 Rule 7 is the pairwise rule, and rule 6 cannot replace it. Rule 6 compares each language against
 English alone, so a French block set to the Spanish values passes it byte for byte. That is a
@@ -558,11 +563,16 @@ render. The check walks the indent structure of the project file and asks what p
 sits at.
 
 Rule 7 takes two exclusions, both measured on 2026-09-18 over 86 cross-language collisions. 84
-are service-card URLs, one string in every language by design. 2 are Spanish and Portuguese
+are service-card hrefs, one string in every language by design. 2 are Spanish and Portuguese
 cognates, `capítulos` and `idiomas`, which the two languages spell identically. Each allowlist
 entry pins the key, the ordered pair `("es", "pt")` AND the exact value. Edit the Spanish string
 and the entry stops matching, so the check fires rather than exempting in silence. Rule 6 takes
-the URL exclusion and no other.
+the href exclusion and no other.
+
+The href exclusion names the FIELD as well as the shape, and `svc[i].href` is the whole of that
+field. It matched any URL-shaped value until 2026-09-18. Give `fr` and `es` one identical
+`btn_start` of `https://example.org/x` on that version, and both rules exempt it. A French page
+carrying Spanish text then ships clean, whenever the shared string looks like a URL.
 
 Remedy for rules 1 to 7: edit `landing.yml`. Remedy for rule 8: restore the missing line in
 `content/<code>/_quarto.yaml`, copying it from a language the check reports as wired.
@@ -574,18 +584,55 @@ languages declared: 8 (en fr es vn jp pt tr ru)
 project files wired to the theme and the app bar: 8 of 8
 keys the hero reads: 18, plus the svc cards (from utils/landing-hero.R)
 keys declared: 166 across the 7 translated blocks; 'en' declares 31
-against 'en': 21 values match it and are URLs, which the URL rule allows
-pairwise: 28 ordered language pairs; 84 URL values and 2 allowed cognates skipped
+translated blocks complete: 7 of 7; a complete block declares 13 keys, and 2 pinned omissions are allowed
+against 'en': 21 values match it and are service-card hrefs, which the href rule allows
+pairwise: 28 ordered language pairs; 84 service-card hrefs and 2 allowed cognates skipped
 problems: 0
 ```
 
-With `--slots`, after a render, two more lines sit before `problems: 0`:
+With `--slots`, after a render, three more lines sit before `problems: 0`:
 
 ```
-slots read: 168 across the 7 rendered page(s); 2 of them fall back to 'en'
-slots expected: 168, which is 7 page(s) x (12 scalar slots + 4 fields x 3 cards)
+slots read: 231 across the 7 rendered page(s); 44 of them fall back to 'en'
+slots expected: 231, which is 7 page(s) x (21 scalar slots + 4 fields x 3 cards)
 slot mismatches: 0
 ```
+
+### Rule 10, the completeness rule
+
+Rule 10 asks every translated block for every translatable key. Rules 1 to 8 never ask. Replace
+the `fr:` block with `fr: {}` on the 2026-09-18 version and all eight hold. The block declares
+nothing, so every key it declares exists under `en`, no value is empty, and no value matches
+another language. `keys declared:` falls from 166 to 142 and `problems:` stays 0. A
+language that lost every translation looks clean, and that is how all eight heroes shipped in
+English after the tagline was removed.
+
+**A translatable key is one the hero reads and `INVARIANT` does not name.** That one line is
+what separates a block nobody translated from a key that falls back on purpose. It comes from
+`utils/landing-hero.R`, so no edit to `landing.yml` can lower it. Today it is 13: the 18 keys
+the hero reads, less the 6 `INVARIANT` names, plus the `svc` list.
+
+Three omissions stay legal, and a rule that rejected every omission would break all three:
+
+- **A language-invariant key.** `INVARIANT` names 6: `btn_start_href`, `btn_offline_href`,
+  `np_brand`, `np_btn`, `np_btn_href` and `np_links`. Each is a path, a URL or a brand name, so
+  a translation of it would be the same string. No block declares one, and rule 10 never asks.
+- **A pinned omission.** `OMISSIONS` names 2, both `stat_used_num`. The Spanish and Portuguese
+  source pages read "3 millón de veces" and "3 milhão de vezes", singular after three. A block
+  that copied one would carry the error into the hero, so the count falls back to English.
+- **The fallback itself.** The hero reads `en` for any key the language omits, so the page still
+  renders. Rule 10 changes nothing about that. It reports the gap and leaves the choice to a
+  reader.
+
+Every other omission is a fault, whether the block lost one key or all 13.
+
+An `OMISSIONS` entry pins the key and the ONE language, so it weakens the gate for one value of
+one block. Declare the key again and the entry stops matching. Rule 10 then reports the entry
+as stale. A stale entry would otherwise permit the same loss a second time.
+
+Remedy for rule 10: translate the key and add it to that language's block. Where the source
+carries an error the translation would import, add an `OMISSIONS` entry and write the reason in
+it.
 
 ### Rule 9, the transport rule
 
@@ -600,15 +647,34 @@ deletes every folder and file the render created. It takes about 20 seconds and 
 mode of `render-gate.sh` that executes R. It needs the R packages `yaml` and `here`, which
 `utils/landing-hero.R` loads.
 
-Rule 9 reads 24 slots on each of the 7 translated pages, 168 in all, and compares each one
-against `landing.yml`. 166 of those values come from the language's own block. The other 2 fall
-back to English, because `es` and `pt` omit `stat_used_num`. Without this rule a value that
-never reaches its slot ships clean.
+Rule 9 reads 33 slots on each of the 7 translated pages, 231 in all, and compares each one
+against its source. 166 of those values come from the language's own block, which is every key
+`keys declared:` counts. 44 fall back to English. 42 are the 6 `INVARIANT` keys on all 7
+pages, and 2 are `stat_used_num` on the Spanish and the Portuguese page. The last 21 are the 3
+slots `landing.yml` does not key, one set per page:
 
-**The total is an assertion, not a line of output.** Rule 9 computes it as pages x (12 scalar
+| Slot | Source |
+|---|---|
+| `hero_title` | `languages.yml`, the `title` of this language |
+| `stat_chapters_num` | `content/en/_quarto.yaml`, `book.chapters` less `index`, `about` and `acknowledgements` |
+| `stat_languages_num` | `languages.yml`, the count of declared codes |
+
+Without this rule a value that never reaches its slot ships clean.
+
+**Rule 9 read 24 slots per page until 2026-09-18.** It skipped both button targets, both
+computed counts, the hero title and 4 of the 6 nonprofit-band fields. Every one of those is a
+rendered slot, `slots read:` counted none of them, and the printed count was honest about its
+own narrower coverage.
+
+**The total is an assertion, not a line of output.** Rule 9 computes it as pages x (21 scalar
 slots + 4 fields x 3 cards) and fails on any deviation, in either direction. The 3 is pinned in
 the check, never read from `landing.yml`, so the data cannot move the expectation. A printed
 number nobody compares is decoration, and a slot that goes unread lowers the total in silence.
+
+**A pinned total stops the data moving it and cannot stop the slot list moving it.** Delete one
+name from `SCALAR_SLOTS` and `slots read:` and `slots expected:` both fall to 32, in step, and
+the run stays green. So the check asks `utils/landing-hero.R` for its key list and names any
+key `SCALAR_SLOTS` omits. That assertion needs no rendered page, and it runs in every mode.
 
 Rule 9 reads every slot with `findall`, never `search`, and requires exactly one occurrence.
 `search` stops at the first hit, so a second copy of a slot carrying the wrong value would pass
@@ -633,5 +699,5 @@ the root of its output directory, so the step passes
 `--only "$LANG_CODE" --pages html_outputs/index.html`. The leg also renders with `--no-inject`,
 so nothing has re-serialised the page and the slot patterns read what Quarto wrote. A leg whose
 hero is broken fails before it uploads anything.
-`.github/workflows/translation-sync.yml` still runs rules 1 to 8 only. It renders no landing
+`.github/workflows/translation-sync.yml` runs every rule but rule 9. It renders no landing
 page, and its runner carries neither the `here` R package nor a language image.

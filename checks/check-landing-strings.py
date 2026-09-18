@@ -12,24 +12,44 @@ Four inputs:
   utils/landing-hero.R        the only consumer, which names every key it reads
   content/<code>/_quarto.yaml the project file, one per declared language
 
-Eight static rules, in the default run:
+Nine static rules, in the default run:
 
-1. Every code `languages.yml` declares has a block in `landing.yml`.
-2. Every block in `landing.yml` names a code `languages.yml` declares.
-3. The `en` block declares every key `utils/landing-hero.R` reads. English is the
-   fallback of last resort, so a key absent there stops the render.
-4. Every key a translated block declares also exists under `en`.
-5. No value is an empty string. Omit the key instead, and the value falls back.
-6. No translated value is byte-identical to the English value for that key.
-7. No two languages give one key the same value.
+ 1. Every code `languages.yml` declares has a block in `landing.yml`.
+ 2. Every block in `landing.yml` names a code `languages.yml` declares.
+ 3. The `en` block declares every key `utils/landing-hero.R` reads. English is the
+    fallback of last resort, so a key absent there stops the render.
+ 4. Every key a translated block declares also exists under `en`.
+ 5. No value is an empty string. Omit the key instead, and the value falls back.
+ 6. No translated value is byte-identical to the English value for that key.
+ 7. No two languages give one key the same value.
+10. Every translated block declares every translatable key.
 
 Rule 7 is the pairwise rule, and it walks all 28 ordered pairs of the 8 languages.
 Rule 6 compares each language against English alone. So rule 6 cannot see a language
 that carries a THIRD language's text. A French block set to the Spanish values passed
 rule 6 byte for byte. Rule 7 takes two exclusions, and both were measured on 2026-09-18.
-A service-card URL is one string in every language by design, and Spanish and
-Portuguese spell two of the stat labels identically. Rule 6 takes the URL exclusion
-for the same reason, and takes no other.
+A service-card href is one string in every language by design, and Spanish and
+Portuguese spell two of the stat labels identically. Rule 6 takes the href exclusion
+for the same reason, and takes no other. Both name the FIELD and the shape: a
+URL-shaped value under any other key is one language carrying another's text.
+
+Rule 10 is the completeness rule, and it closes the hole the other seven leave:
+
+10. Every translated block declares every translatable key, or a pinned entry in
+    OMISSIONS says why it does not.
+
+A translatable key is one the hero reads and that INVARIANT does not name. Replace one
+block with `fr: {}` and rules 1 to 7 all hold. Every key it declares exists under `en`,
+no value is empty, and no value matches another language, because it declares nothing.
+The declared key count falls from 166 to 142 and nothing else moves. That is how all
+eight heroes shipped in English after the tagline was removed. Rule 10 names the
+language and each key it lost.
+
+Three omissions stay legal, and a rule that rejected every omission would be no fix. A
+key INVARIANT names is not asked for, so a URL or a brand name never fires. An omission
+OMISSIONS pins is allowed, and the entry carries its reason. The hero still falls back
+to English for both, so the page renders either way. Every other omission is a fault,
+whether the block lost one key or all of them.
 
 Rule 8 is about the page rather than the strings:
 
@@ -42,10 +62,14 @@ with no condition on it. `ael-extras.html` is what puts both back, in the top ap
 So a language that does not include it ships with no search box and no dark-mode
 toggle, and the render reports nothing.
 
-The ninth rule needs a rendered page, so `--slots` asks for it:
+Rule 9 needs a rendered page, so `--slots` asks for it:
 
-9. Every hero and band slot on every translated page carries the value `landing.yml`
-   gives for that key, the English fallback included.
+9. Every hero and band slot on every translated page carries the value its source gives
+   for it. The English fallback counts. So do the three slots `landing.yml` does not
+   key: the hero title, the chapter count and the language count.
+
+A number here names a rule, never the order it runs in. Rule 10 is static and rule 9
+needs a render, because rule 10 was written last.
 
 Run `--slots` after `quarto render index.qmd --to html` in each language folder. It
 refuses to run when a rendered page is absent. A check that passes because it found no
@@ -98,9 +122,19 @@ for a in TAKES_VALUE:
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
-# The URL rule for the pairwise check. A service-card href is the same string in every
-# language, because it points at one page of appliedepi.org.
+# The href rule for rules 6 and 7. A service-card href is the same string in every
+# language, because it points at one page of appliedepi.org. The exclusion names the FIELD
+# as well as the shape. It matched any URL-shaped value until 2026-09-18. Two languages
+# sharing a URL under any other key were exempted in silence. The gate applied an exclusion
+# wider than the one it documented.
+HREF = re.compile(r'^svc\[\d+\]\.href$')
 URL = re.compile(r'^(https?://|mailto:)')
+
+
+def shared_href(key, value):
+    """True when the key is a service-card href and the value is the URL it holds."""
+    return bool(HREF.match(key) and URL.match(value))
+
 
 # The cognate allowlist for the pairwise check. Spanish and Portuguese spell these two
 # words identically, so an identical value here is not a copy of one language by another.
@@ -111,6 +145,30 @@ COGNATES = {
     ("stat_chapters_label", ("es", "pt"), "capítulos"),
     ("stat_languages_label", ("es", "pt"), "idiomas"),
 }
+
+# Rule 10 asks every translated block for every key the hero reads, less these. Each one is
+# language-invariant: a path, a URL, a brand name, or a line built out of the two. A
+# translation of any of them would be the same string. So no block declares one, and the
+# hero falls back to English on every page.
+#
+# This tuple is the whole of what rule 10 does not ask for, so read it as the exemption it
+# is. Add a key here and seven landing pages may ship that string in English, with nothing
+# left to report it.
+INVARIANT = ('btn_start_href', 'btn_offline_href', 'np_brand', 'np_btn', 'np_btn_href',
+             'np_links')
+
+# The omission allowlist for rule 10. Each entry pins the key, the ONE language, and why
+# that language leaves the key to the English fallback. An entry weakens the gate for one
+# key of one block and nothing else.
+#
+# A stale entry is a hole, so the gate names one. Declare the key again and the entry stops
+# matching anything. Rule 10 then reports the entry, and exempts nothing in silence.
+OMISSIONS = (
+    ("stat_used_num", "es",
+     'the pre-plan page reads "3 millón de veces", which is a number-agreement error'),
+    ("stat_used_num", "pt",
+     'the pre-plan page reads "3 milhão de vezes", which is a number-agreement error'),
+)
 
 # The four fields of one service card, in the order utils/landing-hero.R writes them into
 # the markup. The slot rule reads the rendered card with these names.
@@ -123,6 +181,34 @@ CARD = ('h', 'p', 'href', 'link')
 # pass on fewer slots.
 # Add a fourth card to landing.yml and this constant is the one place that changes.
 CARDS = 3
+
+# Every scalar slot rule 9 reads out of a rendered page, one value each, in the order
+# utils/landing-hero.R writes them. 18 of them are landing.yml keys and 3 are not. The
+# expected slot total is the count of this tuple plus the count of CARD times CARDS. So a
+# slot added to the markup must be added here, or the total stops matching.
+#
+# The tuple covered 12 slots until 2026-09-18. It read neither button target, neither
+# computed count, the hero title nor four of the six nonprofit-band fields. Every one of
+# those is a rendered slot, and `slots read:` counted none of them. The count was honest
+# and the coverage was narrower than "transport is verified" implies. Rule 10 now asks the
+# hero for its key list and names any key this tuple omits.
+SCALAR_SLOTS = ('eyebrow', 'hero_title', 'subtitle', 'search_placeholder', 'search_label',
+                'btn_start_href', 'btn_start', 'btn_offline_href', 'btn_offline',
+                'stat_used_num', 'stat_used_label', 'stat_chapters_num',
+                'stat_chapters_label', 'stat_languages_num', 'stat_languages_label',
+                'np_brand', 'np_lead', 'np_trust', 'np_btn_href', 'np_btn', 'np_links')
+
+# The three slots landing.yml does not key. Each already has one home, and a second copy of
+# it is the thing that drifts. So rule 9 reads each one from its own home:
+#   hero_title           languages.yml, the title of this language
+#   stat_chapters_num    content/<main>/_quarto.yaml, book.chapters less NOT_CHAPTERS
+#   stat_languages_num   languages.yml, the count of declared codes
+# utils/landing-hero.R counts the same three the same way.
+COMPUTED_SLOTS = ('hero_title', 'stat_chapters_num', 'stat_languages_num')
+
+# The book pages the hero does not count as chapters. utils/landing-hero.R names the same
+# three, and a fourth page added there must be added here too.
+NOT_CHAPTERS = ('index', 'about', 'acknowledgements')
 
 # The theme wiring every content/<code>/_quarto.yaml must carry. Each entry is a dotted key
 # path in that file, the values the path must hold, and what a reader loses without them.
@@ -262,6 +348,20 @@ def need(path, why):
     return path
 
 
+def load(path):
+    """One YAML file, or one sentence naming THAT file.
+
+    The handler read both files under one `try` until 2026-09-18, and its message named
+    landing.yml whichever file had failed. A parse error in languages.yml sent the reader
+    to the wrong file.
+    """
+    try:
+        return yaml.safe_load(path.read_text(encoding='utf-8'))
+    except yaml.YAMLError as e:
+        sys.exit("check-landing-strings.py: %s does not parse as YAML: %s"
+                 % (path, str(e).replace('\n', ' ')))
+
+
 need(ROOT / 'languages.yml',
      "That file is the one declaration of which languages ship, and this check needs the "
      "code list to know which landing blocks to expect.")
@@ -270,12 +370,8 @@ need(ROOT / 'landing.yml',
 need(ROOT / 'utils' / 'landing-hero.R',
      "That file is the only consumer of landing.yml, and it names every key the hero reads.")
 
-try:
-    langs_doc = yaml.safe_load((ROOT / 'languages.yml').read_text(encoding='utf-8'))
-    landing = yaml.safe_load((ROOT / 'landing.yml').read_text(encoding='utf-8'))
-except yaml.YAMLError as e:
-    sys.exit("check-landing-strings.py: %s does not parse as YAML: %s"
-             % (ROOT / 'landing.yml', str(e).replace('\n', ' ')))
+langs_doc = load(ROOT / 'languages.yml')
+landing = load(ROOT / 'landing.yml')
 for path, doc in ((ROOT / 'languages.yml', langs_doc), (ROOT / 'landing.yml', landing)):
     if not isinstance(doc, dict):
         sys.exit("check-landing-strings.py: %s is not a mapping at its top level. This check "
@@ -338,13 +434,40 @@ for k, v in sorted(en_flat.items()):
                         "last resort, so every page that omits the key shows nothing"
                         % (main, k))
 
-# Rules 4, 5 and 6, over every translated block.
-keys_declared, en_urls = 0, 0
+# Rule 9 reads a pinned list of slots, and this is what holds that list against the hero. A
+# key the hero writes and SCALAR_SLOTS omits is a slot nothing measures. The printed total
+# stays honest about its own count and says nothing about the slot, so the check cannot fail
+# on it. This runs in every mode, because it needs no rendered page.
+for k in sorted(set(required) | set(COMPUTED_SLOTS)):
+    if k not in SCALAR_SLOTS:
+        problems.append("rule 9 reads no '%s' slot, and the hero writes that value into every "
+                        "page. Add the key to SCALAR_SLOTS, with the pattern that reads it out "
+                        "of the rendered markup." % k)
+
+# Rule 10: every translated block declares every translatable key.
+#
+# The set is the keys the hero reads, less the language-invariant ones, plus the svc list.
+# It comes from utils/landing-hero.R and not from landing.yml, so no edit to the data can
+# lower it. `en` must declare the key too. A key only the hero names is rule 3's fault, and
+# one report of it beats seven.
+translatable = sorted(((set(required) & set(en_flat)) - set(INVARIANT)) | {'svc'})
+allowed = {(k, c) for k, c, _ in OMISSIONS}
+
+# Rules 4, 5, 6 and 10, over every translated block.
+keys_declared, en_urls, complete = 0, 0, 0
 for c in translated:
     blk = landing.get(c)
     if not isinstance(blk, dict):
         continue
     keys_declared += len(F[c])
+    missing = [k for k in translatable if k not in blk and (k, c) not in allowed]
+    if missing:
+        problems.append("%s: the block omits %d of the %d keys a translated block MUST declare, "
+                        "and each one falls back to '%s', so this page ships that slot in "
+                        "English: %s" % (c, len(missing), len(translatable), main,
+                                         ' '.join(missing)))
+    else:
+        complete += 1
     for k, v in sorted(F[c].items()):
         if k not in en_flat:
             problems.append("%s: key '%s' is not declared under '%s', so nothing can fall back "
@@ -353,7 +476,7 @@ for c in translated:
             problems.append("%s: key '%s' is an empty string. Omit the key, and it falls back "
                             "to '%s'" % (c, k, main))
         elif k in en_flat and v.strip() == en_flat[k].strip():
-            if URL.match(v):
+            if shared_href(k, v):
                 en_urls += 1
             else:
                 problems.append("%s: key '%s' is byte-identical to '%s'. Omit it, or translate it"
@@ -370,6 +493,15 @@ for c in translated:
     else:
         check_cards(c, cards, problems)
 
+# Rule 10b: every pinned omission still describes the block it names. An entry that no longer
+# matches exempts nothing today and permits the same loss tomorrow, in silence.
+for key, code, why in OMISSIONS:
+    pinned = landing.get(code)
+    if isinstance(pinned, dict) and key in pinned:
+        problems.append("the pinned omission of '%s' in '%s' is stale: that block declares the "
+                        "key now. Delete the entry, or rule 10 lets the key go missing again "
+                        "without a word. The entry reads: %s" % (key, code, why))
+
 # Rule 7: pairwise distinctness across every ordered pair of declared languages.
 pairs = list(itertools.combinations(codes, 2))
 urls, cognates = 0, 0
@@ -378,7 +510,7 @@ for a, b in pairs:
         if F[a][k] != F[b][k]:
             continue
         v = F[a][k]
-        if URL.match(v):
+        if shared_href(k, v):
             urls += 1
             continue
         if (k, (a, b), v) in COGNATES:
@@ -418,19 +550,14 @@ print("project files wired to the theme and the app bar: %d of %d" % (wired, len
 print("keys the hero reads: %d, plus the svc cards (from utils/landing-hero.R)" % len(required))
 print("keys declared: %d across the %d translated blocks; '%s' declares %d"
       % (keys_declared, len(translated), main, len(en_flat)))
-print("against '%s': %d values match it and are URLs, which the URL rule allows" % (main, en_urls))
-print("pairwise: %d ordered language pairs; %d URL values and %d allowed cognates skipped"
+print("translated blocks complete: %d of %d; a complete block declares %d keys, and %d pinned "
+      "omissions are allowed" % (complete, len(translated), len(translatable), len(OMISSIONS)))
+print("against '%s': %d values match it and are service-card hrefs, which the href rule allows"
+      % (main, en_urls))
+print("pairwise: %d ordered language pairs; %d service-card hrefs and %d allowed cognates skipped"
       % (len(pairs), urls, cognates))
 
 # Rule 9: the transport rule. It reads a rendered page, so it runs only on request.
-#
-# The 12 scalar slots the hero and the band carry, one value each. The expected slot total is
-# derived from the count of this tuple and the count of CARD. So a slot added to the markup
-# must be added here, or the total stops matching.
-SCALAR_SLOTS = ('eyebrow', 'subtitle', 'search_placeholder', 'search_label',
-                'btn_start', 'btn_offline', 'stat_used_num', 'stat_used_label',
-                'stat_chapters_label', 'stat_languages_label', 'np_lead', 'np_trust')
-
 if want_slots:
     if ONLY is not None and ONLY not in codes:
         sys.exit("check-landing-strings.py --only %s: languages.yml declares no such code. It "
@@ -451,16 +578,40 @@ if want_slots:
                  "nothing without a rendered page, and it will not report success it did not "
                  "measure." % ', no '.join(absent))
 
+    # One pattern per rendered slot, keyed by the slot names its groups fill, in order. A
+    # pattern anchors on the element that holds the value AND on its container where the page
+    # carries the element more than once. The band logo is one of five images on the page, so
+    # its pattern starts at the lockup that holds it.
     ONE = {
-        'eyebrow': r'<div class="ael-eyebrow">(.*?)</div>',
-        'subtitle': r'<p class="ael-hsub">(.*?)</p>',
-        'btn_start': r'<a class="btn light" href="[^"]*">(.*?)</a>',
-        'btn_offline': r'<a class="btn out" href="[^"]*">(.*?)</a>',
-        'np_lead': r'<p class="nplead">(.*?)</p>',
-        'np_trust': r'<div class="nptrust">(.*?)</div>\s*<div class="svcs">',
+        ('eyebrow',): r'<div class="ael-eyebrow">(.*?)</div>',
+        ('hero_title',): r'<h1 class="ael-htitle">(.*?)</h1>',
+        ('subtitle',): r'<p class="ael-hsub">(.*?)</p>',
+        ('search_placeholder', 'search_label'):
+            r'<input id="ael-hsearch-input".*?placeholder="(.*?)" aria-label="(.*?)">',
+        ('btn_start_href', 'btn_start'): r'<a class="btn light" href="([^"]*)">(.*?)</a>',
+        ('btn_offline_href', 'btn_offline'): r'<a class="btn out" href="([^"]*)">(.*?)</a>',
+        ('np_brand',): r'<div class="nplockup">\s*<img src="[^"]*" alt="([^"]*)">',
+        ('np_lead',): r'<p class="nplead">(.*?)</p>',
+        ('np_trust',): r'<div class="nptrust">(.*?)</div>\s*<div class="svcs">',
+        ('np_btn_href', 'np_btn'):
+            r'<div class="npfoot">\s*<a class="btn" href="([^"]*)">(.*?)</a>',
+        ('np_links',): r'<div class="nplinks">(.*?)</div>',
     }
     CARD_RE = (r'<div class="svc"><div class="svch">(.*?)</div><p class="svcp">(.*?)</p>'
                r'<a class="svclink" href="([^"]*)">(.*?)</a></div>')
+
+    # The two counts the hero computes. languages.yml and content/<main>/_quarto.yaml hold
+    # them, landing.yml holds no copy, and utils/landing-hero.R counts them the same way.
+    titles = {e['code']: e.get('title') for e in entries
+              if isinstance(e, dict) and e.get('code')}
+    book = load(ROOT / 'content' / main / '_quarto.yaml') or {}
+    stems = []
+    for x in ((book.get('book') or {}).get('chapters') or []):
+        if isinstance(x, str):
+            stems.append(x)
+        elif isinstance(x, dict):
+            stems.extend(y for y in (x.get('chapters') or []) if isinstance(y, str))
+    chapters_n = len({re.sub(r'\.qmd$', '', s) for s in stems} - set(NOT_CHAPTERS))
 
     slots_read, fallbacks, mismatches = 0, 0, []
     for c in selected:
@@ -470,43 +621,46 @@ if want_slots:
         # findall, never search. search reads the FIRST occurrence and stops, so a second
         # copy of a slot carrying the wrong value passes while the total still matches.
         # Upward drift has to fail the count as surely as downward drift does.
-        for k, pattern in ONE.items():
+        for keys, pattern in ONE.items():
             hits = re.findall(pattern, text, re.S)
+            name = '/'.join(keys)
             if not hits:
-                mismatches.append("%s: the rendered page carries no '%s' slot at all" % (c, k))
+                mismatches.append("%s: the rendered page carries no '%s' slot at all" % (c, name))
             elif len(hits) > 1:
                 mismatches.append("%s: the rendered page carries %d '%s' slots, and the hero "
-                                  "writes one" % (c, len(hits), k))
+                                  "writes one" % (c, len(hits), name))
+            elif len(keys) == 1:
+                got[keys[0]] = hits[0]
             else:
-                got[k] = hits[0]
-        pair = re.findall(r'<input id="ael-hsearch-input".*?placeholder="(.*?)" aria-label="(.*?)">',
-                          text, re.S)
-        if not pair:
-            mismatches.append("%s: the rendered page carries no hero search box" % c)
-        elif len(pair) > 1:
-            mismatches.append("%s: the rendered page carries %d hero search boxes, and the hero "
-                              "writes one" % (c, len(pair)))
-        else:
-            got['search_placeholder'], got['search_label'] = pair[0]
+                for k, value in zip(keys, hits[0]):
+                    got[k] = value
         nums = re.findall(r'<div class="statnum">(.*?)</div>', text, re.S)
         labels = re.findall(r'<div class="statlbl">(.*?)</div>', text, re.S)
         if len(nums) != 3 or len(labels) != 3:
             mismatches.append("%s: the rendered page carries %d stat numbers and %d stat labels, "
                               "and the hero writes 3 of each" % (c, len(nums), len(labels)))
         else:
-            got['stat_used_num'] = nums[0]
+            got['stat_used_num'], got['stat_chapters_num'], got['stat_languages_num'] = nums
             got['stat_used_label'], got['stat_chapters_label'], got['stat_languages_label'] = labels
 
+        computed = {'hero_title': titles.get(c),
+                    'stat_chapters_num': str(chapters_n),
+                    'stat_languages_num': str(len(codes))}
         brand = blk.get('np_brand', en_flat.get('np_brand', ''))
         for k in SCALAR_SLOTS:
             if k not in got:
                 continue            # the mismatch list already names the slot it could not read
+            slots_read += 1
+            if k in computed:
+                if got[k] != computed[k]:
+                    mismatches.append("%s: slot '%s'\n     got  %r\n     want %r"
+                                      % (c, k, got[k], computed[k]))
+                continue
             want = blk[k] if k in blk else en_flat.get(k)
             if k not in blk:
                 fallbacks += 1
             if k == 'np_lead' and want is not None:
                 want = want.replace('{brand}', '<span class="brandname">%s</span>' % brand)
-            slots_read += 1
             if want is None:
                 mismatches.append("%s: the rendered page shows a '%s' slot that neither '%s' nor "
                                   "'%s' declares" % (c, k, c, main))

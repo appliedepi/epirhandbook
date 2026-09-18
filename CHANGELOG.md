@@ -8,6 +8,42 @@ of it, and that is expected of a changelog. Read it as a record, never as curren
 
 ---
 
+## 2026-09-18: four holes in the landing page gate
+
+A Codex review of check 15 found four. `checks/check-landing-strings.py` carries the repairs and
+`checks/README.md` describes each rule.
+
+**A block that lost every translation passed.** Replace the `fr:` block with `fr: {}` and every
+rule held: `keys declared:` fell from 166 to 142 and `problems:` stayed 0. That is the exact
+failure the gate exists to catch, because it is how all eight heroes shipped in English after
+the tagline was removed. Rule 10 now asks every translated block for every translatable key,
+which is a key the hero reads and `INVARIANT` does not name. Today that set is 13 keys.
+
+Three omissions stay legal, and a rule that rejected every omission would break all three. The 6
+`INVARIANT` keys are a path, a URL or a brand name. A translation of one would be the same
+string, so no block declares it. `OMISSIONS` pins 2. `es` and `pt` leave `stat_used_num` to
+English, because their source pages read "3 millón de veces" and "3 milhão de vezes", singular
+after three. The hero still falls back for any key a block omits, so rule 10 moves no rendered
+page. It reports the gap and leaves the choice to a reader.
+
+**Rule 9 read 24 of the 33 slots on each page.** It skipped both button targets, the hero title,
+the two computed counts and 4 of the 6 nonprofit-band fields. It now reads 231 slots across the
+7 pages, up from 168. The expectation stays a pinned constant, because a total derived from the
+data would move with it. A pinned total stops the data moving it. It cannot stop the slot list
+moving it. Delete one name from `SCALAR_SLOTS` and both the total and the expectation fall to
+32, in step, and the run stays green. So the check also asks `utils/landing-hero.R` for its key
+list and names any key `SCALAR_SLOTS` omits.
+
+**The href exclusion covered any URL-shaped value.** Rules 6 and 7 take it for `svc[i].href`,
+one string in every language by design. Two languages sharing any other URL-shaped string were
+exempted in silence. A French page carrying Spanish text then shipped clean, whenever the
+shared value looked like a URL. The exclusion now names the field as well as the shape.
+
+**A `languages.yml` parse error blamed `landing.yml`.** One handler read both files, and its
+message named the second file whichever one had failed.
+
+---
+
 ## 2026-09-18: the Applied Epi theme, the translated heroes, and the gate that holds them
 
 The Applied Epi redesign, ported from the unshipped `richard` branch at `ebc8b272` onto the
