@@ -8,6 +8,30 @@ of it, and that is expected of a changelog. Read it as a record, never as curren
 
 ---
 
+## 2026-09-18: a dead key under `en`, and what rule 9 cannot verify
+
+`checks/check-landing-strings.py` ran rule 3 in one direction only. It asked whether the `en`
+block declares every key `utils/landing-hero.R` reads. Nothing asked the other question, so a
+key under `en` that no code reads met no rule at all. `donate_label` sat there from the day the
+donation form went, and the gate passed it on every run. Rule 3 now runs both ways, and
+`landing.yml` no longer declares the key.
+
+The legal set is the hero's own, read out of `utils/landing-hero.R`. A list written into the
+check would go stale on the next rename and exempt the key it named.
+
+**Rule 9 verifies the strings the server sends, and it cannot verify what the browser builds.**
+That limit carried no measurement behind it. `checks/README.md` now carries one, taken from the
+deployed site at `origin/staging` `f18ff0e4`.
+
+`#languages-links-parent` is a real element on 416 of the 833 deployed HTML files, which is
+every rendered page, and it holds 7 language links. `class="ael-appbar"` appears 0 times as an
+element, `ael-appbar` appears 5 times in script text, and the compiled CSS carries every theme
+token. So the injector ran in production, and the app bar is absent from the served HTML because
+JavaScript builds it at load. A headless browser would close this limit, and this machine has
+no headless browser.
+
+---
+
 ## 2026-09-18: four holes in the landing page gate
 
 A Codex review of check 15 found four. `checks/check-landing-strings.py` carries the repairs and

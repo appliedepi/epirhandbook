@@ -516,7 +516,8 @@ Rules 1 to 8 run by default:
 1. Every code `languages.yml` declares has a block in `landing.yml`.
 2. Every block in `landing.yml` names a code `languages.yml` declares.
 3. The `en` block declares every key `utils/landing-hero.R` reads, and gives none of them an
-   empty string. English is the fallback of last resort.
+   empty string. English is the fallback of last resort. The hero reads every key the `en`
+   block declares, so a key nothing reads is a failure.
 4. Every key a translated block declares also exists under `en`. Every value is a string. A
    declared `svc` list holds 3 cards, and every card carries `h`, `p`, `link` and `href`.
 5. No value is an empty string. Omit the key, and the value falls back to English.
@@ -529,6 +530,16 @@ Rules 1 to 8 run by default:
 Rule 10 runs by default as well, and it has its own section below. Rule 9 is the one rule
 that needs a rendered page. A number names a rule, never the order it runs in: rule 10 came
 last, so its number sits after the render rule.
+
+**Rule 3 runs in both directions, and one direction alone is blind.** Rule 3 names a key the
+hero reads and `en` omits. Its mirror names a key `en` declares and no `s("key")` call reads.
+`donate_label` sat under `en` from 2026-09-18, when the donation form went, and the gate passed
+it on every run.
+
+The mirror takes its legal set from `utils/landing-hero.R`, so a rename in the hero moves it.
+`svc` is legal because `svcs()` reads it. The 6 `INVARIANT` keys are legal because the hero
+reads all 6. The mirror asks about the `en` block alone, and rule 4 closes the other seven. A
+key a translated block declares must also exist under `en`.
 
 Rule 7 is the pairwise rule, and rule 6 cannot replace it. Rule 6 compares each language against
 English alone, so a French block set to the Spanish values passes it byte for byte. That is a
@@ -583,7 +594,7 @@ Expected output:
 languages declared: 8 (en fr es vn jp pt tr ru)
 project files wired to the theme and the app bar: 8 of 8
 keys the hero reads: 18, plus the svc cards (from utils/landing-hero.R)
-keys declared: 166 across the 7 translated blocks; 'en' declares 31
+keys declared: 166 across the 7 translated blocks; 'en' declares 30
 translated blocks complete: 7 of 7; a complete block declares 13 keys, and 2 pinned omissions are allowed
 against 'en': 21 values match it and are service-card hrefs, which the href rule allows
 pairwise: 28 ordered language pairs; 84 service-card hrefs and 2 allowed cognates skipped
@@ -679,6 +690,30 @@ key `SCALAR_SLOTS` omits. That assertion needs no rendered page, and it runs in 
 Rule 9 reads every slot with `findall`, never `search`, and requires exactly one occurrence.
 `search` stops at the first hit, so a second copy of a slot carrying the wrong value would pass
 while the total still matched. Upward drift has to fail the count as surely as downward drift.
+
+**Rule 9 verifies the strings the server sends. It cannot verify anything the browser builds.**
+`ael-extras.html` builds the top app bar in JavaScript at load. Rule 8 checks that every project
+file includes that script, and nothing here verifies what the script then builds. The
+measurement below is on the deployed site, `origin/staging` at `f18ff0e4`, the deploy of
+`2bdfad56`.
+
+| Measured on `origin/staging` at `f18ff0e4` | Result |
+|---|---|
+| `<div class="dropdown" id="languages-links-parent">` as a real element | 416 of the 833 HTML files, which is every rendered page |
+| language links inside that element, on `en/index.html` | 7 |
+| `class="ael-appbar"` as a real element, on `en/index.html` | 0 |
+| `ael-appbar` anywhere in `en/index.html` | 5, and all 5 are script text |
+| `ael-appbar`, `--brand`, `Spectral`, `ael-hero` and `ael-navhelp` in the compiled CSS | present in the light bundle and in the dark bundle |
+
+The injector ran in production. The compiled CSS carries every theme token, and the switcher
+parent is on every rendered page. The app bar is absent from the served HTML because the script
+builds it in the browser. The other 417 HTML files of that deploy are redirect stubs, and a stub
+carries no chrome.
+
+A headless browser would close this limit. It would load an assembled page, run the script, and
+assert two things. `.ael-appbar` MUST exist, and `#languages-links-parent` MUST have
+`.ael-appbar-tools` as its parent. `ael-extras.html` makes that move at line 86. This machine
+carries no chromium, no playwright, no puppeteer and no chromote, so the gate does not run it.
 
 Two flags aim it elsewhere:
 

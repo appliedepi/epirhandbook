@@ -16,8 +16,9 @@ Nine static rules, in the default run:
 
  1. Every code `languages.yml` declares has a block in `landing.yml`.
  2. Every block in `landing.yml` names a code `languages.yml` declares.
- 3. The `en` block declares every key `utils/landing-hero.R` reads. English is the
-    fallback of last resort, so a key absent there stops the render.
+ 3. The `en` block declares every key `utils/landing-hero.R` reads, and the hero
+    reads every key the `en` block declares. English is the fallback of last resort,
+    so a key absent there stops the render. A key nothing reads is dead configuration.
  4. Every key a translated block declares also exists under `en`.
  5. No value is an empty string. Omit the key instead, and the value falls back.
  6. No translated value is byte-identical to the English value for that key.
@@ -433,6 +434,24 @@ for k, v in sorted(en_flat.items()):
         problems.append("the '%s' block: key '%s' is an empty string, and it is the fallback of "
                         "last resort, so every page that omits the key shows nothing"
                         % (main, k))
+
+# Rule 3c: the mirror of rule 3, and rule 3 is blind to what it catches. Rule 3 runs the hero's
+# keys to `en` and names the ones `en` does not declare. Nothing ran `en` to the hero, so a key
+# under `en` that no code reads met no rule at all. `donate_label` sat there from the day the
+# donation form went, on 2026-09-18, and the gate passed it on every run.
+#
+# The legal set is the hero's own, read out of utils/landing-hero.R. A list written here would
+# go stale on the next rename and exempt the key it named. `svc` is the one key svcs() reads
+# rather than s(), and rule 10 pins it the same way for the same reason. The 6 INVARIANT keys
+# are legal: the hero reads every one of them, and INVARIANT says only that no translated block
+# has to declare them.
+#
+# `en` is the only block this asks about. Rule 4 names any key a translated block declares and
+# `en` does not. So between rule 4 and this rule, every declared key meets a question.
+for k in sorted(set(en) - set(required) - {'svc'}):
+    problems.append("the '%s' block declares '%s', and no s(\"%s\") call in "
+                    "utils/landing-hero.R reads it, so nothing renders that value. Delete the "
+                    "key, or read it in the hero" % (main, k, k))
 
 # Rule 9 reads a pinned list of slots, and this is what holds that list against the hero. A
 # key the hero writes and SCALAR_SLOTS omits is a slot nothing measures. The printed total
