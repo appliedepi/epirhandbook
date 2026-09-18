@@ -1,0 +1,144 @@
+<script>
+// Applied Epi redesign: progressive enhancement.
+document.addEventListener('DOMContentLoaded', function () {
+
+  // 0a) Publish the footer's live height so the sticky columns leave exactly enough
+  //     room and stay pinned at the very bottom regardless of footer size.
+  function syncLayoutVars() {
+    var root = document.documentElement;
+    // target the visible light-blue panel (.nav-footer), NOT the outer <footer> wrapper.
+    // Growing the wrapper leaves the panel short and white shows below it.
+    var f = document.querySelector('.nav-footer') || document.querySelector('footer.footer');
+    var main = document.querySelector('main#quarto-document-content');
+    if (f) f.style.minHeight = '';                       // reset before measuring
+    var footerH = f ? Math.ceil(f.getBoundingClientRect().height) : 60;
+    root.style.setProperty('--ael-footer-h', (footerH + 8) + 'px');
+    // Natural content height = the vertical extent of main's CHILDREN. We must NOT
+    // use main's own box height: as a grid item it stretches to the grid row, which
+    // the tall sidebar itself inflates. Measuring that is circular (the sidebar's
+    // height feeds back as the "content height" and the cap never bites).
+    var mainH = 0;
+    if (main) {
+      var top = main.getBoundingClientRect().top, bottom = top;
+      for (var i = 0; i < main.children.length; i++) {
+        var cr = main.children[i].getBoundingClientRect();
+        if (cr.height > 0 && cr.bottom > bottom) bottom = cr.bottom;
+      }
+      mainH = Math.ceil(bottom - top);
+    }
+    root.style.setProperty('--ael-content-h', mainH + 'px');
+    // Cap the sidebar/TOC at min(viewport space, content height). The content term
+    // stops the tall nav overhanging a short page (Welcome) and leaving dead space;
+    // the viewport term keeps it scrollable-in-place on long chapters. We fill to just
+    // shy of the viewport bottom (vh - appbar - 8), NOT minus the footer. The footer is
+    // off-screen mid-page, so reserving room for it would leave dead white below the
+    // nav. At the page bottom the sticky container already stops the box at the footer.
+    var vh = window.innerHeight;
+    var cap = Math.max(0, Math.min(vh - 60 - 8, mainH));
+    root.style.setProperty('--ael-sidebar-maxh', cap + 'px');
+    // Stretch the footer to the bottom of the viewport when the page is shorter than
+    // the window. That leaves no white strip below it OR above it. Compute the page
+    // height from known parts (app bar + content + footer), not from scrollHeight.
+    // scrollHeight would still reflect the pre-cap tall sidebar this same tick.
+    if (f) {
+      var appbar = document.querySelector('.ael-appbar');
+      var appbarH = appbar ? Math.ceil(appbar.getBoundingClientRect().height) : 60;
+      var pageH = appbarH + mainH + footerH;             // sidebar is capped <= content
+      var gap = vh - pageH;
+      if (gap > 0) f.style.minHeight = (footerH + gap) + 'px';
+    }
+  }
+  syncLayoutVars();
+  window.addEventListener('resize', syncLayoutVars);
+  window.addEventListener('load', syncLayoutVars);
+
+  // 0) Build the full-width top app bar and relocate Quarto's brand/search/toggle into it.
+  if (!document.querySelector('.ael-appbar')) {
+    var bar = document.createElement('div');
+    bar.className = 'ael-appbar';
+
+    var logoImg = document.querySelector('.sidebar-logo img, .sidebar-header img');
+    var logoSrc = logoImg ? logoImg.getAttribute('src') : '';
+    var logoLink = logoImg ? logoImg.closest('a') : null;
+    var homeHref = logoLink ? logoLink.getAttribute('href') : '#';
+    var brand = document.createElement('a');
+    brand.className = 'ael-brand';
+    brand.href = homeHref || '#';
+    brand.innerHTML = (logoSrc ? '<img src="' + logoSrc + '" alt="">' : '') +
+      '<span><span class="ael-brand-t">Epi R Handbook</span>' +
+      '<span class="ael-brand-s">by Applied Epi</span></span>';
+    bar.appendChild(brand);
+
+    var searchWrap = document.createElement('div');
+    searchWrap.className = 'ael-appbar-search';
+    var search = document.getElementById('quarto-search');
+    if (search) searchWrap.appendChild(search);
+    bar.appendChild(searchWrap);
+
+    var tools = document.createElement('div');
+    tools.className = 'ael-appbar-tools';
+    // The real language switcher. inject_language_links.R writes
+    // #languages-links-parent into the sidebar header after the render.
+    // theme-ael.scss hides that header, so the element has to move here or no
+    // reader ever sees it. Only CI injects it, so it is absent on a local
+    // single-language render: guard on null and leave the bar one item shorter.
+    var switcher = document.getElementById('languages-links-parent');
+    if (switcher) tools.appendChild(switcher);
+    var toggle = document.querySelector('.quarto-color-scheme-toggle');
+    if (toggle) tools.appendChild(toggle);
+    var dark = document.createElement('span');
+    dark.className = 'ael-darklbl';
+    dark.textContent = 'Dark mode';
+    dark.addEventListener('click', function () { if (toggle) toggle.click(); });
+    tools.appendChild(dark);
+    bar.appendChild(tools);
+
+    document.body.insertBefore(bar, document.body.firstChild);
+  }
+
+  // 0b) Sidebar: split "9  Title" into number + text so wrapped lines hang-indent
+  //     (the wrapped line aligns with the title text, not under the number).
+  document.querySelectorAll('#quarto-sidebar .sidebar-link .menu-text').forEach(function (m) {
+    var mm = (m.textContent || '').match(/^(\d+)\s+(.*)$/);
+    if (mm) {
+      m.textContent = '';
+      var num = document.createElement('span'); num.className = 'ael-navnum'; num.textContent = mm[1];
+      var txt = document.createElement('span'); txt.className = 'ael-navtext'; txt.textContent = mm[2];
+      m.appendChild(num); m.appendChild(txt);
+      var link = m.closest('.sidebar-link'); if (link) link.classList.add('ael-numbered');
+    }
+  });
+
+  var isChapter = document.querySelector('#title-block-header .chapter-number');
+
+  // 1) Move the chapter's intro paragraph (the "lede") into the title block so it
+  //    sits in the right-hand column beside the big hanging chapter number.
+  if (isChapter) {
+    var content = document.getElementById('quarto-document-content');
+    var titleWrap = document.querySelector('#title-block-header .quarto-title');
+    if (content && titleWrap) {
+      var el = content.firstElementChild;
+      while (el && el.tagName !== 'P' && el.tagName !== 'SECTION') el = el.nextElementSibling;
+      if (el && el.tagName === 'P') {
+        el.classList.add('ael-lede');
+        titleWrap.appendChild(el);
+      }
+    }
+  }
+
+  // 2) Append a "Need help with R?" box beneath the on-this-page TOC.
+  var toc = document.getElementById('TOC');
+  if (toc) {
+    var box = document.createElement('div');
+    box.className = 'ael-navhelp';
+    box.innerHTML =
+      '<div class="ael-navhelp-t">Need help with R?</div>' +
+      '<p class="ael-navhelp-p">Applied Epi offers live training, expert support, and a global community.</p>' +
+      '<a href="https://appliedepi.org/resources/tutorials.html">Free R tutorials &rarr;</a>' +
+      '<a href="https://appliedepi.org/training/training.html">Intro R course &rarr;</a>' +
+      '<a href="https://appliedepi.org/support/support.html">R Support Desk &rarr;</a>' +
+      '<a href="https://community.appliedepi.org/">Community forum &rarr;</a>';
+    toc.parentNode.insertBefore(box, toc.nextSibling);
+  }
+});
+</script>
