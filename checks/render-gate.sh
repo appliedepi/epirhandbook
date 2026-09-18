@@ -2,6 +2,14 @@
 # Phase G, the structural render gate: quarto render --no-execute on every translated chapter
 # that changed since <base>.
 # Usage: checks/render-gate.sh <base-commit> [head]
+#        checks/render-gate.sh --landing
+#
+# --landing is a second mode, and the only one that EXECUTES R. It renders every translated
+# language's index.qmd with execution, then runs rule 9 of checks/check-landing-strings.py
+# over the pages it produced. Rule 9 reads each hero and band slot and compares it against
+# landing.yml, so it needs a real hero, and --no-execute produces none. The mode needs the R
+# packages yaml and here, which utils/landing-hero.R loads. CI runs the same rule per language
+# in the render leg of .github/workflows/build-deploy.yml.
 #
 # A translated chapter is a file under content/<lang>/ whose language is not the main language
 # that languages.yml declares. Each one renders as a temporary copy beside the original,
@@ -24,8 +32,18 @@
 # fence with exit 0, so the render alone cannot see that class. YAML damage does exit 1.
 # The gate needs quarto and git. It runs no R: --no-execute skips the knitr engine.
 set -uo pipefail
+here_checks=$(cd "$(dirname "$0")" && pwd)
 cd "$(dirname "$0")/.."
-if [ $# -lt 1 ]; then echo "Usage: checks/render-gate.sh <base-commit> [head]" >&2; exit 2; fi
+if [ $# -lt 1 ]; then
+  echo "Usage: checks/render-gate.sh <base-commit> [head]" >&2
+  echo "       checks/render-gate.sh --landing" >&2
+  exit 2
+fi
+landing=no
+if [ "$1" = "--landing" ]; then
+  if [ $# -ne 1 ]; then echo "render-gate: --landing takes no other argument" >&2; exit 2; fi
+  landing=yes
+fi
 base="$1"; head="${2:-HEAD}"
 out=/tmp/render-gate; rm -rf "$out"; mkdir -p "$out"
 
@@ -41,6 +59,9 @@ for d in content/*/; do
   d="${d%/}"
   [ -e "$d/html_outputs" ] || absent+=("$d/html_outputs")
   [ -e "$d/.quarto" ] || absent+=("$d/.quarto")
+  # A render with execution also writes content/<lang>/.gitignore. Track it the same way,
+  # so a run leaves a language folder exactly as it found it.
+  [ -e "$d/.gitignore" ] || absent+=("$d/.gitignore")
 done
 
 cleanup() {
@@ -52,7 +73,8 @@ cleanup() {
 # The cleanup deletes every path that matches the temporary-copy pattern, and every build folder
 # it created. Refuse to run at all when the repository tracks one, rather than delete a tracked
 # file.
-tracked=$(git ls-files -- 'content/*/*.render-gate-tmp*' 'content/*/html_outputs/*' 'content/*/.quarto/*')
+tracked=$(git ls-files -- 'content/*/*.render-gate-tmp*' 'content/*/html_outputs/*' \
+  'content/*/.quarto/*' 'content/*/.gitignore')
 if [ -n "$tracked" ]; then
   echo "render-gate: the repository tracks a path this gate deletes; refusing to delete it:" >&2
   echo "$tracked" >&2
@@ -60,6 +82,33 @@ if [ -n "$tracked" ]; then
 fi
 trap cleanup EXIT
 cleanup
+
+if [ "$landing" = yes ]; then
+  mapfile -t codes < <(sed -n \
+    's/^[[:space:]]*-[[:space:]]*code:[[:space:]]*\([A-Za-z0-9_][A-Za-z0-9_]*\).*/\1/p' \
+    languages.yml)
+  if [ "${#codes[@]}" -eq 0 ]; then
+    echo "render-gate: languages.yml declares no language" >&2; exit 2
+  fi
+  rc=0
+  rendered=0
+  for c in "${codes[@]}"; do
+    [ "$c" = "$main" ] && continue
+    if ( cd "content/$c" && timeout 600 quarto render index.qmd --to html ) \
+        > "$out/landing.$c.log" 2>&1; then
+      rendered=$((rendered+1))
+    else
+      echo "render-gate: content/$c/index.qmd FAILED to render; last 20 lines:"
+      tail -20 "$out/landing.$c.log" | sed 's/^/   /'
+      rc=1
+    fi
+  done
+  echo "landing pages rendered: $rendered of $(( ${#codes[@]} - 1 )) translated languages"
+  # Rule 9 refuses to run when a page is absent. So a failed render above cannot hide behind
+  # a check that finds nothing to measure.
+  python3 "$here_checks/check-landing-strings.py" --slots || rc=1
+  exit $rc
+fi
 
 for c in "$base" "$head"; do
   if ! git cat-file -e "$c^{commit}" 2>/dev/null; then

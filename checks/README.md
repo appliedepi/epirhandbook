@@ -276,8 +276,9 @@ The gate stops with exit 2 in four cases.
 
 `check-sync.sh` runs check 9 itself, and it needs no base commit. It reads `languages.yml`, the
 eight `content/<lang>/_quarto.yaml` project files, `docker-images.yml` and the front matter of
-the 416 declared files. Regular expressions read every one of them, because the
-translation-sync runner carries no yaml module.
+the 416 declared files. Regular expressions read every one of them. That started because the
+translation-sync runner had no yaml module. The runner installs `python3-yaml` since
+2026-09-18, for check 15, so the reason here is now historical.
 
 It prints one summary line, and one `DRIFT` line for each finding:
 
@@ -487,3 +488,150 @@ a chapter back to an older image, and that is a real option.
 Expected output: `stale: 0`.
 
 Remedy: update the prose. If a version is genuinely live, declare it in one of the two files.
+
+## 15. The landing page gate
+
+`checks/check-landing-strings.py`. Every language must resolve a complete landing page: its
+strings, the theme that renders them, and the slot each string lands in.
+
+`landing.yml` is a second copy of the language list, and check 13 does not see it. Check 13
+covers `banner.html` alone. So a ninth language gets an English hero today, and no check
+reports it.
+
+The check needs PyYAML. `.github/workflows/translation-sync.yml` installs `python3-yaml`, and
+the render job of `.github/workflows/build-deploy.yml` already installed it. It reads four
+inputs:
+
+- `languages.yml`, for the code list
+- `landing.yml`, for the strings
+- `utils/landing-hero.R`, for the keys the hero reads
+- each `content/<code>/_quarto.yaml`, for the theme wiring
+
+Reading the key set from the consumer is what makes "complete" checkable. Rename a key in the
+hero, and English no longer declares it.
+
+Eight rules run by default:
+
+1. Every code `languages.yml` declares has a block in `landing.yml`.
+2. Every block in `landing.yml` names a code `languages.yml` declares.
+3. The `en` block declares every key `utils/landing-hero.R` reads, and gives none of them an
+   empty string. English is the fallback of last resort.
+4. Every key a translated block declares also exists under `en`. Every value is a string. A
+   declared `svc` list holds 3 cards, and every card carries `h`, `p`, `link` and `href`.
+5. No value is an empty string. Omit the key, and the value falls back to English.
+6. No translated value is byte-identical to the English value for that key.
+7. No two languages give one key the same value.
+8. Every `content/<code>/_quarto.yaml` names `../../ael-extras.html` under
+   `format.html.include-after-body`, and names both token layers and `../../theme-ael.scss`
+   under `format.html.theme.light` and `format.html.theme.dark`.
+
+Rule 7 is the pairwise rule, and rule 6 cannot replace it. Rule 6 compares each language against
+English alone, so a French block set to the Spanish values passes it byte for byte. That is a
+French page serving Spanish text, shipped clean.
+
+The `svc` clause of rule 4 is the one that reaches furthest. A translated `svc: []`, a
+shortened card list or a malformed field used to pass every rule here. Rule 9 then took the
+short translated list as the EXPECTED list, so the slot total fell and nothing failed. That is
+a check that cannot fail, inside the gate written to stop exactly that.
+
+Three blind spots of the same shape are closed with it. A value that is not a string is NAMED,
+so `btn_start: 3` is a failure rather than an omission. The card count is pinned at 3, never
+read from the English list. So a matched reduction of English and a translation cannot lower
+what rule 9 expects. Rule 3 checks the English values for emptiness, because rule 5 reads
+translated blocks alone.
+
+`yaml.safe_load` is what makes the type rule possible. The check carried a hand-written reader
+until 2026-09-18, and that reader returned the string `'3'` for both `btn_start: 3` and
+`btn_start: "3"`. On that path the type rule could not fire at all, so the reader went and
+`.github/workflows/translation-sync.yml` installs `python3-yaml` instead.
+
+Rule 8 is the theme wiring. `theme-ael.scss` hides the sidebar search box and the colour-scheme
+toggle from CSS, with no condition on it. `ael-extras.html` is what puts both back, in the top
+app bar. A language that does not include it ships with no search box and no dark-mode toggle,
+and the render reports nothing. Rule 8 names each required VALUE, never the key alone. On
+2026-09-18 every project file named `theme-dark.scss` on its own. So a `--brand` or `Spectral`
+probe stayed green while the language was un-wired from `theme-ael.scss`.
+
+Rule 8 reads the PATH, not the file. Quarto reads these three keys under `format.html` and
+nowhere else, so a value parked under `book:` satisfies a grep and changes nothing about the
+render. The check walks the indent structure of the project file and asks what path each key
+sits at.
+
+Rule 7 takes two exclusions, both measured on 2026-09-18 over 86 cross-language collisions. 84
+are service-card URLs, one string in every language by design. 2 are Spanish and Portuguese
+cognates, `capítulos` and `idiomas`, which the two languages spell identically. Each allowlist
+entry pins the key, the ordered pair `("es", "pt")` AND the exact value. Edit the Spanish string
+and the entry stops matching, so the check fires rather than exempting in silence. Rule 6 takes
+the URL exclusion and no other.
+
+Remedy for rules 1 to 7: edit `landing.yml`. Remedy for rule 8: restore the missing line in
+`content/<code>/_quarto.yaml`, copying it from a language the check reports as wired.
+
+Expected output:
+
+```
+languages declared: 8 (en fr es vn jp pt tr ru)
+project files wired to the theme and the app bar: 8 of 8
+keys the hero reads: 18, plus the svc cards (from utils/landing-hero.R)
+keys declared: 166 across the 7 translated blocks; 'en' declares 31
+against 'en': 21 values match it and are URLs, which the URL rule allows
+pairwise: 28 ordered language pairs; 84 URL values and 2 allowed cognates skipped
+problems: 0
+```
+
+With `--slots`, after a render, two more lines sit before `problems: 0`:
+
+```
+slots read: 168 across the 7 rendered page(s); 2 of them fall back to 'en'
+slots expected: 168, which is 7 page(s) x (12 scalar slots + 4 fields x 3 cards)
+slot mismatches: 0
+```
+
+### Rule 9, the transport rule
+
+Rule 9 reads a rendered page, so `check-sync.sh` does not run it. Run it locally with:
+
+```
+checks/render-gate.sh --landing
+```
+
+That mode renders every translated `index.qmd` with execution, runs rule 9 over the pages, and
+deletes every folder and file the render created. It takes about 20 seconds and it is the only
+mode of `render-gate.sh` that executes R. It needs the R packages `yaml` and `here`, which
+`utils/landing-hero.R` loads.
+
+Rule 9 reads 24 slots on each of the 7 translated pages, 168 in all, and compares each one
+against `landing.yml`. 166 of those values come from the language's own block. The other 2 fall
+back to English, because `es` and `pt` omit `stat_used_num`. Without this rule a value that
+never reaches its slot ships clean.
+
+**The total is an assertion, not a line of output.** Rule 9 computes it as pages x (12 scalar
+slots + 4 fields x 3 cards) and fails on any deviation, in either direction. The 3 is pinned in
+the check, never read from `landing.yml`, so the data cannot move the expectation. A printed
+number nobody compares is decoration, and a slot that goes unread lowers the total in silence.
+
+Rule 9 reads every slot with `findall`, never `search`, and requires exactly one occurrence.
+`search` stops at the first hit, so a second copy of a slot carrying the wrong value would pass
+while the total still matched. Upward drift has to fail the count as surely as downward drift.
+
+Two flags aim it elsewhere:
+
+- `--pages <template>` says where a rendered page is. `{code}` is the language code, and the
+  default is `content/{code}/html_outputs/index.html`.
+- `--only <code>` checks one language. It accepts the main language too, and the expected slot
+  total follows the selection.
+
+`--slots` refuses to run when a rendered page is absent, and it never skips. Check 12 covers
+that refusal with a second fixture, because the first one renders nothing.
+
+Remedy for rule 9: edit `landing.yml`. A slot mismatch with no `landing.yml` fault is a defect
+in `utils/landing-hero.R`, or in this check's own slot patterns.
+
+**CI runs rule 9 in the render leg of `.github/workflows/build-deploy.yml`,** one language per
+leg, after the render and before the artifact upload. The leg writes that language's site to
+the root of its output directory, so the step passes
+`--only "$LANG_CODE" --pages html_outputs/index.html`. The leg also renders with `--no-inject`,
+so nothing has re-serialised the page and the slot patterns read what Quarto wrote. A leg whose
+hero is broken fails before it uploads anything.
+`.github/workflows/translation-sync.yml` still runs rules 1 to 8 only. It renders no landing
+page, and its runner carries neither the `here` R package nor a language image.

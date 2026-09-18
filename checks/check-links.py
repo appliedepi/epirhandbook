@@ -2,7 +2,7 @@
 """Report every internal link in the declared chapters that pandoc leaves dead.
 
 The file set is `content/<lang>/<stem>.qmd` for every language in `languages.yml` and every
-stem in `content/en/_quarto.yaml`: 400 files. Pandoc renders each file to one standalone HTML
+stem in `content/en/_quarto.yaml`: 416 files. Pandoc renders each file to one standalone HTML
 page, and Python's `html.parser` reads that page once. The ids are the ones a browser sees:
 `id` on any element, and `name` on an `<a>` element. The links are the `href` of every `<a>`
 element.

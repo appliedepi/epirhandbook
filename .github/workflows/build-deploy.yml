@@ -255,6 +255,26 @@ jobs:
         run: |
           ./build_all.sh --only-lang "$LANG_CODE" --no-inject . "$PREFIX" html_outputs
 
+      # The landing-page transport gate, rule 9 of checks/check-landing-strings.py. It reads
+      # every hero and band slot out of the page this leg rendered and compares each one
+      # against landing.yml, the English fallback included. Without it a landing.yml value
+      # that never reaches its slot ships clean in eight language editions.
+      #
+      # It runs HERE, in the render leg, for three reasons:
+      #   --only-lang writes this language's site to the ROOT of the output dir, so the page
+      #     is html_outputs/index.html and --pages names it.
+      #   --no-inject means nothing re-serialised the page yet, so the slot patterns read
+      #     what Quarto wrote.
+      #   A leg that renders a broken hero fails before it uploads an artifact.
+      # The check reads landing.yml with yaml.safe_load. The "Install PyYAML" step of this
+      # same job already supplies it, so this step installs nothing.
+      - name: Check this language's landing page slots
+        env:
+          LANG_CODE: ${{ matrix.lang }}
+        run: |
+          python3 checks/check-landing-strings.py \
+            --slots --only "$LANG_CODE" --pages html_outputs/index.html
+
       - name: Upload this language's output
         uses: actions/upload-artifact@v4
         with:

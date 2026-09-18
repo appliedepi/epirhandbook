@@ -6,7 +6,7 @@ directories chapter and the importing chapter teach file paths, so a reader runs
 the repository's own `data/` folder. Those two may read `data/`. Nothing may write into it.
 
 The file set is `content/<lang>/<stem>.qmd` for every language in `languages.yml` and every
-stem in `content/en/_quarto.yaml`: 400 files.
+stem in `content/en/_quarto.yaml`: 416 files.
 
 A chunk executes when its fence options do not set `eval=F` or `eval=FALSE`. The checker strips
 the `#` comment from each line of such a chunk, then matches three lexical forms:

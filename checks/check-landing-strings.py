@@ -1,0 +1,562 @@
+#!/usr/bin/env python3
+"""The landing page gate: every language resolves its strings, its theme and its slots.
+
+`landing.yml` is a second copy of the language list, and nothing else measures it.
+`checks/check-language-copies.py` covers `banner.html` only. So a ninth language gets
+an English hero today, and no check reports it.
+
+Four inputs:
+
+  languages.yml               the one declaration of which languages ship
+  landing.yml                 one string block per language code
+  utils/landing-hero.R        the only consumer, which names every key it reads
+  content/<code>/_quarto.yaml the project file, one per declared language
+
+Eight static rules, in the default run:
+
+1. Every code `languages.yml` declares has a block in `landing.yml`.
+2. Every block in `landing.yml` names a code `languages.yml` declares.
+3. The `en` block declares every key `utils/landing-hero.R` reads. English is the
+   fallback of last resort, so a key absent there stops the render.
+4. Every key a translated block declares also exists under `en`.
+5. No value is an empty string. Omit the key instead, and the value falls back.
+6. No translated value is byte-identical to the English value for that key.
+7. No two languages give one key the same value.
+
+Rule 7 is the pairwise rule, and it walks all 28 ordered pairs of the 8 languages.
+Rule 6 compares each language against English alone. So rule 6 cannot see a language
+that carries a THIRD language's text. A French block set to the Spanish values passed
+rule 6 byte for byte. Rule 7 takes two exclusions, and both were measured on 2026-09-18.
+A service-card URL is one string in every language by design, and Spanish and
+Portuguese spell two of the stat labels identically. Rule 6 takes the URL exclusion
+for the same reason, and takes no other.
+
+Rule 8 is about the page rather than the strings:
+
+8. Every `content/<code>/_quarto.yaml` names `../../ael-extras.html` in
+   `include-after-body`, and names both token layers and `../../theme-ael.scss` in
+   `theme.light` and in `theme.dark`.
+
+`theme-ael.scss` hides the sidebar search box and the colour-scheme toggle from CSS,
+with no condition on it. `ael-extras.html` is what puts both back, in the top app bar.
+So a language that does not include it ships with no search box and no dark-mode
+toggle, and the render reports nothing.
+
+The ninth rule needs a rendered page, so `--slots` asks for it:
+
+9. Every hero and band slot on every translated page carries the value `landing.yml`
+   gives for that key, the English fallback included.
+
+Run `--slots` after `quarto render index.qmd --to html` in each language folder. It
+refuses to run when a rendered page is absent. A check that passes because it found no
+input reports a success it never measured.
+
+Usage: python3 checks/check-landing-strings.py [--summary] [--slots]
+Exit 0 when every rule holds, 1 on any problem.
+"""
+import itertools
+import pathlib
+import re
+import sys
+
+try:
+    import yaml
+except ImportError:
+    sys.exit("check-landing-strings.py: no PyYAML. This check reads landing.yml and "
+             "languages.yml with yaml.safe_load. Only a real YAML parser separates the string "
+             "\"3\" from the number 3, and rule 4 rejects a value that is not a string. "
+             "Install it with `sudo apt-get install -y python3-yaml`, or `pip install pyyaml`.")
+
+ARGS = sys.argv[1:]
+USAGE = ("Usage: check-landing-strings.py [--summary] [--slots] "
+         "[--pages <template>] [--only <code>]")
+TAKES_VALUE = ('--pages', '--only')
+opt = {}
+i = 0
+while i < len(ARGS):
+    a = ARGS[i]
+    if a in TAKES_VALUE:
+        if i + 1 >= len(ARGS):
+            sys.exit("%s needs a value. %s" % (a, USAGE))
+        opt[a] = ARGS[i + 1]
+        i += 2
+        continue
+    if a not in ('--summary', '--slots'):
+        sys.exit("unknown argument %s. %s" % (a, USAGE))
+    opt[a] = True
+    i += 1
+summary = '--summary' in opt
+want_slots = '--slots' in opt
+# Where a rendered landing page is. {code} is the language code. The render leg of
+# .github/workflows/build-deploy.yml renders one language to the root of its output
+# directory. It passes a template with no {code} and names the language with --only.
+PAGES = opt.get('--pages', 'content/{code}/html_outputs/index.html')
+ONLY = opt.get('--only')
+for a in TAKES_VALUE:
+    if a in opt and not want_slots:
+        sys.exit("%s only means something with --slots, and --slots is not set. %s" % (a, USAGE))
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+
+# The URL rule for the pairwise check. A service-card href is the same string in every
+# language, because it points at one page of appliedepi.org.
+URL = re.compile(r'^(https?://|mailto:)')
+
+# The cognate allowlist for the pairwise check. Spanish and Portuguese spell these two
+# words identically, so an identical value here is not a copy of one language by another.
+# Each entry pins the key, the exact ordered language pair AND the exact value. The pinned
+# value stops the entry masking any other string. Edit the Spanish word and the entry stops
+# matching, so the check fires again.
+COGNATES = {
+    ("stat_chapters_label", ("es", "pt"), "capítulos"),
+    ("stat_languages_label", ("es", "pt"), "idiomas"),
+}
+
+# The four fields of one service card, in the order utils/landing-hero.R writes them into
+# the markup. The slot rule reads the rendered card with these names.
+CARD = ('h', 'p', 'href', 'link')
+
+# The number of service cards the band writes on every page. utils/landing-hero.R writes one
+# card per entry of the svc list. Pinning the number here is what holds the expected slot
+# total still. A total derived from the English list would move with the data. A MATCHED
+# reduction of English and a translation would lower the expectation, and the run would then
+# pass on fewer slots.
+# Add a fourth card to landing.yml and this constant is the one place that changes.
+CARDS = 3
+
+# The theme wiring every content/<code>/_quarto.yaml must carry. Each entry is a dotted key
+# path in that file, the values the path must hold, and what a reader loses without them.
+# theme-ael.scss hides the sidebar search box and the colour-scheme toggle with
+# `display: none !important`, from CSS and with no condition on it. ael-extras.html is the
+# file that puts both back, in the top app bar.
+#
+# The path is the point. Quarto reads these keys under format.html and nowhere else. A value
+# parked under book:, or under a stray top-level key, satisfies a grep of the file and
+# changes nothing. Name the VALUE too, never the key alone. On 2026-09-18
+# every project file named theme-dark.scss on its own. So a `--brand` or `Spectral` probe
+# stayed green while the language was un-wired from theme-ael.scss.
+WIRING = (
+    ('format.html.include-after-body', ['../../ael-extras.html'],
+     'so this language ships with no search box and no colour-scheme toggle'),
+    ('format.html.theme.light', ['../../theme-light.scss', '../../theme-ael.scss'],
+     'so this language renders light mode without that layer'),
+    ('format.html.theme.dark', ['../../theme-dark.scss', '../../theme-ael.scss'],
+     'so this language renders dark mode without that layer'),
+)
+
+
+def flat(block, code, problems):
+    """Every string one block declares, with `svc` flattened to `svc[i].field`.
+
+    A value of any other type is a NAMED failure here, never a silent omission. The hero
+    writes each of these into the page as text, so `btn_start: []` reaches the reader as a
+    rendering of an empty list. A reader that drops such a value hides it from rules 4 to 7,
+    and the gate's blind spot is whatever it declines to look at.
+    """
+    out = {}
+    for k, v in sorted((block or {}).items()):
+        if k == 'svc':
+            if not isinstance(v, list):
+                continue            # the svc rules below name a malformed svc
+            for i, card in enumerate(v, 1):
+                if not isinstance(card, dict):
+                    problems.append("%s: svc card %d is %r, and the hero reads four named "
+                                    "fields from each card" % (code, i, card))
+                    continue
+                for field, s in sorted(card.items()):
+                    if isinstance(s, str):
+                        out['svc[%d].%s' % (i, field)] = s
+                    else:
+                        problems.append("%s: key 'svc[%d].%s' is %r, and the hero writes that "
+                                        "field into the page as text" % (code, i, field, s))
+            continue
+        if isinstance(v, str):
+            out[k] = v
+        else:
+            problems.append("%s: key '%s' is %r, and the hero writes that value into the page "
+                            "as text" % (code, k, v))
+    return out
+
+
+def check_cards(code, cards, problems):
+    """One block's svc list, against the pinned shape: CARDS cards, each carrying CARD."""
+    if len(cards) != CARDS:
+        problems.append("%s: svc declares %d cards, and the band writes %d on every page"
+                        % (code, len(cards), CARDS))
+    for i, card in enumerate(cards, 1):
+        if not isinstance(card, dict):
+            continue                # flat() names it
+        if set(card) != set(CARD):
+            problems.append("%s: svc card %d declares the fields %s, and the hero reads %s"
+                            % (code, i, sorted(card), sorted(CARD)))
+        for field in CARD:
+            v = card.get(field)
+            if isinstance(v, str) and not v.strip():
+                problems.append("%s: svc card %d gives '%s' an empty string, and the hero "
+                                "writes that field into the page" % (code, i, field))
+
+
+def project_paths(text):
+    """Every mapping key of a Quarto project file, as a dotted path to the list it holds.
+
+    A grep cannot answer the question rule 8 asks. `include-after-body` under `book:`
+    satisfies a grep of the file, and Quarto ignores it. So the reader walks the indent
+    structure and records the path each key sits at.
+
+    A block scalar (`left: |`) holds prose, not structure, so its body is skipped whole.
+    A value is returned as a list in every case: a flow sequence gives its items, a plain
+    scalar gives a one-item list, and a block sequence gives its items.
+    """
+    lines = text.split('\n')
+    out, stack, i = {}, [], 0
+    while i < len(lines):
+        raw = lines[i]
+        i += 1
+        if not raw.strip() or raw.lstrip().startswith('#'):
+            continue
+        indent = len(raw) - len(raw.lstrip(' '))
+        body = raw.strip()
+        if body.startswith('- '):
+            continue
+        m = re.match(r'^([A-Za-z0-9_.-]+):[ \t]*(.*)$', body)
+        if not m:
+            continue
+        key, rest = m.group(1), m.group(2).strip()
+        while stack and stack[-1][0] >= indent:
+            stack.pop()
+        path = '.'.join([k for _, k in stack] + [key])
+        stack.append((indent, key))
+        if rest in ('|', '>', '|-', '>-', '|+', '>+'):
+            while i < len(lines) and (not lines[i].strip()
+                                      or len(lines[i]) - len(lines[i].lstrip(' ')) > indent):
+                i += 1
+            out[path] = []
+            continue
+        if rest.startswith('[') and rest.endswith(']'):
+            out[path] = [x.strip().strip('"\'') for x in rest[1:-1].split(',') if x.strip()]
+            continue
+        if rest:
+            out[path] = [rest.strip('"\'')]
+            continue
+        items, j = [], i
+        while j < len(lines):
+            line = lines[j]
+            if not line.strip() or line.lstrip().startswith('#'):
+                j += 1
+                continue
+            if len(line) - len(line.lstrip(' ')) <= indent:
+                break
+            one = re.match(r'^\s*-[ \t]+(.*)$', line)
+            if not one:
+                break
+            items.append(one.group(1).strip().strip('"\''))
+            j += 1
+        out[path] = items
+    return out
+
+
+def need(path, why):
+    """Stop with one sentence when a required input is absent."""
+    if not path.is_file():
+        sys.exit("check-landing-strings.py: no %s. %s" % (path, why))
+    return path
+
+
+need(ROOT / 'languages.yml',
+     "That file is the one declaration of which languages ship, and this check needs the "
+     "code list to know which landing blocks to expect.")
+need(ROOT / 'landing.yml',
+     "That file holds every string the landing hero and the nonprofit band show.")
+need(ROOT / 'utils' / 'landing-hero.R',
+     "That file is the only consumer of landing.yml, and it names every key the hero reads.")
+
+try:
+    langs_doc = yaml.safe_load((ROOT / 'languages.yml').read_text(encoding='utf-8'))
+    landing = yaml.safe_load((ROOT / 'landing.yml').read_text(encoding='utf-8'))
+except yaml.YAMLError as e:
+    sys.exit("check-landing-strings.py: %s does not parse as YAML: %s"
+             % (ROOT / 'landing.yml', str(e).replace('\n', ' ')))
+for path, doc in ((ROOT / 'languages.yml', langs_doc), (ROOT / 'landing.yml', landing)):
+    if not isinstance(doc, dict):
+        sys.exit("check-landing-strings.py: %s is not a mapping at its top level. This check "
+                 "reads it by key, so it cannot measure a file of another shape." % path)
+
+entries = langs_doc.get('languages') or []
+codes = [e.get('code') for e in entries if isinstance(e, dict) and e.get('code')]
+main = langs_doc.get('main')
+if not codes:
+    sys.exit("check-landing-strings.py: %s declares no language. An empty code list would "
+             "match an empty landing.yml and report agreement." % (ROOT / 'languages.yml'))
+if main not in codes:
+    sys.exit("check-landing-strings.py: %s declares main: %r, which is not one of its own "
+             "codes. The fallback language must be one that ships."
+             % (ROOT / 'languages.yml', main))
+
+hero_text = (ROOT / 'utils' / 'landing-hero.R').read_text(encoding='utf-8')
+required = sorted(set(re.findall(r's\("([A-Za-z0-9_]+)"\)', hero_text)))
+if not required:
+    sys.exit("check-landing-strings.py: %s names no s(\"key\") call, so this check cannot "
+             "tell which keys the hero reads. Read the file, then repair the check or the "
+             "hero." % (ROOT / 'utils' / 'landing-hero.R'))
+
+problems = []
+translated = [c for c in codes if c != main]
+en = landing.get(main) or {}
+# One flattening per declared block. flat() NAMES a malformed value, so flattening the same
+# block twice would report the same fault twice.
+F = {c: flat(landing.get(c), c, problems) for c in codes}
+en_flat = F[main]
+
+# Rule 1 and rule 2: the code list and the block list are the same set.
+for c in codes:
+    if not isinstance(landing.get(c), dict):
+        problems.append("languages.yml declares '%s', landing.yml has no block for it, so that "
+                        "landing page is English with nothing to report it" % c)
+for k in landing:
+    if k not in codes:
+        problems.append("landing.yml carries a block '%s', languages.yml declares no such code" % k)
+
+# Rule 3: English is the fallback of last resort, so it declares every key the hero reads.
+for k in required:
+    if k not in en_flat:
+        problems.append("the '%s' block declares no '%s', and the hero reads that key on every "
+                        "page, so the render stops" % (main, k))
+en_cards = en.get('svc')
+if not isinstance(en_cards, list) or not en_cards:
+    problems.append("the '%s' block declares no svc list, and the hero reads one on every page"
+                    % main)
+    en_cards = []
+else:
+    check_cards(main, en_cards, problems)
+
+# Rule 3b: no English value is an empty string. English is the fallback of last resort, so an
+# empty value there reaches every page that does not declare the key. That is worse than an
+# empty value in one language, and rule 5 alone cannot see it.
+for k, v in sorted(en_flat.items()):
+    if not v.strip():
+        problems.append("the '%s' block: key '%s' is an empty string, and it is the fallback of "
+                        "last resort, so every page that omits the key shows nothing"
+                        % (main, k))
+
+# Rules 4, 5 and 6, over every translated block.
+keys_declared, en_urls = 0, 0
+for c in translated:
+    blk = landing.get(c)
+    if not isinstance(blk, dict):
+        continue
+    keys_declared += len(F[c])
+    for k, v in sorted(F[c].items()):
+        if k not in en_flat:
+            problems.append("%s: key '%s' is not declared under '%s', so nothing can fall back "
+                            "to it" % (c, k, main))
+        if not v.strip():
+            problems.append("%s: key '%s' is an empty string. Omit the key, and it falls back "
+                            "to '%s'" % (c, k, main))
+        elif k in en_flat and v.strip() == en_flat[k].strip():
+            if URL.match(v):
+                en_urls += 1
+            else:
+                problems.append("%s: key '%s' is byte-identical to '%s'. Omit it, or translate it"
+                                % (c, k, main))
+    # Rules 4b, 4c and 4d. A translated `svc: []`, a shortened card list or a malformed
+    # field used to pass every rule here. Rule 9 then took the short list as the expected
+    # one, so the slot total fell and nothing failed.
+    cards = blk.get('svc')
+    if cards is None:
+        pass                        # the key is absent, so the hero falls back to English
+    elif not isinstance(cards, list) or not cards:
+        problems.append("%s: svc is %r. Omit the key to fall back to '%s', because an empty "
+                        "list renders a band with no service cards" % (c, cards, main))
+    else:
+        check_cards(c, cards, problems)
+
+# Rule 7: pairwise distinctness across every ordered pair of declared languages.
+pairs = list(itertools.combinations(codes, 2))
+urls, cognates = 0, 0
+for a, b in pairs:
+    for k in sorted(set(F[a]) & set(F[b])):
+        if F[a][k] != F[b][k]:
+            continue
+        v = F[a][k]
+        if URL.match(v):
+            urls += 1
+            continue
+        if (k, (a, b), v) in COGNATES:
+            cognates += 1
+            continue
+        problems.append("%s and %s both give key '%s' the same value, so one page carries the "
+                        "other language's text: %r" % (a, b, k, v[:80]))
+
+# Rule 8: every language's project file names the theme layers and the app bar.
+gone = [c for c in codes if not (ROOT / 'content' / c / '_quarto.yaml').is_file()]
+if gone:
+    sys.exit("check-landing-strings.py: no %s. languages.yml declares that code, and rule 8 "
+             "reads each project file for the theme wiring. Without the file this check "
+             "measures no wiring, and it will not report a pass it did not measure."
+             % ', no '.join('content/%s/_quarto.yaml' % c for c in gone))
+wired = 0
+for c in codes:
+    project = ROOT / 'content' / c / '_quarto.yaml'
+    paths = project_paths(project.read_text(encoding='utf-8'))
+    faults = 0
+    if 'format.html' not in paths:
+        faults += 1
+        problems.append("%s: content/%s/_quarto.yaml declares no format.html block, and Quarto "
+                        "reads the theme and the app bar from there alone" % (c, c))
+    for key, want, cost in WIRING:
+        got = paths.get(key)
+        for value in want:
+            if got is None or value not in got:
+                faults += 1
+                problems.append("%s: content/%s/_quarto.yaml does not name %s under %s, %s"
+                                % (c, c, value, key, cost))
+    if not faults:
+        wired += 1
+
+print("languages declared: %d (%s)" % (len(codes), ' '.join(codes)))
+print("project files wired to the theme and the app bar: %d of %d" % (wired, len(codes)))
+print("keys the hero reads: %d, plus the svc cards (from utils/landing-hero.R)" % len(required))
+print("keys declared: %d across the %d translated blocks; '%s' declares %d"
+      % (keys_declared, len(translated), main, len(en_flat)))
+print("against '%s': %d values match it and are URLs, which the URL rule allows" % (main, en_urls))
+print("pairwise: %d ordered language pairs; %d URL values and %d allowed cognates skipped"
+      % (len(pairs), urls, cognates))
+
+# Rule 9: the transport rule. It reads a rendered page, so it runs only on request.
+#
+# The 12 scalar slots the hero and the band carry, one value each. The expected slot total is
+# derived from the count of this tuple and the count of CARD. So a slot added to the markup
+# must be added here, or the total stops matching.
+SCALAR_SLOTS = ('eyebrow', 'subtitle', 'search_placeholder', 'search_label',
+                'btn_start', 'btn_offline', 'stat_used_num', 'stat_used_label',
+                'stat_chapters_label', 'stat_languages_label', 'np_lead', 'np_trust')
+
+if want_slots:
+    if ONLY is not None and ONLY not in codes:
+        sys.exit("check-landing-strings.py --only %s: languages.yml declares no such code. It "
+                 "declares %s." % (ONLY, ' '.join(codes)))
+    selected = [ONLY] if ONLY else translated
+    if '{code}' not in PAGES and len(selected) > 1:
+        sys.exit("check-landing-strings.py --pages %s: the template holds no {code}, so every "
+                 "language would read one file. Add {code}, or name one language with --only."
+                 % PAGES)
+
+    def page(c):
+        return ROOT / PAGES.format(code=c)
+
+    absent = [PAGES.format(code=c) for c in selected if not page(c).is_file()]
+    if absent:
+        sys.exit("check-landing-strings.py --slots: no %s. Render each language first, with "
+                 "`cd content/<code> && quarto render index.qmd --to html`. This mode measures "
+                 "nothing without a rendered page, and it will not report success it did not "
+                 "measure." % ', no '.join(absent))
+
+    ONE = {
+        'eyebrow': r'<div class="ael-eyebrow">(.*?)</div>',
+        'subtitle': r'<p class="ael-hsub">(.*?)</p>',
+        'btn_start': r'<a class="btn light" href="[^"]*">(.*?)</a>',
+        'btn_offline': r'<a class="btn out" href="[^"]*">(.*?)</a>',
+        'np_lead': r'<p class="nplead">(.*?)</p>',
+        'np_trust': r'<div class="nptrust">(.*?)</div>\s*<div class="svcs">',
+    }
+    CARD_RE = (r'<div class="svc"><div class="svch">(.*?)</div><p class="svcp">(.*?)</p>'
+               r'<a class="svclink" href="([^"]*)">(.*?)</a></div>')
+
+    slots_read, fallbacks, mismatches = 0, 0, []
+    for c in selected:
+        text = page(c).read_text(encoding='utf-8')
+        blk = landing.get(c) or {}
+        got = {}
+        # findall, never search. search reads the FIRST occurrence and stops, so a second
+        # copy of a slot carrying the wrong value passes while the total still matches.
+        # Upward drift has to fail the count as surely as downward drift does.
+        for k, pattern in ONE.items():
+            hits = re.findall(pattern, text, re.S)
+            if not hits:
+                mismatches.append("%s: the rendered page carries no '%s' slot at all" % (c, k))
+            elif len(hits) > 1:
+                mismatches.append("%s: the rendered page carries %d '%s' slots, and the hero "
+                                  "writes one" % (c, len(hits), k))
+            else:
+                got[k] = hits[0]
+        pair = re.findall(r'<input id="ael-hsearch-input".*?placeholder="(.*?)" aria-label="(.*?)">',
+                          text, re.S)
+        if not pair:
+            mismatches.append("%s: the rendered page carries no hero search box" % c)
+        elif len(pair) > 1:
+            mismatches.append("%s: the rendered page carries %d hero search boxes, and the hero "
+                              "writes one" % (c, len(pair)))
+        else:
+            got['search_placeholder'], got['search_label'] = pair[0]
+        nums = re.findall(r'<div class="statnum">(.*?)</div>', text, re.S)
+        labels = re.findall(r'<div class="statlbl">(.*?)</div>', text, re.S)
+        if len(nums) != 3 or len(labels) != 3:
+            mismatches.append("%s: the rendered page carries %d stat numbers and %d stat labels, "
+                              "and the hero writes 3 of each" % (c, len(nums), len(labels)))
+        else:
+            got['stat_used_num'] = nums[0]
+            got['stat_used_label'], got['stat_chapters_label'], got['stat_languages_label'] = labels
+
+        brand = blk.get('np_brand', en_flat.get('np_brand', ''))
+        for k in SCALAR_SLOTS:
+            if k not in got:
+                continue            # the mismatch list already names the slot it could not read
+            want = blk[k] if k in blk else en_flat.get(k)
+            if k not in blk:
+                fallbacks += 1
+            if k == 'np_lead' and want is not None:
+                want = want.replace('{brand}', '<span class="brandname">%s</span>' % brand)
+            slots_read += 1
+            if want is None:
+                mismatches.append("%s: the rendered page shows a '%s' slot that neither '%s' nor "
+                                  "'%s' declares" % (c, k, c, main))
+            elif got[k] != want:
+                mismatches.append("%s: key '%s'\n     got  %r\n     want %r" % (c, k, got[k], want))
+
+        cards = re.findall(CARD_RE, text, re.S)
+        own = blk.get('svc') if isinstance(blk.get('svc'), list) else None
+        wanted = own if own is not None else (en_cards or [])
+        # CARDS is the authority on how many cards a page carries. A comparison against a
+        # SHORT translated list would accept the loss that list caused. A comparison against
+        # the English list would accept a matched reduction of both.
+        if len(cards) != CARDS:
+            mismatches.append("%s: the rendered page shows %d service cards, and the band "
+                              "writes %d" % (c, len(cards), CARDS))
+        if len(wanted) != CARDS:
+            mismatches.append("%s: landing.yml gives %d service cards for this page, and the "
+                              "band writes %d" % (c, len(wanted), CARDS))
+        for i, (card, wcard) in enumerate(zip(cards, wanted), 1):
+            for value, f in zip(card, CARD):
+                slots_read += 1
+                if own is None:
+                    fallbacks += 1
+                if value != (wcard.get(f) if isinstance(wcard, dict) else None):
+                    mismatches.append("%s: key 'svc[%d].%s'\n     got  %r\n     want %r"
+                                      % (c, i, f, value,
+                                         wcard.get(f) if isinstance(wcard, dict) else None))
+
+    # The count is an ASSERTION, not a print. A printed number nobody compares is decoration,
+    # and a slot that goes unread lowers the total in silence. CARDS pins the per-page figure,
+    # so a matched reduction of the English list and a translated list cannot lower it.
+    per_page = len(SCALAR_SLOTS) + len(CARD) * CARDS
+    expected = len(selected) * per_page
+    print("slots read: %d across the %d rendered page(s); %d of them fall back to '%s'"
+          % (slots_read, len(selected), fallbacks, main))
+    print("slots expected: %d, which is %d page(s) x (%d scalar slots + %d fields x %d cards)"
+          % (expected, len(selected), len(SCALAR_SLOTS), len(CARD), CARDS))
+    if slots_read != expected:
+        mismatches.append("rule 9 read %d slots and expected %d. The expectation is pinned, so "
+                          "the data cannot move it. A total below it means a slot went unread, "
+                          "and a check that reads nothing reports nothing."
+                          % (slots_read, expected))
+    print("slot mismatches: %d" % len(mismatches))
+    problems.extend(mismatches)
+else:
+    print("slots read: 0. This run does not measure transport. Render each language, then "
+          "add --slots.")
+
+print("problems: %d" % len(problems))
+if problems and not summary:
+    for p in problems:
+        print(p)
+sys.exit(1 if problems else 0)

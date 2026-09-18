@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Read-only: report how far the translated chapters have drifted from the English.
 # Runs every structural check the 2026-09 fix pass used. Changes nothing. Exit 1 on any drift.
-# Usage: checks/check-sync.sh                 (checks 1, 2, 3, 4, 5, 7, 9, 10, 11, 12, 13 and 14; about two minutes)
+# Usage: checks/check-sync.sh                 (checks 1, 2, 3, 4, 5, 7, 9, 10, 11, 12, 13, 14 and 15; about two minutes)
 #        checks/check-sync.sh --base <sha>    (also checks 6 and 8, over the files changed since <sha>)
 #        checks/check-sync.sh --render        (also checks 6 and 8, over the whole tree, ~20 min)
 # Checks 6 and 8 are the render gate and the chunk parse gate. Both need a base commit. Without
@@ -114,7 +114,7 @@ for lang in langs:
             if not (s2 in es or s2 in te or s2.strip('r ').strip() in te): per[lang] += 1
 print('   suspect spans by language:', dict(sorted(per.items())), 'total', sum(per.values()), '(baseline 2026-09-17: 357, all judged placeholders or noise. Was 356 from 2026-09-02; the extra one is es/transition_to_r.qmd, where bare R code was wrapped in backticks to stop two dollars pairing as TeX maths)')
 PY
-echo "== 5. Internal links: every internal link in the 400 declared chapter files"
+echo "== 5. Internal links: every internal link in the 416 declared chapter files"
 python3 "$here/check-links.py" --summary | sed 's/^/   /' \
   || { python3 "$here/check-links.py" | sed 's/^/   /'; rc=1; }
 echo "== 7. Data folder: R chunks that execute and name the repository's data/ folder"
@@ -125,8 +125,10 @@ python3 - <<'LAYOUT' || rc=1
 """Report every way the language folders drift from the layout the repository declares.
 
 `languages.yml` is the language list. `content/<main>/_quarto.yaml` is the reference project
-file, and its flattened chapter list is the stem list. Regular expressions read both, because
-the translation-sync runner carries no yaml module.
+file, and its flattened chapter list is the stem list. Regular expressions read both. That
+started because the translation-sync runner had no yaml module. The runner installs
+python3-yaml since 2026-09-18, for check 15, so this code could now use yaml.safe_load. It
+does not yet, and the regexes are proven, so the reason here is historical.
 """
 import glob, os, re, sys
 
@@ -208,7 +210,7 @@ if not os.path.exists('languages.yml'):
 
 y = open('languages.yml', encoding='utf-8').read()
 main = re.search(r'^main:\s*([A-Za-z0-9_]+)', y, re.M).group(1)
-codes, titles, cur = [], {}, None
+codes, titles, tags, cur = [], {}, {}, None
 for line in y.split('\n'):
     if re.match(r'^\s*#', line):
         continue
@@ -216,6 +218,12 @@ for line in y.split('\n'):
     if m:
         cur = m.group(1)
         codes.append(cur)
+        continue
+    # The BCP-47 tag this language declares. It is not the folder code for two of the
+    # eight: content/jp/ is Japanese, tag ja, and content/vn/ is Vietnamese, tag vi.
+    m = re.match(r'^\s+lang:\s*([A-Za-z0-9-]+)\s*$', line)
+    if m and cur:
+        tags[cur] = m.group(1)
         continue
     m = re.match(r'^\s+title:\s*(.*)$', line)
     if m and cur:
@@ -251,8 +259,9 @@ for c in codes:
         drift(f, 'chapter list differs from content/%s/_quarto.yaml' % main)
     if ref_parts is not None and parts != ref_parts:
         drift(f, 'part count %d, content/%s/_quarto.yaml has %d' % (parts, main, ref_parts))
-    if lang != c:
-        drift(f, 'lang %s, folder %s' % (lang or '(none)', c))
+    if lang != tags.get(c, ''):
+        drift(f, 'lang %s, languages.yml declares the tag %s'
+              % (lang or '(none)', tags.get(c) or '(none)'))
     if title != titles.get(c, ''):
         drift(f, 'book.title %s, languages.yml says %s'
               % (title or '(none)', titles.get(c, '(none)')))
@@ -335,6 +344,9 @@ python3 "$here/check-image-names.py" --summary | sed 's/^/   /' \
 echo "== 13. Language copies: every second copy of the language list agrees with languages.yml"
 python3 "$here/check-language-copies.py" --summary | sed 's/^/   /' \
   || { python3 "$here/check-language-copies.py" | sed 's/^/   /'; rc=1; }
+echo "== 15. Landing page: every hero string resolves and is distinct, every language is wired"
+python3 "$here/check-landing-strings.py" --summary | sed 's/^/   /' \
+  || { python3 "$here/check-landing-strings.py" | sed 's/^/   /'; rc=1; }
 echo "== 14. Image versions in prose: every 2.<n> the docs name is one the repository uses"
 python3 "$here/check-image-version-refs.py" --summary | sed 's/^/   /' \
   || { python3 "$here/check-image-version-refs.py" | sed 's/^/   /'; rc=1; }

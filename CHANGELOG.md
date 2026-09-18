@@ -8,6 +8,137 @@ of it, and that is expected of a changelog. Read it as a record, never as curren
 
 ---
 
+## 2026-09-18: the Applied Epi theme, the translated heroes, and the gate that holds them
+
+The Applied Epi redesign, ported from the unshipped `richard` branch at `ebc8b272` onto the
+per-language layout. The landing page itself has its own entry below, "the landing page becomes
+a hero, and the Welcome page splits in three". This entry covers the theme under it, the
+translations in it, and the gate that now holds both.
+
+### The theme foundation
+
+`theme-ael.scss` is the design system. `theme-light.scss` and `theme-dark.scss` are its two
+token layers, and `ael-extras.html` is the top app bar. All eight `content/<lang>/_quarto.yaml`
+name them.
+
+Seven changes to the branch version, each deliberate:
+
+- The app bar hosts the REAL language switcher. The branch hardcoded an "EN" span.
+  `inject_language_links.R` already builds a complete switcher from `languages.yml`, so
+  `ael-extras.html` moves `#languages-links-parent` into the app bar instead.
+- `--on-brand` replaces a hardcoded `#fff` on `.btn-primary`. Over the dark mode's `--brand` it
+  measured about 2.4:1, which fails WCAG AA, on the switcher's own button.
+- CJK and Cyrillic fallbacks went onto all three font stacks. Japanese fell through Spectral to
+  Georgia to the generic serif.
+- `text-transform: uppercase` sits behind a `:lang()` gate. On kana and kanji the transform does
+  nothing, while the letter-spacing still fires and loosens the line.
+- The 58px gutter became `--ael-gutter-n`, at five sites.
+- The branch's "by Applied Epi" rule is gone. `theme-ael.scss` now carries no CSS `content:`
+  rule with English text in it.
+- `banner.html` keeps its body and gains the font links. The branch version re-added a
+  `gtag('config')` call, which would double-count every pageview.
+
+`theme-dark.scss` keeps four rules from the file it replaced. An unterminated block comment at
+line 30 of that file meant only its lines 2 to 27 were ever live. Those four rules cover 180
+inline-black spans across 100 chapter files, 263 darkgreen spans across 136 chapter files, 78
+flextable files and 296 DT files. Without them that text is invisible on the dark background.
+
+### The seven translated heroes
+
+`landing.yml` now carries a populated block for each of the seven translation languages. Those
+seven blocks declare 166 keys. 26 of them are harvested from the pre-plan Welcome pages at
+`a5b7317d`, so they carry the handbook's own translators' words. 119 were written for this port
+and NEED NATIVE REVIEW. The other 21 are service-card URLs, one string in every language by
+design.
+
+### The new gate: check 15
+
+`checks/check-landing-strings.py` is new, and `check-sync.sh` runs it as check 15. Nothing
+measured `landing.yml` before it, so a ninth language would have got an English hero with no
+check to report it. It holds eight static rules and one transport rule, and `checks/README.md`
+lists all nine.
+
+The pairwise rule is the one that earns its place. A comparison against English alone cannot
+see a language that carries a THIRD language's text. A French block set to the Spanish values
+passed that comparison byte for byte. The pairwise rule walks all 28 ordered pairs of the 8
+languages. It takes two exclusions, both measured over the 86 cross-language collisions in
+the tree. 84 of those collisions are service-card URLs. The other 2 are Spanish and Portuguese
+cognates, which the two languages spell identically. Each cognate entry pins the key, the
+ordered pair and the exact value, so an edit to the Spanish string makes the check fire again.
+
+Rule 8 is the theme wiring, and it is not about strings at all. `theme-ael.scss` hides the
+sidebar search box and the colour-scheme toggle from CSS, with no condition on it.
+`ael-extras.html` puts both back, in the top app bar. So a language that does not include it
+ships with no search box and no dark-mode toggle, and the render reports nothing. The rule names
+each required VALUE, never the key alone. All eight project files name `theme-dark.scss` on
+their own, and `--brand` is defined in the two token layers and nowhere else. So a `--brand` or
+`Spectral` probe stays green while a language is un-wired from `theme-ael.scss`.
+
+Rule 8 reads the PATH, not the file. Quarto reads those three keys under `format.html` and
+nowhere else, so a value parked under `book:` satisfies a grep and changes nothing. The rule
+walks the indent structure of the project file and asks what path each key sits at.
+
+The transport rule, `--slots`, reads 24 slots on each of the 7 rendered translated pages, 168
+in all. Each slot must carry the value `landing.yml` gives for that key, the English fallback
+included. Without it a value that never reaches its slot ships clean.
+
+That total is an assertion, not a line of output. The rule computes it as pages x (12 scalar
+slots + 4 fields x 3 cards) and fails on any deviation. The 3 is pinned in the check and never
+read from `landing.yml`, so the data cannot move the expectation. The rule reads each slot with
+`findall` and requires exactly one occurrence, so a duplicate slot fails the count too.
+
+Check 15 reads `landing.yml` with `yaml.safe_load`, and
+`.github/workflows/translation-sync.yml` installs `python3-yaml` for it. It carried a
+hand-written reader first, so that the job needed no new package. That reader returned the
+string `'3'` for both `btn_start: 3` and `btn_start: "3"`. The rule that rejects a value which
+is not a string could never fire on the path CI uses. A dependency is the smaller cost.
+
+The `svc` clause of rule 4 closes the same hole from the other side. A translated `svc: []` or
+a shortened card list used to pass every static rule. The transport rule then took the short
+list as the expected one. Two blind spots of the same shape went with it. A value that is not a
+string is now a named failure rather than a silent omission. Rule 3 checks the English values
+for emptiness, because rule 5 reads translated blocks alone.
+
+The render leg of `.github/workflows/build-deploy.yml` runs the transport rule, one language per
+leg, after the render and before the artifact upload. `checks/render-gate.sh --landing` is the
+local equivalent: it renders every translated `index.qmd` with execution, runs the rule, and
+deletes every folder and file the render created. The rule refuses to run when a page is absent,
+so a failed render cannot hide behind a check that measures nothing.
+
+### The invalid language tags
+
+`content/jp/_quarto.yaml` declared `lang: jp` and `content/vn/_quarto.yaml` declared `lang: vn`.
+Neither is a valid ISO 639 tag. Japanese is `ja` and Vietnamese is `vi`.
+
+Quarto ships `_language-ja.yml` and no `_language-jp.yml`, so the Japanese book served an
+English interface. Every render logged `Could not load translations for jp`, and nothing read
+that log. The corrected tag supplies the contents title, the search labels and buttons, and the
+back-to-top label. It reaches the cookie-consent banner too. That banner's config carried
+`"language":"jp"` and now carries `"language":"ja"`, and Quarto's `cookie-consent.js` holds a
+`ja` catalogue and no `jp` one. `_language-ja.yml` leaves `search-text-placeholder` empty, so
+the search placeholder is not one of them. The tag also reached the page as `<html lang="jp">`,
+which is wrong for a screen reader, for a browser translation offer and for CSS `:lang()`.
+
+There is no `_language-vi.yml`, so Vietnamese keeps an English interface either way. The correct
+tag still buys it `<html lang="vi">`.
+
+The reason the tags were wrong is that the gate enforced them being wrong. Check 9 of
+`check-sync.sh` compared the `lang:` key against the FOLDER NAME. `languages.yml` now declares a
+`lang:` per entry, and check 9 compares against that. Before, the gate asserted something false
+for two of the eight languages. After, it asserts something checkable and true. The folder, the
+site path and all 416 aliases keep the `jp` and `vn` spelling, and none of them moved.
+
+`content/jp/_quarto.yaml` also lost its `toc-title: "Table of contents"`. `_language-ja.yml`
+supplies 目次, and an explicit English string would override it. The `:lang()` gate in
+`theme-ael.scss` now lists `ja` and `vi`, and no longer lists `jp` and `vn`.
+
+### Three stale counts
+
+`check-sync.sh`, `check-links.py` and `check-data-reads.py` each said the declared file set is
+400 files. It became 416 when `about.qmd` and `acknowledgements.qmd` split off the landing page.
+
+---
+
 ## 2026-09-18: the landing page becomes a hero, and the Welcome page splits in three
 
 Phase 2 of the Applied Epi redesign. Phase 1 added the theme. This phase replaces the landing
