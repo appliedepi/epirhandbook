@@ -39,7 +39,6 @@ CASES = {
     'check-data-reads.py': ['languages.yml', 'content'],
     'check-unparsed-links.py': ['content'],
     'check-image-names.py': ['content', 'images'],
-    'check-language-copies.py': ['languages.yml', 'banner.html'],
     'check-landing-strings.py': [
         'languages.yml', 'landing.yml', 'utils/landing-hero.R', 'content'],
     'check-image-version-refs.py': ['docker-images.yml', '.devcontainer.json', 'README.md'],
@@ -84,8 +83,6 @@ def build(tmp):
     (tmp / 'images' / 'real.png').write_bytes(b'PNG')
     (tmp / 'languages.yml').write_text(
         'main: en\nlanguages:\n  - code: en\n    label: "English"\n    title: "T"\n', encoding='utf-8')
-    (tmp / 'banner.html').write_text(
-        "<script>\n  const translations = {\n    en: 'a'\n  };\n</script>\n", encoding='utf-8')
     (tmp / 'docker-images.yml').write_text('images:\n  - stem: index\n    image: epirhandbook-basics:2.9\n', encoding='utf-8')
     (tmp / '.devcontainer.json').write_text(
         '{"image": "ghcr.io/appliedepi/aedockerpublic/epirhandbook-monolith:2.9"}\n', encoding='utf-8')

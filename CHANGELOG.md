@@ -8,6 +8,26 @@ of it, and that is expected of a changelog. Read it as a record, never as curren
 
 ---
 
+## 2026-09-24: the course banner is gone
+
+Every rendered page in all eight languages showed a "Need help learning R?" alert at the top:
+416 of the 833 HTML files on `origin/staging` `b8b055d2`. The other 417 are redirect stubs. The
+alert asked readers to enrol in the Applied Epi intro R course. In `banner.html` the alert's
+text was commented out, but the alert `<div>` was live, and a script below it wrote the
+translated text into it and made it visible. So the banner looked dead in the source and was live on the site. The alert and the
+script are removed. `banner.html` keeps only the webfont links.
+
+Two things went with it:
+
+- `checks/check-language-copies.py`, check 13. It compared the banner's own language list with
+  `languages.yml`. With no banner there is nothing to compare, and the check's own remedy said
+  to delete it in that case. `check-sync.sh` and `check-clean-failure.py` no longer run it.
+- `images/donate_button_long.png`. The donation form was removed on 2026-09-18, and no shipping
+  page names the image.
+
+The "Need help with R?" box under each chapter's table of contents and the service cards on the
+landing page stay. They are deliberate.
+
 ## 2026-09-18: a dead key under `en`, and what rule 9 cannot verify
 
 `checks/check-landing-strings.py` ran rule 3 in one direction only. It asked whether the `en`

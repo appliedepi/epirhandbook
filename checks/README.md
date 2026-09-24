@@ -445,27 +445,13 @@ script, so check 12 never runs it. Check 9 was verified by hand on 2026-09-16 to
 DRIFT line for a missing `languages.yml` and for a missing `docker-images.yml`. Any new check
 written inline rather than as `checks/<name>.py` is outside this gate for the same reason.
 
-## 13. Language copies
+## 13. Language copies (removed)
 
-`checks/check-language-copies.py`. Every second copy of the language list must agree with
-`languages.yml`.
-
-`languages.yml` is the one file that declares which languages ship, and everything that renders
-or deploys reads it. `banner.html` is the exception. Its `const translations = {...}` object
-carries one key per language, hard-coded. The banner text is prose, and there is nowhere else
-to put it.
-
-A deliberate second copy is exactly the thing that drifts. Add a ninth language and every other
-part of the system picks it up while the banner silently has no text for it.
-
-`offline_long/standalone_html.R` was a third copy, with its own language vector and title map
-that nothing checked. It excluded `en`, which is one of the two faults that made it unable to
-run at all. Deleted on 2026-09-16.
-
-Expected output: `disagreements: 0`.
-
-Remedy: add or remove the key in `banner.html`. If the banner ever stops carrying its own copy,
-delete this check rather than weakening it.
+`checks/check-language-copies.py` was deleted on 2026-09-24. It compared the language list in
+`languages.yml` with the `const translations = {...}` object in `banner.html`. That object held
+the "Need help learning R?" course banner, which was removed on the same day. `banner.html` now
+holds only the webfont links, so no second copy of the language list is left for this check to
+compare. The number 13 is not reused.
 
 ## 14. Image versions in prose
 
@@ -494,9 +480,8 @@ Remedy: update the prose. If a version is genuinely live, declare it in one of t
 `checks/check-landing-strings.py`. Every language must resolve a complete landing page: its
 strings, the theme that renders them, and the slot each string lands in.
 
-`landing.yml` is a second copy of the language list, and check 13 does not see it. Check 13
-covers `banner.html` alone. So a ninth language gets an English hero today, and no check
-reports it.
+`landing.yml` is a second copy of the language list. This check is what keeps it in step with
+`languages.yml`.
 
 The check needs PyYAML. `.github/workflows/translation-sync.yml` installs `python3-yaml`, and
 the render job of `.github/workflows/build-deploy.yml` already installed it. It reads four

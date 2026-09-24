@@ -2,8 +2,6 @@
 """The landing page gate: every language resolves its strings, its theme and its slots.
 
 `landing.yml` is a second copy of the language list, and nothing else measures it.
-`checks/check-language-copies.py` covers `banner.html` only. So a ninth language gets
-an English hero today, and no check reports it.
 
 Four inputs:
 
