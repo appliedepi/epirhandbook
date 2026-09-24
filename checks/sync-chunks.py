@@ -129,6 +129,18 @@ def main():
     langs = [l for l in args.langs.split(',') if l]
     if args.only:
         files = args.only
+        # The run compares with, and writes to, the working-tree file. Under --from-ref it
+        # also reads the translation from the ref, so the file must exist in both.
+        gone = [f for f in files if not os.path.isfile(f)]
+        if args.from_ref:
+            import subprocess
+            gone += [f for f in files if subprocess.run(
+                ['git', 'cat-file', '-e', '%s:%s' % (args.from_ref, f)],
+                capture_output=True).returncode != 0 and f not in gone]
+        if gone:
+            sys.exit('sync-chunks.py: --only names %d file(s) that do not exist in the working '
+                     'tree%s, first: %s'
+                     % (len(gone), ' or in %s' % args.from_ref if args.from_ref else '', gone[0]))
     else:
         # The file set comes from a glob, so a folder with no chapter file drops out of it in
         # silence. The run would then report a clean tree for a language it never read.

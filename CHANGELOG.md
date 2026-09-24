@@ -17,7 +17,7 @@ The checks read `languages.yml` with a loader that keeps `no` as text. The build
 - `utils/landing-hero.R` read `code: no` as a logical, and `vapply` stopped. It also misread a `no:` block in `landing.yml`. It now reads both files with handlers that keep those words as text.
 - Check 15 read a `no:` block in `landing.yml` as the key `False`. Its loader now resolves only `true` and `false` as booleans, so `no`, `yes`, `on` and `off` stay text. A number or `true` as a value still fails the type rule.
 - Checks 2 and 3 of `check-sync.sh` printed only their heading when their script failed. They now print the last lines of its log.
-- `sync-chunks.py` passed on an empty `content/<lang>/` folder, and `sync-anchors.py` stopped with a `KeyError`. Both now name the missing files. Check 12 covers `sync-chunks.py`, with 37 cases.
+- `sync-chunks.py` passed on an empty `content/<lang>/` folder, and `sync-anchors.py` stopped with a `KeyError`. Both now name the missing files. With `--only`, `sync-chunks.py` now also names a file that does not exist. Before, it reported that file as having no English chapter. Check 12 covers `sync-chunks.py`, with 37 cases.
 - The documented run time of `check-sync.sh` is now about three minutes, measured at 2 minutes 40 seconds to 3 minutes 56 seconds.
 
 On the current tree the landing page of all eight languages is byte-identical, and every check prints what it printed before, except the case count of check 12.
