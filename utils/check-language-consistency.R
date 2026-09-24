@@ -64,8 +64,8 @@
 #      leaves 7 translation languages. German is not declared there: the German
 #      chapters live under _excluded/de/.
 #
-# A regular expression reads each file. The translation-sync runner carries no
-# yaml package, and checks/check-sync.sh reads the same two files the same way.
+# A regular expression reads each file, so the script needs no yaml package.
+# Check 9 of checks/check-sync.sh reads the same two files with PyYAML.
 #
 # Nothing runs this script automatically. A human types the command.
 #

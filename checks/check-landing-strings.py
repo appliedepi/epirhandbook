@@ -281,62 +281,32 @@ def check_cards(code, cards, problems):
                                 "writes that field into the page" % (code, i, field))
 
 
-def project_paths(text):
+def project_paths(doc):
     """Every mapping key of a Quarto project file, as a dotted path to the list it holds.
 
-    A grep cannot answer the question rule 8 asks. `include-after-body` under `book:`
-    satisfies a grep of the file, and Quarto ignores it. So the reader walks the indent
-    structure and records the path each key sits at.
+    doc is the file as yaml.safe_load returns it. A grep cannot answer the question rule 8
+    asks. `include-after-body` under `book:` satisfies a grep of the file, and Quarto ignores
+    it. So the walk records the path each key sits at in the parsed mappings.
 
-    A block scalar (`left: |`) holds prose, not structure, so its body is skipped whole.
-    A value is returned as a list in every case: a flow sequence gives its items, a plain
-    scalar gives a one-item list, and a block sequence gives its items.
+    A value is returned as a list in every case. A sequence gives its items, a mapping or an
+    empty value gives an empty list, and any other scalar gives a one-item list. A key inside
+    a sequence item has no dotted path, so the walk does not go into a sequence.
     """
-    lines = text.split('\n')
-    out, stack, i = {}, [], 0
-    while i < len(lines):
-        raw = lines[i]
-        i += 1
-        if not raw.strip() or raw.lstrip().startswith('#'):
-            continue
-        indent = len(raw) - len(raw.lstrip(' '))
-        body = raw.strip()
-        if body.startswith('- '):
-            continue
-        m = re.match(r'^([A-Za-z0-9_.-]+):[ \t]*(.*)$', body)
-        if not m:
-            continue
-        key, rest = m.group(1), m.group(2).strip()
-        while stack and stack[-1][0] >= indent:
-            stack.pop()
-        path = '.'.join([k for _, k in stack] + [key])
-        stack.append((indent, key))
-        if rest in ('|', '>', '|-', '>-', '|+', '>+'):
-            while i < len(lines) and (not lines[i].strip()
-                                      or len(lines[i]) - len(lines[i].lstrip(' ')) > indent):
-                i += 1
-            out[path] = []
-            continue
-        if rest.startswith('[') and rest.endswith(']'):
-            out[path] = [x.strip().strip('"\'') for x in rest[1:-1].split(',') if x.strip()]
-            continue
-        if rest:
-            out[path] = [rest.strip('"\'')]
-            continue
-        items, j = [], i
-        while j < len(lines):
-            line = lines[j]
-            if not line.strip() or line.lstrip().startswith('#'):
-                j += 1
-                continue
-            if len(line) - len(line.lstrip(' ')) <= indent:
-                break
-            one = re.match(r'^\s*-[ \t]+(.*)$', line)
-            if not one:
-                break
-            items.append(one.group(1).strip().strip('"\''))
-            j += 1
-        out[path] = items
+    out = {}
+
+    def walk(node, prefix):
+        for key, value in node.items():
+            path = prefix + str(key)
+            if isinstance(value, dict):
+                out[path] = []
+                walk(value, path + '.')
+            elif isinstance(value, list):
+                out[path] = value
+            else:
+                out[path] = [] if value is None else [value]
+
+    if isinstance(doc, dict):
+        walk(doc, '')
     return out
 
 
@@ -347,6 +317,28 @@ def need(path, why):
     return path
 
 
+class Loader(yaml.SafeLoader):
+    """yaml.SafeLoader that refuses a mapping with a duplicate key.
+
+    PyYAML keeps the last value of a duplicate key and says nothing, so a second block for
+    one language would silently replace the first.
+    """
+
+    def construct_mapping(self, node, deep=False):
+        # Compare the key nodes by tag and text, before construction. A merge key `<<` is
+        # skipped, because SafeLoader expands it later. Comparing constructed values would
+        # also treat the keys `true` and `1` as one key.
+        seen = set()
+        for k, _ in node.value:
+            if not isinstance(k, yaml.ScalarNode) or k.tag == 'tag:yaml.org,2002:merge':
+                continue
+            if (k.tag, k.value) in seen:
+                raise yaml.constructor.ConstructorError(
+                    None, None, 'duplicate key %s' % k.value, k.start_mark)
+            seen.add((k.tag, k.value))
+        return super().construct_mapping(node, deep)
+
+
 def load(path):
     """One YAML file, or one sentence naming THAT file.
 
@@ -355,7 +347,7 @@ def load(path):
     to the wrong file.
     """
     try:
-        return yaml.safe_load(path.read_text(encoding='utf-8'))
+        return yaml.load(path.read_text(encoding='utf-8'), Loader=Loader)
     except yaml.YAMLError as e:
         sys.exit("check-landing-strings.py: %s does not parse as YAML: %s"
                  % (path, str(e).replace('\n', ' ')))
@@ -546,7 +538,7 @@ if gone:
 wired = 0
 for c in codes:
     project = ROOT / 'content' / c / '_quarto.yaml'
-    paths = project_paths(project.read_text(encoding='utf-8'))
+    paths = project_paths(load(project))
     faults = 0
     if 'format.html' not in paths:
         faults += 1

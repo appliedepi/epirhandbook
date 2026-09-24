@@ -8,6 +8,30 @@ of it, and that is expected of a changelog. Read it as a record, never as curren
 
 ---
 
+## 2026-09-24: check 9 and rule 8 of check 15 read YAML with PyYAML
+
+Check 9 of `checks/check-sync.sh` read `languages.yml`, the project files, `docker-images.yml`
+and the chapter front matter with regular expressions. It now parses them with `yaml.BaseLoader`,
+which keeps every scalar a string. `yaml.safe_load` reads an unquoted `no` as False, so the
+Norwegian code `no` would not survive it. On the current tree, check 9 prints the same line as
+before: `layout: 8 languages, 52 stems, 416 aliases, drifted: 0`.
+
+The regular expressions misread valid YAML. A quoted code, a comment after a value, and a list or
+a manifest row in flow style each gave a false `DRIFT` line. A file that does not parse now gives
+a `DRIFT` line. Before, a broken `languages.yml` raised a traceback, and a broken manifest or
+front matter passed. An empty `stem:` or `image:` value now counts as a missing key.
+
+A duplicate key is now a parse failure, in check 9 and in the files check 15 reads. PyYAML keeps
+the last value of a duplicate key and says nothing. A stale second `chapters:` list would then
+hide the first, where the regular expressions read the first and reported it.
+
+`project_paths()` in `checks/check-landing-strings.py` walked the indent structure of each project
+file for rule 8. It now walks the mappings that `yaml.safe_load` returns. A theme in flow style,
+or a comment after the `include-after-body` item, no longer fails rule 8.
+
+`.github/workflows/translation-sync.yml` already installs `python3-yaml` before it runs
+`check-sync.sh`. Checks 1 and 4 still read `languages.yml` with regular expressions.
+
 ## 2026-09-24: loose ends from the theme port
 
 These close the "checks", "documentation" and "pre-existing" boxes of issue 459.

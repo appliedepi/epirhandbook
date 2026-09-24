@@ -279,9 +279,10 @@ The gate stops with exit 2 in four cases.
 
 `check-sync.sh` runs check 9 itself, and it needs no base commit. It reads `languages.yml`, the
 eight `content/<lang>/_quarto.yaml` project files, `docker-images.yml` and the front matter of
-the 416 declared files. Regular expressions read every one of them. That started because the
-translation-sync runner had no yaml module. The runner installs `python3-yaml` since
-2026-09-18, for check 15, so the reason here is now historical.
+the 416 declared files. PyYAML parses every one of them with `yaml.BaseLoader`, which makes every
+scalar a string. `yaml.safe_load` reads an unquoted `no` as False, so the Norwegian code `no`
+would not survive it. `.github/workflows/translation-sync.yml` installs `python3-yaml` before it
+runs `check-sync.sh`.
 
 It prints one summary line, and one `DRIFT` line for each finding:
 
@@ -289,20 +290,23 @@ It prints one summary line, and one `DRIFT` line for each finding:
    layout: 8 languages, 52 stems, 416 aliases, drifted: 0
 ```
 
-A finding sets the DRIFT exit. Check 9 reports nine kinds.
+A finding sets the DRIFT exit. Check 9 reports ten kinds.
 
+- A file check 9 reads that does not parse as YAML. The `DRIFT` line names the file and the
+  line that PyYAML reports. For a chapter file, it names the front matter.
 - A language `languages.yml` declares with no `content/<code>/_quarto.yaml`.
 - A `content/<x>/` folder that holds `.qmd` files for a code `languages.yml` does not declare.
 - A project file whose flattened chapter list differs from `content/en/_quarto.yaml` in set or
   in order, or whose part count differs.
-- A project file whose `lang` is not its own folder, or whose `book.title` differs from the
-  title `languages.yml` gives that code.
+- A project file whose `lang` differs from the tag `languages.yml` gives that code, or whose
+  `book.title` differs from the title `languages.yml` gives that code.
 - A declared stem with no file in one of the eight language folders. `index` is a declared
   stem, so every folder needs its own landing page.
 - A `docker-images.yml` that does not hold exactly one row per declared stem, or that holds a
   row for something else.
 - A `docker-images.yml` row under `chapters:` with no `stem:` key, or with no `image:` key.
-  The `stem:` key names the chapter, and the `image:` key names the image CI renders it in.
+  The `stem:` key names the chapter, and the `image:` key names the image CI renders it in. A
+  key with an empty value, a list or a mapping names nothing, so it counts as absent.
 - A `.qmd` file in a language folder that `content/en/_quarto.yaml` does not declare,
   `index.qmd` aside.
 - A chapter file, `index.qmd` aside, whose aliases are not the ones the layout wants. English
@@ -316,17 +320,17 @@ shipped under both spellings, so it wants two aliases: `/new_pages/transition_to
 `/new_pages/transition_to_r.html`. Check 9 compares the aliases case-sensitively, because a URL
 path is case-sensitive. Two identical lines are not two aliases.
 
-Check 9 reads the aliases from the block list under the front matter's top-level `aliases:`
-key. A list under another key counts for nothing, and neither does a list below the front
-matter.
+Check 9 reads the aliases from the list under the front matter's top-level `aliases:` key, in
+block or flow style. A list under another key counts for nothing, and neither does a list below
+the front matter.
 
-A missing file never stops check 9. It reports the file, skips the comparisons that need it,
-and still reports what it can see. A missing `content/en/_quarto.yaml`, a missing
-`docker-images.yml` and a missing `languages.yml` each give check 9 one `DRIFT` line and no
-traceback.
+A missing file, or a file that does not parse, gives check 9 one `DRIFT` line and no traceback.
+Check 9 then skips the comparisons that need that file, and still reports what it can see.
+`languages.yml` is the exception, because without it there is nothing to compare. When it is
+missing, does not parse or names no `main:` language, check 9 stops after that one line.
 
-Checks 1, 4, 5 and 7 read `languages.yml` without a guard. Delete that file and each of the
-four raises a traceback, above check 9's own `DRIFT languages.yml` line.
+Checks 1 and 4 read `languages.yml` without a guard, and with regular expressions. Delete that
+file and both raise a traceback, above check 9's own `DRIFT languages.yml` line.
 
 Checks 1, 5 and 7 read the stem list from `content/en/_quarto.yaml`. Without that file each one
 stops with a one-line message, and check 9 names the file to restore.
@@ -558,8 +562,8 @@ probe stayed green while the language was un-wired from `theme-ael.scss`.
 
 Rule 8 reads the PATH, not the file. Quarto reads these three keys under `format.html` and
 nowhere else, so a value parked under `book:` satisfies a grep and changes nothing about the
-render. The check walks the indent structure of the project file and asks what path each key
-sits at.
+render. The check parses the project file with `yaml.safe_load` and asks what path each key sits
+at.
 
 Rule 7 takes two exclusions, both measured on 2026-09-18 over 86 cross-language collisions. 84
 are service-card hrefs, one string in every language by design. 2 are Spanish and Portuguese

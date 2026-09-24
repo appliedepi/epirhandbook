@@ -125,18 +125,85 @@ python3 - <<'LAYOUT' || rc=1
 """Report every way the language folders drift from the layout the repository declares.
 
 `languages.yml` is the language list. `content/<main>/_quarto.yaml` is the reference project
-file, and its flattened chapter list is the stem list. Regular expressions read both. That
-started because the translation-sync runner had no yaml module. The runner installs
-python3-yaml since 2026-09-18, for check 15, so this code could now use yaml.safe_load. It
-does not yet, and the regexes are proven, so the reason here is historical.
+file, and its flattened `book.chapters` list is the stem list. A YAML parser reads both. It
+also reads `docker-images.yml` and the front matter of the chapter files.
+
+The loader is `yaml.BaseLoader`. It shares the scanner and the parser of `yaml.safe_load`, and
+it makes every scalar a string. `yaml.safe_load` reads an unquoted `no` as False, so the
+Norwegian code `no` would not survive it. A file that does not parse gives a DRIFT line.
+
+A duplicate key is a parse failure here. PyYAML keeps the last value of a duplicate key and
+says nothing, so a stale second `chapters:` list would hide the first. The regular expressions
+this code replaced read the first one and reported it.
 """
-import glob, os, re, sys
+import glob, os, sys
+
+try:
+    import yaml
+except ImportError:
+    print('   layout: not measured. Check 9 reads YAML with PyYAML, and python3 cannot import '
+          'yaml. Install it with `sudo apt-get install -y python3-yaml`.')
+    sys.exit(1)
 
 DRIFT = []
+
+# What parse() returns for text that does not parse. It cannot be None, because an empty
+# document parses to None.
+FAILED = object()
 
 
 def drift(where, why):
     DRIFT.append((where, why))
+
+
+class Loader(yaml.BaseLoader):
+    """yaml.BaseLoader that refuses a mapping with a duplicate key."""
+
+    def construct_mapping(self, node, deep=False):
+        # Compare the key nodes by tag and text, before construction. A merge key `<<` is
+        # skipped, because SafeLoader expands it later. Comparing constructed values would
+        # also treat the keys `true` and `1` as one key.
+        seen = set()
+        for k, _ in node.value:
+            if not isinstance(k, yaml.ScalarNode) or k.tag == 'tag:yaml.org,2002:merge':
+                continue
+            if (k.tag, k.value) in seen:
+                raise yaml.constructor.ConstructorError(
+                    None, None, 'duplicate key %s' % k.value, k.start_mark)
+            seen.add((k.tag, k.value))
+        return super().construct_mapping(node, deep)
+
+
+def parse(text, where, first=1, part='the file'):
+    """The YAML document in text, or FAILED after one DRIFT line that names where.
+
+    first is the file line that holds the first line of text, so the message names a line of
+    the file.
+    """
+    try:
+        return yaml.load(text, Loader=Loader)
+    except yaml.YAMLError as e:
+        mark = getattr(e, 'problem_mark', None)
+        at = ', line %d' % (mark.line + first) if mark else ''
+        why = getattr(e, 'problem', None) or str(e)
+        drift(where, '%s does not parse as YAML%s: %s' % (part, at, ' '.join(why.split())))
+        return FAILED
+
+
+def read(path):
+    """One YAML file, parsed, or FAILED."""
+    return parse(open(path, encoding='utf-8').read(), path)
+
+
+def stop():
+    """Print the summary line and the DRIFT lines so far, and stop.
+
+    Without the language list there is nothing to compare against.
+    """
+    print('   layout: 0 languages, 0 stems, 0 aliases, drifted: %d' % len(DRIFT))
+    for where, why in DRIFT:
+        print('   DRIFT %s %s' % (where, why))
+    sys.exit(1)
 
 
 def front_matter(text):
@@ -150,25 +217,17 @@ def front_matter(text):
     return ''
 
 
-def aliases_of(text):
-    """The items of the front matter's top-level `aliases:` key, in file order.
+def aliases_of(path, text):
+    """The items of the front matter's top-level `aliases:` key, in file order, or FAILED.
 
-    A list item under another key is not an alias. A list below the front matter is not one
-    either. The first line that is not an indented list item ends the key.
+    Only the front matter is parsed, so a list below it is not an alias. A list under another
+    key is not one either. Quarto reads `aliases` as a list of strings, so a scalar gives none.
     """
-    found, inside = [], False
-    for line in front_matter(text).split('\n'):
-        if re.match(r'^aliases:\s*$', line):
-            inside = True
-            continue
-        if not inside:
-            continue
-        m = re.match(r'^\s+-\s+(\S+)\s*$', line)
-        if m:
-            found.append(m.group(1).strip('"\''))
-        else:
-            inside = False
-    return found
+    doc = parse(front_matter(text), path, 2, 'the front matter')
+    if doc is FAILED:
+        return FAILED
+    found = doc.get('aliases') if isinstance(doc, dict) else None
+    return [a for a in found if isinstance(a, str)] if isinstance(found, list) else []
 
 
 def wanted(stem, code, main):
@@ -186,55 +245,90 @@ def wanted(stem, code, main):
     return ['/new_pages/%s.html' % old]
 
 
-def project(path):
-    """One project file: (stems in order, part count, lang, book title)."""
-    t = open(path, encoding='utf-8').read()
-    m = re.search(r'^  chapters:\s*$', t, re.M)
-    body = t[m.end():] if m else ''
-    stems = re.findall(r'^\s*-\s*([A-Za-z0-9_]+)\.qmd\s*$', body, re.M)
-    parts = len(re.findall(r'^\s*-\s*part:', body, re.M))
-    lang = re.search(r'^lang:\s*(\S+)', t, re.M)
-    b = re.search(r'^book:\s*$', t, re.M)
-    title = re.search(r'^  title:\s*(.*)$', t[b.end():], re.M) if b else None
+def project(doc):
+    """One parsed project file: (stems in order, part count, lang, book title).
+
+    The stems are the `.qmd` entries of `book.chapters`, in file order. A part is a mapping
+    with a `part:` key, and its own `chapters:` list gives its stems in its place.
+    """
+    doc = doc if isinstance(doc, dict) else {}
+    book = doc.get('book') if isinstance(doc.get('book'), dict) else {}
+    stems, parts = [], 0
+
+    def walk(items):
+        nonlocal parts
+        for x in items if isinstance(items, list) else []:
+            if isinstance(x, str) and x.endswith('.qmd'):
+                stems.append(x[:-len('.qmd')])
+            elif isinstance(x, dict):
+                if 'part' in x:
+                    parts += 1
+                walk(x.get('chapters'))
+
+    walk(book.get('chapters'))
+    lang, title = doc.get('lang'), book.get('title')
     return (stems, parts,
-            lang.group(1) if lang else '',
-            title.group(1).strip().strip('"\'') if title else '')
+            lang if isinstance(lang, str) else '',
+            title if isinstance(title, str) else '')
+
+
+# Each project file is parsed once. A file that does not parse gives its DRIFT line once, and
+# None here, so every comparison that needs the file is skipped.
+PROJECTS = {}
+
+
+def project_of(path):
+    if path not in PROJECTS:
+        doc = read(path)
+        PROJECTS[path] = None if doc is FAILED else project(doc)
+    return PROJECTS[path]
+
+
+def first_line(item):
+    """The first key and value of one manifest item, in the form `- stem: index`."""
+    if isinstance(item, dict) and item:
+        k, v = next(iter(item.items()))
+        return ('- %s: %s' % (k, v if isinstance(v, str) else '')).rstrip()
+    return ('- %s' % (item if isinstance(item, str) else '')).rstrip()
 
 
 if not os.path.exists('languages.yml'):
     # The language list is the one declaration of which languages ship. Without it there is
     # nothing to compare against, so report the file and stop with one line, not a traceback.
-    print('   layout: 0 languages, 0 stems, 0 aliases, drifted: 1')
-    print('   DRIFT languages.yml the language list is missing')
-    sys.exit(1)
+    drift('languages.yml', 'the language list is missing')
+    stop()
 
-y = open('languages.yml', encoding='utf-8').read()
-main = re.search(r'^main:\s*([A-Za-z0-9_]+)', y, re.M).group(1)
-codes, titles, tags, cur = [], {}, {}, None
-for line in y.split('\n'):
-    if re.match(r'^\s*#', line):
+langs = read('languages.yml')
+if langs is FAILED:
+    stop()
+langs = langs if isinstance(langs, dict) else {}
+main = langs.get('main')
+if not isinstance(main, str) or not main:
+    drift('languages.yml', 'declares no main: language, and that language names the reference '
+          'project file')
+    stop()
+
+codes, titles, tags = [], {}, {}
+entries = langs.get('languages')
+for e in entries if isinstance(entries, list) else []:
+    code = e.get('code') if isinstance(e, dict) else None
+    if not isinstance(code, str) or not code:
         continue
-    m = re.match(r'^\s*-\s*code:\s*([A-Za-z0-9_]+)', line)
-    if m:
-        cur = m.group(1)
-        codes.append(cur)
-        continue
+    codes.append(code)
     # The BCP-47 tag this language declares. It is not the folder code for two of the
     # eight: content/jp/ is Japanese, tag ja, and content/vn/ is Vietnamese, tag vi.
-    m = re.match(r'^\s+lang:\s*([A-Za-z0-9-]+)\s*$', line)
-    if m and cur:
-        tags[cur] = m.group(1)
-        continue
-    m = re.match(r'^\s+title:\s*(.*)$', line)
-    if m and cur:
-        titles[cur] = m.group(1).strip().strip('"\'')
+    if isinstance(e.get('lang'), str):
+        tags[code] = e['lang']
+    if isinstance(e.get('title'), str):
+        titles[code] = e['title']
 
 ref_file = 'content/%s/_quarto.yaml' % main
-if os.path.exists(ref_file):
-    ref_stems, ref_parts, _, _ = project(ref_file)
+ref = project_of(ref_file) if os.path.exists(ref_file) else None
+if ref is not None:
+    ref_stems, ref_parts = ref[0], ref[1]
 else:
-    # Drift 1 below reports the missing file. Every check that needs the reference is
-    # skipped, and the rest of check 9 still runs.
+    # Drift 1 below reports a missing file, and parse() reports a file that does not parse.
+    # Every check that needs the reference is skipped, and the rest of check 9 still runs.
     ref_stems, ref_parts = None, None
 
 # 1. A declared language with no project file.
@@ -252,9 +346,9 @@ for d in sorted(glob.glob('content/*/')):
 # 3 and 4. Each project file against the reference and against languages.yml.
 for c in codes:
     f = 'content/%s/_quarto.yaml' % c
-    if not os.path.exists(f):
+    if not os.path.exists(f) or project_of(f) is None:
         continue
-    stems, parts, lang, title = project(f)
+    stems, parts, lang, title = project_of(f)
     if ref_stems is not None and stems != ref_stems:
         drift(f, 'chapter list differs from content/%s/_quarto.yaml' % main)
     if ref_parts is not None and parts != ref_parts:
@@ -276,31 +370,24 @@ if ref_stems is not None:
 
 # 6. The manifest holds exactly one row per declared stem, and no row for anything else.
 # Every row carries both keys: stem: names the chapter, image: names the image CI renders it in.
+# A key counts only when it holds text, so an empty stem: names no chapter.
+manifest = FAILED
 if not os.path.exists('docker-images.yml'):
     drift('docker-images.yml', 'the chapter image manifest is missing')
 elif ref_stems is not None:
-    manifest = open('docker-images.yml', encoding='utf-8').read()
-    rows = re.findall(r'^\s*-\s*stem:\s*([A-Za-z0-9_]+)', manifest, re.M)
-    # One entry per list item under chapters:, as [the item's first line, its keys]. The row
-    # regex above sees a stem: key and nothing else, so a row that carries no stem: at all is
-    # invisible to it. Read the keys of every item instead.
-    cm = re.search(r'^chapters:\s*$', manifest, re.M)
-    items = []
-    for line in (manifest[cm.end():] if cm else '').split('\n'):
-        if not line.strip() or re.match(r'^\s*#', line):
-            continue
-        if re.match(r'^\S', line):
-            break  # a new top-level key ends the chapters: list
-        if re.match(r'^\s*-\s', line):
-            items.append([line.strip(), []])
-        k = re.match(r'^\s*(?:-\s*)?([A-Za-z0-9_]+)\s*:', line)
-        if k and items:
-            items[-1][1].append(k.group(1))
-    for n, (first, keys) in enumerate(items, 1):
+    manifest = read('docker-images.yml')
+if manifest is not FAILED:
+    items = manifest.get('chapters') if isinstance(manifest, dict) else None
+    rows = []
+    for n, item in enumerate(items if isinstance(items, list) else [], 1):
+        keys = ({k: v for k, v in item.items() if isinstance(v, str) and v}
+                if isinstance(item, dict) else {})
         for k in ('stem', 'image'):
             if k not in keys:
                 drift('docker-images.yml',
-                      'chapters: item %d, %s, carries no %s: key' % (n, first, k))
+                      'chapters: item %d, %s, carries no %s: key' % (n, first_line(item), k))
+        if 'stem' in keys:
+            rows.append(keys['stem'])
     for s in ref_stems:
         hits = rows.count(s)
         if hits != 1:
@@ -321,7 +408,9 @@ for c in codes:
         if ref_stems is not None and stem != 'index' and stem not in ref_stems:
             drift(f, 'content/%s/_quarto.yaml declares no chapter %s.qmd' % (main, stem))
             continue
-        found = aliases_of(open(f, encoding='utf-8').read())
+        found = aliases_of(f, open(f, encoding='utf-8').read())
+        if found is FAILED:
+            continue
         aliases += len(found)
         if stem == 'index':
             continue
