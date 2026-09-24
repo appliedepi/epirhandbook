@@ -74,8 +74,12 @@ jobs:
           PATH = "languages.yml"
           if not os.path.isfile(PATH):
               sys.exit(f"::error::{PATH} is missing; it declares every language that ships")
+          # BaseLoader keeps every scalar a string. yaml.safe_load reads an
+          # unquoted `no` as False, so the Norwegian code `no` would fail the
+          # shape check below. The step cannot import checks/langs.py, so it
+          # names the loader here.
           with open(PATH) as fh:
-              cfg = yaml.safe_load(fh) or {}
+              cfg = yaml.load(fh, Loader=yaml.BaseLoader) or {}
           main = cfg.get("main")
           entries = cfg.get("languages") or []
           if not main:
@@ -266,7 +270,7 @@ jobs:
       #   --no-inject means nothing re-serialised the page yet, so the slot patterns read
       #     what Quarto wrote.
       #   A leg that renders a broken hero fails before it uploads an artifact.
-      # The check reads landing.yml with yaml.safe_load. The "Install PyYAML" step of this
+      # The check reads landing.yml with PyYAML. The "Install PyYAML" step of this
       # same job already supplies it, so this step installs nothing.
       - name: Check this language's landing page slots
         env:
@@ -625,8 +629,11 @@ jobs:
 
           # languages.yml is the one file that declares which languages ship.
           # An empty or short ALL_LANGS would otherwise check nothing and pass.
+          # BaseLoader keeps every scalar a string, so an unquoted `no` stays
+          # the code `no`. yaml.safe_load reads it as False.
           declared = [str(entry["code"]) for entry in
-                      yaml.safe_load(pathlib.Path("languages.yml").read_text(encoding="utf-8"))["languages"]]
+                      yaml.load(pathlib.Path("languages.yml").read_text(encoding="utf-8"),
+                                Loader=yaml.BaseLoader)["languages"]]
           if sorted(langs) != sorted(declared):
               sys.exit(f"::error::ALL_LANGS is {sorted(langs)}, languages.yml declares {sorted(declared)}")
 
@@ -667,18 +674,26 @@ jobs:
               # in its own project file.
               # Parsed with PyYAML, installed by an earlier step in this job.
               # book.chapters nests: a part is a dict carrying its own chapters.
+              # The walk is project() in checks/langs.py. A part may name a
+              # .qmd file instead of a title. Quarto renders that file as the
+              # part page, so it is a chapter too, and it comes before the
+              # part's own chapters.
               project = pathlib.Path("content") / lang / "_quarto.yaml"
 
               def stems(items):
                   found = []
-                  for item in items:
+                  for item in items if isinstance(items, list) else []:
                       if isinstance(item, str) and item.endswith(".qmd"):
                           found.append(item[:-4])
-                      elif isinstance(item, dict) and "chapters" in item:
-                          found.extend(stems(item["chapters"]))
+                      elif isinstance(item, dict):
+                          part = item.get("part")
+                          if isinstance(part, str) and part.endswith(".qmd"):
+                              found.append(part[:-4])
+                          found.extend(stems(item.get("chapters")))
                   return found
 
-              declared_chapters = stems(yaml.safe_load(project.read_text(encoding="utf-8"))["book"]["chapters"])
+              declared_chapters = stems(yaml.load(project.read_text(encoding="utf-8"),
+                                                  Loader=yaml.BaseLoader)["book"]["chapters"])
               if not declared_chapters:
                   sys.exit(f"::error::no chapter list parsed from {project}")
               absent = sorted(s for s in declared_chapters if f"{root}{s}.html" not in packed_full)

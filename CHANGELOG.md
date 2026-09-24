@@ -8,6 +8,20 @@ of it, and that is expected of a changelog. Read it as a record, never as curren
 
 ---
 
+## 2026-09-24: the build and the landing page read `no` as a code
+
+The checks read `languages.yml` with a loader that keeps `no` as text. The build and the landing page did not, so a Norwegian `code: no` would have failed the build or broken the page.
+
+- `.github/workflows/build-deploy.yml` read the codes with `yaml.safe_load` in two steps. The first failed with `invalid language code(s) [False]`, and the offline-zip check read `'False'`. Both now use `yaml.BaseLoader`.
+- The offline-zip check and `utils/landing-hero.R` walked `book.chapters` without a `part: x.qmd` page, as check 15 rule 9 did. A zip that lacked that page passed, and the landing page undercounted the chapters. All three now walk the list the way `checks/langs.py` does.
+- `utils/landing-hero.R` read `code: no` as a logical, and `vapply` stopped. It also misread a `no:` block in `landing.yml`. It now reads both files with handlers that keep those words as text.
+- Check 15 read a `no:` block in `landing.yml` as the key `False`. Its loader now resolves only `true` and `false` as booleans, so `no`, `yes`, `on` and `off` stay text. A number or `true` as a value still fails the type rule.
+- Checks 2 and 3 of `check-sync.sh` printed only their heading when their script failed. They now print the last lines of its log.
+- `sync-chunks.py` passed on an empty `content/<lang>/` folder, and `sync-anchors.py` stopped with a `KeyError`. Both now name the missing files. Check 12 covers `sync-chunks.py`, with 37 cases.
+- The documented run time of `check-sync.sh` is now about three minutes, measured at 2 minutes 40 seconds to 3 minutes 56 seconds.
+
+On the current tree the landing page of all eight languages is byte-identical, and every check prints what it printed before, except the case count of check 12.
+
 ## 2026-09-24: one reader for the language list and the stem list
 
 `checks/langs.py` reads `languages.yml` and the stem list of `content/<main>/_quarto.yaml`. It

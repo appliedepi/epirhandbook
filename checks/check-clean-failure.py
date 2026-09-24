@@ -21,6 +21,10 @@ parse as YAML:
 One input cannot sit in that fixture. `check-landing-strings.py --slots` reads a rendered
 page, so it gets a second fixture: two declared languages, and no render in either.
 
+`sync-chunks.py` finds the chapter files of each translation with a glob, so an empty
+translation folder drops out of its file set. A third fixture declares two languages and
+empties the folder of the second.
+
 Usage: python3 checks/check-clean-failure.py [--summary]
 Exit 0 when every case is clean, 1 when any check crashes or passes on a missing input.
 """
@@ -45,10 +49,9 @@ CASES = {
         'languages.yml', 'landing.yml', 'utils/landing-hero.R', 'content']),
     'check-image-version-refs.py': (
         ['--summary'], ['docker-images.yml', '.devcontainer.json', 'README.md']),
-    # The two sync scripts write chapter files, so they run as a dry run. sync-chunks.py finds
-    # its files with a glob, so it reads no stem list and has no 'content' case.
+    # The two sync scripts write chapter files, so they run as a dry run.
     'sync-anchors.py': (['--dry-run'], ['languages.yml', 'content']),
-    'sync-chunks.py': (['--dry-run'], ['languages.yml']),
+    'sync-chunks.py': (['--dry-run'], ['languages.yml', 'content']),
     # Checks 8 and 6 compare two commits, so the fixture becomes a git repository for them.
     # An empty diff is their correct result, so they have no 'content' case.
     'chunk-parse-gate.py': (['HEAD', 'HEAD'], ['languages.yml']),
@@ -200,6 +203,30 @@ with tempfile.TemporaryDirectory() as raw:
         failures.append(f"{label}: crashed with a traceback instead of a message")
     elif 'content/fr/html_outputs' not in output:
         failures.append(f"{label}: the message never names content/fr/html_outputs")
+
+# An empty translation folder. sync-chunks.py globs each folder, so the language would drop
+# out of the file set and the run would report no drift for a language it never read.
+cases += 1
+with tempfile.TemporaryDirectory() as raw:
+    tmp = pathlib.Path(raw) / 'fixture'
+    tmp.mkdir()
+    build(tmp)
+    (tmp / 'languages.yml').write_text(
+        'main: en\nlanguages:\n  - code: en\n    label: "English"\n    title: "T"\n'
+        '  - code: fr\n    label: "Français"\n    title: "TF"\n', encoding='utf-8')
+    (tmp / 'content' / 'en' / 'basics.qmd').write_text('# Basics\n', encoding='utf-8')
+    (tmp / 'content' / 'fr').mkdir()
+    run = subprocess.run(
+        [sys.executable, str(tmp / 'checks' / 'sync-chunks.py'), '--dry-run'],
+        capture_output=True, text=True, cwd=tmp, timeout=120)
+    output = run.stdout + run.stderr
+    label = "sync-chunks.py with content/fr empty"
+    if run.returncode == 0:
+        failures.append(f"{label}: exited 0, so a missing input reads as a pass")
+    elif 'Traceback' in output:
+        failures.append(f"{label}: crashed with a traceback instead of a message")
+    elif 'content/fr' not in output:
+        failures.append(f"{label}: the message never names content/fr")
 
 print(f"cases: {cases}")
 print(f"checks that do not fail cleanly: {len(failures)}")

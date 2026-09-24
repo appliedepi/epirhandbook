@@ -14,7 +14,7 @@ its own landing page, so its headings are not a copy of the English headings.
 Deterministic. No model, no network. `checks/langs.py` reads `languages.yml` and the stem list
 with PyYAML. Usage: python3 checks/sync-anchors.py [--dry-run]
 """
-import re, glob, sys
+import os, re, glob, sys
 
 from langs import read_languages, read_stems
 
@@ -68,6 +68,12 @@ def cross_link(stem, ident):
     return r'(?<![A-Za-z0-9_])%s\.qmd#%s\)' % (re.escape(stem), re.escape(ident))
 
 
+# Every declared chapter must exist in every language before any is read. A missing one
+# would otherwise stop the run with a KeyError. Check 9 of checks/check-sync.sh names each.
+missing = [chapter(s, l) for s in decl for l in [MAIN] + LANGS if not os.path.isfile(chapter(s, l))]
+if missing:
+    sys.exit('sync-anchors.py: %d declared chapter file(s) are missing, first: %s. '
+             'Check 9 of checks/check-sync.sh names each one.' % (len(missing), missing[0]))
 texts = {f: open(f, encoding='utf-8').read() for f in glob.glob('content/*/*.qmd')}
 
 

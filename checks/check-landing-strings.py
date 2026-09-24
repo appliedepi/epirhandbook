@@ -85,14 +85,16 @@ import sys
 try:
     import yaml
 except ImportError:
-    sys.exit("check-landing-strings.py: no PyYAML. This check reads landing.yml and "
-             "languages.yml with yaml.safe_load. Only a real YAML parser separates the string "
-             "\"3\" from the number 3, and rule 4 rejects a value that is not a string. "
+    sys.exit("check-landing-strings.py: no PyYAML. This check reads landing.yml and the "
+             "project files with a yaml.SafeLoader subclass, and languages.yml with "
+             "yaml.BaseLoader. Only a real YAML parser separates the string \"3\" from the "
+             "number 3, and the check rejects a value that is not a string. "
              "Install it with `sudo apt-get install -y python3-yaml`, or `pip install pyyaml`.")
 
 # The duplicate-key refusal and the string-only loader. checks/langs.py holds both, and every
 # check that reads languages.yml uses that loader.
-from langs import NoDuplicates, Loader as Strings
+# Rule 8 names its own loop variable `project`, so the walk takes another name here.
+from langs import NoDuplicates, Loader as Strings, project as walk_project
 
 ARGS = sys.argv[1:]
 USAGE = ("Usage: check-landing-strings.py [--summary] [--slots] "
@@ -288,7 +290,7 @@ def check_cards(code, cards, problems):
 def project_paths(doc):
     """Every mapping key of a Quarto project file, as a dotted path to the list it holds.
 
-    doc is the file as yaml.safe_load returns it. A grep cannot answer the question rule 8
+    doc is the file as Loader below returns it. A grep cannot answer the question rule 8
     asks. `include-after-body` under `book:` satisfies a grep of the file, and Quarto ignores
     it. So the walk records the path each key sits at in the parsed mappings.
 
@@ -325,8 +327,26 @@ def need(path, why):
 # duplicate key and says nothing, so a second block for one language would silently replace the
 # first. Strings, the loader for languages.yml, keeps every scalar a string. yaml.safe_load reads
 # an unquoted `no` as False, so the Norwegian code `no` would drop out of the code list.
+#
+# landing.yml needs typed values, because a value that is not a string is a named fault. So
+# Loader keeps the types of yaml.SafeLoader, with one change. YAML 1.1 reads an unquoted yes, no,
+# on or off as a boolean, as a key too. So a `no:` block key would read as False, and rules 1 and
+# 2 would not find the Norwegian block. Loader reads those four words as strings, in all three
+# spellings YAML 1.1 gives them, as in `no`, `No` and `NO`. `true` and `false` stay booleans, and
+# a number stays a number.
+BOOL = 'tag:yaml.org,2002:bool'
+
+
 class Loader(NoDuplicates, yaml.SafeLoader):
     """The loader for landing.yml and the project files."""
+
+    yaml_implicit_resolvers = {
+        first: [(tag, rx) for tag, rx in resolvers if tag != BOOL]
+        for first, resolvers in yaml.SafeLoader.yaml_implicit_resolvers.items()}
+
+
+Loader.add_implicit_resolver(
+    BOOL, re.compile(r'^(?:true|True|TRUE|false|False|FALSE)$'), list('tTfF'))
 
 
 def load(path, loader=None):
@@ -603,14 +623,10 @@ if want_slots:
     # them, landing.yml holds no copy, and utils/landing-hero.R counts them the same way.
     titles = {e['code']: e.get('title') for e in entries
               if isinstance(e, dict) and e.get('code')}
-    book = load(ROOT / 'content' / main / '_quarto.yaml') or {}
-    stems = []
-    for x in ((book.get('book') or {}).get('chapters') or []):
-        if isinstance(x, str):
-            stems.append(x)
-        elif isinstance(x, dict):
-            stems.extend(y for y in (x.get('chapters') or []) if isinstance(y, str))
-    chapters_n = len({re.sub(r'\.qmd$', '', s) for s in stems} - set(NOT_CHAPTERS))
+    # project() in checks/langs.py is the shared walk of book.chapters. A part that names a
+    # .qmd file is a page too.
+    stems = walk_project(load(ROOT / 'content' / main / '_quarto.yaml', Strings))[0]
+    chapters_n = len(set(stems) - set(NOT_CHAPTERS))
 
     slots_read, fallbacks, mismatches = 0, 0, []
     for c in selected:

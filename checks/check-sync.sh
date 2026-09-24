@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Read-only: report how far the translated chapters have drifted from the English.
 # Runs every structural check the 2026-09 fix pass used. Changes nothing. Exit 1 on any drift.
-# Usage: checks/check-sync.sh                 (checks 1, 2, 3, 4, 5, 7, 9, 10, 11, 12, 14 and 15; about two minutes)
+# Usage: checks/check-sync.sh                 (checks 1, 2, 3, 4, 5, 7, 9, 10, 11, 12, 14 and 15; about three minutes)
 #        checks/check-sync.sh --base <sha>    (also checks 6 and 8, over the files changed since <sha>)
 #        checks/check-sync.sh --render        (also checks 6 and 8, over the whole tree, ~20 min)
 # Checks 6 and 8 are the render gate and the chunk parse gate. Both need a base commit. Without
@@ -75,13 +75,23 @@ for p, why in bad: print('   DRIFT', p, why)
 sys.exit(1 if bad else 0)
 PY
 echo "== 2. Anchors: headings whose anchor id differs from the English, and dead English-style links"
-python3 "$here/sync-anchors.py" --dry-run > "$log/anchors.txt" 2>&1 || rc=1
+# A script that stops early writes no summary line, so the grep below prints nothing. The last
+# lines of its log then say why.
+if ! python3 "$here/sync-anchors.py" --dry-run > "$log/anchors.txt" 2>&1; then
+  rc=1
+  echo "   sync-anchors.py exited non-zero. The last lines of $log/anchors.txt:"
+  tail -n 5 "$log/anchors.txt" | sed 's/^/   /'
+fi
 grep -E '^dead|^headings' "$log/anchors.txt" | sed 's/^/   /'
 grep -q '^headings changed 0,' "$log/anchors.txt" || rc=1
 grep -q '^dead English-id links before: 0$' "$log/anchors.txt" || rc=1
 grep -q '^dead English-id links after: 0$' "$log/anchors.txt" || rc=1
 echo "== 3. Chunks: aligned chunks whose code differs from the English (sync-chunks.py --dry-run)"
-python3 "$here/sync-chunks.py" --dry-run > "$log/chunks.txt" 2>&1 || rc=1
+if ! python3 "$here/sync-chunks.py" --dry-run > "$log/chunks.txt" 2>&1; then
+  rc=1
+  echo "   sync-chunks.py exited non-zero. The last lines of $log/chunks.txt:"
+  tail -n 5 "$log/chunks.txt" | sed 's/^/   /'
+fi
 grep -E '^files|^SKIPPED' "$log/chunks.txt" | sed 's/^/   /'
 grep -q '^files [0-9]*, changed 0,' "$log/chunks.txt" || rc=1
 echo "== 4. Inline code spans in translated prose that occur nowhere in the English chapter (informational)"

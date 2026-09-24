@@ -36,6 +36,11 @@ def languages():
     return main, [c for c in codes if c != main]
 
 
+def chapters(lang):
+    """The chapter files of one language folder, the landing page left out."""
+    return [f for f in glob.glob('content/%s/*.qmd' % lang) if os.path.basename(f) != LANDING]
+
+
 def split(text):
     """Return a list of segments: ('prose', lines) or ('chunk', fence_line, body_lines, close_line)."""
     segs, cur, fence, i = [], [], None, 0
@@ -121,10 +126,20 @@ def main():
     ap.add_argument('--only', nargs='*', default=None)
     ap.add_argument('--from-ref', default=None, help='read the translated files from this git ref instead of the working tree')
     args = ap.parse_args()
-    langs = args.langs.split(',')
-    files = args.only if args.only else sorted(
-        f for l in langs for f in glob.glob('content/%s/*.qmd' % l)
-        if os.path.basename(f) != LANDING)
+    langs = [l for l in args.langs.split(',') if l]
+    if args.only:
+        files = args.only
+    else:
+        # The file set comes from a glob, so a folder with no chapter file drops out of it in
+        # silence. The run would then report a clean tree for a language it never read.
+        for l in [main_lang] + langs:
+            if not chapters(l):
+                sys.exit('sync-chunks.py: content/%s/ is missing or holds no chapter file, so '
+                         'this run would compare nothing for that language.' % l)
+        files = sorted(f for l in langs for f in chapters(l))
+        if not files:
+            sys.exit('sync-chunks.py: no translation is selected, so this run would compare '
+                     'nothing. Check languages.yml and --langs.')
     changed, chunks_changed, kept_total, fallback_total, skipped = 0, 0, 0, 0, []
     for tr in files:
         en = 'content/%s/%s' % (main_lang, os.path.basename(tr))

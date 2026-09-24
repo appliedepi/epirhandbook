@@ -1,7 +1,7 @@
 # The repository's checks: what they cover, and how to run them
 
-Run `checks/check-sync.sh` from the repository root. It changes nothing, takes about half a
-minute, and ends with `IN SYNC` or `DRIFT`. Repeat after any English chapter changes, and every
+Run `checks/check-sync.sh` from the repository root. It changes nothing, takes about three
+minutes, and ends with `IN SYNC` or `DRIFT`. Repeat after any English chapter changes, and every
 few months regardless.
 
 Checks 6 and 8 need a base commit, and they do not run without one. Add `--base <sha>` to run
@@ -571,7 +571,7 @@ read from the English list. So a matched reduction of English and a translation 
 what rule 9 expects. Rule 3 checks the English values for emptiness, because rule 5 reads
 translated blocks alone.
 
-`yaml.safe_load` is what makes the type rule possible. The check carried a hand-written reader
+A typed YAML loader is what makes the type rule possible. The check carried a hand-written reader
 until 2026-09-18, and that reader returned the string `'3'` for both `btn_start: 3` and
 `btn_start: "3"`. On that path the type rule could not fire at all, so the reader went and
 `.github/workflows/translation-sync.yml` installs `python3-yaml` instead.
@@ -585,7 +585,7 @@ probe stayed green while the language was un-wired from `theme-ael.scss`.
 
 Rule 8 reads the PATH, not the file. Quarto reads these three keys under `format.html` and
 nowhere else, so a value parked under `book:` satisfies a grep and changes nothing about the
-render. The check parses the project file with `yaml.safe_load` and asks what path each key sits
+render. The check parses the project file with PyYAML and asks what path each key sits
 at.
 
 Rule 7 takes two exclusions, both measured on 2026-09-18 over 86 cross-language collisions. 84

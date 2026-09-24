@@ -20,6 +20,11 @@
 #                       about and acknowledgements, which are not chapters
 #   the language count  languages.yml
 #
+# yaml::read_yaml reads an unquoted yes, no, true, false, on, off, y or n as a
+# logical. The handlers keep each one as its text, as
+# utils/check-language-consistency.R does.
+# The Norwegian code no then stays a code, and a no: block key stays a key.
+#
 # The old Welcome page carried a live PayPal donation form. It is not here, and
 # it MUST NOT come back. Richard removed it on 2026-09-18. Its button id is in no
 # file of this repository, and the landing page gate fails on that string
@@ -27,8 +32,12 @@
 # and the contact line, and that is the whole of it.
 
 landing_hero <- function(lang, root = here::here()) {
-  strings <- yaml::read_yaml(file.path(root, "landing.yml"))
-  langs <- yaml::read_yaml(file.path(root, "languages.yml"))
+  as_text <- list("bool#yes" = function(x) x, "bool#no" = function(x) x)
+  read <- function(...) {
+    yaml::read_yaml(file.path(root, ...), handlers = as_text)
+  }
+  strings <- read("landing.yml")
+  langs <- read("languages.yml")
 
   pick <- function(block, key) {
     if (!is.list(block) || is.null(names(block)) || !key %in% names(block)) {
@@ -75,22 +84,25 @@ landing_hero <- function(lang, root = here::here()) {
   title <- titles[i]
   languages_n <- length(codes)
 
-  book <- yaml::read_yaml(file.path(
-    root,
-    "content",
-    langs$main,
-    "_quarto.yaml"
-  ))
-  stems <- unlist(lapply(book$book$chapters, function(x) {
-    if (is.character(x)) {
-      x
-    } else if (is.list(x)) {
-      unlist(x$chapters)
-    } else {
-      NULL
+  book <- read("content", langs$main, "_quarto.yaml")
+  # The .qmd entries of book.chapters: the walk of project() in checks/langs.py.
+  # A part that names a .qmd file is a page too, and it comes before its chapters.
+  entries <- function(items) {
+    out <- character(0)
+    for (x in items) {
+      if (is.character(x) && length(x) == 1 && endsWith(x, ".qmd")) {
+        out <- c(out, x)
+      } else if (is.list(x)) {
+        part <- x[["part"]]
+        if (is.character(part) && length(part) == 1 && endsWith(part, ".qmd")) {
+          out <- c(out, part)
+        }
+        out <- c(out, entries(x[["chapters"]]))
+      }
     }
-  }))
-  stems <- sub("\\.qmd$", "", stems)
+    out
+  }
+  stems <- sub("\\.qmd$", "", entries(book$book$chapters))
   # index, about and acknowledgements are pages of the book, not chapters of it.
   chapters_n <- length(setdiff(stems, c("index", "about", "acknowledgements")))
 

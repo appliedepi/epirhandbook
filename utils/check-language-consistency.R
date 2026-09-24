@@ -66,7 +66,8 @@
 #      chapters live under _excluded/de/.
 #
 # yaml::read_yaml reads both files. The yaml package reads an unquoted yes,
-# no, on, off, y or n as a logical, so the script keeps each one as its text.
+# no, on, off, y, n, true or false as a logical, so the script keeps each one
+# as its text.
 # The Norwegian code no then stays a code. The checks under checks/ read the
 # same two files with PyYAML, through checks/langs.py.
 #
@@ -245,7 +246,7 @@ get_data_names_in_chunks <- function(path) {
 
 LANDING <- "index"
 
-# These handlers keep an unquoted yes, no, on, off, y or n as its text.
+# These handlers keep an unquoted yes, no, on, off, y, n, true or false as its text.
 AS_TEXT <- list("bool#yes" = function(x) x, "bool#no" = function(x) x)
 
 # One YAML file, or a stop with one line that names it: the failure form of
