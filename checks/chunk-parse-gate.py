@@ -15,12 +15,17 @@ chunk breaks and another is repaired in the same file.
 Proved red: an extra closing parenthesis is reported by parse(). Proved red again on a file where
 one chunk breaks and another is fixed in the same commit.
 
-Exit 0 when no chunk regresses, 1 when one does, 2 when the gate cannot run: a base or head that
-is not a commit, a git command that fails, or a missing or failing Rscript.
+Exit 0 when no chunk regresses, and 1 when one does. Exit 2 when the gate cannot run:
+  a base or head that is not a commit
+  a git command that fails
+  a missing or failing Rscript
+  a languages.yml that checks/langs.py cannot read
 
 Usage: python3 checks/chunk-parse-gate.py <base> [head]
 """
 import os, re, shutil, subprocess, sys, tempfile
+
+from langs import Unreadable, read_languages
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -50,11 +55,10 @@ rscript = shutil.which('Rscript')
 if rscript is None:
     die('Rscript is not on PATH. This gate parses every chunk with R.')
 
-y = open(os.path.join(ROOT, 'languages.yml'), encoding='utf-8').read()
-main = re.search(r'^main:\s*([A-Za-z0-9_]+)', y, re.M)
-if main is None:
-    die('languages.yml declares no main language')
-main = main.group(1)
+try:
+    main, _ = read_languages(os.path.join(ROOT, 'languages.yml'))
+except Unreadable as e:
+    die(e.why)
 
 d = git(['diff', '--name-only', base, head, '--', 'content/'])
 if d.returncode != 0:

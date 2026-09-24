@@ -11,7 +11,8 @@ missing reports a clean tree and exits 0. Nothing is measured and the result say
 So a check MUST refuse an empty file set as well as an absent one.
 
 For each check and each required input, this builds a fixture without that input and asserts
-three things about the run:
+three things about the run. For languages.yml it also builds a fixture where that file does not
+parse as YAML:
 
   it exits non-zero            a missing input is not a pass
   it prints no traceback       the reader gets a sentence, not a stack
@@ -23,6 +24,7 @@ page, so it gets a second fixture: two declared languages, and no render in eith
 Usage: python3 checks/check-clean-failure.py [--summary]
 Exit 0 when every case is clean, 1 when any check crashes or passes on a missing input.
 """
+import os
 import pathlib
 import shutil
 import subprocess
@@ -32,17 +34,29 @@ import tempfile
 HERE = pathlib.Path(__file__).resolve().parent
 ROOT = HERE.parent
 
-# check script -> the inputs it must refuse to run without.
+# check script -> (its arguments, the inputs it must refuse to run without).
 # 'content' is the chapter set, and an EMPTY one must be refused too.
 CASES = {
-    'check-links.py': ['languages.yml', 'content'],
-    'check-data-reads.py': ['languages.yml', 'content'],
-    'check-unparsed-links.py': ['content'],
-    'check-image-names.py': ['content', 'images'],
-    'check-landing-strings.py': [
-        'languages.yml', 'landing.yml', 'utils/landing-hero.R', 'content'],
-    'check-image-version-refs.py': ['docker-images.yml', '.devcontainer.json', 'README.md'],
+    'check-links.py': (['--summary'], ['languages.yml', 'content']),
+    'check-data-reads.py': (['--summary'], ['languages.yml', 'content']),
+    'check-unparsed-links.py': (['--summary'], ['content']),
+    'check-image-names.py': (['--summary'], ['content', 'images']),
+    'check-landing-strings.py': (['--summary'], [
+        'languages.yml', 'landing.yml', 'utils/landing-hero.R', 'content']),
+    'check-image-version-refs.py': (
+        ['--summary'], ['docker-images.yml', '.devcontainer.json', 'README.md']),
+    # The two sync scripts write chapter files, so they run as a dry run. sync-chunks.py finds
+    # its files with a glob, so it reads no stem list and has no 'content' case.
+    'sync-anchors.py': (['--dry-run'], ['languages.yml', 'content']),
+    'sync-chunks.py': (['--dry-run'], ['languages.yml']),
+    # Checks 8 and 6 compare two commits, so the fixture becomes a git repository for them.
+    # An empty diff is their correct result, so they have no 'content' case.
+    'chunk-parse-gate.py': (['HEAD', 'HEAD'], ['languages.yml']),
+    'render-gate.sh': (['HEAD', 'HEAD'], ['languages.yml']),
 }
+
+# A languages.yml that does not parse: the flow sequence never closes.
+BROKEN = 'main: en\nlanguages: [\n'
 
 summary = '--summary' in sys.argv[1:]
 
@@ -118,30 +132,46 @@ def build_rendered(tmp):
     shutil.copytree(HERE, tmp / 'checks')
 
 
+def commit(tmp):
+    """Make the fixture a git repository with one commit, so HEAD names a commit."""
+    git = ['git', '-C', str(tmp), '-c', 'user.name=fixture', '-c', 'user.email=fixture@example.org',
+           '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=' + os.devnull]
+    for args in (['init', '-q'], ['add', '-A'], ['commit', '-q', '-m', 'fixture']):
+        subprocess.run(git + args, check=True, capture_output=True)
+
+
 failures = []
 cases = 0
-for script, inputs in sorted(CASES.items()):
+for script, (script_args, inputs) in sorted(CASES.items()):
     for missing in inputs:
-        for mode in ('absent', 'empty'):
+        for mode in ('absent', 'empty', 'broken'):
             if mode == 'empty' and missing not in ('content', 'images'):
+                continue
+            if mode == 'broken' and missing != 'languages.yml':
                 continue
             cases += 1
             with tempfile.TemporaryDirectory() as raw:
                 tmp = pathlib.Path(raw) / 'fixture'
                 tmp.mkdir()
                 build(tmp)
+                if 'HEAD' in script_args:
+                    commit(tmp)
                 target = tmp / missing
                 if mode == 'absent':
                     shutil.rmtree(target) if target.is_dir() else target.unlink()
-                else:
+                elif mode == 'empty':
                     shutil.rmtree(target)
                     target.mkdir()
+                else:
+                    target.write_text(BROKEN, encoding='utf-8')
                 # No --fixture. That flag makes a check derive its file set by globbing,
                 # which deliberately bypasses languages.yml, so it would exercise a path
                 # the repository never runs. Each check takes ROOT from its own location,
                 # so copying checks/ into the fixture IS how the fixture becomes the root.
+                # The sync scripts read from the working directory, so cwd is the root too.
+                shell = ['bash'] if script.endswith('.sh') else [sys.executable]
                 run = subprocess.run(
-                    [sys.executable, str(tmp / 'checks' / script), '--summary'],
+                    shell + [str(tmp / 'checks' / script)] + script_args,
                     capture_output=True, text=True, cwd=tmp, timeout=120)
                 output = run.stdout + run.stderr
                 label = f"{script} with {missing} {mode}"

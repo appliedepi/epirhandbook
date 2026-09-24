@@ -27,8 +27,9 @@ never checked. The checker reads the raw source for that form and counts it as
 link whose destination sits on the next line still passes, which CommonMark allows. The checker
 skips a fenced code block, an HTML comment and a code span.
 
-Deterministic. No model, no network, no third-party package. Exit 1 on a link that is dead,
-same-page in long form, across languages, or unterminated.
+Deterministic. No model and no network. `checks/langs.py` reads `languages.yml` and the stem
+list with PyYAML. Exit 1 on a link that is dead, same-page in long form, across languages, or
+unterminated.
 
 Usage: python3 checks/check-links.py [--summary] [--fixture <dir>] [--pandoc <cmd>]
 """
@@ -37,6 +38,8 @@ from concurrent.futures import ThreadPoolExecutor
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import unquote
+
+from langs import read_languages, read_stems
 
 ROOT = Path(__file__).resolve().parent.parent
 POOL = 8
@@ -73,21 +76,10 @@ def languages():
     """The codes `languages.yml` declares, in file order, and the main language.
 
     The order is the declared one. `main:` names the reference language, and it is a code in
-    that list, not a position in it.
+    that list, not a position in it. `checks/langs.py` reads the file, and it stops the run
+    with one line that names the file when it cannot.
     """
-    path = ROOT / 'languages.yml'
-    if not path.is_file():
-        sys.exit(f"{sys.argv[0]}: no {path}. That file is the one declaration of which "
-                 "languages ship, and without it this check has no file set.")
-    y = path.read_text(encoding='utf-8')
-    found = re.search(r'^main:\s*([A-Za-z0-9_]+)', y, re.M)
-    if found is None:
-        sys.exit(f"{sys.argv[0]}: {path} has no 'main:' line naming the reference language.")
-    main = found.group(1)
-    codes = re.findall(r'^\s*-\s*code:\s*([A-Za-z0-9_]+)', y, re.M)
-    if not codes:
-        sys.exit(f"{sys.argv[0]}: {path} declares no language. An empty list would check nothing "
-                 "and report a clean tree.")
+    main, codes = read_languages(ROOT / 'languages.yml')
     return codes, main
 
 
@@ -99,13 +91,7 @@ def declared():
     check 9 of `checks/check-sync.sh` reports a language that does not.
     """
     langs, main = languages()
-    ref = ROOT / 'content' / main / '_quarto.yaml'
-    if not ref.exists():
-        # Without the reference project file there is no stem list, so this check cannot run.
-        # Stop with one line, not a traceback. Check 9 of check-sync.sh reports the file.
-        sys.exit('%s: missing. Check 9 of checks/check-sync.sh reports it.' % ref)
-    y = ref.read_text(encoding='utf-8')
-    stems = re.findall(r'^\s*-\s*([A-Za-z0-9_]+)\.qmd', y, re.M)
+    stems = read_stems(ROOT / 'content' / main / '_quarto.yaml')
     return sorted(('content/%s/%s.qmd' % (l, s), l) for l in langs for s in stems), langs
 
 

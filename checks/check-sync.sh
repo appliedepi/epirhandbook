@@ -34,22 +34,21 @@ if [ -n "$base" ] && ! git cat-file -e "$base^{commit}" 2>/dev/null; then
   exit 2
 fi
 echo "== 1. Structure: every declared chapter in every language, same chunk count, same heading sequence"
-python3 - <<'PY' || rc=1
+python3 - "$here" <<'PY' || rc=1
 import re, os, sys
-if not os.path.exists('languages.yml'):
-    # No language list, so this check cannot run. Stop with one line, not a traceback.
-    print('   languages.yml is missing; check 9 below reports it')
+# checks/langs.py reads languages.yml and the stem list. A heredoc has no directory of its
+# own, so check-sync.sh gives it the checks directory as its first argument.
+sys.path.insert(0, sys.argv[1])
+from langs import Unreadable, read_languages, read_stems
+try:
+    main, codes = read_languages('languages.yml')
+    decl = read_stems('content/%s/_quarto.yaml' % main)
+except Unreadable as e:
+    # No language list or no stem list, so this check cannot run. Stop with one line, not
+    # a traceback.
+    print('   %s. Check 9 below reports it.' % e.why.rstrip('.'))
     sys.exit(1)
-y = open('languages.yml', encoding='utf-8').read()
-main = re.search(r'^main:\s*([A-Za-z0-9_]+)', y, re.M).group(1)
-langs = [l for l in re.findall(r'^\s*-\s*code:\s*([A-Za-z0-9_]+)', y, re.M) if l != main]
-ref = 'content/%s/_quarto.yaml' % main
-if not os.path.exists(ref):
-    # No stem list, so this check cannot run. Stop with one line, not a traceback.
-    print('   %s is missing; check 9 below reports it' % ref)
-    sys.exit(1)
-decl = re.findall(r'^\s*-\s*([A-Za-z0-9_]+)\.qmd',
-                  open(ref, encoding='utf-8').read(), re.M)
+langs = [l for l in codes if l != main]
 # The landing page is written per language, so it is not held to the English structure.
 decl = [s for s in decl if s != 'index']
 F = re.compile(r'^\s*`{3,}\s*\{r[ ,}]', re.M)
@@ -86,24 +85,22 @@ python3 "$here/sync-chunks.py" --dry-run > "$log/chunks.txt" 2>&1 || rc=1
 grep -E '^files|^SKIPPED' "$log/chunks.txt" | sed 's/^/   /'
 grep -q '^files [0-9]*, changed 0,' "$log/chunks.txt" || rc=1
 echo "== 4. Inline code spans in translated prose that occur nowhere in the English chapter (informational)"
-python3 - <<'PY'
+python3 - "$here" <<'PY'
 import re, os, sys, collections
 def strip(t): return re.sub(r'^\s*`{3,}\s*\{r.*?^\s*`{3,}\s*$', '', t, flags=re.S | re.M)
 SPAN = re.compile(r'(?<!`)`([^`\n]+)`(?!`)')
-if not os.path.exists('languages.yml'):
-    # No language list, so this check cannot run. Stop with one line, not a traceback.
-    print('   languages.yml is missing; check 9 below reports it')
+# checks/langs.py reads languages.yml and the stem list, as in check 1.
+sys.path.insert(0, sys.argv[1])
+from langs import Unreadable, read_languages, read_stems
+try:
+    main, codes = read_languages('languages.yml')
+    decl = read_stems('content/%s/_quarto.yaml' % main)
+except Unreadable as e:
+    # No language list or no stem list, so this check cannot run. Stop with one line, not
+    # a traceback.
+    print('   %s. Check 9 below reports it.' % e.why.rstrip('.'))
     sys.exit(0)
-y = open('languages.yml', encoding='utf-8').read()
-main = re.search(r'^main:\s*([A-Za-z0-9_]+)', y, re.M).group(1)
-langs = [l for l in re.findall(r'^\s*-\s*code:\s*([A-Za-z0-9_]+)', y, re.M) if l != main]
-ref = 'content/%s/_quarto.yaml' % main
-if not os.path.exists(ref):
-    # No stem list, so this check cannot run. Stop with one line, not a traceback.
-    print('   %s is missing; check 9 below reports it' % ref)
-    sys.exit(0)
-decl = re.findall(r'^\s*-\s*([A-Za-z0-9_]+)\.qmd',
-                  open(ref, encoding='utf-8').read(), re.M)
+langs = [l for l in codes if l != main]
 # The landing page is written per language, so its spans are not measured against the English.
 decl = [s for s in decl if s != 'index']
 per = collections.Counter()
@@ -129,15 +126,16 @@ echo "== 7. Data folder: R chunks that execute and name the repository's data/ f
 python3 "$here/check-data-reads.py" --summary | sed 's/^/   /' \
   || { python3 "$here/check-data-reads.py" | sed 's/^/   /'; rc=1; }
 echo "== 9. Layout: the language folders, the project files, the manifest and the aliases"
-python3 - <<'LAYOUT' || rc=1
+python3 - "$here" <<'LAYOUT' || rc=1
 """Report every way the language folders drift from the layout the repository declares.
 
 `languages.yml` is the language list. `content/<main>/_quarto.yaml` is the reference project
 file, and its flattened `book.chapters` list is the stem list. A YAML parser reads both. It
 also reads `docker-images.yml` and the front matter of the chapter files.
 
-The loader is `yaml.BaseLoader`. It shares the scanner and the parser of `yaml.safe_load`, and
-it makes every scalar a string. `yaml.safe_load` reads an unquoted `no` as False, so the
+The loader is `Loader` from `checks/langs.py`, and every check that reads `languages.yml` uses
+it. It is `yaml.BaseLoader`, which shares the scanner and the parser of `yaml.safe_load` and
+makes every scalar a string. `yaml.safe_load` reads an unquoted `no` as False, so the
 Norwegian code `no` would not survive it. A file that does not parse gives a DRIFT line.
 
 A duplicate key is a parse failure here. PyYAML keeps the last value of a duplicate key and
@@ -153,6 +151,11 @@ except ImportError:
           'yaml. Install it with `sudo apt-get install -y python3-yaml`.')
     sys.exit(1)
 
+# checks/langs.py holds the loader and the walk over book.chapters. A heredoc has no
+# directory of its own, so check-sync.sh gives it the checks directory as its first argument.
+sys.path.insert(0, sys.argv[1])
+from langs import Loader, project
+
 DRIFT = []
 
 # What parse() returns for text that does not parse. It cannot be None, because an empty
@@ -162,24 +165,6 @@ FAILED = object()
 
 def drift(where, why):
     DRIFT.append((where, why))
-
-
-class Loader(yaml.BaseLoader):
-    """yaml.BaseLoader that refuses a mapping with a duplicate key."""
-
-    def construct_mapping(self, node, deep=False):
-        # Compare the key nodes by tag and text, before construction. A merge key `<<` is
-        # skipped, because SafeLoader expands it later. Comparing constructed values would
-        # also treat the keys `true` and `1` as one key.
-        seen = set()
-        for k, _ in node.value:
-            if not isinstance(k, yaml.ScalarNode) or k.tag == 'tag:yaml.org,2002:merge':
-                continue
-            if (k.tag, k.value) in seen:
-                raise yaml.constructor.ConstructorError(
-                    None, None, 'duplicate key %s' % k.value, k.start_mark)
-            seen.add((k.tag, k.value))
-        return super().construct_mapping(node, deep)
 
 
 def parse(text, where, first=1, part='the file'):
@@ -251,37 +236,6 @@ def wanted(stem, code, main):
     if stem == 'transition_to_r':
         return ['/new_pages/transition_to_R.html', '/new_pages/transition_to_r.html']
     return ['/new_pages/%s.html' % old]
-
-
-def project(doc):
-    """One parsed project file: (stems in order, part count, lang, book title).
-
-    The stems are the `.qmd` entries of `book.chapters`, in file order. A part is a mapping
-    with a `part:` key, and its own `chapters:` list gives its stems in its place. A part may
-    name a `.qmd` file instead of a title. Quarto renders that file as the part page, so it is
-    a stem too, and it comes before the part's chapters.
-    """
-    doc = doc if isinstance(doc, dict) else {}
-    book = doc.get('book') if isinstance(doc.get('book'), dict) else {}
-    stems, parts = [], 0
-
-    def walk(items):
-        nonlocal parts
-        for x in items if isinstance(items, list) else []:
-            if isinstance(x, str) and x.endswith('.qmd'):
-                stems.append(x[:-len('.qmd')])
-            elif isinstance(x, dict):
-                if 'part' in x:
-                    parts += 1
-                    if isinstance(x['part'], str) and x['part'].endswith('.qmd'):
-                        stems.append(x['part'][:-len('.qmd')])
-                walk(x.get('chapters'))
-
-    walk(book.get('chapters'))
-    lang, title = doc.get('lang'), book.get('title')
-    return (stems, parts,
-            lang if isinstance(lang, str) else '',
-            title if isinstance(title, str) else '')
 
 
 # Each project file is parsed once. A file that does not parse gives its DRIFT line once, and

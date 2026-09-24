@@ -27,6 +27,15 @@ The repository declares its layout in two files. `languages.yml` names the eight
 `content/en/_quarto.yaml` names the 52 stems. Every chapter file is `content/<lang>/<stem>.qmd`,
 so a file's language is the folder that holds it.
 
+`checks/langs.py` reads both files for the checks. `read_languages()` returns the main code and
+the declared codes, and checks 1 to 8 call it. `read_stems()` returns the stems in file order,
+and checks 1, 2, 4, 5 and 7 call it. Checks 9 and 15 use the module's loader.
+
+The loader is `yaml.BaseLoader`, and it refuses a duplicate key. BaseLoader keeps every scalar a
+string, so the Norwegian code `no` stays a code. When a function cannot read a file, the check
+stops with one line that names the file. The causes are a missing file, a file that does not
+parse, and a `languages.yml` with no `main:` or no code.
+
 The landing page hero says 49 chapters. That is a narrower count, and both are right. It is the
 52 stems less `index`, `about` and `acknowledgements`. Those three are pages of the book, not
 chapters of it.
@@ -220,7 +229,8 @@ The root `CLAUDE.md` carries the same rule, for an agent that edits a chapter.
 
 Run `checks/render-gate.sh <base> [head]`. `check-sync.sh` runs it as check 6, with the base it
 was given. It runs `quarto render --no-execute` on every translated chapter that changed since
-`<base>`. It needs quarto and git. It runs no R, because `--no-execute` skips the knitr engine.
+`<base>`. It needs quarto, git and PyYAML. It runs no R, because `--no-execute` skips the knitr
+engine.
 
 A translated chapter is a file under `content/<lang>/` whose language is not the main language
 in `languages.yml`. Each one renders as a temporary copy beside the original,
@@ -245,8 +255,9 @@ count uses the gate's own `INLINE` pattern, on prose only, with fenced blocks sk
 count of `` `r `` over the same files gives 105, because it also counts text inside fenced
 blocks.
 
-The gate stops with exit 2, before it renders anything, in four cases.
+The gate stops with exit 2, before it renders anything, in five cases.
 
+- A `languages.yml` that `checks/langs.py` cannot read.
 - A base or a head that is not a commit.
 - A `git diff` that fails.
 - A temporary copy path that the repository tracks.
@@ -273,11 +284,12 @@ not fail before is a regression, unless the English chunk at that index fails to
 comparison reads `same` when one chunk breaks and another is repaired in the same file, so the
 gate compares indices instead.
 
-The gate stops with exit 2 in four cases.
+The gate stops with exit 2 in five cases.
 
 - A base or a head that is not a commit.
 - A `git` command that fails.
 - `Rscript` that is not on PATH.
+- A `languages.yml` that `checks/langs.py` cannot read.
 - `Rscript` that returns non-zero. The gate prints `Rscript`'s own stderr.
 
 ## Check 9: the layout
@@ -334,11 +346,9 @@ Check 9 then skips the comparisons that need that file, and still reports what i
 `languages.yml` is the exception, because without it there is nothing to compare. When it is
 missing, does not parse or names no `main:` language, check 9 stops after that one line.
 
-Checks 1 and 4 read `languages.yml` without a guard, and with regular expressions. Delete that
-file and both raise a traceback, above check 9's own `DRIFT languages.yml` line.
-
-Checks 1, 5 and 7 read the stem list from `content/en/_quarto.yaml`. Without that file each one
-stops with a one-line message, and check 9 names the file to restore.
+Checks 1 and 4 read `languages.yml` and the stem list through `checks/langs.py`. When either file
+is missing or does not parse, each prints one line that ends `Check 9 below reports it.` Checks 5
+and 7 stop with one line that names the file. Check 9 then prints its own `DRIFT` line.
 
 ### Remedy
 
@@ -443,19 +453,27 @@ missing file. Two boxes of issue 455 were this, and one crashed four checks at o
 It also covers the worse case. A check whose input is EMPTY rather than absent reports a clean
 tree and exits 0. Nothing is measured and the result says success.
 
-For each check and each required input, it builds a fixture without that input. It then
-asserts that the run exits non-zero, prints no traceback, and names the missing thing. It does
-NOT pass `--fixture`. That flag makes a check derive its file set by globbing. Globbing
+For each check and each required input, it builds a fixture without that input. For
+`languages.yml` it also builds a fixture where that file does not parse. It then asserts that the
+run exits non-zero, prints no traceback, and names the missing thing.
+
+The two sync scripts run with `--dry-run`, so they write nothing. Checks 6 and 8 compare two
+commits, so they run with `HEAD HEAD` in a fixture that is a git repository. The other six
+checks run with `--summary`.
+
+It does NOT pass `--fixture`. That flag makes a check derive its file set by globbing. Globbing
 bypasses `languages.yml`, and would exercise a path the repository never runs.
 
 Expected output: `checks that do not fail cleanly: 0`.
 
 Remedy: guard the read. Say which file is missing and why the check needs it.
 
-**What it does not cover.** Check 9 is inline python inside `check-sync.sh`, not a separate
-script, so check 12 never runs it. Check 9 was verified by hand on 2026-09-16 to degrade to a
-DRIFT line for a missing `languages.yml` and for a missing `docker-images.yml`. Any new check
-written inline rather than as `checks/<name>.py` is outside this gate for the same reason.
+**What it does not cover.** Checks 1, 4 and 9 are inline python inside `check-sync.sh`, not
+separate scripts, so check 12 never runs them. Check 9 was verified by hand on 2026-09-16 to
+degrade to a DRIFT line for a missing `languages.yml` and for a missing `docker-images.yml`.
+Checks 1 and 4 were verified by hand on 2026-09-24 to print one line for a missing
+`languages.yml` and for one that does not parse. Any new check written inline rather than as
+`checks/<name>.py` is outside this gate for the same reason.
 
 ## 13. Language copies (removed)
 

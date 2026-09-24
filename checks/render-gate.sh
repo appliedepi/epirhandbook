@@ -24,13 +24,17 @@
 # creates, and only those: the gate records at start which of them are already there, and leaves
 # every one of those alone. In a fresh clone the gate therefore leaves no file at all.
 #
-# Exit 0 when every file renders, 1 when a file FAILS, 2 when the gate cannot run: a base or head
-# that is not a commit, a git diff that fails, or a copy path that already exists or is tracked.
+# Exit 0 when every file renders, and 1 when a file FAILS. Exit 2 when the gate cannot run:
+#   a base or head that is not a commit
+#   a git diff that fails
+#   a copy path that already exists or is tracked
+#   a languages.yml that checks/langs.py cannot read
 #
 # Writes /tmp/render-gate/<lang>.<stem>.log per file and /tmp/render-gate/SUMMARY.tsv.
 # A file with an odd number of fence lines FAILS before render. Pandoc renders an unclosed
 # fence with exit 0, so the render alone cannot see that class. YAML damage does exit 1.
-# The gate needs quarto and git. It runs no R: --no-execute skips the knitr engine.
+# The gate needs quarto, git, and python3 with PyYAML, which reads languages.yml through
+# checks/langs.py. It runs no R: --no-execute skips the knitr engine.
 set -uo pipefail
 here_checks=$(cd "$(dirname "$0")" && pwd)
 cd "$(dirname "$0")/.."
@@ -47,10 +51,23 @@ fi
 base="$1"; head="${2:-HEAD}"
 out=/tmp/render-gate; rm -rf "$out"; mkdir -p "$out"
 
-main=$(sed -n 's/^main:[[:space:]]*\([A-Za-z0-9_][A-Za-z0-9_]*\).*/\1/p' languages.yml | head -1)
-if [ -z "$main" ]; then
-  echo "render-gate: languages.yml declares no main language" >&2; exit 2
+# The main language on the first line, then every declared code, one per line.
+# checks/langs.py reads languages.yml, and it names the file when it cannot.
+if ! declared=$(python3 - "$here_checks" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1])
+from langs import Unreadable, read_languages
+try:
+    main, codes = read_languages('languages.yml')
+except Unreadable as e:
+    sys.exit('render-gate: %s' % e.why)
+print('\n'.join([main] + codes))
+PY
+); then
+  exit 2
 fi
+main=$(head -1 <<<"$declared")
+mapfile -t codes < <(tail -n +2 <<<"$declared")
 
 # Record which build folders are absent now. The trap deletes the ones the render creates and
 # leaves every folder that was already here.
@@ -84,12 +101,6 @@ trap cleanup EXIT
 cleanup
 
 if [ "$landing" = yes ]; then
-  mapfile -t codes < <(sed -n \
-    's/^[[:space:]]*-[[:space:]]*code:[[:space:]]*\([A-Za-z0-9_][A-Za-z0-9_]*\).*/\1/p' \
-    languages.yml)
-  if [ "${#codes[@]}" -eq 0 ]; then
-    echo "render-gate: languages.yml declares no language" >&2; exit 2
-  fi
   rc=0
   rendered=0
   for c in "${codes[@]}"; do

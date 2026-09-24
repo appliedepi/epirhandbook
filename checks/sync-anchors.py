@@ -11,9 +11,12 @@ translated files, that target an English id the translation does not carry.
 The landing page, content/<lang>/index.qmd, is outside the chapter set. Each language writes
 its own landing page, so its headings are not a copy of the English headings.
 
-Deterministic. No model, no network. Usage: python3 checks/sync-anchors.py [--dry-run]
+Deterministic. No model, no network. `checks/langs.py` reads `languages.yml` and the stem list
+with PyYAML. Usage: python3 checks/sync-anchors.py [--dry-run]
 """
 import re, glob, sys
+
+from langs import read_languages, read_stems
 
 USAGE = __doc__.strip().split('Usage: ')[1].strip()
 unknown = [a for a in sys.argv[1:] if a != '--dry-run']
@@ -21,13 +24,10 @@ if unknown:
     print('unknown argument %s\nUsage: %s' % (unknown[0], USAGE), file=sys.stderr)
     sys.exit(2)
 dry = '--dry-run' in sys.argv
-LANGS = re.findall(r'^\s*-\s*code:\s*([A-Za-z0-9_]+)', open('languages.yml').read(), re.M)
-MAIN = re.search(r'^main:\s*([A-Za-z0-9_]+)', open('languages.yml').read(), re.M).group(1)
+MAIN, LANGS = read_languages('languages.yml')
 LANGS = [l for l in LANGS if l != MAIN]
 LANDING = 'index'
-decl = re.findall(r'^\s*-\s*([A-Za-z0-9_]+)\.qmd',
-                  open('content/%s/_quarto.yaml' % MAIN).read(), re.M)
-decl = [s for s in decl if s != LANDING]
+decl = [s for s in read_stems('content/%s/_quarto.yaml' % MAIN) if s != LANDING]
 HEAD = re.compile(r'^(#{1,6}\s+.*?)(\s*\{[^}]*\})?\s*$')
 
 

@@ -13,6 +13,7 @@ The landing page, content/<lang>/index.qmd, is outside the file set. Each langua
 own landing page, so its chunks are not a copy of the English chunks.
 
 Deterministic. No model, no network. Prints one line per changed file and a summary.
+`checks/langs.py` reads `languages.yml` with PyYAML.
 
 Usage:
     python3 checks/sync-chunks.py [--langs fr,es,vn,jp,pt,tr,ru] [--dry-run] [--only FILE ...]
@@ -23,15 +24,15 @@ import os
 import re
 import sys
 
+from langs import read_languages
+
 FENCE = re.compile(r'^(\s*)(`{3,})\s*\{r[ ,}]')
 LANDING = 'index.qmd'
 
 
 def languages():
     """The main language code and the translation codes, from `languages.yml`."""
-    y = open('languages.yml', encoding='utf-8').read()
-    main = re.search(r'^main:\s*([A-Za-z0-9_]+)', y, re.M).group(1)
-    codes = re.findall(r'^\s*-\s*code:\s*([A-Za-z0-9_]+)', y, re.M)
+    main, codes = read_languages('languages.yml')
     return main, [c for c in codes if c != main]
 
 

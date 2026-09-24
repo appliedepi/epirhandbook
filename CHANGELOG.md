@@ -8,14 +8,30 @@ of it, and that is expected of a changelog. Read it as a record, never as curren
 
 ---
 
+## 2026-09-24: one reader for the language list and the stem list
+
+`checks/langs.py` reads `languages.yml` and the stem list of `content/<main>/_quarto.yaml`. It
+parses both with `yaml.BaseLoader`, which keeps every scalar a string, and it refuses a duplicate
+key. Checks 1 to 8 now read `languages.yml` through it, and checks 1, 2, 4, 5 and 7 read the stem
+list through it too. Before, they used regular expressions, and check 6 used `sed`. Checks 9 and
+15 take their loader from it, and check 9 also takes its walk over `book.chapters`.
+
+- A quoted code, `code: "fr"`, was invisible to the regular expressions. Checks 1, 3, 4, 5 and 7 then skipped French, and none of them failed. They now read it.
+- A comment between `main:` and its value stopped checks 1 to 4 with a traceback. Checks 5, 7 and 8 said the file had no `main:`. All of them now read the value.
+- A part that names a `.qmd` file, `- part: about.qmd`, was not a stem for the regular expressions. Checks 1, 5 and 7 skipped that file. They now count it, as check 9 does.
+- `sync-anchors.py`, `sync-chunks.py` and `chunk-parse-gate.py` raised a traceback when `languages.yml` was missing. When the file did not parse but still held a `main:` line, checks 1 to 4 measured no language and passed. Each reader now stops with one message that names the file.
+- Check 12 now also runs `sync-anchors.py`, `sync-chunks.py`, `render-gate.sh` and `chunk-parse-gate.py`, and it adds a `languages.yml` that does not parse. It reports 34 cases, not 21.
+- The reader refuses a declaration the old regular expressions accepted: an entry with no code, a code that is not 2 or 3 lowercase letters, a repeated code, and a `main:` that is not one of the codes. The build in `.github/workflows/build-deploy.yml` already refuses the same shapes. It also refuses a project file with no chapter, which the old code read as an empty list and passed with 0 files scanned.
+- `utils/check-language-consistency.R` reads both files with `yaml::read_yaml`. Its handlers keep an unquoted `yes`, `no`, `on`, `off`, `y` or `n` as text.
+
+On the current tree every check prints the lines it printed before, except the case count of check 12.
+
 ## 2026-09-24: four checks that passed or crashed on a broken input
 
 - Check 15 read `languages.yml` with `yaml.safe_load`, which reads an unquoted `no` as False. A Norwegian `code: no` dropped out of the code list, and the check reported `problems: 0` without measuring it. It now reads that file with a loader that keeps every value a string, as check 9 does.
 - Checks 1 and 4 raised a traceback when `languages.yml` was missing. They now print one line and leave the report to check 9.
 - Check 9 did not see a part that names a `.qmd` file, `- part: intro.qmd`, which is valid Quarto. That file is now a stem, so a missing file or a missing `docker-images.yml` row is a DRIFT line. The handbook names every part by title today.
 - Check 5 raised a traceback when pandoc could not read a file, for example a front matter that does not parse. It now prints `PANDOC-FAILED <file>` and fails.
-
-Checks 1 and 4 still read `languages.yml` with regular expressions. So do `check-links.py`, `check-data-reads.py`, `chunk-parse-gate.py`, `sync-anchors.py`, `sync-chunks.py` and `utils/check-language-consistency.R`.
 
 ## 2026-09-24: check 9 and rule 8 of check 15 read YAML with PyYAML
 

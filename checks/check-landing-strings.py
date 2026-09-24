@@ -90,6 +90,10 @@ except ImportError:
              "\"3\" from the number 3, and rule 4 rejects a value that is not a string. "
              "Install it with `sudo apt-get install -y python3-yaml`, or `pip install pyyaml`.")
 
+# The duplicate-key refusal and the string-only loader. checks/langs.py holds both, and every
+# check that reads languages.yml uses that loader.
+from langs import NoDuplicates, Loader as Strings
+
 ARGS = sys.argv[1:]
 USAGE = ("Usage: check-landing-strings.py [--summary] [--slots] "
          "[--pages <template>] [--only <code>]")
@@ -317,38 +321,12 @@ def need(path, why):
     return path
 
 
-class NoDuplicates:
-    """A loader mixin that refuses a mapping with a duplicate key.
-
-    PyYAML keeps the last value of a duplicate key and says nothing, so a second block for
-    one language would silently replace the first.
-    """
-
-    def construct_mapping(self, node, deep=False):
-        # Compare the key nodes by tag and text, before construction. A merge key `<<` is
-        # skipped, because SafeLoader expands it later. Comparing constructed values would
-        # also treat the keys `true` and `1` as one key.
-        seen = set()
-        for k, _ in node.value:
-            if not isinstance(k, yaml.ScalarNode) or k.tag == 'tag:yaml.org,2002:merge':
-                continue
-            if (k.tag, k.value) in seen:
-                raise yaml.constructor.ConstructorError(
-                    None, None, 'duplicate key %s' % k.value, k.start_mark)
-            seen.add((k.tag, k.value))
-        return super().construct_mapping(node, deep)
-
-
+# NoDuplicates, from checks/langs.py, refuses a duplicate key. PyYAML keeps the last value of a
+# duplicate key and says nothing, so a second block for one language would silently replace the
+# first. Strings, the loader for languages.yml, keeps every scalar a string. yaml.safe_load reads
+# an unquoted `no` as False, so the Norwegian code `no` would drop out of the code list.
 class Loader(NoDuplicates, yaml.SafeLoader):
     """The loader for landing.yml and the project files."""
-
-
-class Strings(NoDuplicates, yaml.BaseLoader):
-    """The loader for languages.yml: every scalar stays a string.
-
-    yaml.safe_load reads an unquoted `no` as False. The Norwegian code `no` would then drop
-    out of the code list, and every rule would pass without measuring that language.
-    """
 
 
 def load(path, loader=None):

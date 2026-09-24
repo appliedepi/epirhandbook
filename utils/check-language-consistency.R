@@ -56,7 +56,8 @@
 #
 # Three input rules decide the counts.
 #   1. Read book.chapters from content/<main>/_quarto.yaml, where <main> is the
-#      main language in languages.yml. Keep the .qmd entries only.
+#      main language in languages.yml. Keep the .qmd entries only, in the walk
+#      that checks/langs.py uses. A part that names a .qmd file is an entry.
 #   2. Drop the index entry. It is the book landing page, each language writes
 #      its own, and it is not a translation. The report prints the entry it
 #      skips.
@@ -64,15 +65,17 @@
 #      leaves 7 translation languages. German is not declared there: the German
 #      chapters live under _excluded/de/.
 #
-# A regular expression reads each file, so the script needs no yaml package.
-# Check 9 of checks/check-sync.sh reads the same two files with PyYAML.
+# yaml::read_yaml reads both files. The yaml package reads an unquoted yes,
+# no, on, off, y or n as a logical, so the script keeps each one as its text.
+# The Norwegian code no then stays a code. The checks under checks/ read the
+# same two files with PyYAML, through checks/langs.py.
 #
 # Nothing runs this script automatically. A human types the command.
 #
 # Run from the repo root: Rscript utils/check-language-consistency.R
 # Pass a content directory as the first argument to check a copy:
 #   Rscript utils/check-language-consistency.R /tmp/scratch/content
-# Requires: appliedepidata.
+# Requires: appliedepidata and yaml.
 
 args <- commandArgs(trailingOnly = TRUE)
 content_dir <- if (length(args) >= 1) args[[1]] else "content"
@@ -242,26 +245,54 @@ get_data_names_in_chunks <- function(path) {
 
 LANDING <- "index"
 
-languages_yml <- read_lines_utf8("languages.yml")
-main_lang <- sub(
-  "^main:[[:space:]]*([A-Za-z0-9_]+).*$", "\\1",
-  grep("^main:", languages_yml, value = TRUE)[[1]]
-)
-langs <- sub(
-  "^[[:space:]]*-[[:space:]]*code:[[:space:]]*([A-Za-z0-9_]+).*$", "\\1",
-  grep("^[[:space:]]*-[[:space:]]*code:", languages_yml, value = TRUE)
-)
-langs <- setdiff(langs, main_lang)
+# These handlers keep an unquoted yes, no, on, off, y or n as its text.
+AS_TEXT <- list("bool#yes" = function(x) x, "bool#no" = function(x) x)
+
+# One YAML file, or a stop with one line that names it: the failure form of
+# checks/langs.py. yaml puts the file name in its own parse message.
+read_yaml_file <- function(path) {
+  if (!file.exists(path)) {
+    stop("no ", path, ".", call. = FALSE)
+  }
+  tryCatch(
+    yaml::read_yaml(path, handlers = AS_TEXT),
+    error = function(e) stop(conditionMessage(e), call. = FALSE)
+  )
+}
+
+# The .qmd entries of book.chapters, in file order: the walk of project() in
+# checks/langs.py. A part that names a .qmd file comes before its chapters.
+# yaml gives a list of strings as a character vector, and the loop reads both.
+chapter_entries <- function(items) {
+  out <- character(0)
+  for (x in items) {
+    if (is.character(x) && length(x) == 1 && endsWith(x, ".qmd")) {
+      out <- c(out, x)
+    } else if (is.list(x)) {
+      part <- x[["part"]]
+      if (is.character(part) && length(part) == 1 && endsWith(part, ".qmd")) {
+        out <- c(out, part)
+      }
+      out <- c(out, chapter_entries(x[["chapters"]]))
+    }
+  }
+  out
+}
+
+languages <- read_yaml_file("languages.yml")
+main_lang <- languages[["main"]]
+if (!is.character(main_lang) || length(main_lang) != 1 || !nzchar(main_lang)) {
+  stop("languages.yml declares no main: language.", call. = FALSE)
+}
+codes <- unlist(lapply(languages[["languages"]], function(x) x[["code"]]))
+if (length(codes) == 0) {
+  stop("languages.yml declares no language.", call. = FALSE)
+}
+langs <- setdiff(codes, main_lang)
 
 project_file <- file.path(content_dir, main_lang, "_quarto.yaml")
-declared_qmd <- sub(
-  "^[[:space:]]*-[[:space:]]*([A-Za-z0-9_]+\\.qmd)[[:space:]]*$", "\\1",
-  grep(
-    "^[[:space:]]*-[[:space:]]*[A-Za-z0-9_]+\\.qmd[[:space:]]*$",
-    read_lines_utf8(project_file),
-    value = TRUE
-  )
-)
+project <- read_yaml_file(project_file)
+declared_qmd <- chapter_entries(project[["book"]][["chapters"]])
 stems <- sub("\\.qmd$", "", declared_qmd)
 declared_elsewhere <- declared_qmd[stems == LANDING]
 stems <- stems[stems != LANDING]
@@ -455,7 +486,8 @@ outside_chunk <- name_rows[name_rows$in_chunk, , drop = FALSE]
 cat("=== Cross-language code and chunk-header consistency ===\n")
 cat("content directory:", content_dir, "\n")
 cat(
-  "declared .qmd entries in", paste0(project_file, " book.chapters:"),
+  "declared .qmd entries in",
+  paste0(project_file, " book.chapters:"),
   length(declared_qmd),
   "\n"
 )
@@ -475,7 +507,8 @@ cat(
   "\n"
 )
 cat(
-  "languages from languages.yml, main", paste0(main_lang, ":"),
+  "languages from languages.yml, main",
+  paste0(main_lang, ":"),
   length(langs),
   paste0("(", paste(langs, collapse = ", "), ")"),
   "\n"
