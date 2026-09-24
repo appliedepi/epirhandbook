@@ -24,6 +24,9 @@
 # logical. The handlers keep each one as its text, as
 # utils/check-language-consistency.R does.
 # The Norwegian code no then stays a code, and a no: block key stays a key.
+# landing.yml is stricter. An unquoted true or false, in any case, stops the
+# render, because check 15 reads those two words as booleans and rejects them.
+# Without this, eyebrow: true renders the text "true" and check 15 fails.
 #
 # The old Welcome page carried a live PayPal donation form. It is not here, and
 # it MUST NOT come back. Richard removed it on 2026-09-18. Its button id is in no
@@ -33,10 +36,29 @@
 
 landing_hero <- function(lang, root = here::here()) {
   as_text <- list("bool#yes" = function(x) x, "bool#no" = function(x) x)
-  read <- function(...) {
-    yaml::read_yaml(file.path(root, ...), handlers = as_text)
+  read <- function(..., handlers = as_text) {
+    yaml::read_yaml(file.path(root, ...), handlers = handlers)
   }
-  strings <- read("landing.yml")
+  # yaml catches an error inside a handler, warns, and keeps the logical. So the
+  # handler only records the value, and the stop comes after the read.
+  bools <- character(0)
+  refuse_bool <- function(x) {
+    if (tolower(x) %in% c("true", "false")) {
+      bools <<- c(bools, x)
+    }
+    x
+  }
+  strings <- read(
+    "landing.yml",
+    handlers = list("bool#yes" = refuse_bool, "bool#no" = refuse_bool)
+  )
+  if (length(bools)) {
+    stop(
+      "landing.yml has the unquoted value or key ",
+      paste(unique(bools), collapse = ", "),
+      ". Put it in quotes, because check 15 reads it as a boolean."
+    )
+  }
   langs <- read("languages.yml")
 
   pick <- function(block, key) {

@@ -13,8 +13,10 @@ The result line names what ran. It reads `IN SYNC` when checks 6 and 8 ran, and
 `DRIFT`, and 2 when `--base` names something that is not a commit.
 `.github/workflows/translation-sync.yml` passes `--base` on every push and every pull request.
 
-Every check writes its full output under `/tmp/check-sync/`. The lines the script prints come
-from those files.
+Every check writes its full output under `/tmp/check-sync-<id>/`. The lines the script prints come
+from those files. `<id>` is 8 hex digits from the `cksum` of the repository root path. Each
+checkout has its own folder, so two checkouts that run at the same time keep their logs. The
+script prints the folder on its first line.
 
 Every check below was used in the 2026-09 fix pass. The record of that pass is the
 [`archive/modernization` tree](https://github.com/appliedepi/epirhandbook/tree/621c4b053a1b8cba0d969dad13fb5c2a6e9155a8/archive/modernization), pinned at the last commit that carried it. Each check has a script, an expected output, and a remedy. The remedies are the
@@ -54,7 +56,7 @@ the GIS chapter returned. It became 51 x 7 on 2026-09-18, when `about.qmd` and
 | every heading with an English `{#id}` carries that id | 0 headings differ, 0 dead links | check 2 | `sync-anchors.py`, no agent |
 | every aligned chunk's code equals the English, comments free | 0 chunks differ | check 3 | `sync-chunks.py`, no agent |
 | inline code spans in prose name things the English names | informational | check 4 | the inline-pass agent workflow over the new suspects |
-| every changed chapter renders without execution, fences balanced | 0 FAIL | check 6, with `--base` or `--render` | read the log under `/tmp/render-gate/` |
+| every changed chapter renders without execution, fences balanced | 0 FAIL | check 6, with `--base` or `--render` | read the log under `/tmp/render-gate-<id>/` |
 | no R chunk parses worse than the English chunk | 0 files worse | check 8, with `--base` or `--render` | the sync, or a source defect |
 | every internal link resolves, stays on its page and stays in its language | 0 dead, 0 same-page, 0 cross-language and 0 unterminated links in the 416 declared files | check 5 | `rewrite-links.py`, no agent |
 | no chunk that executes names the `data/` folder, outside the two chapters that teach file paths | 0 lines in the 416 declared files | check 7 | load the data with `appliedepidata::get_data()`, or set `eval=F` |
@@ -270,8 +272,9 @@ because the gate never read the file.
 A file with an odd number of fence lines FAILS before the render. Pandoc renders an unclosed
 fence with exit 0, so the render alone cannot see that class.
 
-Per-file output goes to `/tmp/render-gate/<lang>.<stem>.log`, and the result of each file to
-`/tmp/render-gate/SUMMARY.tsv`.
+Per-file output goes to `/tmp/render-gate-<id>/<lang>.<stem>.log`, and the result of each file to
+`/tmp/render-gate-<id>/SUMMARY.tsv`. `<id>` is the same as for `check-sync.sh`, and the gate
+prints the folder on a `logs:` line.
 
 ## Check 8: the chunk parse gate
 

@@ -30,7 +30,9 @@
 #   a copy path that already exists or is tracked
 #   a languages.yml that checks/langs.py cannot read
 #
-# Writes /tmp/render-gate/<lang>.<stem>.log per file and /tmp/render-gate/SUMMARY.tsv.
+# Writes /tmp/render-gate-<id>/<lang>.<stem>.log per file and /tmp/render-gate-<id>/SUMMARY.tsv.
+# <id> is 8 hex digits from the cksum of the repository root path, as in checks/check-sync.sh.
+# Each checkout then has its own folder, and the same checkout reuses it.
 # A file with an odd number of fence lines FAILS before render. Pandoc renders an unclosed
 # fence with exit 0, so the render alone cannot see that class. YAML damage does exit 1.
 # The gate needs quarto, git, and python3 with PyYAML, which reads languages.yml through
@@ -49,7 +51,6 @@ if [ "$1" = "--landing" ]; then
   landing=yes
 fi
 base="$1"; head="${2:-HEAD}"
-out=/tmp/render-gate; rm -rf "$out"; mkdir -p "$out"
 
 # The main language on the first line, then every declared code, one per line.
 # checks/langs.py reads languages.yml, and it names the file when it cannot.
@@ -66,6 +67,11 @@ PY
 ); then
   exit 2
 fi
+# The log folder is made only after languages.yml reads. The fixtures of
+# checks/check-clean-failure.py stop before this line, so they leave no folder behind.
+out=/tmp/render-gate-$(printf '%08x' "$(pwd -P | cksum | cut -d' ' -f1)")
+rm -rf "$out"; mkdir -p "$out"
+echo "logs: $out"
 main=$(head -1 <<<"$declared")
 mapfile -t codes < <(tail -n +2 <<<"$declared")
 
@@ -215,7 +221,7 @@ done
 echo "rendered: $pass pass, $fail FAIL, $gone deleted, of ${#files[@]} changed translated files"
 echo "skipped inline-r 0: the gate renders inline R through the INLINE_R placeholder; $inline of these files carry inline R"
 grep -P '\tFAIL' "$out/SUMMARY.tsv" || true
-# A FAIL without its reason is unreadable in CI, where /tmp/render-gate is gone when the job ends.
+# A FAIL without its reason is unreadable in CI, where /tmp/render-gate-<id> is gone when the job ends.
 # Print the last lines of the first failing render log, prefixed so the caller can pass them on.
 first=$(grep -P '\tFAIL\t' "$out/SUMMARY.tsv" | head -1 | cut -f1)
 if [ -n "$first" ]; then

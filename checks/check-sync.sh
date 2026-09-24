@@ -8,13 +8,18 @@
 # --base and without --render they do not run, and the result line says
 # "IN SYNC (checks 6 and 8 not run)".
 # Exit 0 on IN SYNC, 1 on DRIFT, 2 when --base names something that is not a commit.
-# Every check writes its full output to /tmp/check-sync/, and the lines below come from those files.
+# Every check writes its full output to /tmp/check-sync-<id>/, and the lines below come from those files.
+# <id> is 8 hex digits from the cksum of the repository root path. Each checkout then has its
+# own folder, and two checkouts that run at the same time do not delete each other's logs.
+# The same checkout reuses its folder. checks/render-gate.sh derives its folder the same way.
 # Full description of each check, expected output and remedies: checks/README.md
 set -uo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 cd "$here/.."
 rc=0
-log=/tmp/check-sync; rm -rf "$log"; mkdir -p "$log"
+id=$(printf '%08x' "$(pwd -P | cksum | cut -d' ' -f1)")
+log=/tmp/check-sync-$id; rm -rf "$log"; mkdir -p "$log"
+echo "== logs: $log"
 base=''
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -420,7 +425,7 @@ if [ -n "$base" ]; then
   "$here/render-gate.sh" "$base" HEAD > "$log/render.txt" 2>&1 || rc=1
   grep -E '^(rendered:|skipped inline-r)|FAIL' "$log/render.txt" | grep -v '^FAIL-LOG' | sed 's/^/   /'
   grep -E '^FAIL-LOG' "$log/render.txt" | sed 's/^/   /'
-  echo "   full output: $log/render.txt, per file: /tmp/render-gate/SUMMARY.tsv"
+  echo "   full output: $log/render.txt, per file: /tmp/render-gate-$id/SUMMARY.tsv"
   echo "== 8. Chunk parse gate on every translated chapter changed since $base"
   python3 "$here/chunk-parse-gate.py" "$base" HEAD > "$log/parse.txt" 2>&1 || rc=1
   grep -E '^files |^content/|after-fail' "$log/parse.txt" | sed 's/^/   /'

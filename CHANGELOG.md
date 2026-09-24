@@ -8,6 +8,12 @@ of it, and that is expected of a changelog. Read it as a record, never as curren
 
 ---
 
+## 2026-09-24: the landing page refuses an unquoted boolean, and each checkout keeps its own logs
+
+- `utils/landing-hero.R` rendered `eyebrow: true` in `landing.yml` as the text "true", and check 15 rejected it. `landing_hero()` now stops on an unquoted `true` or `false`, in any case, and names `landing.yml`. `yes`, `no`, `on`, `off`, `y` and `n` stay text, and `languages.yml` reads as before.
+- `checks/check-sync.sh` wrote to `/tmp/check-sync` and `checks/render-gate.sh` to `/tmp/render-gate`, and each script deleted its folder first. Two checkouts that ran at the same time deleted each other's logs. Each folder name now ends in 8 hex digits from the `cksum` of the repository root path, for example `/tmp/check-sync-1a2b3c4d`. Both scripts print the folder.
+- `render-gate.sh` now makes its folder only after `languages.yml` reads. The check 12 fixtures stop before that, so they leave no folder in `/tmp`.
+
 ## 2026-09-24: the build and the landing page read `no` as a code
 
 The checks read `languages.yml` with a loader that keeps `no` as text. The build and the landing page did not, so a Norwegian `code: no` would have failed the build or broken the page.
