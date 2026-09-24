@@ -235,7 +235,10 @@ expression cannot cross one. Without that bound the match runs to the next backt
 the file, and one unterminated expression swallows whole paragraphs into the placeholder. The
 gate then reads a copy that is missing prose the original carries. An expression that does not
 close inside its paragraph now stops the gate with `FAIL-placeholder`. The 416 declared files
-hold 81 inline R expressions, and none of them crosses a line break.
+hold 81 inline R expressions, in 33 of those files, and none of them crosses a line break. That
+count uses the gate's own `INLINE` pattern, on prose only, with fenced blocks skipped. A plain
+count of `` `r `` over the same files gives 105, because it also counts text inside fenced
+blocks.
 
 The gate stops with exit 2, before it renders anything, in four cases.
 

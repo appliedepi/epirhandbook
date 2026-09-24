@@ -8,6 +8,19 @@ of it, and that is expected of a changelog. Read it as a record, never as curren
 
 ---
 
+## 2026-09-24: loose ends from the theme port
+
+These close the "checks", "documentation" and "pre-existing" boxes of issue 459.
+
+- `README.md` now says how to add a language, in six steps. It also names the `lang` field, which `languages.yml` has carried since 2026-09-18.
+- `checks/README.md` claimed 81 inline R expressions, and nobody could reproduce it. The number is right. It counts with the render gate's own `INLINE` pattern, on prose only, and a plain search also counts fenced code. The text now says which rule it uses.
+- Eight images that no page named are deleted: `Applied Epi Hex.png` and the seven translated `Epi R Handbook Banner` files. The Beige banner stays, because `README.md` shows it.
+- The `:lang()` gate in `theme-ael.scss` no longer lists `zh` and `ko`. Neither language ships. `README.md` now says to add a tag there for a new script that should not be uppercased.
+- The 108 dead rules of the old `theme-dark.scss` stay dead. A headless browser read the dark theme of `en/basics.html` on the `staging` artifact from `50e79b34`, in `en`, `jp` and `ru`. The elements those rules targeted, which are the chapter title, the chapter number, the sidebar links, the active link, the navigation links and bold text, all have readable colours from the new theme. The old rule for the last breadcrumb link has nothing to style: that link is hidden at every width from 360 to 1920 pixels. This was a sample of one page in three languages, not every page.
+- The same browser closed the last open item of the port, in light mode. On `en/basics.html`, `fr/basics.html` and `jp/basics.html`, the app bar exists, `#languages-links-parent` sits inside `.ael-appbar-tools` with 7 links, and the page raises no JavaScript error.
+
+The 2026-09-18 entry below says no hero string is translated. That was true when it was written, and this file records the project as it was, so the entry stays.
+
 ## 2026-09-24: the course banner is gone
 
 Every rendered page in all eight languages showed a "Need help learning R?" alert at the top:

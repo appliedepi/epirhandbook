@@ -83,7 +83,7 @@ The language list is **not** in this manifest. It lives in `languages.yml`.
 
 ### How languages are handled
 
-`languages.yml` declares each language: its code, its display label and its book title. Every
+`languages.yml` declares each language: its code, its BCP-47 `lang` tag, its display label and its book title. Every
 check in `checks/check-sync.sh` reads it. English is the main language.
 
 Each language owns one folder, `content/<lang>/`. That folder holds the language's chapter
@@ -250,6 +250,17 @@ unaffected.
    `content/en/`, `/new_pages/<stem>.<lang>.html` elsewhere. The value needs a leading `/`.
 
 Run `checks/check-sync.sh` afterwards. Check 9 reports a language you missed.
+
+**Add a new language.** Six things, all in this repository:
+
+1. An entry in `languages.yml` with four fields: `code`, `lang`, `label` and `title`. `code` names the folder and the site path. `lang` is the BCP-47 tag, and it can differ from the code: Japanese is `code: jp` with `lang: ja`.
+2. A folder `content/<code>/` with a translated `<stem>.qmd` for each of the 52 stems that `content/en/` holds.
+3. A `content/<code>/_quarto.yaml`, copied from `content/en/_quarto.yaml`. Set `lang:` to the `lang` value and `book.title` to the `title` value from `languages.yml`. Keep the chapter list and its order unchanged.
+4. The alias in each chapter's front matter, `/new_pages/<stem>.<code>.html`. In `index.qmd` the alias is `/index.<code>.html` instead. Check 9 does not check `index.qmd`, so get that one right by hand.
+5. A `<code>:` block in `landing.yml` for the landing page strings. A missing string falls back to English. Check 15 names every translatable key the block lacks, apart from the two omissions it allows on purpose.
+6. For a script that is not Latin, check two places. The `subset=` list in the webfont link in `banner.html` sets which scripts the webfonts serve. The `:lang()` gate near the top of `theme-ael.scss` turns off uppercase headings, and it needs the new tag if uppercase does not suit the script.
+
+No image or `docker-images.yml` change is needed: a translation runs the same R code as the English chapter. Run `checks/check-sync.sh` afterwards. Check 9 reports a missing folder, project file, chapter or alias.
 
 ### Debugging a failed render
 
