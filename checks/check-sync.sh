@@ -36,6 +36,10 @@ fi
 echo "== 1. Structure: every declared chapter in every language, same chunk count, same heading sequence"
 python3 - <<'PY' || rc=1
 import re, os, sys
+if not os.path.exists('languages.yml'):
+    # No language list, so this check cannot run. Stop with one line, not a traceback.
+    print('   languages.yml is missing; check 9 below reports it')
+    sys.exit(1)
 y = open('languages.yml', encoding='utf-8').read()
 main = re.search(r'^main:\s*([A-Za-z0-9_]+)', y, re.M).group(1)
 langs = [l for l in re.findall(r'^\s*-\s*code:\s*([A-Za-z0-9_]+)', y, re.M) if l != main]
@@ -86,6 +90,10 @@ python3 - <<'PY'
 import re, os, sys, collections
 def strip(t): return re.sub(r'^\s*`{3,}\s*\{r.*?^\s*`{3,}\s*$', '', t, flags=re.S | re.M)
 SPAN = re.compile(r'(?<!`)`([^`\n]+)`(?!`)')
+if not os.path.exists('languages.yml'):
+    # No language list, so this check cannot run. Stop with one line, not a traceback.
+    print('   languages.yml is missing; check 9 below reports it')
+    sys.exit(0)
 y = open('languages.yml', encoding='utf-8').read()
 main = re.search(r'^main:\s*([A-Za-z0-9_]+)', y, re.M).group(1)
 langs = [l for l in re.findall(r'^\s*-\s*code:\s*([A-Za-z0-9_]+)', y, re.M) if l != main]
@@ -249,7 +257,9 @@ def project(doc):
     """One parsed project file: (stems in order, part count, lang, book title).
 
     The stems are the `.qmd` entries of `book.chapters`, in file order. A part is a mapping
-    with a `part:` key, and its own `chapters:` list gives its stems in its place.
+    with a `part:` key, and its own `chapters:` list gives its stems in its place. A part may
+    name a `.qmd` file instead of a title. Quarto renders that file as the part page, so it is
+    a stem too, and it comes before the part's chapters.
     """
     doc = doc if isinstance(doc, dict) else {}
     book = doc.get('book') if isinstance(doc.get('book'), dict) else {}
@@ -263,6 +273,8 @@ def project(doc):
             elif isinstance(x, dict):
                 if 'part' in x:
                     parts += 1
+                    if isinstance(x['part'], str) and x['part'].endswith('.qmd'):
+                        stems.append(x['part'][:-len('.qmd')])
                 walk(x.get('chapters'))
 
     walk(book.get('chapters'))

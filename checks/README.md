@@ -112,11 +112,16 @@ character reference into that one page. So the checker does not re-implement pan
 rule, and it does not read markdown itself. A link in a YAML `title` renders on the page, so it
 counts. None of the 416 declared files carries such a link today.
 
+A file that pandoc cannot read is a failure, not a crash. The usual cause is a front matter that
+does not parse as YAML. The checker prints `PANDOC-FAILED <file>` with the first line of the
+pandoc message, and counts it under `pandoc-failed`. That file has no ids, so a link into it can
+also appear as dead.
+
 The checker takes three options.
 
 - `--summary` prints the counts and no link lines. It gives files scanned, the pandoc binary
   and its version, one line for each language, `same-page N`, `language-mismatch N`,
-  `unterminated-links N` and `dead N`.
+  `unterminated-links N`, `dead N` and `pandoc-failed N`.
 - `--fixture <dir>` uses every `<lang>/*.qmd` under that directory as the file set. The folder
   gives each file its language, so a fixture can carry a cross-language link.
 - `--pandoc <cmd>` names the binary. The default is `quarto pandoc`, and plain `pandoc` when

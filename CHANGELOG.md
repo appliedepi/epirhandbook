@@ -8,6 +8,15 @@ of it, and that is expected of a changelog. Read it as a record, never as curren
 
 ---
 
+## 2026-09-24: four checks that passed or crashed on a broken input
+
+- Check 15 read `languages.yml` with `yaml.safe_load`, which reads an unquoted `no` as False. A Norwegian `code: no` dropped out of the code list, and the check reported `problems: 0` without measuring it. It now reads that file with a loader that keeps every value a string, as check 9 does.
+- Checks 1 and 4 raised a traceback when `languages.yml` was missing. They now print one line and leave the report to check 9.
+- Check 9 did not see a part that names a `.qmd` file, `- part: intro.qmd`, which is valid Quarto. That file is now a stem, so a missing file or a missing `docker-images.yml` row is a DRIFT line. The handbook names every part by title today.
+- Check 5 raised a traceback when pandoc could not read a file, for example a front matter that does not parse. It now prints `PANDOC-FAILED <file>` and fails.
+
+Checks 1 and 4 still read `languages.yml` with regular expressions. So do `check-links.py`, `check-data-reads.py`, `chunk-parse-gate.py`, `sync-anchors.py`, `sync-chunks.py` and `utils/check-language-consistency.R`.
+
 ## 2026-09-24: check 9 and rule 8 of check 15 read YAML with PyYAML
 
 Check 9 of `checks/check-sync.sh` read `languages.yml`, the project files, `docker-images.yml`

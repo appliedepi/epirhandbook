@@ -287,6 +287,11 @@ def unterminated_links(text):
     return sorted(found)
 
 
+# Files pandoc could not read, with the first line of its message. A front matter that does
+# not parse as YAML is the usual cause. The file has no ids and no links, and the run fails.
+failed = []
+
+
 def parse(path):
     """Return (ids, link targets) for one file, from the page pandoc renders."""
     src = plain_fences(Path(path).read_text(encoding='utf-8'))
@@ -294,7 +299,8 @@ def parse(path):
                                  '--metadata', 'pagetitle=check'],
                        input=src, capture_output=True, text=True)
     if r.returncode != 0:
-        raise RuntimeError('pandoc failed on %s: %s' % (path, r.stderr.strip()))
+        failed.append((os.path.relpath(path, base), (r.stderr.strip().split('\n') or [''])[0]))
+        return set(), []
     p = PageParser()
     p.feed(r.stdout)
     p.close()
@@ -386,6 +392,8 @@ if not summary:
         out.append((f, n, t, 'LANGUAGE-MISMATCH %s:%d%s %s' % (f, n, '?' if many else '', t)))
     for f, lang, n, line in unterminated:
         out.append((f, n, line, 'UNTERMINATED-LINK %s:%d %s' % (f, n, line.strip())))
+    for f, why in sorted(failed):
+        out.append((f, 0, '', 'PANDOC-FAILED %s %s' % (f, why)))
     for _, _, _, line in sorted(out):
         print(line)
 
@@ -405,5 +413,6 @@ else:
     print('language-mismatch %d' % len(mismatch))
     print('unterminated-links %d' % len(unterminated))
     print('dead %d' % len(dead))
+    print('pandoc-failed %d' % len(failed))
 
-sys.exit(1 if dead or samepage or mismatch or unterminated or missing else 0)
+sys.exit(1 if dead or samepage or mismatch or unterminated or missing or failed else 0)

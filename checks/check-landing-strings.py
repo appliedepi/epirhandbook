@@ -317,8 +317,8 @@ def need(path, why):
     return path
 
 
-class Loader(yaml.SafeLoader):
-    """yaml.SafeLoader that refuses a mapping with a duplicate key.
+class NoDuplicates:
+    """A loader mixin that refuses a mapping with a duplicate key.
 
     PyYAML keeps the last value of a duplicate key and says nothing, so a second block for
     one language would silently replace the first.
@@ -339,7 +339,19 @@ class Loader(yaml.SafeLoader):
         return super().construct_mapping(node, deep)
 
 
-def load(path):
+class Loader(NoDuplicates, yaml.SafeLoader):
+    """The loader for landing.yml and the project files."""
+
+
+class Strings(NoDuplicates, yaml.BaseLoader):
+    """The loader for languages.yml: every scalar stays a string.
+
+    yaml.safe_load reads an unquoted `no` as False. The Norwegian code `no` would then drop
+    out of the code list, and every rule would pass without measuring that language.
+    """
+
+
+def load(path, loader=None):
     """One YAML file, or one sentence naming THAT file.
 
     The handler read both files under one `try` until 2026-09-18, and its message named
@@ -347,7 +359,7 @@ def load(path):
     to the wrong file.
     """
     try:
-        return yaml.load(path.read_text(encoding='utf-8'), Loader=Loader)
+        return yaml.load(path.read_text(encoding='utf-8'), Loader=loader or Loader)
     except yaml.YAMLError as e:
         sys.exit("check-landing-strings.py: %s does not parse as YAML: %s"
                  % (path, str(e).replace('\n', ' ')))
@@ -361,7 +373,7 @@ need(ROOT / 'landing.yml',
 need(ROOT / 'utils' / 'landing-hero.R',
      "That file is the only consumer of landing.yml, and it names every key the hero reads.")
 
-langs_doc = load(ROOT / 'languages.yml')
+langs_doc = load(ROOT / 'languages.yml', Strings)
 landing = load(ROOT / 'landing.yml')
 for path, doc in ((ROOT / 'languages.yml', langs_doc), (ROOT / 'landing.yml', landing)):
     if not isinstance(doc, dict):
