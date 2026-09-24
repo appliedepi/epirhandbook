@@ -8,6 +8,17 @@ of it, and that is expected of a changelog. Read it as a record, never as curren
 
 ---
 
+## 2026-09-24: seven translation fixes that two reviews agreed on
+
+Two Codex models, `gpt-6-sol` and `gpt-6-astra`, reviewed the landing page strings independently. These fixes are the ones both models agreed on, or that are objective. The rest are proposals on issue 459 for the translators.
+
+- French and Spanish `np_lead` said "épis" and "epis", a literal carry-over of the English shorthand. In French "épis" means ears of grain. They now say `épidémiologistes` and `epidemiólogos`.
+- Russian `np_lead` used a hyphen between subject and predicate. It is now a spaced em dash, as Russian typography requires.
+- Russian `оффлайн` is now `офлайн`, the standard spelling, in `subtitle`, `btn_offline` and `content/ru/about.qmd`.
+- The Japanese training card said `自己学習型` (self-study) where the English says "interactive". It now says `インタラクティブな`.
+- The Japanese switcher label in `languages.yml` was `日本`, which means Japan. It is now `日本語`, Japanese.
+- Turkish `np_trust` said `400'ten`. After *dört yüz* the suffix is `'den`.
+
 ## 2026-09-24: the landing page refuses an unquoted boolean, and each checkout keeps its own logs
 
 - `utils/landing-hero.R` rendered `eyebrow: true` in `landing.yml` as the text "true", and check 15 rejected it. `landing_hero()` now stops on an unquoted `true` or `false`, in any case, and names `landing.yml`. `yes`, `no`, `on`, `off`, `y` and `n` stay text, and `languages.yml` reads as before.
