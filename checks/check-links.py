@@ -13,7 +13,12 @@ pandoc's identifier rule, and it never reads markdown itself.
 
 A link is dead when its `.qmd` target does not exist, or when the target page does not define
 the `#fragment` it asks for. Fragments resolve against the same page when the target is a bare
-`#fragment`. External links and targets that are not `.qmd` are ignored.
+`#fragment`. A link with a URL scheme, such as `https://` or `mailto:`, is not checked.
+
+A target with no URL scheme that is not a `.qmd` file must be a file that exists, relative to
+the page's folder. The checker drops `#fragment` and `?query` before it looks. So `github.com`,
+`iteration` and an old slug such as `working-with-dates` are dead. A web scheme with one slash,
+`https:/x.org`, is dead too, because a browser reads it as a path on the same site.
 
 Two more link forms fail. Write a link to a section of the same page as `#id`, never as
 `file.qmd#id`. The checker counts the long form as `same-page`. A link never crosses languages.
@@ -45,6 +50,8 @@ ROOT = Path(__file__).resolve().parent.parent
 POOL = 8
 FENCE = re.compile(r'^( *)(`{3,}|~{3,})(.*)$')
 SCHEME = re.compile(r'^(?:[A-Za-z][A-Za-z0-9+.\-]*:|//)')
+# A web scheme that is not followed by `//`. `https:/x.org` is the usual form.
+MALFORMED = re.compile(r'^(?:https?|ftp):(?!//)', re.I)
 
 args = sys.argv[1:]
 summary = '--summary' in args
@@ -339,6 +346,9 @@ for f, lang in files:
         unterminated.append((f, lang, n, line))
 for f, lang in files:
     for t in parsed[f][1]:
+        if t and MALFORMED.match(t):
+            dead.append((f, lang, t, 'no // after the URL scheme'))
+            continue
         if not t or SCHEME.match(t):
             continue
         path, _, frag = t.partition('#')
@@ -348,6 +358,10 @@ for f, lang in files:
                 dead.append((f, lang, t, 'no id %s on this page' % frag))
             continue
         if not path.lower().endswith('.qmd'):
+            # No URL scheme, so the target is a path on this site. It must be a file.
+            q = os.path.normpath(os.path.join(os.path.dirname(f), unquote(path.split('?', 1)[0])))
+            if not (base / q).is_file():
+                dead.append((f, lang, t, 'no URL scheme and no such file'))
             continue
         q = os.path.normpath(os.path.join(os.path.dirname(f), path))
         if not (base / q).exists():

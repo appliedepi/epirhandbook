@@ -55,6 +55,8 @@ CASES = {
     # Checks 8 and 6 compare two commits, so the fixture becomes a git repository for them.
     # An empty diff is their correct result, so they have no 'content' case.
     'chunk-parse-gate.py': (['HEAD', 'HEAD'], ['languages.yml']),
+    # Check 16 reads the English chapters and its list of exempt chunks. It needs R.
+    'check-english-parse.py': (['--summary'], ['content', 'checks/parse-exceptions.tsv']),
     'render-gate.sh': (['HEAD', 'HEAD'], ['languages.yml']),
 }
 

@@ -8,6 +8,14 @@ of it, and that is expected of a changelog. Read it as a record, never as curren
 
 ---
 
+## 2026-10-01: check 5 reads scheme-less links, and check 16 parses the English code
+
+- `checks/check-links.py` (check 5) now reports a link with no URL scheme that is not a `.qmd` file and not a file that exists. Examples are `github.com`, `iteration` and an old slug. It also reports `https:/` with one slash. On the tree before the 2026-10-01 link fixes it reports 88 such links. Before this change it reported 0.
+- New check 16, `checks/check-english-parse.py`, parses every R chunk in `content/en/` with R. A chunk that does not parse fails, unless `checks/parse-exceptions.tsv` lists it with a reason. Two chunks are listed: a template in `basics` and a markdown image line in `rmarkdown`.
+- Check 16 also fails on `suppressWarnings()` in a chunk that runs. It fails on `options(warn = ...)` there unless the value is a non-negative number literal, such as `0` or `1`. A warning muffled in chunk code never reaches the render log.
+- `rmarkdown`: the `rmarkdown::render()` example wrote `params = “ask”` with curly quotes, so it did not parse. It now writes `params = "ask"` in all eight languages.
+- Check 12 now runs check 16 without `content/` and without `checks/parse-exceptions.tsv`, and expects a clean failure.
+
 ## 2026-10-01: agent rules move to AGENTS.md
 
 - The agent rules moved from `CLAUDE.md` to `AGENTS.md`, the name other agent tools read. `CLAUDE.md` is now one line, `@AGENTS.md`, so Claude Code reads the same file.

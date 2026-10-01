@@ -90,7 +90,11 @@ UNTERMINATED-LINK content/pt/basics.qmd:925 ... na seção [Importar e exportar]
 ```
 
 A link is dead when its `.qmd` target does not exist, or when the target page does not define
-the `#fragment`. The line number is the first source line that holds the target. Pandoc's
+the `#fragment`. A target with no URL scheme that is not a `.qmd` file must be a file that
+exists, relative to the page's folder. The checker drops `#fragment` and `?query` first. So
+`github.com`, `iteration` and an old slug such as `working-with-dates` are dead. A web scheme
+with one slash, `https:/x.org`, is dead too. A link with a scheme, such as `https://` or
+`mailto:`, is not checked. The line number is the first source line that holds the target. Pandoc's
 markdown reader gives no source position, so `?` after the number means the target occurs on
 more than one line.
 
@@ -461,8 +465,8 @@ For each check and each required input, it builds a fixture without that input. 
 run exits non-zero, prints no traceback, and names the missing thing.
 
 The two sync scripts run with `--dry-run`, so they write nothing. Checks 6 and 8 compare two
-commits, so they run with `HEAD HEAD` in a fixture that is a git repository. The other six
-checks run with `--summary`.
+commits, so they run with `HEAD HEAD` in a fixture that is a git repository. The other seven
+checks run with `--summary`. Check 16 needs `Rscript`, so check 12 needs it too.
 
 It does NOT pass `--fixture`. That flag makes a check derive its file set by globbing. Globbing
 bypasses `languages.yml`, and would exercise a path the repository never runs.
@@ -754,3 +758,31 @@ so nothing has re-serialised the page and the slot patterns read what Quarto wro
 hero is broken fails before it uploads anything.
 `.github/workflows/translation-sync.yml` runs every rule but rule 9. It renders no landing
 page, and its runner carries neither the `here` R package nor a language image.
+
+## 16. English parse
+
+`checks/check-english-parse.py`. Every R chunk in `content/en/*.qmd` must parse, and no chunk
+that runs may muffle a warning. It needs no base commit.
+
+One R process parses every ```` ```{r ...} ```` chunk with `parse()`. Translations carry the
+same code byte for byte, which check 3 enforces, so the English chapters are enough. A chunk that
+does not parse fails, unless `checks/parse-exceptions.tsv` lists it. A row names the stem, the
+first non-empty line of the chunk, and the reason the chunk is not R. A row that matches no
+failing chunk is stale, and it fails too.
+
+The check also fails on a call to `suppressWarnings()` in a chunk that runs. It fails on an
+`options()` call in such a chunk when its `warn` argument is not a non-negative number literal.
+So `options(warn = 1)` and `options(warn = 0)` pass. `options(warn = -1)`, `options(warn = 0 - 1)`
+and `options(warn = x)` fail. An `options()` call with no `warn` argument is not judged.
+
+A chunk with `eval=F` or `eval=FALSE` in its header, or `#| eval: false` in its body, does not
+run. R finds the calls by a walk of the parsed expressions, so a comment or a string that names
+them does not count. The render profile in the book's image logs every warning that reaches
+knitr. A warning muffled inside chunk code never reaches knitr.
+
+The check needs `Rscript` on PATH. Without it the check exits 2 and says so. It never skips.
+
+Expected output: `parse failures 0`, `stale exceptions 0` and `muffling calls in evaluated chunks 0`.
+
+Remedy: fix the chunk. List a chunk in `parse-exceptions.tsv` only when it is pseudo-code or
+another language on purpose. Let a warning reach knitr, or remove its cause.
