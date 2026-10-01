@@ -17,3 +17,7 @@ them all. Run it from the repository root before you finish.
 - `languages.yml` is the language list, and `content/<lang>/_quarto.yaml` is the chapter list.
   The eight project files MUST declare the same stems in the same order. Every declared stem
   MUST exist as a file in every language folder.
+
+# Visual design
+
+Visual design follows the Applied Epi design system: https://claude.ai/artifact/2xfUuazFtAp5oqzya4NH7X. Read its `project/README.md` before you change `theme-*.scss`, `ael-extras.html`, `banner.html` or any landing-page markup.
