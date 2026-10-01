@@ -4,8 +4,26 @@ on:
     types: [opened, synchronize, reopened]
     branches:
       - main
+# One run per pull request, newest push wins. The group is per pull request, so
+# one PR never cancels the translation sync check of another. The deploys of
+# different PRs share the deploy-preview group inside build-deploy.yml, and
+# there the newest deploy cancels the older one.
+# The name MUST differ from that group: a caller and a called workflow in groups
+# of the same name cancel each other.
+concurrency:
+  group: preview-caller-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 jobs:
+  # The translation sync check runs on the commit this workflow builds, and
+  # build-deploy needs it, so a commit that fails the check is never deployed.
+  translation-sync:
+    uses: ./.github/workflows/translation-sync.yml
+    with:
+      ref: ${{ github.event.pull_request.head.sha }}
+    permissions:
+      contents: read
   build-deploy:
+    needs: translation-sync
     uses: ./.github/workflows/build-deploy.yml
     with:
       ref: ${{ github.event.pull_request.head.sha }}

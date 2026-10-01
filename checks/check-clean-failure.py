@@ -58,7 +58,13 @@ CASES = {
     # Check 16 reads the English chapters and its list of exempt chunks. It needs R.
     'check-english-parse.py': (['--summary'], ['content', 'checks/parse-exceptions.tsv']),
     'render-gate.sh': (['HEAD', 'HEAD'], ['languages.yml']),
+    # Checks 17 and 18 read what a render wrote, so they take paths, not the chapter set.
+    'check-render-leg.py': (['html_outputs', 'render.log'], ['html_outputs', 'render.log']),
+    'check-site-links.py': (['site'], ['site']),
 }
+
+# The inputs that MUST be refused when they are empty as well as when they are absent.
+EMPTY = ('content', 'images', 'html_outputs', 'render.log', 'site')
 
 # A languages.yml that does not parse: the flow sequence never closes.
 BROKEN = 'main: en\nlanguages: [\n'
@@ -111,6 +117,17 @@ def build(tmp):
     (tmp / 'utils').mkdir()
     (tmp / 'utils' / 'landing-hero.R').write_text(
         'landing_hero <- function(lang) paste0(s("eyebrow"), svcs())\n', encoding='utf-8')
+    # What checks 17 and 18 read: one rendered page, a log that carries the four lines
+    # check 17 requires, and one assembled site page.
+    (tmp / 'html_outputs').mkdir()
+    (tmp / 'html_outputs' / 'index.html').write_text('<html><body></body></html>\n', encoding='utf-8')
+    (tmp / 'render.log').write_text(
+        'EHB-ERROR\twriting_functions.qmd\terror-missing-argument\tm\n'
+        'EHB-ERROR\twriting_functions.qmd\terror-stop\tm\n'
+        'EHB-WARNING\tmissing_data.qmd\twarning-coercion-demo\tm\n'
+        'EHB-WARNING\tggplot_tips.qmd\twarning-na-translate-demo\tm\n', encoding='utf-8')
+    (tmp / 'site').mkdir()
+    (tmp / 'site' / 'index.html').write_text('<html><body></body></html>\n', encoding='utf-8')
     shutil.copytree(HERE, tmp / 'checks')
 
 
@@ -150,7 +167,7 @@ cases = 0
 for script, (script_args, inputs) in sorted(CASES.items()):
     for missing in inputs:
         for mode in ('absent', 'empty', 'broken'):
-            if mode == 'empty' and missing not in ('content', 'images'):
+            if mode == 'empty' and missing not in EMPTY:
                 continue
             if mode == 'broken' and missing != 'languages.yml':
                 continue
@@ -164,6 +181,8 @@ for script, (script_args, inputs) in sorted(CASES.items()):
                 target = tmp / missing
                 if mode == 'absent':
                     shutil.rmtree(target) if target.is_dir() else target.unlink()
+                elif mode == 'empty' and target.is_file():
+                    target.write_text('', encoding='utf-8')
                 elif mode == 'empty':
                     shutil.rmtree(target)
                     target.mkdir()

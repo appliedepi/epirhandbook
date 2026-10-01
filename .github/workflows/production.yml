@@ -19,7 +19,37 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Fetch latest staging
         run: git fetch origin
+      # Staging updates only when its build succeeds, so after a failed staging
+      # run it still holds an older build. Promote only when staging holds the
+      # build of the commit being released. build-deploy.yml writes the deploy
+      # commit as "Deploy site from <sha>", where <sha> is the commit it built.
+      - name: Check that staging holds the release commit
+        id: verify
+        env:
+          EVENT: ${{ github.event_name }}
+          TAG: ${{ github.event.release.tag_name }}
+          DISPATCH_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = "release" ]; then
+            want=$(git rev-list -n1 "refs/tags/$TAG")
+          else
+            want="$DISPATCH_SHA"
+          fi
+          staging=$(git rev-parse origin/staging)
+          got=$(git log -1 --format=%B "$staging")
+          if [ "$got" != "Deploy site from $want" ]; then
+            echo "::error::staging ($staging) says '$got'; expected 'Deploy site from $want'. Wait for the staging build of $want to succeed, then release again."
+            exit 1
+          fi
+          echo "staging=$staging" >> "$GITHUB_OUTPUT"
+      # Push the commit that was checked, not the name origin/staging, so a
+      # staging deploy that lands between the check and the push is not promoted.
       - name: Promote staging to production
-        run: git push origin origin/staging:refs/heads/production --force
+        env:
+          STAGING: ${{ steps.verify.outputs.staging }}
+        run: git push origin "$STAGING:refs/heads/production" --force

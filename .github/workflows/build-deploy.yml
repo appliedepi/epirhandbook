@@ -48,11 +48,28 @@ jobs:
     outputs:
       mainlanguage: ${{ steps.read.outputs.mainlanguage }}
       all: ${{ steps.read.outputs.all }}
+      sha: ${{ steps.resolve.outputs.sha }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.ref }}
+
+      # inputs.ref MAY name a branch, and a branch moves while the render runs.
+      # Every later checkout uses this SHA instead, so every render leg and the
+      # deploy build ONE commit. The deploy commit message names it.
+      - name: Resolve the ref to one commit
+        id: resolve
+        env:
+          REF: ${{ inputs.ref }}
+        run: |
+          sha="$(git rev-parse HEAD)"
+          if ! printf '%s' "$sha" | grep -Eqx '[0-9a-f]{40}'; then
+            echo "::error::git rev-parse HEAD gave '$sha', which is not a commit SHA" >&2
+            exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "inputs.ref '$REF' is commit $sha"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -140,7 +157,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ needs.languages.outputs.sha }}
           persist-credentials: false
 
       - name: Set up Python
@@ -252,12 +269,23 @@ jobs:
       # assembled site would append a second set of links to every translated
       # page. The switcher is injected exactly once, in Job 2, over the
       # complete tree.
+      #
+      # The tee keeps the full output for check 17, and pipefail keeps the exit
+      # status of build_all.sh instead of the exit status of tee. The log sits
+      # outside html_outputs, so the artifact does not carry it.
       - name: Render this language (two passes, internal to the script)
         env:
           LANG_CODE: ${{ matrix.lang }}
           PREFIX: ${{ steps.registry.outputs.prefix }}
         run: |
-          ./build_all.sh --only-lang "$LANG_CODE" --no-inject . "$PREFIX" html_outputs
+          set -o pipefail
+          ./build_all.sh --only-lang "$LANG_CODE" --no-inject . "$PREFIX" html_outputs 2>&1 \
+            | tee render.log
+
+      # Check 17. It fails on an R warning or an unexpected R error in render.log,
+      # and on stderr output or a render-machine path in a page. See checks/README.md.
+      - name: Check the render log and pages of this language
+        run: python3 checks/check-render-leg.py html_outputs render.log
 
       # The landing-page transport gate, rule 9 of checks/check-landing-strings.py. It reads
       # every hero and band slot out of the page this leg rendered and compares each one
@@ -296,7 +324,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ needs.languages.outputs.sha }}
 
       - name: Download every language's artifact
         uses: actions/download-artifact@v4
@@ -570,6 +598,13 @@ jobs:
               print(f"  {code}: {resolved[code]} reference(s) resolving inside site/{code}/images/, {len(shared)} image file(s)")
           PY
 
+      # Check 18. Every relative href and src in the tree about to be deployed
+      # must resolve to a file, and every #fragment to an id on its target page.
+      # It runs after the switcher injection, which writes links of its own, and
+      # before the zip and the deploy. See checks/README.md.
+      - name: Check every link in the tree about to be deployed
+        run: python3 checks/check-site-links.py site
+
       # The offline download. Each language folder is already a complete site,
       # so a zip of it opens from the filesystem with working navigation, links
       # and images. Quarto's search box is the one thing that does not survive:
@@ -714,6 +749,9 @@ jobs:
         shell: bash
         env:
           DEPLOY_BRANCH: ${{ inputs.branch }}
+          # The commit every leg built. GITHUB_SHA is the commit of the event,
+          # which is not always that commit.
+          SOURCE_SHA: ${{ needs.languages.outputs.sha }}
         run: |
           # The branch name is an input, and everything below it is
           # destructive and ends in a force-push. Refuse to proceed on an
@@ -727,6 +765,13 @@ jobs:
             *) echo "::error::refusing to force-push to unexpected branch '$DEPLOY_BRANCH' (expected preview or staging; production is a promotion, see production.yml)" >&2; exit 1 ;;
           esac
           git check-ref-format --branch "$DEPLOY_BRANCH"
+          # Staging publishes main only. GITHUB_REF is the ref of the calling
+          # event, so a staging run dispatched from another branch stops here,
+          # and so does a pull request whose preview.yml passes 'staging'.
+          if [ "$DEPLOY_BRANCH" = "staging" ] && [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::refusing to deploy $GITHUB_REF to staging; staging publishes refs/heads/main only" >&2
+            exit 1
+          fi
           # Set git identity
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -735,8 +780,9 @@ jobs:
           # Switch to the orphan branch
           git checkout --orphan "$DEPLOY_BRANCH"
           # Delete all visible files
-          # In bash, '*' does not match hidden items like .git or .github
-          rm -rf *
+          # In bash, '*' does not match hidden items like .git or .github.
+          # The -- stops a file name that starts with - from reading as an option.
+          rm -rf -- *
           # Clean up remaining top-level hidden files except .git and .github
           # This ensures a truly clean state without killing the runner metadata
           find . -maxdepth 1 -name ".*" ! -name "." ! -name ".." ! -name ".git" ! -name ".github" -exec rm -rf {} +
@@ -747,7 +793,7 @@ jobs:
           # Unstage .github so it is not included in the deployed branch
           git rm -rf --cached .github --ignore-unmatch
           # Commit and force push
-          git commit -m "Deploy site from ${GITHUB_SHA}"
+          git commit -m "Deploy site from ${SOURCE_SHA}"
           git push origin "$DEPLOY_BRANCH" --force
 
       # One rolling release, tag "offline", whose assets are replaced on every
@@ -776,11 +822,12 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           ALL_LANGS: ${{ needs.languages.outputs.all }}
+          SOURCE_SHA: ${{ needs.languages.outputs.sha }}
         run: |
           if ! gh release view offline --repo "$REPO" >/dev/null 2>&1; then
             gh release create offline --repo "$REPO" \
               --title "Offline downloads" \
-              --target "$GITHUB_SHA" \
+              --target "$SOURCE_SHA" \
               --latest=false \
               --notes "One zip per language, each a complete offline copy of the handbook. Unzip, then open index.html. Rebuilt automatically from the latest version of the handbook. Quarto's search box needs a web server, so it does not work offline: use Ctrl+f (Cmd+f) on the page you are reading."
           fi

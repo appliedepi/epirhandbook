@@ -4,11 +4,34 @@ on:
   push:
     branches:
       - main
+# One staging run at a time, newest wins. The name MUST differ from the
+# deploy-<branch> group inside build-deploy.yml: a caller and a called workflow
+# in groups of the same name cancel each other.
+concurrency:
+  group: staging-caller-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
+  # The translation sync check runs on the commit this workflow builds, and
+  # build-deploy needs it, so a commit that fails the check is never deployed.
+  #
+  # Staging publishes main only. A workflow_dispatch from another branch runs
+  # neither job, so it cannot publish that branch. The deploy step of
+  # build-deploy.yml refuses the same case again.
+  translation-sync:
+    if: github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/translation-sync.yml
+    with:
+      ref: ${{ github.sha }}
+    permissions:
+      contents: read
   build-deploy:
+    if: github.ref == 'refs/heads/main'
+    needs: translation-sync
     uses: ./.github/workflows/build-deploy.yml
     with:
-      ref: main
+      # The pushed commit, not the branch name main. main can move during the
+      # render, and the deploy message names the commit that was built.
+      ref: ${{ github.sha }}
       branch: staging
     secrets: inherit
     permissions:

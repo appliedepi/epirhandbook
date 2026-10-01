@@ -12,6 +12,7 @@ The result line names what ran. It reads `IN SYNC` when checks 6 and 8 ran, and
 `IN SYNC (checks 6 and 8 not run)` when they did not. The script exits 0 on `IN SYNC`, 1 on
 `DRIFT`, and 2 when `--base` names something that is not a commit.
 `.github/workflows/translation-sync.yml` passes `--base` on every push and every pull request.
+`staging.yml` and `preview.yml` call it on the commit they build, and their deploy job needs it.
 
 Every check writes its full output under `/tmp/check-sync-<id>/`. The lines the script prints come
 from those files. `<id>` is 8 hex digits from the `cksum` of the repository root path. Each
@@ -465,8 +466,10 @@ For each check and each required input, it builds a fixture without that input. 
 run exits non-zero, prints no traceback, and names the missing thing.
 
 The two sync scripts run with `--dry-run`, so they write nothing. Checks 6 and 8 compare two
-commits, so they run with `HEAD HEAD` in a fixture that is a git repository. The other seven
-checks run with `--summary`. Check 16 needs `Rscript`, so check 12 needs it too.
+commits, so they run with `HEAD HEAD` in a fixture that is a git repository. Checks 17 and 18
+read what a render wrote, so they run with the paths `html_outputs render.log` and `site`. Each of
+those three inputs is refused when it is absent and when it is empty. The other seven checks run
+with `--summary`. Check 16 needs `Rscript`, so check 12 needs it too.
 
 It does NOT pass `--fixture`. That flag makes a check derive its file set by globbing. Globbing
 bypasses `languages.yml`, and would exercise a path the repository never runs.
@@ -786,3 +789,91 @@ Expected output: `parse failures 0`, `stale exceptions 0` and `muffling calls in
 
 Remedy: fix the chunk. List a chunk in `parse-exceptions.tsv` only when it is pseudo-code or
 another language on purpose. Let a warning reach knitr, or remove its cause.
+
+## 17. Render leg
+
+`checks/check-render-leg.py <html_outputs> <log>`. Each render leg of
+`.github/workflows/build-deploy.yml` runs it after the render. A leg MUST NOT ship a page whose
+code warned, failed by accident, or printed a path of the render machine.
+
+The book's images load an R profile. It writes one stderr line for each R warning that reaches
+knitr, and one for each error that an `error=TRUE` chunk captures. The line format is
+`EHB-WARNING<TAB><file><TAB><chunk label><TAB><message>`, or `EHB-ERROR` for an error. The
+render step tees its full output to `render.log` under `set -o pipefail`. The check removes ANSI
+colour codes from each line before it reads the line.
+
+`ALLOWED` in the script names four chunks that show a warning or an error on purpose:
+
+- `writing_functions.qmd`, label `error-missing-argument`, an error
+- `writing_functions.qmd`, label `error-stop`, an error
+- `missing_data.qmd`, label `warning-coercion-demo`, a warning
+- `ggplot_tips.qmd`, label `warning-na-translate-demo`, a warning
+
+The check fails on each of these:
+
+- an `EHB-WARNING` or `EHB-ERROR` line that `ALLOWED` does not name
+- no line for one of the chunks in `ALLOWED`
+- an element with the class `cell-output-stderr` in a page
+- a render-machine path in a page: `/tmp/Rtmp`, `/home/runner` or `/book/`
+
+Each chunk in `ALLOWED` always raises its warning or error. A log without
+its line comes from a render where the R profile did not run in that chunk's image. Then no
+warning from that image was logged, and the leg would pass without this rule.
+`writing_functions` renders in `epirhandbook-miscellaneous`, `missing_data` in
+`epirhandbook-analysis` and `ggplot_tips` in `epirhandbook-data-viz`, so the rule covers three
+images.
+
+Quarto puts the messages and the warnings that a chunk prints into a `cell-output-stderr`
+element. The rendered page does not carry the chunk label. So the page of an allowed warning MAY
+carry one such element for each allowed message, when the element shows that message.
+
+`/tmp/Rtmp` is the R session temporary folder. `/home/runner` is the runner home, and `/book/` is
+where the render container mounts the repository. `/book/` counts only when no host or path
+character comes before it, so `https://git-scm.com/book/` passes. The other two match as plain
+strings. Neither occurred in the English render of 2026-10-01, so no URL form of them is known.
+
+The check exits 2 when the output folder or the log is missing, when the log is empty, and when the
+folder holds no page.
+
+Expected output: `render leg: <n> page(s), 0 failure(s)`. With the first three entries of
+`ALLOWED`, the English render of 2026-10-01 gave 600 failures. 576 of them are warning lines, over
+the two render passes.
+
+Remedy: remove the cause of the warning in the chunk. A new chunk that warns or fails on purpose
+needs a label, and the label needs an entry in `ALLOWED` in the script.
+
+## 18. Site links
+
+`checks/check-site-links.py <site dir>`. The assemble-deploy job of
+`.github/workflows/build-deploy.yml` runs it on `site/`, after the language switcher injection
+and before the zip and the deploy. Every relative link in the deployed tree MUST resolve.
+
+The check reads every `href` and `src` attribute with Python's `html.parser`. Text inside a
+`<script>` element is not an attribute. The check therefore never reads a JavaScript template,
+such as `' + logoSrc + '` or `${href}`, as a link. The check skips a value with a URL scheme, such as `https:`,
+`mailto:` or `data:`, and a value that starts with `//`.
+
+The check fails on each of these:
+
+- a path that resolves to no file, with file names compared in exact case
+- a path that resolves outside the site folder
+- a `#fragment` with no matching `id` on its target page, on the same page or on another page.
+  A `name` attribute does not count, and `#top` needs an element whose `id` is `top`
+- a page with a `<base>` element
+
+A folder counts as its `index.html`. A path that starts with `/` resolves from the site folder.
+An empty fragment, such as `href="#"`, needs no element, because the HTML standard scrolls it to
+the top. The English render of 2026-10-01 has 52 such references over 105 pages. It has 0
+references to `#top` and 0 fragments that only an `<a name>` satisfies, so the check accepts
+neither. A link into `site_libs/` gets the same check as any other link.
+
+Check 5 reads the `.qmd` sources. This check reads the HTML that ships, so it also sees the links
+that Quarto, the images path rewrite and the switcher injection write.
+
+The check exits 2 when the site folder is missing or holds no page.
+
+Expected output: `site links: <n> page(s), <m> relative reference(s), 0 failure(s)`. The English
+render of 2026-10-01, assembled as the job does, gave 105 pages, 17848 relative references and 0
+failures.
+
+Remedy: correct the link in the source chapter, or add the file or the heading id that it names.

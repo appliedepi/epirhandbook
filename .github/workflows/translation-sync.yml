@@ -8,13 +8,18 @@ name: Translation sync check
 # check 8, the R parse gate on every chunk of those chapters.
 # Read-only. Needs python3, git, quarto and R. What each check means and how to repair
 # drift: checks/README.md.
+#
+# staging.yml and preview.yml call this workflow on the commit they build, and their
+# build-deploy job needs it. So a commit that fails here is never deployed. A called
+# workflow sees the event of its caller, so the base commit below still comes from the
+# push or the pull_request event.
 on:
-  push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
+  workflow_call:
+    inputs:
+      ref:
+        description: "The commit to check. The caller passes the commit it builds."
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       base:
@@ -31,6 +36,9 @@ jobs:
         # Major tag, never a SHA. See the note at the top of build-deploy.yml.
         uses: actions/checkout@v4
         with:
+          # The caller's commit. Empty under workflow_dispatch, which checks out the
+          # commit of the dispatch.
+          ref: ${{ inputs.ref }}
           # Checks 6 and 8 read the diff against a base commit, so they need the history.
           fetch-depth: 0
       - name: Install pandoc
@@ -82,6 +90,8 @@ jobs:
           elif [ "$EVENT" = "pull_request" ]; then
             # On a pull request origin/main is the target branch, not this head, so merge-base
             # gives the fork point. That is the right fallback here and only here.
+            # preview.yml passes the PR head, not the merge commit. When main moved after the
+            # fork, PR_BASE is not an ancestor of that head, and merge-base gives the base.
             if usable "${PR_BASE:-}"; then
               base="$PR_BASE"; why="the pull_request event's base commit"
             elif git fetch --no-tags --quiet origin +refs/heads/main:refs/remotes/origin/main \
