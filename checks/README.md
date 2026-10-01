@@ -225,7 +225,7 @@ A chunk that builds a path on one line and reads it on another passes.
 2. Set `eval=F` on a chunk whose subject is the path itself, not the data.
 3. Delete a chunk that writes into `data/`.
 
-The root `CLAUDE.md` carries the same rule, for an agent that edits a chapter.
+The root `AGENTS.md` carries the same rule, for an agent that edits a chapter.
 
 ## Check 6: the render gate
 

@@ -8,6 +8,11 @@ of it, and that is expected of a changelog. Read it as a record, never as curren
 
 ---
 
+## 2026-10-01: agent rules move to AGENTS.md
+
+- The agent rules moved from `CLAUDE.md` to `AGENTS.md`, the name other agent tools read. `CLAUDE.md` is now one line, `@AGENTS.md`, so Claude Code reads the same file.
+- `AGENTS.md` gained a "Visual design" section. It points agents at the Applied Epi design system before they change `theme-*.scss`, `ael-extras.html`, `banner.html` or landing-page markup.
+
 ## 2026-09-24: seven translation fixes that two reviews agreed on
 
 Two Codex models, `gpt-6-sol` and `gpt-6-astra`, reviewed the landing page strings independently. These fixes are the ones both models agreed on, or that are objective. The rest are proposals on issue 459 for the translators.
