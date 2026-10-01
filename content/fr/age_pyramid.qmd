@@ -97,7 +97,7 @@ En utilisant l'ensemble de données `linelist` nettoyées, nous pouvons créer u
 -   Le paramètre `split_by =` (pour l'axe des abscisses) est défini comme la colonne sexe.
 
 ```{r, warning=F, message=F}
-apyramid::age_pyramid(data = linelist,
+apyramid::age_pyramid(data = drop_na(linelist, age_cat5, gender),
                       age_group = "age_cat5",
                       split_by = "gender")
 ```
@@ -105,7 +105,7 @@ apyramid::age_pyramid(data = linelist,
 La pyramide peut être affichée avec le pourcentage de tous les cas sur l'axe des abscisses, au lieu du nombre, en incluant `proportional = TRUE`.
 
 ```{r, warning=F, message=F}
-apyramid::age_pyramid(data = linelist,
+apyramid::age_pyramid(data = drop_na(linelist, age_cat5, gender),
                       age_group = "age_cat5",
                       split_by = "gender",
                       proportional = TRUE)
@@ -114,7 +114,7 @@ apyramid::age_pyramid(data = linelist,
 Lors de l'utilisation du package **apyramid**, si la colonne `split_by` est binaire (par exemple homme/femme, ou oui/non), le résultat apparaîtra comme une pyramide. Cependant, s'il y a plus de deux valeurs dans la colonne `split_by` (sans compter `NA`), la pyramide apparaîtra comme un diagramme à barres à facettes avec des barres grises dans le "fond" indiquant la plage des données non facettées pour ce groupe d'âge. Dans ce cas, les valeurs de `split_by =` apparaîtront comme des libellés en haut de chaque panneau de facettes. Par exemple, voici ce qui se passe si la colonne `hospital` est attribuée à `split_by =`.
 
 ```{r, warning=F, message=F}
-apyramid::age_pyramid(data = linelist,
+apyramid::age_pyramid(data = drop_na(linelist, age_cat5),
                       age_group = "age_cat5",
                       split_by = "hospital")  
 ```
@@ -138,7 +138,7 @@ Vous pouvez également ajouter des commandes ggplot() supplémentaires au graphi
 
 ```{r, warning=F, message=F}
 apyramid::age_pyramid(
-  data = linelist,
+  data = drop_na(linelist, age_cat5, gender),
   age_group = "age_cat5",
   split_by = "gender",
   proportional = TRUE,              # afficher les pourcentages, pas les chiffres
@@ -207,10 +207,11 @@ DT::datatable(demo_agg_long, rownames = FALSE, filter="top", options = list(page
 Utilisez ensuite les arguments `split_by =` et `count =` de `age_pyramid()` pour spécifier les colonnes respectives dans les données :
 
 ```{r, warning=F, message=F}
-apyramid::age_pyramid(data = demo_agg_long,
+apyramid::age_pyramid(data = drop_na(demo_agg_long),
                       age_group = "age_cat5",# Nom de la colonne pour la catégorie d'âge
                       split_by = "gender",   # Nom de la colonne pour le sexe
-                      count = "counts")      # Nom de la colonne pour le nombre de cas
+                      count = "counts",      # Nom de la colonne pour le nombre de cas
+                      show_midpoint = FALSE)
 ```
 
 Notez dans l'exemple ci-dessus que l'ordre des facteurs "m" et "f" est différent (pyramide inversée). Pour ajuster l'ordre, vous devez redéfinir le sexe dans les données agrégées comme un facteur et ordonner les niveaux comme vous le souhaitez. Voir la page [Facteurs](factors.qmd).
@@ -241,7 +242,7 @@ Tout d'abord, il faut comprendre que pour réaliser une telle pyramide à l'aide
 
 -   Dans la fonction `ggplot()`, créez deux histogrammes en utilisant la colonne numérique de l'âge. Créez-en un pour chacune des deux valeurs de regroupement (dans ce cas, les sexes masculin et féminin). Pour ce faire, les données de chaque histogramme sont spécifiées dans leurs commandes `geom_histogram()` respectives, avec les filtres respectifs appliqués à `linelist`.
 
--   Un graphique aura des valeurs de comptage positives, tandis que l'autre aura ses comptages convertis en valeurs négatives - cela crée la "pyramide" avec la valeur 0 au milieu du graphique. Les valeurs négatives sont créées en utilisant un terme spécial de **ggplot2** `..count..` et en les multipliant par -1.
+-   Un graphique aura des valeurs de comptage positives, tandis que l'autre aura ses comptages convertis en valeurs négatives - cela crée la "pyramide" avec la valeur 0 au milieu du graphique. Les valeurs négatives sont créées en utilisant un terme spécial de **ggplot2** `after_stat(count)` et en les multipliant par -1.
 
 -   La commande `coord_flip()` permute les axes X et Y, ce qui a pour effet de rendre les graphiques verticaux et de créer la pyramide.
 
@@ -261,7 +262,7 @@ Une version **simple** de cette méthode, utilisant `geom_histogram()`, est pré
   # histogramme hommes (valeurs converties en négatif)
   geom_histogram(data = linelist %>% filter(gender == "m"),
                  breaks = seq(0,85,5),
-                 mapping = aes(y = ..count..*(-1)),
+                 mapping = aes(y = after_stat(count)*(-1)),
                  colour = "white") +
   
   # Inversion des axes X et Y
@@ -315,7 +316,7 @@ Enfin, nous effectuons le `ggplot()` sur les données en pourcentage. Nous spéc
   ggplot()+  # par défaut l'axe X est l'âge en années;
 
   # graphe des données des cas
-  geom_col(data = pyramid_data,
+  geom_col(data = drop_na(pyramid_data, percent),
            mapping = aes(
              x = age_cat5,
              y = percent,
@@ -491,7 +492,7 @@ ggplot()+  # l'axe des x par défaut est l'âge en années;
   
   # Graphe des données des cas
   geom_col(
-    data = pyramid_data %>% filter(data_source == "cases"), 
+    data = pyramid_data %>% filter(data_source == "cases") %>% drop_na(percent), 
     mapping = aes(
       x = age_cat5,                               # Catégorie d'âge comme axes des x d'origine
       y = percent,                                # % comme axe des Y d'origine
@@ -602,7 +603,7 @@ melted_max <- melted %>%
 
 Maintenant, créez le graphique. Comme dans les pyramides des âges ci-dessus, nous créons deux graphes à barres et inversons les valeurs de l'un d'entre eux en négatif.
 
-On utilise `geom_bar()` parce que nos données sont une ligne par observation, et non pas des comptes agrégés. Nous utilisons le terme spécial de **ggplot2** `..count..` dans l'un des graphiques en barres pour inverser les valeurs négatives (*-1*), et nous définissons `position = "stack"` pour que les valeurs s'empilent les unes sur les autres.
+On utilise `geom_bar()` parce que nos données sont une ligne par observation, et non pas des comptes agrégés. Nous utilisons le terme spécial de **ggplot2** `after_stat(count)` dans l'un des graphiques en barres pour inverser les valeurs négatives (*-1*), et nous définissons `position = "stack"` pour que les valeurs s'empilent les unes sur les autres.
 
 ```{r, warning=F, message=F}
 # Créer le graphe
@@ -613,10 +614,9 @@ ggplot()+
        data = melted %>% filter(direction == "Negative"),
        mapping = aes(
          x = status,
-         y = ..count..*(-1),    # counts inverted to negative
+         y = after_stat(count)*(-1),    # counts inverted to negative
          fill = Response),
        color = "black",
-       closed = "left",
        position = "stack")+
      
      #  graphique à barres des réponses "positives" 
@@ -626,7 +626,6 @@ ggplot()+
          x = status,
          fill = Response),
        colour = "black",
-       closed = "left",
        position = "stack")+
      
      # inversion des axes x et y

@@ -71,7 +71,7 @@ DT::datatable(head(linelist, 50), rownames = FALSE, filter="top", options = list
 
 ```{r, warning=F, message=F}
 # ヒストグラム
-ggplot(data = linelist, mapping = aes(x = age))+       # データと軸を指定
+ggplot(data = linelist %>% drop_na(age), mapping = aes(x = age))+       # データと軸を指定
   geom_histogram(              # ヒストグラムを表示
     binwidth = 7,                # ビンの幅
     color = "red",               # ビンの外側の色
@@ -84,18 +84,18 @@ ggplot(data = linelist, mapping = aes(x = age))+       # データと軸を指�
 
 ```{r, out.width=c('50%', '50%'), fig.show='hold', warning=F, message=F}
 # 点と線の色を単一色で指定する
-ggplot(data = linelist, mapping = aes(x = age, y = wt_kg))+     
+ggplot(data = linelist %>% drop_na(age, wt_kg), mapping = aes(x = age, y = wt_kg))+     
   geom_point(color = "purple")+
   geom_vline(xintercept = 50, color = "orange")+
   labs(title = "Static color for points and line")
 
 # 連続数からなる列に色を対応させる
-ggplot(data = linelist, mapping = aes(x = age, y = wt_kg))+     
+ggplot(data = linelist %>% drop_na(age, wt_kg), mapping = aes(x = age, y = wt_kg))+     
   geom_point(mapping = aes(color = temp))+         
   labs(title = "Color mapped to continuous column")
 
 # 離散数からなる列に色を対応させる
-ggplot(data = linelist, mapping = aes(x = age, y = wt_kg))+     
+ggplot(data = linelist %>% drop_na(age, wt_kg), mapping = aes(x = age, y = wt_kg))+     
   geom_point(mapping = aes(color = gender))+         
   labs(title = "Color mapped to discrete column")
 
@@ -143,7 +143,7 @@ ggplot(data = linelist, mapping = aes(x = hospital))+
 以下の例では、まず棒グラフを初期設定で作成します。次に 3 つのスケール – 連続数の y 軸、離散値の x 軸、fill（バー内部の色指定）のマニュアル調整 – を変更したグラフを作成します。
 
 
-```{r, warning=F, message=F}
+```{r warning-na-translate-demo, warning=F, message=F}
 # 初期設定 - スケール調整なし
 ggplot(data = linelist)+
   geom_bar(mapping = aes(x = outcome, fill = gender))+
@@ -302,7 +302,8 @@ preparedness_plot+                   # 上記の図を修正する
 
 ```{r, warning=F, message=F}
 case_source_relationships <- appliedepidata::get_data(name = "relationships_clean") %>%
-  select(source_age, target_age) 
+  select(source_age, target_age) %>%
+  drop_na(source_age, target_age)
 ```
 
 以下の例では、ラスターヒートマップを描画します。ヒートマップについての詳細はここでは扱わず（前段落のリンクを参照してください）、カラースケールの変更方法に焦点を当てます。**ggplot2** の `stat_density2d()` 関数については[こちら](https://ggplot2.tidyverse.org/reference/geom_density_2d.html)を参照してください。`fill` スケールが連続数であることに注意してください。
@@ -499,7 +500,7 @@ case_source_relationships %>%
 pacman::p_load(ggExtra)
 
 # 体重と年齢を基本の散布図で図示する
-scatter_plot <- ggplot(data = linelist)+
+scatter_plot <- ggplot(data = linelist %>% drop_na(age, wt_kg))+
   geom_point(mapping = aes(y = wt_kg, x = age)) +
   labs(title = "Scatter plot of weight and age")
 ```
@@ -640,7 +641,7 @@ ggplot で時間スケールを使用すると聞くと難しく感じるかも�
 
 ```{r, , warning=F, message=F}
 # 観測された発症日から流行曲線を作成する
-ggplot(linelist, aes(x = date_onset)) +
+ggplot(linelist %>% drop_na(date_onset), aes(x = date_onset)) +
   geom_histogram(binwidth = 7) +
   scale_x_date(
     # 1ヶ月ごとに軸ラベルを表示する
@@ -658,7 +659,7 @@ x 軸に日付ラベルを作成するかんたんな方法のひとつは、**s
 本ハンドブックの 32 章 流行曲線（エピカーブ）の[複数の日付ラベル](https://epirhandbook.com/jp/epicurves.html#%E8%A4%87%E6%95%B0%E3%81%AE%E6%97%A5%E4%BB%98%E3%83%A9%E3%83%99%E3%83%AB)節に詳しい例示がありますが、参考のため以下にも例示します。
 
 ```{r, eval=T, warning=F}
-ggplot(linelist, aes(x = date_onset)) +
+ggplot(linelist %>% drop_na(date_onset), aes(x = date_onset)) +
   geom_histogram(binwidth = 7) +
   scale_x_date(
     labels = scales::label_date_short()  # 自動的に日付ラベルを作成
@@ -684,10 +685,10 @@ linelist <- linelist %>%
 
 # 全症例の年齢分布をヒストグラムで図示
 ggplot(
-  data = linelist,
+  data = linelist %>% drop_na(age_years),
   mapping = aes(x = age_years, fill = outcome)) +
   geom_histogram() + 
-  gghighlight::gghighlight(outcome == "Death")     # 患者が亡くなっている症例の分布を強調する
+  gghighlight::gghighlight(outcome == "Death", use_group_by = FALSE)     # 患者が亡くなっている症例の分布を強調する
 
 ```
 
@@ -752,7 +753,7 @@ pacman::p_load(
 malaria_data <- appliedepidata::get_data(name = "malaria_facility_count_data")
 
 # 地区毎の症例数を棒グラフで図示
-p1 <- ggplot(malaria_data, aes(x = District, y = malaria_tot)) +
+p1 <- ggplot(malaria_data %>% drop_na(malaria_tot), aes(x = District, y = malaria_tot)) +
   geom_bar(stat = "identity") +
   labs(
     x = "District",
@@ -762,7 +763,7 @@ p1 <- ggplot(malaria_data, aes(x = District, y = malaria_tot)) +
   theme_minimal()
 
 # 時間毎の流行曲線
-p2 <- ggplot(malaria_data, aes(x = data_date, y = malaria_tot)) +
+p2 <- ggplot(malaria_data %>% drop_na(malaria_tot), aes(x = data_date, y = malaria_tot)) +
   geom_col(width = 1) +
   labs(
     x = "Date of data submission",
@@ -905,7 +906,7 @@ combined  # 図を表示
 ```{r, out.width=c('100%'), fig.show='hold', warning=F, message=F}
 
 # メイン図の作成
-main_plot <- ggplot(data = linelist)+
+main_plot <- ggplot(data = linelist %>% drop_na(date_onset))+
   geom_histogram(aes(x = date_onset, fill = hospital))+
   scale_fill_brewer(type = "qual", palette = 1, na.value = "grey")+ 
   theme_half_open()+
@@ -966,6 +967,7 @@ cowplot::ggdraw(main_plot)+
 pacman::p_load(cowplot)            # cowplotの読み込み
 
 p1 <- linelist %>%                 # 図をオブジェクトとして保存
+     drop_na(date_onset) %>%
      count(
        epiweek = lubridate::floor_date(date_onset, "week")) %>% 
      ggplot()+
@@ -987,6 +989,7 @@ p1                                      # 図の表示
 ```{r, warning=F, message=F}
 
 p2 <- linelist %>%         # 図をオブジェクトとして保存
+     drop_na(date_onset) %>%
      group_by(
        epiweek = lubridate::floor_date(date_onset, "week")) %>% 
      summarise(

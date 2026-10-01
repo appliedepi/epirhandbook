@@ -107,7 +107,7 @@ Sử dụng dữ liệu `linelist` đã làm sạch, chúng ta có thể tạo m
 * Đối số `split_by = ` (trục x) lấy thông tin từ cột giới  
 
 ```{r, warning=F, message=F}
-apyramid::age_pyramid(data = linelist,
+apyramid::age_pyramid(data = drop_na(linelist, age_cat5, gender),
                       age_group = "age_cat5",
                       split_by = "gender")
 ```
@@ -116,7 +116,7 @@ apyramid::age_pyramid(data = linelist,
 Tháp có thể hiện thị phần trăm của tất cả các trường hợp trên trục x, thay vì chỉ số lượng, bằng cách thêm `proportional = TRUE`.  
 
 ```{r, warning=F, message=F}
-apyramid::age_pyramid(data = linelist,
+apyramid::age_pyramid(data = drop_na(linelist, age_cat5, gender),
                       age_group = "age_cat5",
                       split_by = "gender",
                       proportional = TRUE)
@@ -126,7 +126,7 @@ apyramid::age_pyramid(data = linelist,
 Khi sử dụng package **agepyramid**, nếu cột được phân chia `split_by` là nhị phân (vd. nam/nữ, hoặc có/không), thì kết quả sẽ xuất hiện dưới dạng một kim tự tháp. Tuy nhiên nếu có nhiều hơn hai giá trị trong cột được phân chia `split_by` (không bao gồm `NA`), kim tự tháp sẽ xuất hiện dưới dạng nhiều biểu đồ cột ngang với các thanh màu xám trong "background" cho biết phạm vi của dữ liệu chưa phân tách (un-faceted) cho nhóm tuổi đó. Trong trường hợp này, giá trị của `split_by = ` sẽ xuất hiện dưới dạng nhãn ở đỉnh mỗi biểu đồ. Chẳng hạn, bên dưới là những gì xảy ra nếu `split_by = ` được chỉ định tới cột `hospital`.  
 
 ```{r, warning=F, message=F}
-apyramid::age_pyramid(data = linelist,
+apyramid::age_pyramid(data = drop_na(linelist, age_cat5),
                       age_group = "age_cat5",
                       split_by = "hospital")  
 ```
@@ -150,7 +150,7 @@ Bạn cũng có thể thêm các lệnh `ggplot()` vào biểu đồ bằng các
 
 ```{r, warning=F, message=F}
 apyramid::age_pyramid(
-  data = linelist,
+  data = drop_na(linelist, age_cat5, gender),
   age_group = "age_cat5",
   split_by = "gender",
   proportional = TRUE,              # show percents, not counts
@@ -221,10 +221,11 @@ DT::datatable(demo_agg_long, rownames = FALSE, filter="top", options = list(page
 Sau đó sử dụng các đối số `split_by = ` và `count = ` của hàm `age_pyramid()` để chỉ định các cột tương ứng trong bộ dữ liệu:  
 
 ```{r, warning=F, message=F}
-apyramid::age_pyramid(data = demo_agg_long,
+apyramid::age_pyramid(data = drop_na(demo_agg_long),
                       age_group = "age_cat5",# column name for age category
                       split_by = "gender",   # column name for gender
-                      count = "counts")      # column name for case counts
+                      count = "counts",      # column name for case counts
+                      show_midpoint = FALSE)
 ```
 
 Lưu ý rằng ở trên, thứ tự của "m" và "f" là khác nhau (tháp bị đảo ngược). Để điều chỉnh thự tự, bạn phải định nghĩa lại cột giới trong dữ liệu được tổng hợp thành kiểu Factor và sắp xếp thứ tự như mong muốn. Xem chương [Factors](factors.qmd).  
@@ -258,7 +259,7 @@ Trước tiên, hãy hiểu rằng để tạo một kim tự tháp như vậy b
 
 * Bên trong hàm `ggplot()`, tạo **hai** biểu đồ histograms sử dụng cột tuổi dạng numeric, tương ứng cho hai nhóm (trong trường hợp này là giới nam và nữ). Để thực hiện việc này, dữ liệu cho mỗi biểu đồ được chỉ định trong các lệnh `geom_histogram()` tương ứng của chúng, với các bộ lọc tương ứng được áp dụng cho bộ dữ liệu `linelist`.    
 
-* Một biểu đồ sẽ có các giá trị dương, trong khi biểu đồ kia sẽ có các giá trị được chuyển thành giá trị âm - điều này tạo ra “kim tự tháp” với giá trị `0` ở giữa biểu đồ. Các giá trị âm được tạo bằng cách sử dụng thuật ngữ đặc biệt của  **ggplot2** là `..count..` và nhân với -1.  
+* Một biểu đồ sẽ có các giá trị dương, trong khi biểu đồ kia sẽ có các giá trị được chuyển thành giá trị âm - điều này tạo ra “kim tự tháp” với giá trị `0` ở giữa biểu đồ. Các giá trị âm được tạo bằng cách sử dụng thuật ngữ đặc biệt của  **ggplot2** là `after_stat(count)` và nhân với -1.  
 
 * Lệnh `coord_flip()` chuyển trục X và Y, dẫn đến các đồ thị quay dọc và tạo ra hình kim tự tháp.
 
@@ -278,7 +279,7 @@ Một phiên bản **đơn giản** của biểu đồ, sử dụng hàm `geom_h
   # male histogram (values converted to negative)
   geom_histogram(data = linelist %>% filter(gender == "m"),
                  breaks = seq(0,85,5),
-                 mapping = aes(y = ..count..*(-1)),
+                 mapping = aes(y = after_stat(count)*(-1)),
                  colour = "white") +
   
   # flip the X and Y axes
@@ -333,7 +334,7 @@ Cuối cùng, chúng ta dùng hàm `ggplot()` trên dữ liệu phần trăm. Ch
   ggplot()+  # default x-axis is age in years;
 
   # case data graph
-  geom_col(data = pyramid_data,
+  geom_col(data = drop_na(pyramid_data, percent),
            mapping = aes(
              x = age_cat5,
              y = percent,
@@ -516,7 +517,7 @@ ggplot()+  # default x-axis is age in years;
   
   # case data graph
   geom_col(
-    data = pyramid_data %>% filter(data_source == "cases"), 
+    data = pyramid_data %>% filter(data_source == "cases") %>% drop_na(percent), 
     mapping = aes(
       x = age_cat5,                               # age categories as original X axis
       y = percent,                                # % as original Y-axis
@@ -629,7 +630,7 @@ melted_max <- melted %>%
 
 Bây giờ hãy cùng vẽ biểu đồ. Tương tự các tháp tuổi ở trên, chúng ta đang tạo hai biểu đồ thanh và đảo các giá trị của một trong số chúng thành âm. 
 
-Chúng ta sử dụng hàm `geom_bar()` bởi vì dữ liệu của chúng ta mỗi quan sát nằm trên một hàng, không phải là số lượng tổng hợp. Chúng ta sử dụng thuật ngữ đặc biệt của **ggplot2** là `..count..` ở một biểu đồ thanh để đảo ngược các giá trị thành âm(*-1), sau đó chúng ta thiết lập `position = "stack"` để các giá trị xếp chồng lên nhau.  
+Chúng ta sử dụng hàm `geom_bar()` bởi vì dữ liệu của chúng ta mỗi quan sát nằm trên một hàng, không phải là số lượng tổng hợp. Chúng ta sử dụng thuật ngữ đặc biệt của **ggplot2** là `after_stat(count)` ở một biểu đồ thanh để đảo ngược các giá trị thành âm(*-1), sau đó chúng ta thiết lập `position = "stack"` để các giá trị xếp chồng lên nhau.  
 
 ```{r, warning=F, message=F}
 # make plot
@@ -640,10 +641,9 @@ ggplot()+
        data = melted %>% filter(direction == "Negative"),
        mapping = aes(
          x = status,
-         y = ..count..*(-1),    # counts inverted to negative
+         y = after_stat(count)*(-1),    # counts inverted to negative
          fill = Response),
        color = "black",
-       closed = "left",
        position = "stack")+
      
      # bar graph of the "positive responses
@@ -653,7 +653,6 @@ ggplot()+
          x = status,
          fill = Response),
        colour = "black",
-       closed = "left",
        position = "stack")+
      
      # flip the X and Y axes

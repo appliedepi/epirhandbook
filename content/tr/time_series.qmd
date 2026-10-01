@@ -187,9 +187,10 @@ file_paths <- list.files(
 file_paths <- file_paths[str_detect(file_paths, "germany")]
 
 ## tüm dosyaları stars nesnesi olarak oku
-## along = "time" stacks the ten yearly files into one series; without it
-## stars cannot tell how to merge them and errors
-data <- stars::read_stars(file_paths, along = "time")
+## read_ncdf() reads one file per call, so read each file, then use
+## c(along = "time") to stack the ten yearly files into one series
+data <- map(file_paths, stars::read_ncdf)
+data <- do.call(c, c(data, along = "time"))
 ```
 
 Bu dosyalar nesne verisi olarak içe aktarıldıktan sonra onları bir veri çerçevesine dönüştüreceğiz.
@@ -300,7 +301,10 @@ counts <- counts %>%
          )
 
 ## orijinaline kıyasla hangi değerlerin atfedildiğini (impute) kontrol etmek için
-ggplot_na_imputations(counts$case_miss, counts$case_int) + 
+ggplot(counts, aes(x = epiweek, y = case_int)) + 
+  ## enterpole edilen seri kırmızı çizgi, gözlenen değerler siyah noktalar olarak
+  geom_line(colour = "red") + 
+  geom_point(data = drop_na(counts, case_miss), aes(y = case_miss)) + 
   ## geleneksel bir grafik oluşturun (siyah eksenli ve beyaz arka planlı)
   theme_classic()
 
@@ -429,13 +433,18 @@ Klasik ayrıştırma, bir zaman serisini parçalara ayırmak için kullanılır 
 ```{r decomposition, warning=F, message=F}
 
 ## sayımlar veri tabanını ayrıştır 
-counts %>% 
+decomposition_plot <- counts %>% 
   # additif klasik ayrıştırma modeli uygula 
   model(classical_decomposition(case_int, type = "additive")) %>% 
   ## önemli bilgileri modelden çıkarın
   components() %>% 
   ## grafik oluştur 
   autoplot()
+
+## serinin iki ucundaki boş trend ve rastgele değerleri çıkarın
+decomposition_plot$data <- drop_na(decomposition_plot$data, .val)
+
+decomposition_plot
 
 ```
 
@@ -664,6 +673,7 @@ counts %>%
       type = "correlation") %>% 
   ## korelasyon katsayısını azalan biçimde dizin
   ## en yüksek ilişkili gecikmeleri göster
+  as_tibble() %>% 
   arrange(-ccf) %>% 
   ## sadece ilk 10'u gösterin 
   slice_head(n = 10)
@@ -959,7 +969,8 @@ ggplot(data = observed, aes(x = epiweek)) +
                   ymax = upper_pi), 
               alpha = 0.25) + 
   ## gözlemlenen vaka sayılarınız için bir çizgi grafiği ekleyin
-  geom_line(aes(y = case_int), 
+  geom_line(data = drop_na(observed, case_int), 
+            aes(y = case_int), 
             col = "black") + 
   ## beklenenin üzerinde gözlenen sayımlar için saçılım grafiği
   geom_point(
@@ -1182,7 +1193,7 @@ surveillance paketiyle çalışmak için öncelikle çerçeveye sığacak bir �
 
 ## gözetim zaman serisi nesnesini tanımla
 ## not. popülasyon nesnesine bir payda ekleyebilirsiniz (bkz. ?sts)
-counts_sts <- sts(observed = counts$case_int[!is.na(counts$case_int)],
+counts_sts <- sts(observed = round(counts$case_int[!is.na(counts$case_int)]),
                   start = c(
               ## yalnızca start_date tarihinden itibaren yılı tutmak için alt küme
                     as.numeric(str_sub(start_date, 1, 4)), 
@@ -1236,9 +1247,11 @@ Daha sonra sonuçları daha önce olduğu gibi ggplot'ta görselleştirebiliriz.
 
 ggplot(counts, aes(x = epiweek)) + 
   ## gözlemlenen vaka sayılarını bir çizgi olarak ekleyin
-  geom_line(aes(y = case_int, colour = "Observed")) + 
+  geom_line(data = drop_na(counts, case_int), 
+            aes(y = case_int, colour = "Observed")) + 
   ## sapma algoritmasının üst sınırını ekleyin 
-  geom_line(aes(y = threshold, colour = "Alert threshold"), 
+  geom_line(data = drop_na(counts, threshold), 
+            aes(y = threshold, colour = "Alert threshold"), 
             linetype = "dashed", 
             linewidth = 1.5) +
   ## renkleri belirleyin 
@@ -1296,9 +1309,11 @@ counts[which(counts$epiweek >= cut_off &
 
 ggplot(counts, aes(x = epiweek)) + 
   ## gözlemlenen vaka sayılarını bir çizgi olarak ekleyin
-  geom_line(aes(y = case_int, colour = "Observed")) + 
+  geom_line(data = drop_na(counts, case_int), 
+            aes(y = case_int, colour = "Observed")) + 
   ## sapma algoritmasının üst sınırına ekleyin
-  geom_line(aes(y = threshold_glrnb, colour = "Alert threshold"), 
+  geom_line(data = drop_na(counts, threshold_glrnb), 
+            aes(y = threshold_glrnb, colour = "Alert threshold"), 
             linetype = "dashed", 
             linewidth = 1.5) +
   ## renkleri belirleyin 

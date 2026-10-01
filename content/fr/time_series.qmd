@@ -182,9 +182,10 @@ file_paths <- list.files(
 file_paths <- file_paths[str_detect(file_paths, "germany")]
 
 ## lire tous les fichiers en tant qu'objet stars 
-## along = "time" stacks the ten yearly files into one series; without it
-## stars cannot tell how to merge them and errors
-data <- stars::read_stars(file_paths, along = "time")
+## read_ncdf() reads one file per call, so read each file, then use
+## c(along = "time") to stack the ten yearly files into one series
+data <- map(file_paths, stars::read_ncdf)
+data <- do.call(c, c(data, along = "time"))
 ```
 
 Une fois que ces fichiers ont été importés en tant qu'objet `data`, nous allons les convertir en un cadre de données.  
@@ -293,7 +294,10 @@ counts <- counts %>%
          )
 
 ## pour vérifier quelles valeurs ont été imputées par rapport à l'original.
-ggplot_na_imputations(counts$case_miss, counts$case_int) + 
+ggplot(counts, aes(x = epiweek, y = case_int)) + 
+  ## série interpolée en ligne rouge, valeurs observées en points noirs
+  geom_line(colour = "red") + 
+  geom_point(data = drop_na(counts, case_miss), aes(y = case_miss)) + 
   ## faire un graphique traditionnel (avec des axes noirs et un fond blanc)
   theme_classic()
 
@@ -424,13 +428,18 @@ Ces différentes parties sont :
 ```{r decomposition, warning=F, message=F}
 
 ## Décomposition de l'ensemble de données counts 
-counts %>% 
+decomposition_plot <- counts %>% 
   ## en utilisant un modèle additif de décomposition classique
   model(classical_decomposition(case_int, type = "additive")) %>% 
   ## extraire les informations importantes du modèle
   components() %>% 
   ## générer un graphique 
   autoplot()
+
+## supprimer les valeurs vides de tendance et aléatoires aux deux extrémités de la série
+decomposition_plot$data <- drop_na(decomposition_plot$data, .val)
+
+decomposition_plot
 
 ```
 
@@ -656,6 +665,7 @@ counts %>%
       type = "correlation") %>% 
   ## arange dans l'ordre décroissant du coefficient de corrélation 
   ## montre les décalages les plus associés
+  as_tibble() %>% 
   arrange(-ccf) %>% 
   ## montrer seulement les dix premiers 
   slice_head(n = 10)
@@ -957,7 +967,8 @@ ggplot(data = observed, aes(x = epiweek)) +
                   ymax = upper_pi), 
               alpha = 0.25) + 
   ## ajouter une ligne pour le nombre de cas observés
-  geom_line(aes(y = case_int), 
+  geom_line(data = drop_na(observed, case_int), 
+            aes(y = case_int), 
             col = "black") + 
   ## Tracez des points pour les nombres observés supérieurs aux prévisions.
   geom_point(
@@ -1176,7 +1187,7 @@ Afin de travailler avec le paquet **surveillance**, nous devons d'abord définir
 
 ## Définir un objet de série temporelle de surveillance
 ## nb. vous pouvez inclure un dénominateur avec l'objet population (voir ?sts)
-counts_sts <- sts(observed = counts$case_int[!is.na(counts$case_int)],
+counts_sts <- sts(observed = round(counts$case_int[!is.na(counts$case_int)]),
                   start = c(
                     ## sous-ensemble pour ne garder que l'année de start_date. 
                     as.numeric(str_sub(start_date, 1, 4)), 
@@ -1231,9 +1242,11 @@ Nous pouvons ensuite visualiser les résultats dans ggplot comme nous l'avons fa
 
 ggplot(counts, aes(x = epiweek)) + 
   ## ajouter le nombre de cas observés sous forme de ligne
-  geom_line(aes(y = case_int, colour = "Observed")) + 
+  geom_line(data = drop_na(counts, case_int), 
+            aes(y = case_int, colour = "Observed")) + 
   ## ajout de la limite supérieure de l'algorithme d'aberration
-  geom_line(aes(y = threshold, colour = "Alert threshold"), 
+  geom_line(data = drop_na(counts, threshold), 
+            aes(y = threshold, colour = "Alert threshold"), 
             linetype = "dashed", 
             linewidth = 1.5) +
   ## définir les couleurs
@@ -1290,9 +1303,11 @@ Visualisez les sorties comme précédemment.
 
 ggplot(counts, aes(x = epiweek)) + 
   ## ajouter le nombre de cas observés sous forme de ligne
-  geom_line(aes(y = case_int, colour = "Observed")) + 
+  geom_line(data = drop_na(counts, case_int), 
+            aes(y = case_int, colour = "Observed")) + 
   ## ajout de la limite supérieure de l'algorithme d'aberration
-  geom_line(aes(y = threshold_glrnb, colour = "Alert threshold"), 
+  geom_line(data = drop_na(counts, threshold_glrnb), 
+            aes(y = threshold_glrnb, colour = "Alert threshold"), 
             linetype = "dashed", 
             linewidth = 1.5) +
   ## définir les couleurs

@@ -107,7 +107,7 @@ Using the cleaned `linelist` dataset, we can create an age pyramid with one simp
 * The `split_by = ` argument (for x-axis) is set to the gender column  
 
 ```{r, warning=F, message=F}
-apyramid::age_pyramid(data = linelist,
+apyramid::age_pyramid(data = drop_na(linelist, age_cat5, gender),
                       age_group = "age_cat5",
                       split_by = "gender")
 ```
@@ -116,7 +116,7 @@ apyramid::age_pyramid(data = linelist,
 The pyramid can be displayed with percent of all cases on the x-axis, instead of counts, by including `proportional = TRUE`.  
 
 ```{r, warning=F, message=F}
-apyramid::age_pyramid(data = linelist,
+apyramid::age_pyramid(data = drop_na(linelist, age_cat5, gender),
                       age_group = "age_cat5",
                       split_by = "gender",
                       proportional = TRUE)
@@ -126,7 +126,7 @@ apyramid::age_pyramid(data = linelist,
 When using **agepyramid** package, if the `split_by` column is binary (e.g. male/female, or yes/no), then the result will appear as a pyramid. However if there are more than two values in the `split_by` column (not including `NA`), the pyramid will appears as a faceted bar plot with grey bars in the "background" indicating the range of the un-faceted data for that age group. In this case, values of `split_by = ` will appear as labels at top of each facet panel. For example, below is what occurs if the `split_by = ` is assigned the column `hospital`.  
 
 ```{r, warning=F, message=F}
-apyramid::age_pyramid(data = linelist,
+apyramid::age_pyramid(data = drop_na(linelist, age_cat5),
                       age_group = "age_cat5",
                       split_by = "hospital")  
 ```
@@ -150,7 +150,7 @@ You can also add additional `ggplot()` commands to the plot using the standard `
 
 ```{r, warning=F, message=F}
 apyramid::age_pyramid(
-  data = linelist,
+  data = drop_na(linelist, age_cat5, gender),
   age_group = "age_cat5",
   split_by = "gender",
   proportional = TRUE,              # show percents, not counts
@@ -221,10 +221,11 @@ DT::datatable(demo_agg_long, rownames = FALSE, filter="top", options = list(page
 Then use the `split_by = ` and `count = ` arguments of `age_pyramid()` to specify the respective columns in the data:  
 
 ```{r, warning=F, message=F}
-apyramid::age_pyramid(data = demo_agg_long,
+apyramid::age_pyramid(data = drop_na(demo_agg_long),
                       age_group = "age_cat5",# column name for age category
                       split_by = "gender",   # column name for gender
-                      count = "counts")      # column name for case counts
+                      count = "counts",      # column name for case counts
+                      show_midpoint = FALSE)
 ```
 
 Note in the above, that the factor order of "m" and "f" is different (pyramid reversed). To adjust the order you must re-define gender in the aggregated data as a Factor and order the levels as desired. See the [Factors](factors.qmd) page.  
@@ -258,7 +259,7 @@ First, understand that to make such a pyramid using `ggplot()` the approach is a
 
 * Within the `ggplot()`, create **two** histograms using the numeric age column. Create one for each of the two grouping values (in this case genders male and female). To do this, the data for each histogram are specified within their respective `geom_histogram()` commands, with the respective filters applied to `linelist`.    
 
-* One graph will have positive count values, while the other will have its counts converted to negative values - this creates the "pyramid" with the `0` value in the middle of the plot. The negative values are created using a special **ggplot2** term `..count..` and multiplying by -1.  
+* One graph will have positive count values, while the other will have its counts converted to negative values - this creates the "pyramid" with the `0` value in the middle of the plot. The negative values are created using a special **ggplot2** term `after_stat(count)` and multiplying by -1.  
 
 * The command `coord_flip()` switches the X and Y axes, resulting in the graphs turning vertical and creating the pyramid.
 
@@ -278,7 +279,7 @@ A **simple** version of this, using `geom_histogram()`, is below:
   # male histogram (values converted to negative)
   geom_histogram(data = linelist %>% filter(gender == "m"),
                  breaks = seq(0,85,5),
-                 mapping = aes(y = ..count..*(-1)),
+                 mapping = aes(y = after_stat(count)*(-1)),
                  colour = "white") +
   
   # flip the X and Y axes
@@ -333,7 +334,7 @@ Finally we make the `ggplot()` on the percent data. We specify `scale_y_continuo
   ggplot()+  # default x-axis is age in years;
 
   # case data graph
-  geom_col(data = pyramid_data,
+  geom_col(data = drop_na(pyramid_data, percent),
            mapping = aes(
              x = age_cat5,
              y = percent,
@@ -516,7 +517,7 @@ ggplot()+  # default x-axis is age in years;
   
   # case data graph
   geom_col(
-    data = pyramid_data %>% filter(data_source == "cases"), 
+    data = pyramid_data %>% filter(data_source == "cases") %>% drop_na(percent), 
     mapping = aes(
       x = age_cat5,                               # age categories as original X axis
       y = percent,                                # % as original Y-axis
@@ -629,7 +630,7 @@ melted_max <- melted %>%
 
 Now make the plot. As in the age pyramids above, we are creating two bar plots and inverting the values of one of them to negative. 
 
-We use `geom_bar()` because our data are one row per observation, not aggregated counts. We use the special **ggplot2** term `..count..` in one of the bar plots to invert the values negative (*-1), and we set `position = "stack"` so the values stack on top of each other.  
+We use `geom_bar()` because our data are one row per observation, not aggregated counts. We use the special **ggplot2** term `after_stat(count)` in one of the bar plots to invert the values negative (*-1), and we set `position = "stack"` so the values stack on top of each other.  
 
 ```{r, warning=F, message=F}
 # make plot
@@ -640,10 +641,9 @@ ggplot()+
        data = melted %>% filter(direction == "Negative"),
        mapping = aes(
          x = status,
-         y = ..count..*(-1),    # counts inverted to negative
+         y = after_stat(count)*(-1),    # counts inverted to negative
          fill = Response),
        color = "black",
-       closed = "left",
        position = "stack")+
      
      # bar graph of the "positive responses
@@ -653,7 +653,6 @@ ggplot()+
          x = status,
          fill = Response),
        colour = "black",
-       closed = "left",
        position = "stack")+
      
      # flip the X and Y axes

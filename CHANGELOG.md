@@ -8,6 +8,35 @@ of it, and that is expected of a changelog. Read it as a record, never as curren
 
 ---
 
+## 2026-10-01: every chapter renders without an R warning
+
+The render images now log every R warning as an `EHB-WARNING` line. A full offline English render on 2026-10-01 logged 180 distinct warnings in 27 chapters. Every chapter now renders with none, except two labelled chunks that teach a warning on purpose.
+
+- `missing_data` chunk `warning-coercion-demo` shows "NAs introduced by coercion". `ggplot_tips` chunk `warning-na-translate-demo` shows that `scale_x_discrete(na.translate = FALSE)` removes the `NA` rows. Check 17 allows exactly these two warning labels.
+- No chunk hides a warning with `suppressWarnings()`, a chunk option or `options(warn = ...)`. The data step now removes the missing values that ggplot dropped with a warning, with `drop_na()` or `filter()`, so the reader sees what is dropped.
+- `heatmaps`: the join matched each infector once per case it caused, so the cross-tab double-counted. `distinct()` fixes it. The joined data goes from 3687 to 2085 rows, and the 0-4 by 0-4 cell goes from 105 to 68.
+- `missing_data`: `fever` was a character column, and `mice` dropped it as constant. It is now numeric, so the imputation and the pooled model change.
+- `contact_tracing`: `date_last_seen` was `-Inf` for 2 contacts. It is now `NA`, which moves them from "Lost to follow up" to "Never seen".
+- `tables_descriptive` uses Fisher's test with a simulated p-value and a fixed seed. The 70+ group has expected counts below 5, and the exact test does not fit in memory.
+- `standardization` uses `calculate_dsr()`, the successor of the deprecated `phe_dsr()`.
+- Several plots lost axis space that only the missing rows had reserved: two alarm plots in `time_series`, and plots in `shiny_basics`, `interactive_plots` and `age_pyramid`. The bars and lines did not change.
+- `time_series` reads the NetCDF climate files with `stars::read_ncdf()`. `read_stars()` went through GDAL and raised 20 warnings. The analysis image now carries `ncmeta`.
+- `stat_tests` draws the correlation plot with ggplot2, because `corrr::rplot()` raises a ggplot2 deprecation warning. `time_series` draws the imputation comparison with ggplot2, because the imputeTS plot function raises one.
+- `combination_analysis`: UpSetR 1.4.1 and ggupset 0.4.1 raise ggplot2 deprecation warnings in their own code. Their chunks are shown unevaluated with saved figures: `images/combination_analysis_upsetr.png`, `images/combination_analysis_ggupset.png` and `images/combination_analysis_ggupset_header.png`. A comment says to restore the chunks when the packages are updated.
+- `directories` no longer prints render-machine paths (`/book/...`).
+
+## 2026-10-01: render gates, and one commit per deploy
+
+- `build-deploy.yml` resolves `inputs.ref` to one commit SHA in its first job. Every render leg and the deploy check out that SHA, and the deploy message `Deploy site from <sha>` names it. It named the event SHA before, while the checkouts followed `main`.
+- `staging.yml` builds `github.sha`, not `main`. `staging.yml` and `preview.yml` run the translation sync check on the commit they build, and the deploy waits for it.
+- Staging publishes `main` only. `staging.yml` runs its jobs only on `refs/heads/main`, and the deploy step refuses `staging` from any other ref.
+- `translation-sync.yml` now runs only when a caller or a person starts it. It lost its own `push` and `pull_request` triggers.
+- New check 17, `checks/check-render-leg.py`, runs in each render leg. It fails on an R warning or error in the render log, except in four chunks that show one on purpose. It also fails on `cell-output-stderr` output and on a render-machine path in a page. With the first three of those chunks allowed, the English render of 2026-10-01 gave 600 failures.
+- New check 18, `checks/check-site-links.py`, runs on the assembled site before the zip and the deploy. It fails on a relative `href` or `src` that resolves to no file, and on a `#fragment` with no matching id.
+- `writing_functions`: the two `error=TRUE` chunks now carry the labels `error-missing-argument` and `error-stop` in all eight languages. Check 17 names them.
+- Check 12 now runs checks 17 and 18 without each of their inputs, and with each one empty.
+- The deploy step deletes the old tree with `rm -rf -- *`, so actionlint passes.
+
 ## 2026-10-01: check 5 reads scheme-less links, and check 16 parses the English code
 
 - `checks/check-links.py` (check 5) now reports a link with no URL scheme that is not a `.qmd` file and not a file that exists. Examples are `github.com`, `iteration` and an old slug. It also reports `https:/` with one slash. On the tree before the 2026-10-01 link fixes it reports 88 such links. Before this change it reported 0.

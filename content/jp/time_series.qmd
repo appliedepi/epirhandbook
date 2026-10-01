@@ -181,9 +181,10 @@ file_paths <- list.files(
 file_paths <- file_paths[str_detect(file_paths, "germany")]
 
 ## 全てのファイルをstartsオブジェクトとして読み込み
-## along = "time" stacks the ten yearly files into one series; without it
-## stars cannot tell how to merge them and errors
-data <- stars::read_stars(file_paths, along = "time")
+## read_ncdf() reads one file per call, so read each file, then use
+## c(along = "time") to stack the ten yearly files into one series
+data <- map(file_paths, stars::read_ncdf)
+data <- do.call(c, c(data, along = "time"))
 ```
 
 これらのファイルがオブジェクト `data` としてインポートされたら、データフレームに変換します。
@@ -292,7 +293,10 @@ counts <- counts %>%
          )
 
 ## 元の値と比較してどのような値が代入されたかを確認する
-ggplot_na_imputations(counts$case_miss, counts$case_int) + 
+ggplot(counts, aes(x = epiweek, y = case_int)) + 
+  ## 補間した系列を赤い線、観測値を黒い点で表示
+  geom_line(colour = "red") + 
+  geom_point(data = drop_na(counts, case_miss), aes(y = case_miss)) + 
   ## 伝統的なプロット（軸が黒で背景が白）を作成
   theme_classic()
 
@@ -421,13 +425,18 @@ peak_weeks <- periodogram(counts,
 ```{r decomposition, warning=F, message=F}
 
 ## counts データセットの分解
-counts %>% 
+decomposition_plot <- counts %>% 
   # 追加的な分解モデルを使用する
   model(classical_decomposition(case_int, type = "additive")) %>% 
   ## モデルから重要な情報を抽出する
   components() %>% 
   ## プロットを生成する
   autoplot()
+
+## 系列の両端にある空のトレンドとランダムの値を削除する
+decomposition_plot$data <- drop_na(decomposition_plot$data, .val)
+
+decomposition_plot
 
 ```
 
@@ -655,6 +664,7 @@ counts %>%
       type = "correlation") %>% 
   ## 相関係数を降順に並び替える
   ## 最も関連するラグを表示する
+  as_tibble() %>% 
   arrange(-ccf) %>% 
   ## 上位10のみ表示する
   slice_head(n = 10)
@@ -959,7 +969,8 @@ ggplot(data = observed, aes(x = epiweek)) +
                   ymax = upper_pi), 
               alpha = 0.25) + 
   ## 観測されたケースの数についての線を追加する
-  geom_line(aes(y = case_int), 
+  geom_line(data = drop_na(observed, case_int), 
+            aes(y = case_int), 
             col = "black") + 
   ## 期待値以上の観測値観測されたケースについての点をプロットする
   geom_point(
@@ -1175,7 +1186,7 @@ model_metrics
 
 ## surveillance time series オブジェクトを定義する
 ## 備考: 母集団オブジェクトに分母を含められる（?stsを参照ください）。
-counts_sts <- sts(observed = counts$case_int[!is.na(counts$case_int)],
+counts_sts <- sts(observed = round(counts$case_int[!is.na(counts$case_int)]),
                   start = c(
                     ## start_date から年のみを保持するサブセット
                     as.numeric(str_sub(start_date, 1, 4)), 
@@ -1229,9 +1240,11 @@ counts[which(counts$epiweek >= cut_off &
 
 ggplot(counts, aes(x = epiweek)) + 
   ## 観測されたケースを線として追加する
-  geom_line(aes(y = case_int, colour = "Observed")) + 
+  geom_line(data = drop_na(counts, case_int), 
+            aes(y = case_int, colour = "Observed")) + 
   ## 収差アルゴリズムの上界を追加する
-  geom_line(aes(y = threshold, colour = "Alert threshold"), 
+  geom_line(data = drop_na(counts, threshold), 
+            aes(y = threshold, colour = "Alert threshold"), 
             linetype = "dashed", 
             linewidth = 1.5) +
   ## 色を定義する
@@ -1288,9 +1301,11 @@ counts[which(counts$epiweek >= cut_off &
 
 ggplot(counts, aes(x = epiweek)) + 
   ## 観測されたケースの数を線として追加する
-  geom_line(aes(y = case_int, colour = "Observed")) + 
+  geom_line(data = drop_na(counts, case_int), 
+            aes(y = case_int, colour = "Observed")) + 
   ## aberration アルゴリズムの上界を追加する
-  geom_line(aes(y = threshold_glrnb, colour = "Alert threshold"), 
+  geom_line(data = drop_na(counts, threshold_glrnb), 
+            aes(y = threshold_glrnb, colour = "Alert threshold"), 
             linetype = "dashed", 
             linewidth = 1.5) +
   ## 色を定義する

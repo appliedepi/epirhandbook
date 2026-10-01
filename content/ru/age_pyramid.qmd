@@ -107,7 +107,7 @@ hist(linelist$age)
 * Аргумент ``split_by = ` (для оси x) задается для столбца пол  
 
 ```{r, warning=F, message=F}
-apyramid::age_pyramid(data = linelist,
+apyramid::age_pyramid(data = drop_na(linelist, age_cat5, gender),
                       age_group = "age_cat5",
                       split_by = "gender")
 ```
@@ -116,7 +116,7 @@ apyramid::age_pyramid(data = linelist,
 Пирамиду можно отобразить на оси x не в виде количества, а в виде процента от всех случаев, включив `proportional = TRUE`.  
 
 ```{r, warning=F, message=F}
-apyramid::age_pyramid(data = linelist,
+apyramid::age_pyramid(data = drop_na(linelist, age_cat5, gender),
                       age_group = "age_cat5",
                       split_by = "gender",
                       proportional = TRUE)
@@ -126,7 +126,7 @@ apyramid::age_pyramid(data = linelist,
 При использовании пакета **agepyramid**, если столбец `split_by` является бинарным (например, мужчина/женщина, или да/нет), то результат будет иметь вид пирамиды. Однако если в столбце `split_by` более двух значений (не считая `NA`), то пирамида будет выглядеть как фасетная столбчатая диаграмма с серыми полосами на "фоне", указывающими на диапазон нефасетных данных для данной возрастной группы. При этом значения `split_by = ` будут отображаться в виде меток в верхней части каждой фасетной панели. Например, ниже показано, что произойдет, если значению `split_by = ` будет присвоен столбец `hospital`.  
 
 ```{r, warning=F, message=F}
-apyramid::age_pyramid(data = linelist,
+apyramid::age_pyramid(data = drop_na(linelist, age_cat5),
                       age_group = "age_cat5",
                       split_by = "hospital")  
 ```
@@ -150,7 +150,7 @@ apyramid::age_pyramid(data = linelist,
 
 ```{r, warning=F, message=F}
 apyramid::age_pyramid(
-  data = linelist,
+  data = drop_na(linelist, age_cat5, gender),
   age_group = "age_cat5",
   split_by = "gender",
   proportional = TRUE,              # показывать проценты, а не подсчеты
@@ -221,10 +221,11 @@ DT::datatable(demo_agg_long, rownames = FALSE, filter="top", options = list(page
 Затем с помощью аргументов `split_by = ` и `count = ` функции `age_pyramid()` указать соответствующие столбцы в данных:  
 
 ```{r, warning=F, message=F}
-apyramid::age_pyramid(data = demo_agg_long,
+apyramid::age_pyramid(data = drop_na(demo_agg_long),
                       age_group = "age_cat5",# название столбца для возрастной категории
                       split_by = "gender",   # название столбца для пола
-                      count = "counts")      # название столбца для подсчета количества случаев
+                      count = "counts",      # название столбца для подсчета количества случаев
+                      show_midpoint = FALSE)
 ```
 
 Обратите внимание, что порядок факторов "m" и "f" отличается (пирамида перевернута). Для корректировки порядка необходимо переопределить пол в агрегированных данных как Фактор и упорядочить уровни по желанию. См. страницу [Факторы].  
@@ -258,7 +259,7 @@ class(linelist$age)
 
 * Внутри `ggplot()` создайте **две** гистограммы, используя числовой столбец возраста. По одной для каждого из двух значений группировки (в данном случае мужского и женского полов). Для этого данные для каждой гистограммы задаются в соответствующих командах `geom_histogram()`, а соответствующие фильтры применяются к `linelist`.    
 
-* На одном графике будут положительные значения подсчетов, а на другом - отрицательные, что создает "пирамиду" со значением `0` в середине графика. Отрицательные значения создаются с помощью специального **ggplot2** термина `..count..` и умножения на -1.  
+* На одном графике будут положительные значения подсчетов, а на другом - отрицательные, что создает "пирамиду" со значением `0` в середине графика. Отрицательные значения создаются с помощью специального **ggplot2** термина `after_stat(count)` и умножения на -1.  
 
 * Команда `coord_flip()` переключает оси X и Y, в результате чего графики становятся вертикальными и образуют пирамиду.
 
@@ -278,7 +279,7 @@ class(linelist$age)
   # гистограмма мужского пола (значения приведены к отрицательным)
   geom_histogram(data = linelist %>% filter(gender == "m"),
                  breaks = seq(0,85,5),
-                 mapping = aes(y = ..count..*(-1)),
+                 mapping = aes(y = after_stat(count)*(-1)),
                  colour = "white") +
   
   # перевернуть оси X и Y
@@ -333,7 +334,7 @@ min_per
   ggplot()+  # По оси x по умолчанию указан возраст в годах;
 
   # графа данных о случае
-  geom_col(data = pyramid_data,
+  geom_col(data = drop_na(pyramid_data, percent),
            mapping = aes(
              x = age_cat5,
              y = percent,
@@ -516,7 +517,7 @@ ggplot()+  # Ось x по умолчанию - возраст в годах;
   
   # график данных о случае
   geom_col(
-    data = pyramid_data %>% filter(data_source == "cases"), 
+    data = pyramid_data %>% filter(data_source == "cases") %>% drop_na(percent), 
     mapping = aes(
       x = age_cat5,                               # возрастные категории в качестве исходной оси X
       y = percent,                                # % по сравнению с исходной осью Y
@@ -629,7 +630,7 @@ melted_max <- melted %>%
 
 Теперь построим график. Как и в случае с возрастными пирамидами, мы строим два столбчатых графика и инвертируем значения одного из них в отрицательные. 
 
-Мы используем `geom_bar()`, поскольку наши данные представляют собой одну строку на наблюдение, а не агрегированные подсчеты. Мы используем специальный **ggplot2** термин `..count..` в одной из гистограмм для инвертирования значений в отрицательные (*-1), и задаем `position = "stack"`, чтобы значения складывались друг на друга.  
+Мы используем `geom_bar()`, поскольку наши данные представляют собой одну строку на наблюдение, а не агрегированные подсчеты. Мы используем специальный **ggplot2** термин `after_stat(count)` в одной из гистограмм для инвертирования значений в отрицательные (*-1), и задаем `position = "stack"`, чтобы значения складывались друг на друга.  
 
 ```{r, warning=F, message=F}
 # построить график
@@ -640,10 +641,9 @@ ggplot()+
        data = melted %>% filter(direction == "Negative"),
        mapping = aes(
          x = status,
-         y = ..count..*(-1),    # инверсия подсчетов в отрицательное значение
+         y = after_stat(count)*(-1),    # инверсия подсчетов в отрицательное значение
          fill = Response),
        color = "black",
-       closed = "left",
        position = "stack")+
      
      # гистограмма "положительных" ответов
@@ -653,7 +653,6 @@ ggplot()+
          x = status,
          fill = Response),
        colour = "black",
-       closed = "left",
        position = "stack")+
      
      # перевернуть оси X и Y

@@ -204,9 +204,10 @@ file_paths <- list.files(
 file_paths <- file_paths[str_detect(file_paths, "germany")]
 
 ## read in all the files as a stars object
-## along = "time" stacks the ten yearly files into one series; without it
-## stars cannot tell how to merge them and errors
-data <- stars::read_stars(file_paths, along = "time")
+## read_ncdf() reads one file per call, so read each file, then use
+## c(along = "time") to stack the ten yearly files into one series
+data <- map(file_paths, stars::read_ncdf)
+data <- do.call(c, c(data, along = "time"))
 ```
 
 Uma vez que estes arquivos foram importados como o objeto `data`, nós iremos convertê-los para um quadro de dados (*data frame*).
@@ -336,7 +337,10 @@ counts <- counts %>%
          )
 
 ## para checar quais valores foram imputados comparados com os originais
-ggplot_na_imputations(counts$case_miss, counts$case_int) + 
+ggplot(counts, aes(x = epiweek, y = case_int)) + 
+  ## série interpolada como linha vermelha, valores observados como pontos pretos
+  geom_line(colour = "red") + 
+  geom_point(data = drop_na(counts, case_miss), aes(y = case_miss)) + 
   ## crie um gráfico tradicional (com eixos negros e fundo branco)
   theme_classic()
 
@@ -471,13 +475,18 @@ Estas partes distintas são:
 ```{r decomposition, warning=F, message=F}
 
 ## decomponha os dados de contagem
-counts %>% 
+decomposition_plot <- counts %>% 
   # utilizando um modelo clássico de decomposição aditiva
   model(classical_decomposition(case_int, type = "additive")) %>% 
   ## extraia a informação importante do modelo
   components() %>% 
   ## gere um gráfico
   autoplot()
+
+## remover os valores vazios de tendência e aleatórios nas duas extremidades da série
+decomposition_plot$data <- drop_na(decomposition_plot$data, .val)
+
+decomposition_plot
 
 ```
 
@@ -744,6 +753,7 @@ counts %>%
       type = "correlation") %>% 
   ## organize pela ordem decrescente do coeficiente de correlação
   ## mostre as defasagens de tempo com maior associação
+  as_tibble() %>% 
   arrange(-ccf) %>% 
   ## apenas mostre os dez maiores coeficientes
   slice_head(n = 10)
@@ -1099,7 +1109,8 @@ ggplot(data = observed, aes(x = epiweek)) +
                   ymax = upper_pi), 
               alpha = 0.25) + 
   ## adiciona uma linha para os as contagens de caso observadas
-  geom_line(aes(y = case_int), 
+  geom_line(data = drop_na(observed, case_int), 
+            aes(y = case_int), 
             col = "black") + 
   ## crie pontos para as contagens observadas acima do esperado
   geom_point(
@@ -1352,7 +1363,7 @@ quadro.
 
 ## defina um objeto de série temporal de vigilância
 ## nb. você pode incluir um denominador com o objeto que contém a população (veja ?sts)
-counts_sts <- sts(observed = counts$case_int[!is.na(counts$case_int)],
+counts_sts <- sts(observed = round(counts$case_int[!is.na(counts$case_int)]),
                   start = c(
                     ## subconjunto para manter apenas o ano da variável start_date
                     as.numeric(str_sub(start_date, 1, 4)), 
@@ -1410,9 +1421,11 @@ Nós podemos, então, visualizar os resultados no ggplot como feito anteriorment
 
 ggplot(counts, aes(x = epiweek)) + 
   ## adicione as quantidades de casos observada como uma linha
-  geom_line(aes(y = case_int, colour = "Observed")) + 
+  geom_line(data = drop_na(counts, case_int), 
+            aes(y = case_int, colour = "Observed")) + 
   ## adicione o limite superior do algoritmo de aberrações
-  geom_line(aes(y = threshold, colour = "Alert threshold"), 
+  geom_line(data = drop_na(counts, threshold), 
+            aes(y = threshold, colour = "Alert threshold"), 
             linetype = "dashed", 
             linewidth = 1.5) +
   ## defina as cores
@@ -1471,9 +1484,11 @@ Visualize os resultados das análises como mostrado anteriormente.
 
 ggplot(counts, aes(x = epiweek)) + 
   ## adicione as quantidades de casos observadas como uma linha
-  geom_line(aes(y = case_int, colour = "Observed")) + 
+  geom_line(data = drop_na(counts, case_int), 
+            aes(y = case_int, colour = "Observed")) + 
   ## adicione o limite superior do algoritmo de aberração
-  geom_line(aes(y = threshold_glrnb, colour = "Alert threshold"), 
+  geom_line(data = drop_na(counts, threshold_glrnb), 
+            aes(y = threshold_glrnb, colour = "Alert threshold"), 
             linetype = "dashed", 
             linewidth = 1.5) +
   ## defina as cores

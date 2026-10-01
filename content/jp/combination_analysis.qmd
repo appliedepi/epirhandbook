@@ -5,15 +5,16 @@ aliases:
 
 # 複数回答データの分析 {#combination-analysis}
 
-```{r echo=F, out.width= "75%", warning=F, message=F}
+<!-- This chunk is not evaluated because ggupset 0.4.1 raises ggplot2 deprecation warnings. Restore eval when ggupset is updated. The figure below is a saved render of this chunk. -->
+```{r echo=F, eval=F, out.width= "75%", warning=F, message=F}
 pacman::p_load(tidyverse,
-               UpSetR,
                ggupset)
 
 # import the linelist into R
 linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds")
 
 # 値を無作為に取る、症状に関する複数の変数を追加する（症状あり "yes" または症状なし "no"） 
+set.seed(1)
 linelist_sym <- linelist %>% 
   mutate(fever  = sample(c("yes", "no"), nrow(linelist), replace = T, prob = c(0.80, 0.20)),
          chills = sample(c("yes", "no"), nrow(linelist), replace = T, prob = c(0.20, 0.80)),
@@ -21,30 +22,20 @@ linelist_sym <- linelist %>%
          aches  = sample(c("yes", "no"), nrow(linelist), replace = T, prob = c(0.10, 0.90)),
          vomit = sample(c("yes", "no"), nrow(linelist), replace = T))
 
-linelist_sym_2 <- linelist_sym %>% 
-     
-  #mutate(fever = ifelse(fever == "yes", colnames(linelist)[which(colnames(linelist) == "fever")]))
-   mutate(across(.cols = c(fever, chills, cough, aches, vomit),
-                 .fns = ~+(.x == "yes")))   
-
-     
-  #mutate(across(c("fever", "chills", "cough", "aches", "vomit"), ~ifelse(.x = "yes", colnames(.)[which(colnames(.) == "fever")], 0)))   
-  
-
 # プロットを作成する
-UpSetR::upset(
-  select(linelist_sym_2, fever, chills, cough, aches, vomit),
-  sets = c("fever", "chills", "cough", "aches", "vomit"),
-  order.by = "freq",
-  sets.bar.color = c("blue", "red", "yellow", "darkgreen", "orange"), # 色の追加
-  empty.intersections = "on",
-  # nsets = 3,
-  number.angles = 0,
-  point.size = 3.5,
-  line.size = 2, 
-  mainbar.y.label = "Symptoms Combinations",
-  sets.x.label = "Patients with Symptom")
+linelist_sym %>% 
+  mutate(across(c(fever, chills, cough, aches, vomit), ~ if_else(.x == "yes", cur_column(), NA))) %>% 
+  unite(col = "all_symptoms", c(fever, chills, cough, aches, vomit), sep = "; ", na.rm = TRUE) %>% 
+  mutate(all_symptoms_list = strsplit(all_symptoms, "; ")) %>% 
+  ggplot(aes(x = all_symptoms_list)) +
+  geom_bar() +
+  scale_x_upset(sets = c("fever", "chills", "cough", "aches", "vomit")) +
+  labs(x = "Symptoms Combinations", y = "Patients")
 
+```
+
+```{r echo=F, out.width= "75%"}
+knitr::include_graphics(here::here("images", "combination_analysis_ggupset_header.png"))
 ```
 
 
@@ -57,7 +48,7 @@ UpSetR::upset(
 * セット分析（**Sets analysis**）
 * 組み合わせ分析（**Combinations analysis**）
 
-上記のプロット例では、5 つの症状が示されており、それぞれの縦棒の下には、反映されている症状の組み合わせを示す線と点があります。左下の横棒は、各症状の頻度を示しています。
+上記のプロット例では、5 つの症状が示されており、それぞれの縦棒の下には、反映されている症状の組み合わせを示す線と点があります。
 
 まず初めに **ggupset** パッケージを使用した方法を説明し、次に **UpSetR** パッケージを使用した方法を紹介します。
 
@@ -169,9 +160,16 @@ pacman::p_load(ggupset)
 
 プロットを作成していきます。まず、`ggplot()` と `geom_bar()` を使用し、次に **ggupset** パッケージの `scale_x_upset()` 関数を使用します。
 
-```{r, warning=F, message=F}
+<!-- This chunk is not evaluated because ggupset 0.4.1 raises ggplot2 deprecation warnings. Restore eval when ggupset is updated. The figure below is a saved render of this chunk. -->
+```{r, eval=F, warning=F, message=F}
+# 最も頻度の高い10の組み合わせ（n_intersections = 10 が表示するもの）を残す
+top_combinations <- linelist_sym_1 %>% 
+  count(all_symptoms, sort = TRUE) %>% 
+  slice_head(n = 10) %>% 
+  pull(all_symptoms)
+
 ggplot(
-  data = linelist_sym_1,
+  data = filter(linelist_sym_1, all_symptoms %in% top_combinations),
   mapping = aes(x = all_symptoms_list)) +
 geom_bar() +
 scale_x_upset(
@@ -185,6 +183,10 @@ labs(
   x = "Symptom combination",
   y = "Frequency in dataset")
 
+```
+
+```{r, echo=F}
+knitr::include_graphics(here::here("images", "combination_analysis_ggupset.png"))
 ```
   
 **ggupset** パッケージについての詳細は、[こちらのページ](https://rdrr.io/cran/ggupset/man/scale_x_upset.html) をご覧ください。オフラインの場合は、RStudio の Help タブに表示されるパッケージのドキュメント `?ggupset` で詳細を確認することができます。
@@ -230,10 +232,12 @@ linelist_sym_2 <- linelist_sym %>%
 
 プロットをカスタマイズする `upset()` 関数で、症状に関する変数（列）のみを使用し、プロットを作成していきます。`sets =` 引数で、比較する症状の「集合（sets）」を指定する必要があります（組み合わせに使用するすべての症状の列の名前を指定する）。また、`nsets =` 引数と `order.by = "freq"` 引数を使用し、頻度の多い上位 X 個の組み合わせ（X は任意の数）のみを表示することもできます。
 
-```{r, warning=F, message=F}
+<!-- This chunk is not evaluated because UpSetR 1.4.1 raises ggplot2 deprecation warnings. Restore eval when UpSetR is updated. The figure below is a saved render of this chunk. -->
+```{r, eval=F}
 
 # プロットを作成する
 linelist_sym_2 %>% 
+  drop_na(fever, chills, cough, aches, vomit) %>% 
   UpSetR::upset(
        sets = c("fever", "chills", "cough", "aches", "vomit"),
        order.by = "freq",
@@ -246,6 +250,10 @@ linelist_sym_2 %>%
        mainbar.y.label = "Symptoms Combinations",
        sets.x.label = "Patients with Symptom")
 
+```
+
+```{r, echo=F}
+knitr::include_graphics(here::here("images", "combination_analysis_upsetr.png"))
 ```
 
 

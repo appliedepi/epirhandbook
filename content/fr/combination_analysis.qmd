@@ -5,15 +5,16 @@ aliases:
 
 # Analyse des combinaisons {#combination_analysis}  
 
-```{r echo=F, out.width= "75%", warning=F, message=F}
+<!-- This chunk is not evaluated because ggupset 0.4.1 raises ggplot2 deprecation warnings. Restore eval when ggupset is updated. The figure below is a saved render of this chunk. -->
+```{r echo=F, eval=F, out.width= "75%", warning=F, message=F}
 pacman::p_load(tidyverse,
-               UpSetR,
                ggupset)
 
 # import the linelist into R
 linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds")
 
 # Ajoute de nouvelles variables de symptôme à la linelist, avec des valeurs aléatoires "oui" ou "non". 
+set.seed(1)
 linelist_sym <- linelist %>% 
   mutate(fever  = sample(c("yes", "no"), nrow(linelist), replace = T, prob = c(0.80, 0.20)),
          chills = sample(c("yes", "no"), nrow(linelist), replace = T, prob = c(0.20, 0.80)),
@@ -21,30 +22,20 @@ linelist_sym <- linelist %>%
          aches  = sample(c("yes", "no"), nrow(linelist), replace = T, prob = c(0.10, 0.90)),
          vomit = sample(c("yes", "no"), nrow(linelist), replace = T))
 
-linelist_sym_2 <- linelist_sym %>% 
-     
-  # convertir les valeurs "oui" et "non" en le nom du symptôme lui-même
-   mutate(across(.cols = c(fever, chills, cough, aches, vomit),
-                 .fns = ~+(.x == "yes")))   
-
-     
-  #mutate(across(c("fever", "chills", "cough", "aches", "vomit"), ~ifelse(.x = "yes", colnames(.)[which(colnames(.) == "fever")], 0)))   
-  
-
 # Créer le graphique
-UpSetR::upset(
-  select(linelist_sym_2, fever, chills, cough, aches, vomit),
-  sets = c("fever", "chills", "cough", "aches", "vomit"),
-  order.by = "freq",
-  sets.bar.color = c("blue", "red", "yellow", "darkgreen", "orange"), # couleurs optionnelles
-  empty.intersections = "on",
-  # nsets = 3,
-  number.angles = 0,
-  point.size = 3.5,
-  line.size = 2, 
-  mainbar.y.label = "Symptoms Combinations",
-  sets.x.label = "Patients with Symptom")
+linelist_sym %>% 
+  mutate(across(c(fever, chills, cough, aches, vomit), ~ if_else(.x == "yes", cur_column(), NA))) %>% 
+  unite(col = "all_symptoms", c(fever, chills, cough, aches, vomit), sep = "; ", na.rm = TRUE) %>% 
+  mutate(all_symptoms_list = strsplit(all_symptoms, "; ")) %>% 
+  ggplot(aes(x = all_symptoms_list)) +
+  geom_bar() +
+  scale_x_upset(sets = c("fever", "chills", "cough", "aches", "vomit")) +
+  labs(x = "Symptoms Combinations", y = "Patients")
 
+```
+
+```{r echo=F, out.width= "75%"}
+knitr::include_graphics(here::here("images", "combination_analysis_ggupset_header.png"))
 ```
 
 
@@ -57,7 +48,7 @@ Cette analyse est aussi souvent appelée :
 * **"Analyse des ensembles"**  
 * **"Analyse des combinaisons"**  
 
-Dans l'exemple de graphique ci-dessus, cinq symptômes sont représentés. Sous chaque barre verticale se trouve une ligne et des points indiquant la combinaison de symptômes reflétée par la barre ci-dessus. À droite, des barres horizontales reflètent la fréquence de chaque symptôme individuel.  
+Dans l'exemple de graphique ci-dessus, cinq symptômes sont représentés. Sous chaque barre verticale se trouve une ligne et des points indiquant la combinaison de symptômes reflétée par la barre ci-dessus.  
 
 La première méthode que nous montrons utilise le paquet **ggupset**, et la seconde utilise le paquet **UpSetR**. 
 
@@ -169,9 +160,16 @@ pacman::p_load(ggupset)
 
 Créez le graphique. Nous commençons par un `ggplot()` et un `geom_bar()`, mais ensuite nous ajoutons la fonction spéciale `scale_x_upset()` du **ggupset**.  
 
-```{r, warning=F, message=F}
+<!-- This chunk is not evaluated because ggupset 0.4.1 raises ggplot2 deprecation warnings. Restore eval when ggupset is updated. The figure below is a saved render of this chunk. -->
+```{r, eval=F, warning=F, message=F}
+# garder les 10 combinaisons les plus fréquentes, celles que n_intersections = 10 affiche
+top_combinations <- linelist_sym_1 %>% 
+  count(all_symptoms, sort = TRUE) %>% 
+  slice_head(n = 10) %>% 
+  pull(all_symptoms)
+
 ggplot(
-  data = linelist_sym_1,
+  data = filter(linelist_sym_1, all_symptoms %in% top_combinations),
   mapping = aes(x = all_symptoms_list)) +
 geom_bar() +
 scale_x_upset(
@@ -185,6 +183,10 @@ labs(
   x = "Symptom combination",
   y = "Frequency in dataset")
 
+```
+
+```{r, echo=F}
+knitr::include_graphics(here::here("images", "combination_analysis_ggupset.png"))
 ```
   
 De plus amples informations sur **ggupset** peuvent être trouvées [en ligne](https://rdrr.io/cran/ggupset/man/scale_x_upset.html) ou hors ligne dans la documentation du paquet dans votre onglet d'aide RStudio `?ggupset`.  
@@ -229,10 +231,12 @@ linelist_sym_2 <- linelist_sym %>%
 
 Maintenant, faites le graphique en utilisant la fonction personnalisée `upset()` - en utilisant seulement les colonnes de symptômes. Vous devez désigner les "ensembles" à comparer (les noms des colonnes de symptômes). Vous pouvez aussi utiliser `nsets = ` et `order.by = "freq"` pour n'afficher que les X combinaisons les plus importantes.  
 
-```{r, warning=F, message=F}
+<!-- This chunk is not evaluated because UpSetR 1.4.1 raises ggplot2 deprecation warnings. Restore eval when UpSetR is updated. The figure below is a saved render of this chunk. -->
+```{r, eval=F}
 
 # Créer le graphique
 linelist_sym_2 %>% 
+  drop_na(fever, chills, cough, aches, vomit) %>% 
   UpSetR::upset(
        sets = c("fever", "chills", "cough", "aches", "vomit"),
        order.by = "freq",
@@ -245,6 +249,10 @@ linelist_sym_2 %>%
        mainbar.y.label = "Symptoms Combinations",
        sets.x.label = "Patients with Symptom")
 
+```
+
+```{r, echo=F}
+knitr::include_graphics(here::here("images", "combination_analysis_upsetr.png"))
 ```
 
 

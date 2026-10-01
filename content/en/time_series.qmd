@@ -205,9 +205,10 @@ file_paths <- list.files(
 file_paths <- file_paths[str_detect(file_paths, "germany")]
 
 ## read in all the files as a stars object
-## along = "time" stacks the ten yearly files into one series; without it
-## stars cannot tell how to merge them and errors
-data <- stars::read_stars(file_paths, along = "time")
+## read_ncdf() reads one file per call, so read each file, then use
+## c(along = "time") to stack the ten yearly files into one series
+data <- map(file_paths, stars::read_ncdf)
+data <- do.call(c, c(data, along = "time"))
 ```
 
 Once these files have been imported as the object `data`, we will convert them to a data frame.  
@@ -330,7 +331,10 @@ counts <- counts %>%
          )
 
 ## to check what values have been imputed compared to the original
-ggplot_na_imputations(counts$case_miss, counts$case_int) + 
+ggplot(counts, aes(x = epiweek, y = case_int)) + 
+  ## interpolated series as a red line, observed values as black points
+  geom_line(colour = "red") + 
+  geom_point(data = drop_na(counts, case_miss), aes(y = case_miss)) + 
   ## make a traditional plot (with black axes and white background)
   theme_classic()
 
@@ -460,13 +464,18 @@ These different parts are:
 ```{r decomposition, warning=F, message=F}
 
 ## decompose the counts dataset 
-counts %>% 
+decomposition_plot <- counts %>% 
   # using an additive classical decomposition model
   model(classical_decomposition(case_int, type = "additive")) %>% 
   ## extract the important information from the model
   components() %>% 
   ## generate a plot 
   autoplot()
+
+## drop the empty trend and random values at both ends of the series
+decomposition_plot$data <- drop_na(decomposition_plot$data, .val)
+
+decomposition_plot
 
 ```
 
@@ -725,6 +734,7 @@ counts %>%
       type = "correlation") %>% 
   ## arange in decending order of the correlation coefficient 
   ## show the most associated lags
+  as_tibble() %>% 
   arrange(-ccf) %>% 
   ## only show the top ten 
   slice_head(n = 10)
@@ -1080,7 +1090,8 @@ ggplot(data = observed, aes(x = epiweek)) +
                   ymax = upper_pi), 
               alpha = 0.25) + 
   ## add in a line for your observed case counts
-  geom_line(aes(y = case_int), 
+  geom_line(data = drop_na(observed, case_int), 
+            aes(y = case_int), 
             col = "black") + 
   ## plot in points for the observed counts above expected
   geom_point(
@@ -1334,7 +1345,7 @@ framework.
 
 ## define surveillance time series object
 ## nb. you can include a denominator with the population object (see ?sts)
-counts_sts <- sts(observed = counts$case_int[!is.na(counts$case_int)],
+counts_sts <- sts(observed = round(counts$case_int[!is.na(counts$case_int)]),
                   start = c(
                     ## subset to only keep the year from start_date 
                     as.numeric(str_sub(start_date, 1, 4)), 
@@ -1392,9 +1403,11 @@ We can then visualise the results in ggplot as done previously.
 
 ggplot(counts, aes(x = epiweek)) + 
   ## add in observed case counts as a line
-  geom_line(aes(y = case_int, colour = "Observed")) + 
+  geom_line(data = drop_na(counts, case_int), 
+            aes(y = case_int, colour = "Observed")) + 
   ## add in upper bound of aberration algorithm
-  geom_line(aes(y = threshold, colour = "Alert threshold"), 
+  geom_line(data = drop_na(counts, threshold), 
+            aes(y = threshold, colour = "Alert threshold"), 
             linetype = "dashed", 
             linewidth = 1.5) +
   ## define colours
@@ -1453,9 +1466,11 @@ Visualise the outputs as previously.
 
 ggplot(counts, aes(x = epiweek)) + 
   ## add in observed case counts as a line
-  geom_line(aes(y = case_int, colour = "Observed")) + 
+  geom_line(data = drop_na(counts, case_int), 
+            aes(y = case_int, colour = "Observed")) + 
   ## add in upper bound of aberration algorithm
-  geom_line(aes(y = threshold_glrnb, colour = "Alert threshold"), 
+  geom_line(data = drop_na(counts, threshold_glrnb), 
+            aes(y = threshold_glrnb, colour = "Alert threshold"), 
             linetype = "dashed", 
             linewidth = 1.5) +
   ## define colours
