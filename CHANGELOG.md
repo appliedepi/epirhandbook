@@ -13,6 +13,16 @@ of it, and that is expected of a changelog. Read it as a record, never as curren
 - The agent rules moved from `CLAUDE.md` to `AGENTS.md`, the name other agent tools read. `CLAUDE.md` is now one line, `@AGENTS.md`, so Claude Code reads the same file.
 - `AGENTS.md` gained a "Visual design" section. It points agents at the Applied Epi design system before they change `theme-*.scss`, `ael-extras.html`, `banner.html` or landing-page markup.
 
+## 2026-10-01: code and link fixes in all eight languages
+
+- `time_series`: in the `plot_interrupted` chunk, `observed` is a predict object, so `max(observed$upper_pi)` warned twice and returned `-Inf`. The chunk now reads `estimate_res$upper_pi`.
+- `epicurves`: `fct_relevel()` warned "1 unknown level in `f`: 70+", because Central Hospital has no case aged 70+. `factor(facet, levels = ...)` sets the same order and does not warn.
+- `iteration`: four hidden chunks printed a `/tmp/Rtmp` path from `save_data()`. They now set `message=F`.
+- `iteration`: two `ggplot()` calls received `color = "black"`, and ggplot2 ignored it with a warning. `geom_col()` now receives it, so the bars get a black outline.
+- Two `eval=F` examples did not parse. In `characters_strings`, `str_detect(` had no `)` and no comma after `negate = TRUE`. In `iteration`, the progress example did not close its `for` loop.
+- `interactive_plots`: `partial_bundle()` downloads from `cdn.plot.ly`, so three evaluated chunks failed offline. They no longer call it. The `eval=F` example and the prose that teach it stay.
+- 96 links in 42 files were dead. External links had no `https://` or had `https:/` with one slash, and cross-chapter links named an id in place of a `.qmd` file. `checks/check-links.py` reported 0 dead links before and after, so it does not find this class.
+
 ## 2026-09-24: seven translation fixes that two reviews agreed on
 
 Two Codex models, `gpt-6-sol` and `gpt-6-astra`, reviewed the landing page strings independently. These fixes are the ones both models agreed on, or that are objective. The rest are proposals on issue 459 for the translators.
