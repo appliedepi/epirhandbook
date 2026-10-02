@@ -8,6 +8,16 @@ of it, and that is expected of a changelog. Read it as a record, never as curren
 
 ---
 
+## 2026-10-02: printed-manual tables
+
+Tables were hard to read: every rule was the pale `line` hairline and the header text was muted, so a table had no visible edge and a row was hard to follow across a wide gap.
+
+- A table has 2px `fg` rules at the top and the foot. The header sits on a `panel` band over a 1px `fg` rule, in `fg`.
+- A table has 44px of space after it, more than the space before it. A bold label that introduced the next table sat 8px under the previous one and read as its caption.
+- Rows are separated by `line-strong`, a new token in both theme layers: `line` mixed 40% toward `muted`, #a7b4c0 in light and #536573 in dark. Cells use a 1.5 line height.
+- A DataTables table gets the header band and row rules but no outer frame, because DataTables splits a scrolling table into two.
+- A gt or gtsummary table is left to gt's own styling. The theme had forced `fg` text onto gt's white cells, which in dark mode was 1.17:1 in 13 tables across `regression`, `stat_tests`, `survey_analysis` and `tables_descriptive`. That was already the case before this pass. These tables now show as gt draws them, white in both modes, as flextable tables do.
+
 ## 2026-10-02: design pass, a four-card landing page, and one front-matter chapter
 
 Every change below was judged on the rendered site, in light and dark mode, at desktop and phone width, in English and Japanese.
