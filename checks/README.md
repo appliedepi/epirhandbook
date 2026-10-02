@@ -27,7 +27,7 @@ then costs minutes, not days.
 ## What "in sync" means
 
 The repository declares its layout in two files. `languages.yml` names the eight languages, and
-`content/en/_quarto.yaml` names the 52 stems. Every chapter file is `content/<lang>/<stem>.qmd`,
+`content/en/_quarto.yaml` names the 50 stems. Every chapter file is `content/<lang>/<stem>.qmd`,
 so a file's language is the folder that holds it.
 
 `checks/langs.py` reads both files for the checks. `read_languages()` returns the main code and
@@ -40,14 +40,14 @@ stops with one line that names the file. The causes are a missing file, a file t
 parse, and a `languages.yml` with no `main:` or no code.
 
 The landing page hero says 49 chapters. That is a narrower count, and both are right. It is the
-52 stems less `index`, `about` and `acknowledgements`. Those three are pages of the book, not
-chapters of it.
+50 stems less `index`, which is a page of the book, not a chapter of it.
 
 English is the reference. Checks 1 to 3 pair each translated chapter with
-`content/en/<stem>.qmd`. That set is 51 non-index stems and 7 translation languages. The landing
+`content/en/<stem>.qmd`. That set is 49 non-index stems and 7 translation languages. The landing
 page `index.qmd` and English itself stay out of it. The set was 49 x 7 from 2026-09-02, when
 the GIS chapter returned. It became 51 x 7 on 2026-09-18, when `about.qmd` and
-`acknowledgements.qmd` split off the landing page.
+`acknowledgements.qmd` split off the landing page. It became 49 x 7 again on 2026-10-02, when
+both merged into `editorial_style.qmd`.
 
 | Property | Expected | Check | Remedy |
 |---|---|---|---|
@@ -59,9 +59,9 @@ the GIS chapter returned. It became 51 x 7 on 2026-09-18, when `about.qmd` and
 | inline code spans in prose name things the English names | informational | check 4 | the inline-pass agent workflow over the new suspects |
 | every changed chapter renders without execution, fences balanced | 0 FAIL | check 6, with `--base` or `--render` | read the log under `/tmp/render-gate-<id>/` |
 | no R chunk parses worse than the English chunk | 0 files worse | check 8, with `--base` or `--render` | the sync, or a source defect |
-| every internal link resolves, stays on its page and stays in its language | 0 dead, 0 same-page, 0 cross-language and 0 unterminated links in the 416 declared files | check 5 | `rewrite-links.py`, no agent |
-| no chunk that executes names the `data/` folder, outside the two chapters that teach file paths | 0 lines in the 416 declared files | check 7 | load the data with `appliedepidata::get_data()`, or set `eval=F` |
-| the eight language folders, project files, chapter files, manifest rows and alias lines agree | `8 languages, 52 stems, 416 aliases, drifted: 0` | check 9 | edit the file the DRIFT line names |
+| every internal link resolves, stays on its page and stays in its language | 0 dead, 0 same-page, 0 cross-language and 0 unterminated links in the 400 declared files | check 5 | `rewrite-links.py`, no agent |
+| no chunk that executes names the `data/` folder, outside the two chapters that teach file paths | 0 lines in the 400 declared files | check 7 | load the data with `appliedepidata::get_data()`, or set `eval=F` |
+| the eight language folders, project files, chapter files, manifest rows and alias lines agree | `8 languages, 50 stems, 432 aliases, drifted: 0` | check 9 | edit the file the DRIFT line names |
 
 Each agent workflow named in the Remedy column is a `.js` file in `checks/workflows/`. A
 remedy is a current procedure, so it lives in the tree beside the check it repairs. The other
@@ -71,7 +71,7 @@ ten workflows of the 2026-09 fix pass ran once and are history: they are in the
 Check 4 is informational because a suspect span is often right: a placeholder the reader
 replaces, or a word the author put in code font. The baseline is 357 suspects as of 2026-09-17. All were judged placeholders or noise. The GIS chapter, restored the same
 day, added one more: a French verb in code font. A rise above that is what to look at, not
-the number itself. Check 4 measures the declared set: the 51 non-index stems in the 7 translation
+the number itself. Check 4 measures the declared set: the 49 non-index stems in the 7 translation
 languages. A file that `content/en/_quarto.yaml` does not declare is not measured here, and
 check 9 reports it. A declared file that is missing gets a one-line note, and check 9 reports
 that too.
@@ -79,7 +79,7 @@ that too.
 ## Check 5: internal links
 
 Run `python3 checks/check-links.py`. `check-sync.sh` runs it as check 5. It reads the
-416 declared files, which are `index.qmd` and the 51 other stems, in English and in the 7
+400 declared files, which are `index.qmd` and the 49 other stems, in English and in the 7
 translation languages. It prints one line for each link it rejects, and exits 1 when it finds
 one. It rejects four link forms.
 
@@ -126,7 +126,7 @@ and `name` on an `<a>` element. The links are the `href` of every `<a>` element.
 Pandoc resolves a heading, a div, a span, a metadata title, raw HTML, an HTML comment and a
 character reference into that one page. So the checker does not re-implement pandoc's identifier
 rule, and it does not read markdown itself. A link in a YAML `title` renders on the page, so it
-counts. None of the 416 declared files carries such a link today.
+counts. None of the 400 declared files carries such a link today.
 
 A file that pandoc cannot read is a failure, not a crash. The usual cause is a front matter that
 does not parse as YAML. The checker prints `PANDOC-FAILED <file>` with the first line of the
@@ -183,7 +183,7 @@ no link there.
 ## Check 7: the data folder
 
 Run `python3 checks/check-data-reads.py`. `check-sync.sh` runs it as check 7. It reads the same
-416 declared files as check 5. Three rules govern the `data/` folder.
+400 declared files as check 5. Three rules govern the `data/` folder.
 
 - A chunk that executes may not name `data/`. The handbook loads its data with
   `appliedepidata::get_data()`.
@@ -256,7 +256,7 @@ The search for the end of an inline R expression stops at the next blank line, b
 expression cannot cross one. Without that bound the match runs to the next backtick anywhere in
 the file, and one unterminated expression swallows whole paragraphs into the placeholder. The
 gate then reads a copy that is missing prose the original carries. An expression that does not
-close inside its paragraph now stops the gate with `FAIL-placeholder`. The 416 declared files
+close inside its paragraph now stops the gate with `FAIL-placeholder`. The 400 declared files
 hold 81 inline R expressions, in 33 of those files, and none of them crosses a line break. That
 count uses the gate's own `INLINE` pattern, on prose only, with fenced blocks skipped. A plain
 count of `` `r `` over the same files gives 105, because it also counts text inside fenced
@@ -304,7 +304,7 @@ The gate stops with exit 2 in five cases.
 
 `check-sync.sh` runs check 9 itself, and it needs no base commit. It reads `languages.yml`, the
 eight `content/<lang>/_quarto.yaml` project files, `docker-images.yml` and the front matter of
-the 416 declared files. PyYAML parses every one of them with `yaml.BaseLoader`, which makes every
+the 400 declared files. PyYAML parses every one of them with `yaml.BaseLoader`, which makes every
 scalar a string. `yaml.safe_load` reads an unquoted `no` as False, so the Norwegian code `no`
 would not survive it. `.github/workflows/translation-sync.yml` installs `python3-yaml` before it
 runs `check-sync.sh`.
@@ -312,7 +312,7 @@ runs `check-sync.sh`.
 It prints one summary line, and one `DRIFT` line for each finding:
 
 ```
-   layout: 8 languages, 52 stems, 416 aliases, drifted: 0
+   layout: 8 languages, 50 stems, 432 aliases, drifted: 0
 ```
 
 A finding sets the DRIFT exit. Check 9 reports ten kinds.
@@ -544,7 +544,7 @@ Rules 1 to 8 run by default:
    empty string. English is the fallback of last resort. The hero reads every key the `en`
    block declares, so a key nothing reads is a failure.
 4. Every key a translated block declares also exists under `en`. Every value is a string. A
-   declared `svc` list holds 3 cards, and every card carries `h`, `p`, `link` and `href`.
+   declared `svc` list holds 4 cards, and every card carries `h`, `p`, `link` and `href`.
 5. No value is an empty string. Omit the key, and the value falls back to English.
 6. No translated value is byte-identical to the English value for that key.
 7. No two languages give one key the same value.
@@ -618,19 +618,19 @@ Expected output:
 ```
 languages declared: 8 (en fr es vn jp pt tr ru)
 project files wired to the theme and the app bar: 8 of 8
-keys the hero reads: 18, plus the svc cards (from utils/landing-hero.R)
-keys declared: 166 across the 7 translated blocks; 'en' declares 30
+keys the hero reads: 16, plus the svc cards (from utils/landing-hero.R)
+keys declared: 194 across the 7 translated blocks; 'en' declares 32
 translated blocks complete: 7 of 7; a complete block declares 13 keys, and 2 pinned omissions are allowed
-against 'en': 21 values match it and are service-card hrefs, which the href rule allows
-pairwise: 28 ordered language pairs; 84 service-card hrefs and 2 allowed cognates skipped
+against 'en': 28 values match it and are service-card hrefs, which the href rule allows
+pairwise: 28 ordered language pairs; 112 service-card hrefs and 2 allowed cognates skipped
 problems: 0
 ```
 
 With `--slots`, after a render, three more lines sit before `problems: 0`:
 
 ```
-slots read: 231 across the 7 rendered page(s); 44 of them fall back to 'en'
-slots expected: 231, which is 7 page(s) x (21 scalar slots + 4 fields x 3 cards)
+slots read: 245 across the 7 rendered page(s); 30 of them fall back to 'en'
+slots expected: 245, which is 7 page(s) x (19 scalar slots + 4 fields x 4 cards)
 slot mismatches: 0
 ```
 
@@ -645,13 +645,13 @@ English after the tagline was removed.
 
 **A translatable key is one the hero reads and `INVARIANT` does not name.** That one line is
 what separates a block nobody translated from a key that falls back on purpose. It comes from
-`utils/landing-hero.R`, so no edit to `landing.yml` can lower it. Today it is 13: the 18 keys
-the hero reads, less the 6 `INVARIANT` names, plus the `svc` list.
+`utils/landing-hero.R`, so no edit to `landing.yml` can lower it. Today it is 13: the 16 keys
+the hero reads, less the 4 `INVARIANT` names, plus the `svc` list.
 
 Three omissions stay legal, and a rule that rejected every omission would break all three:
 
-- **A language-invariant key.** `INVARIANT` names 6: `btn_start_href`, `btn_offline_href`,
-  `np_brand`, `np_btn`, `np_btn_href` and `np_links`. Each is a path, a URL or a brand name, so
+- **A language-invariant key.** `INVARIANT` names 4: `btn_start_href`, `btn_offline_href`,
+  `np_brand` and `np_links`. Each is a path, a URL or a brand name, so
   a translation of it would be the same string. No block declares one, and rule 10 never asks.
 - **A pinned omission.** `OMISSIONS` names 2, both `stat_used_num`. The Spanish and Portuguese
   source pages read "3 millón de veces" and "3 milhão de vezes", singular after three. A block
@@ -683,16 +683,16 @@ deletes every folder and file the render created. It takes about 20 seconds and 
 mode of `render-gate.sh` that executes R. It needs the R packages `yaml` and `here`, which
 `utils/landing-hero.R` loads.
 
-Rule 9 reads 33 slots on each of the 7 translated pages, 231 in all, and compares each one
-against its source. 166 of those values come from the language's own block, which is every key
-`keys declared:` counts. 44 fall back to English. 42 are the 6 `INVARIANT` keys on all 7
+Rule 9 reads 35 slots on each of the 7 translated pages, 245 in all, and compares each one
+against its source. 194 of those values come from the language's own block, which is every key
+`keys declared:` counts. 30 fall back to English. 28 are the 4 `INVARIANT` keys on all 7
 pages, and 2 are `stat_used_num` on the Spanish and the Portuguese page. The last 21 are the 3
 slots `landing.yml` does not key, one set per page:
 
 | Slot | Source |
 |---|---|
 | `hero_title` | `languages.yml`, the `title` of this language |
-| `stat_chapters_num` | `content/en/_quarto.yaml`, `book.chapters` less `index`, `about` and `acknowledgements` |
+| `stat_chapters_num` | `content/en/_quarto.yaml`, `book.chapters` less `index` |
 | `stat_languages_num` | `languages.yml`, the count of declared codes |
 
 Without this rule a value that never reaches its slot ships clean.
@@ -702,13 +702,13 @@ computed counts, the hero title and 4 of the 6 nonprofit-band fields. Every one 
 rendered slot, `slots read:` counted none of them, and the printed count was honest about its
 own narrower coverage.
 
-**The total is an assertion, not a line of output.** Rule 9 computes it as pages x (21 scalar
-slots + 4 fields x 3 cards) and fails on any deviation, in either direction. The 3 is pinned in
+**The total is an assertion, not a line of output.** Rule 9 computes it as pages x (19 scalar
+slots + 4 fields x 4 cards) and fails on any deviation, in either direction. The 4 is pinned in
 the check, never read from `landing.yml`, so the data cannot move the expectation. A printed
 number nobody compares is decoration, and a slot that goes unread lowers the total in silence.
 
 **A pinned total stops the data moving it and cannot stop the slot list moving it.** Delete one
-name from `SCALAR_SLOTS` and `slots read:` and `slots expected:` both fall to 32, in step, and
+name from `SCALAR_SLOTS` and `slots read:` and `slots expected:` both fall to 34 per page, in step, and
 the run stays green. So the check asks `utils/landing-hero.R` for its key list and names any
 key `SCALAR_SLOTS` omits. That assertion needs no rendered page, and it runs in every mode.
 

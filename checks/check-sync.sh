@@ -134,7 +134,7 @@ for lang in langs:
             if not (s2 in es or s2 in te or s2.strip('r ').strip() in te): per[lang] += 1
 print('   suspect spans by language:', dict(sorted(per.items())), 'total', sum(per.values()), '(baseline 2026-09-17: 357, all judged placeholders or noise. Was 356 from 2026-09-02; the extra one is es/transition_to_r.qmd, where bare R code was wrapped in backticks to stop two dollars pairing as TeX maths)')
 PY
-echo "== 5. Internal links: every internal link in the 416 declared chapter files"
+echo "== 5. Internal links: every internal link in the declared chapter files"
 python3 "$here/check-links.py" --summary | sed 's/^/   /' \
   || { python3 "$here/check-links.py" | sed 's/^/   /'; rc=1; }
 echo "== 7. Data folder: R chunks that execute and name the repository's data/ folder"
@@ -246,11 +246,22 @@ def wanted(stem, code, main):
     `transition_to_R`. The English chapter shipped under both spellings and carries both.
     """
     old = 'transition_to_R' if stem == 'transition_to_r' else stem
+    merged = MERGED.get(stem, [])
+    # A merged page also had a URL of its own in the current layout, /<lang>/<stem>.html.
+    # Quarto resolves an alias against the language's site root, so /<stem>.html is it.
+    current = ['/%s.html' % m for m in merged]
     if code != main:
-        return ['/new_pages/%s.%s.html' % (old, code)]
+        return ['/new_pages/%s.%s.html' % (o, code) for o in [old] + merged] + current
     if stem == 'transition_to_r':
         return ['/new_pages/transition_to_R.html', '/new_pages/transition_to_r.html']
-    return ['/new_pages/%s.html' % old]
+    return ['/new_pages/%s.html' % o for o in [old] + merged] + current
+
+
+# Pages merged into another chapter. The chapter that absorbed them carries their old URLs,
+# from both the /new_pages/ layout and the current one, as well as its own. A link or a
+# bookmark to a merged page still lands on its content. about and acknowledgements merged
+# into editorial_style on 2026-10-02.
+MERGED = {'editorial_style': ['about', 'acknowledgements']}
 
 
 # Each project file is parsed once. A file that does not parse gives its DRIFT line once, and

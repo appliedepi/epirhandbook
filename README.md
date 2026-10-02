@@ -1,4 +1,4 @@
-# The Epidemiologist R Handbook 
+# Epi R Handbook
 
 # About this handbook
 **The Epi R Handbook is a R reference manual for applied epidemiology and public health.**  
@@ -91,10 +91,9 @@ files, named `<stem>.qmd`, and one Quarto book project, `content/<lang>/_quarto.
 project file declares the language, the title and the chapter list. Each language renders under
 its own site path: `/en/`, `/fr/`, and so on.
 
-The eight project files declare the same 52 stems in the same order. Check 9 of
-`checks/check-sync.sh` reports a language that drifts from that. Three of the 52 are not
-chapters: `index.qmd`, `about.qmd` and `acknowledgements.qmd`. That is why the landing page
-hero counts 49 chapters.
+The eight project files declare the same 50 stems in the same order. Check 9 of
+`checks/check-sync.sh` reports a language that drifts from that. One of the 50 is not a
+chapter: `index.qmd`. That is why the landing page hero counts 49 chapters.
 
 Old `/new_pages/...` URLs still work. Every chapter file except `index.qmd` carries an
 `aliases:` entry in its front matter. Quarto turns that into a redirect stub at the old path:
@@ -254,7 +253,7 @@ Run `checks/check-sync.sh` afterwards. Check 9 reports a language you missed.
 **Add a new language.** Six things, all in this repository:
 
 1. An entry in `languages.yml` with four fields: `code`, `lang`, `label` and `title`. `code` names the folder and the site path. `lang` is the BCP-47 tag, and it can differ from the code: Japanese is `code: jp` with `lang: ja`.
-2. A folder `content/<code>/` with a translated `<stem>.qmd` for each of the 52 stems that `content/en/` holds.
+2. A folder `content/<code>/` with a translated `<stem>.qmd` for each of the 50 stems that `content/en/` holds.
 3. A `content/<code>/_quarto.yaml`, copied from `content/en/_quarto.yaml`. Set `lang:` to the `lang` value and `book.title` to the `title` value from `languages.yml`. Keep the chapter list and its order unchanged.
 4. The alias in each chapter's front matter, `/new_pages/<stem>.<code>.html`. In `index.qmd` the alias is `/index.<code>.html` instead. Check 9 does not check `index.qmd`, so get that one right by hand.
 5. A `<code>:` block in `landing.yml` for the landing page strings. A missing string falls back to English. Check 15 names every translatable key the block lacks, apart from the two omissions it allows on purpose.

@@ -8,6 +8,21 @@ of it, and that is expected of a changelog. Read it as a record, never as curren
 
 ---
 
+## 2026-10-02: design pass, a four-card landing page, and one front-matter chapter
+
+Every change below was judged on the rendered site, in light and dark mode, at desktop and phone width, in English and Japanese.
+
+- Code shows the characters a reader types. JetBrains Mono drew `<-` as an arrow and `%>%` and `!=` as single glyphs, so ligatures are off in all code.
+- The chapter number sits on its own line above the title, and the h2 section number on its own line above the h2 text. Number, title, lede and body share one left edge. The hanging gutter, `--ael-gutter-n`, is gone. The part name above the chapter title is gone too: the sidebar names the part just above the active chapter.
+- The dark-mode toggle and the code copy button had no icon, because Quarto styles both only inside the sidebar header that this theme hides. Both now draw in the theme colours. The copy button shows when the reader hovers the code block, so it no longer covers the end of a long line.
+- No page scrolls sideways at 390 px. The causes were the app bar, long inline code, long bare URLs, fixed-width figures, wide tables and one wide equation. On a phone the app bar keeps the brand and the toggle, inline code wraps, and a wide table scrolls inside a wrapper that `ael-extras.html` adds, so the table keeps its table semantics.
+- A table that R printed keeps the case of its column names. The uppercase label style had shown `case_id` as CASE_ID.
+- The landing hero stat labels were 2.0 to 2.6:1 on the green in light mode. They are now white and sit above the gradient's 80% stop, at about 5.3:1. The title wraps on balanced lines.
+- The English book title is "Epi R Handbook", the name the app bar already used. The footer citation keeps "The Epidemiologist R Handbook", the title of the Zenodo record.
+- The landing band has four service cards, the same four the help box links to: free tutorials, live training, support and community. The tutorial and training links were `www.appliedepi.org/tutorial/` and `/live/`, and both returned 404. The cards now use the help box's URLs. The "Visit appliedepi.org" button is gone, and the contact line is two links. The first stat reads "page views". `CARDS` in `checks/check-landing-strings.py` is 4.
+- The "Dark mode" label and the help box are translated into the seven other languages, keyed by `<html lang>`. Those strings, the new tutorials card and the "page views" label are new, and a native speaker MUST review them.
+- `about.qmd` and `acknowledgements.qmd` merged into `editorial_style.qmd`, chapter 1, in all eight languages. Chapter numbering does not change, because both pages were unnumbered. Chapter 1 now holds 1.1 R for applied epidemiology and public health, 1.2 to 1.4 as before, 1.5 Acknowledgements, 1.6 Terms of use and contribution, and 1.7 Session info. `editorial_style` carries the aliases of both pages, the `/new_pages/` ones and the current `/<lang>/about.html` and `/<lang>/acknowledgements.html`, so old links and bookmarks still land on the content. Check 9 expects them through `MERGED` in `checks/check-sync.sh`. The book now declares 50 stems.
+
 ## 2026-10-01: every chapter renders without an R warning
 
 The render images now log every R warning as an `EHB-WARNING` line. A full offline English render on 2026-10-01 logged 180 distinct warnings in 27 chapters. Every chapter now renders with none, except two labelled chunks that teach a warning on purpose.

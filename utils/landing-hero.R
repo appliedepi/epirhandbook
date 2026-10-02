@@ -17,7 +17,7 @@
 # Three values are counted here and written down nowhere else:
 #   the hero title      languages.yml, the title of this language
 #   the chapter count   content/<main>/_quarto.yaml, book.chapters less index,
-#                       about and acknowledgements, which are not chapters
+#                       which is not a chapter
 #   the language count  languages.yml
 #
 # yaml::read_yaml reads an unquoted yes, no, true, false, on, off, y or n as a
@@ -31,8 +31,8 @@
 # The old Welcome page carried a live PayPal donation form. It is not here, and
 # it MUST NOT come back. Richard removed it on 2026-09-18. Its button id is in no
 # file of this repository, and the landing page gate fails on that string
-# anywhere in the hero source. The nonprofit band ends with the Applied Epi link
-# and the contact line, and that is the whole of it.
+# anywhere in the hero source. The nonprofit band ends with the contact line, two
+# links to appliedepi.org and to the contact address, and that is the whole of it.
 
 landing_hero <- function(lang, root = here::here()) {
   as_text <- list("bool#yes" = function(x) x, "bool#no" = function(x) x)
@@ -125,8 +125,8 @@ landing_hero <- function(lang, root = here::here()) {
     out
   }
   stems <- sub("\\.qmd$", "", entries(book$book$chapters))
-  # index, about and acknowledgements are pages of the book, not chapters of it.
-  chapters_n <- length(setdiff(stems, c("index", "about", "acknowledgements")))
+  # index is a page of the book, not a chapter of it.
+  chapters_n <- length(setdiff(stems, "index"))
 
   lead <- sub(
     "{brand}",
@@ -293,11 +293,6 @@ landing_hero <- function(lang, root = here::here()) {
     paste(vapply(svcs(), card, character(1)), collapse = "\n"),
     "\n</div>\n",
     '<div class="npfoot">\n',
-    '<a class="btn" href="',
-    s("np_btn_href"),
-    '">',
-    s("np_btn"),
-    "</a>\n",
     '<div class="nplinks">',
     s("np_links"),
     "</div>\n",
