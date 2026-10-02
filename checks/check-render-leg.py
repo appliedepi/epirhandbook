@@ -21,7 +21,8 @@ kind. The check fails on each of these:
    render in three different images.
 3. An element with the class `cell-output-stderr` in a page. Quarto puts the messages and the
    warnings that a chunk prints into that element. The page of an ALLOWED warning chunk MAY
-   carry one such element for each allowed message, when its text is that message.
+   carry one such element for each allowed message, when its text is that message. A page in
+   NOTES MAY carry any number of elements whose text is only lines that NOTES gives for it.
 4. A render-machine path in a page, from LEAKS.
 
 Exit 0 when nothing fails, 1 when something fails, and 2 when an input is missing or empty.
@@ -41,6 +42,18 @@ ALLOWED = (
     ('missing_data.qmd', 'warning-coercion-demo', 'WARNING'),
     ('ggplot_tips.qmd', 'warning-na-translate-demo', 'WARNING'),
 )
+
+# Messages that a page MAY show, by page stem. ggtree 4.2.0 gheatmap() adds its own y and fill
+# scales. So the gheatmap() chunks of phylogenetic_trees print "Scale for y is already present"
+# and the same message for fill. Remove this allowance when ggtree stops adding those scales.
+NOTES = {
+    'phylogenetic_trees': (
+        'Scale for y is already present.',
+        'Adding another scale for y, which will replace the existing scale.',
+        'Scale for fill is already present.',
+        'Adding another scale for fill, which will replace the existing scale.',
+    ),
+}
 
 # Paths of the render machine. /tmp/Rtmp is the R session temporary folder, /home/runner is
 # the GitHub runner home, and /book/ is where build_all_chapters.sh mounts the repository.
@@ -129,6 +142,14 @@ def allowed_cell(cell, allowed):
     return None
 
 
+def note_cell(cell, lines):
+    """True when this stderr text is one or more of the lines, in any order, and nothing else."""
+    if not lines:
+        return False
+    one = '(?:%s)' % '|'.join(re.escape(squash(line)) for line in lines)
+    return re.fullmatch('%s(?: %s)*' % (one, one), cell) is not None
+
+
 def read_pages(pages, root, messages):
     """Return the failures in the rendered pages."""
     failures = []
@@ -139,8 +160,11 @@ def read_pages(pages, root, messages):
         parser.feed(text)
         parser.close()
         left = set(messages.get(page.stem, ()))
+        notes = NOTES.get(page.stem, ())
         bad = 0
         for cell in parser.cells:
+            if note_cell(cell, notes):
+                continue
             message = allowed_cell(cell, left)
             if message is None:
                 bad += 1

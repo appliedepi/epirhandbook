@@ -24,6 +24,11 @@ The render images now log every R warning as an `EHB-WARNING` line. A full offli
 - `stat_tests` draws the correlation plot with ggplot2, because `corrr::rplot()` raises a ggplot2 deprecation warning. `time_series` draws the imputation comparison with ggplot2, because the imputeTS plot function raises one.
 - `combination_analysis`: UpSetR 1.4.1 and ggupset 0.4.1 raise ggplot2 deprecation warnings in their own code. Their chunks are shown unevaluated with saved figures: `images/combination_analysis_upsetr.png`, `images/combination_analysis_ggupset.png` and `images/combination_analysis_ggupset_header.png`. A comment says to restore the chunks when the packages are updated.
 - `directories` no longer prints render-machine paths (`/book/...`).
+- Seven chapters no longer print an R message, and their tables and figures do not change. `heatmaps` names the join columns. `regression` gives `geom_smooth()` its formula, and `transmission_chains` gives `geom_histogram()` 30 bins. `tables_presentation` and `time_series` give `summarise()` the argument `.groups = "drop_last"`, which keeps the grouping it had.
+- `stat_tests` and `tables_descriptive` remove the rows with a missing `outcome` with `drop_na(outcome)` before `tbl_summary()`. Before, gtsummary removed the same 1323 rows and printed a message.
+- `joining_matching` binds `contact_fu_aligned`, the table that the section aligns for `bind_cols()`. Before, it bound `contact_fu`, so 3 of the 6 rows showed the follow-up of a different hospital. `.name_repair = "unique_quiet"` removes the message about the renamed `hospital` columns.
+- `survival_analysis` gives both `ggsurvplot()` calls `tables.col = "strata"`, so the risk table numbers take the group colours. Before, survminer printed "Ignoring unknown labels: colour".
+- Check 17 allows the ggtree 4.2.0 scale messages on `phylogenetic_trees.html` only. `gheatmap()` adds its own y and fill scales.
 
 ## 2026-10-01: render gates, and one commit per deploy
 

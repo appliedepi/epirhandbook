@@ -827,6 +827,19 @@ Quarto puts the messages and the warnings that a chunk prints into a `cell-outpu
 element. The rendered page does not carry the chunk label. So the page of an allowed warning MAY
 carry one such element for each allowed message, when the element shows that message.
 
+`NOTES` in the script names messages that one page MAY show. `phylogenetic_trees.html` MAY carry
+any number of `cell-output-stderr` elements whose text is only these lines, in any order:
+
+- `Scale for y is already present.`
+- `Adding another scale for y, which will replace the existing scale.`
+- `Scale for fill is already present.`
+- `Adding another scale for fill, which will replace the existing scale.`
+
+ggtree 4.2.0 `gheatmap()` adds its own y and fill scales, so the chapter prints these messages.
+The English render of 2026-10-02 showed 6 such elements. The same lines on another page fail.
+An element on `phylogenetic_trees.html` with one more line also fails. Remove the entry when
+ggtree stops adding the scales.
+
 `/tmp/Rtmp` is the R session temporary folder. `/home/runner` is the runner home, and `/book/` is
 where the render container mounts the repository. `/book/` counts only when no host or path
 character comes before it, so `https://git-scm.com/book/` passes. The other two match as plain
