@@ -8,6 +8,16 @@ of it, and that is expected of a changelog. Read it as a record, never as curren
 
 ---
 
+## 2026-10-02: grid tables that Pandoc could not parse
+
+Eight chapters shipped with grid tables that Pandoc did not read as tables. In a grid table every `|` of a content row must sit under a `+` of the separator lines. Where it did not, Pandoc dropped the table and read each header row above a `+===+` line as a level-1 heading. Quarto then numbered those as chapters: English `basics` showed sections numbered up to 12.1, and Japanese and Vietnamese `transition_to_r` showed 11.1 and 19.1 in place of 4.3 and 4.4.
+
+- The English rows broke on 2026-09-08, when the link rewrite changed `dates.html` to `dates.qmd`, one character shorter, in three table rows.
+- The translations had rows of the wrong width, and cells longer than their column. Pandoc measures a Chinese, Japanese or Korean character as two columns.
+- The rows of `basics` in en, jp, pt, ru, tr and vn and of `transition_to_r` in jp and vn are re-padded to their borders, and a column is widened where a cell needs it. The text is unchanged.
+- Vietnamese `basics` had three header rows whose cells began with `# `, which made a heading inside a table cell, and a Date row where an escaped `\|` had merged two cells. Both are corrected.
+- Every grid table in the 25 chapter files that use them now parses. The rendered `basics` is numbered 3.1 to 3.13 and `transition_to_r` 4.1 to 4.4.
+
 ## 2026-10-02: printed-manual tables
 
 Tables were hard to read: every rule was the pale `line` hairline and the header text was muted, so a table had no visible edge and a row was hard to follow across a wide gap.
