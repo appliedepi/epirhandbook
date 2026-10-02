@@ -8,6 +8,10 @@ of it, and that is expected of a changelog. Read it as a record, never as curren
 
 ---
 
+## 2026-10-02: the landing page links the intro R course
+
+The nonprofit band's sentence "Our intro R course is trusted by..." links the course phrase to https://appliedepi.org/training/training.html, in all eight `landing.yml` blocks.
+
 ## 2026-10-02: grid tables that Pandoc could not parse
 
 Eight chapters shipped with grid tables that Pandoc did not read as tables. In a grid table every `|` of a content row must sit under a `+` of the separator lines. Where it did not, Pandoc dropped the table and read each header row above a `+===+` line as a level-1 heading. Quarto then numbered those as chapters: English `basics` showed sections numbered up to 12.1, and Japanese and Vietnamese `transition_to_r` showed 11.1 and 19.1 in place of 4.3 and 4.4.
