@@ -279,7 +279,10 @@ One chapter is excluded from the build: `epidemic_models`. Every
 `_excluded/`.
 
 The chapter fails on a recorded EpiNow2 API break, an `xy.coords()` error. See
-aedockerpublic's `epirhandbook/2.7/BREAKAGE.tsv`.
+the `epidemic_models` row of aedockerpublic's
+[`BREAKAGE.tsv`](https://github.com/appliedepi/aedockerpublic/blob/b2631a401ff6f2bd00350535bfaf28b0ac7d261b/archive/epirhandbook/2.7/BREAKAGE.tsv)
+for the 2.7 line. aedockerpublic commit `d6d358b` (2026-09-17) deleted its top-level
+`archive/` directory, so the link pins the parent of that commit.
 
 **Its old URL will stop working.** `/new_pages/epidemic_models.html` returns HTTP 200
 today, after a redirect to `/en/new_pages/epidemic_models.html`. It serves the version
