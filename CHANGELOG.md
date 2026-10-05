@@ -8,6 +8,17 @@ of it, and that is expected of a changelog. Read it as a record, never as curren
 
 ---
 
+## 2026-10-05: six content defects from #460
+
+Each fix is in all eight languages.
+
+- `time_series`: `c(along = "time")` replaced the dates of the stacked weather files with a counter. The weekly series ran from 1970 W02 to 3649 W42. The chunk now saves the dates of each file and sets them again after the stack. The series runs from 2002 W01 to 2011 W52, 522 weeks, and the model output changes.
+- `standardization`: the text named `phe_dsr()`, which the code no longer uses. It now says that `calculate_dsr()` takes the standard population through `stdpop =`. The rename to `pop` stays, because the code gives `stdpop = pop`.
+- `transmission_chains`: `set.seed(1)` comes before each random draw of contact location and duration, so the printed counts are the same on every render. The text now says 3 transmission links fit the subset, as the seeded output prints. It said two.
+- `ggplot_tips`: a chunk option `warn=F` is now `warning=F`.
+- `shiny_basics`: the plot function in `global.R` drops rows with a missing `cases_reported` before `ggplot()`, as its two other versions in the chapter do.
+- `characters_strings`: the `separate()` bullet said `remove =` is FALSE by default. It is TRUE.
+
 ## 2026-10-02: the landing page links the intro R course
 
 The nonprofit band's sentence "Our intro R course is trusted by..." links the course phrase to https://appliedepi.org/training/training.html, in all eight `landing.yml` blocks.
