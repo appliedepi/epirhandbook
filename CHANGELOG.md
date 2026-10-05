@@ -8,6 +8,20 @@ of it, and that is expected of a changelog. Read it as a record, never as curren
 
 ---
 
+## 2026-10-05: `epidemic_models` is back
+
+- The chapter moves from `_excluded/` to `content/<lang>/` in all eight languages. Each `_quarto.yaml` declares it after `time_series`, and `docker-images.yml` renders it in `epirhandbook-analysis:2.9`. German stays in `_excluded/`.
+- EpiNow2 1.9.0 removed `$summary` and `$estimates`, and `plot()` stops with an error on the stored fit. The page now plots the tables of that fit from appliedepidata: `epidemic_models_summarised_estimates`, `epidemic_models_reported_cases` and `epidemic_models_summary`. The text says that an earlier EpiNow2 made the fit.
+- The code that a reader copies uses EpiNow2 1.9: `epinow(data = ...)` with `gt_opts()`, `forecast_opts(horizon = 21)` and `summary(epinow_res, type = "parameters")`. The literature incubation period is `LogNormal(mean = 9.1, sd = 7.3, max = 30)`. These are the fitted mean and SD in days from Table 2 of the cited paper. `bootstrapped_dist_fit()` stays, because it runs under 1.9.0 with no warning. EpiNow2 1.9.0 stopped with an error on a missing onset date and on gaps between dates. So the case counts drop missing dates, and `fill_missing()` adds the days without cases.
+- Three bugs are fixed. The filter after the rename to `dates` named `date`, so it removed nothing. The EpiEstim windows meant to start on 1 June 2014 started on 31 May, and `t_start` now adds 1. `qplot()` is now `ggplot()`.
+- `project()` needs an `incidence` object, so the projections keep `incidence::incidence()`, and the package chunk loads **incidence**.
+- The `plot()` functions of EpiEstim and incidence raise a ggplot2 deprecation warning. The page draws those plots with ggplot2 and keeps `add_projections()`. `fit_disc_gamma()` and `incidence()` get the data without missing values, `geom_col()` replaces `geom_histogram(stat = "identity")`, and `left_join()` names its key.
+- The stale bookdown anchors and the `.ru.qmd` and `.vn.qmd` links point at `<stem>.qmd`. Vietnamese `###Package EpiNow2` gets the space that makes it a heading.
+- The translated prose of the rewritten passages is agent-written and needs native review.
+- The two EpiEstim runs with the literature and the data serial interval used the default windows, which start on the second day of the data. The first of those windows held 0 cases. So EpiEstim warned "You're estimating R too early in the epidemic", and printed a message on the page. Both runs now use weekly windows from the first 7-day window that holds at least 11 cases, the minimum for EpiEstim's default precision. The code computes that window from the data: it starts on 2014-05-03 and holds 12 cases. The run from 1 June stays as the example of windows the reader chooses.
+- The plot label "Credibel" is now "Credible". The prose and the `rename()` comment name `estimate_R()`, not `estimateR()`.
+- `checks/README.md` and a comment in `utils/landing-hero.R` give the new counts: 51 stems, 50 chapters, 50 non-index stems, 440 aliases and 408 declared files.
+
 ## 2026-10-05: live combination plots, and stricter checks 12 and 17
 
 - `combination_analysis` runs its three plot chunks again in all eight languages, with the labels `combination_header`, `combination_ggupset` and `combination_upsetr`. The three saved PNGs in `images/` are deleted. `combination_upsetr` gets `warning=F`, as the other two have, so the page shows no warning.

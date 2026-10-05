@@ -28,10 +28,10 @@ Below is an example of one of the outputs we'll be producing in this section.
 ```{r out.width=c('100%', '100%'), fig.show='hold', echo=F, fig.width = 12, fig.height = 9, message=F, warning=F}
 
 ## install and load packages
-pacman::p_load(tidyverse, EpiNow2, EpiEstim, here, incidence2, epicontacts, rio, projections)
+pacman::p_load(tidyverse, EpiNow2, EpiEstim, incidence2, incidence, epicontacts, projections)
 
 ## load linelist
-linelist <- import(here::here("data", "case_linelists", "linelist_cleaned.rds"))
+linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds")
 
 ## generate contacts
 contacts <- linelist %>%
@@ -48,69 +48,40 @@ epic <- make_epicontacts(
   directed = TRUE
 )
 
-## ## estimate gamma generation time
-## generation_time <- bootstrapped_dist_fit(
-##   get_pairwise(epic, "date_infection"),
-##   dist = "gamma",
-##   max_value = 20,
-##   bootstraps = 1
-## )
-
-## ## export for caching
-## export(
-##   generation_time,
-##   here("data/cache/epidemic_models/generation_time.rds")
-## )
-
-## import cached generation time
-generation_time <- import(here("data/cache/epidemic_models/generation_time.rds"))
-
-## ## estimate incubation period
-## incubation_period <- bootstrapped_dist_fit(
-##   linelist$date_onset - linelist$date_infection,
-##   dist = "lognormal",
-##   max_value = 100,
-##   bootstraps = 1
-## )
-
-## ## export for caching
-## export(
-##   incubation_period,
-##   here("data/cache/epidemic_models/incubation_period.rds")
-## )
-
-## import cached incubation period
-incubation_period <- import(here("data/cache/epidemic_models/incubation_period.rds"))
-
-## get incidence from onset date
-cases <- linelist %>%
-  group_by(date = date_onset) %>%
-  summarise(confirm = n())
-
-## ## run epinow
-## epinow_res <- epinow(
-##   reported_cases = cases,
-##   generation_time = generation_time,
-##   delays = delay_opts(incubation_period),
-##   target_folder = here("data/cache/epidemic_models"),
-##   return_output = TRUE,
-##   output = "samples",
-##   verbose = TRUE,
-##   stan = stan_opts(samples = 750, chains = 4),
-##   horizon = 21
-## )
-
-## ## export for caching
-## export(
-##   epinow_res,
-##   here("data/cache/epidemic_models/epinow_res.rds")
-## )
-
-## import cached epinow results
-epinow_res <- import(here("data/cache/epidemic_models/epinow_res.rds"))
+## load the stored EpiNow2 estimates and the case counts that the fit used
+estimates <- appliedepidata::get_data(name = "epidemic_models_summarised_estimates")
+observations <- appliedepidata::get_data(name = "epidemic_models_reported_cases")
 
 ## plot summary figure
-plot(epinow_res)
+ggplot(
+  data = filter(estimates, variable %in% c("R", "reported_cases")),
+  aes(x = date)
+) +
+  ## observed case counts, in the reported cases panel only
+  geom_col(
+    data = mutate(observations, variable = "reported_cases"),
+    aes(y = confirm),
+    fill = "grey70",
+    width = 1
+  ) +
+  ## 90% credible interval and median, coloured by estimate type
+  geom_ribbon(aes(ymin = lower_90, ymax = upper_90, fill = type), alpha = 0.3) +
+  geom_line(aes(y = median, colour = type)) +
+  ## use label_parsed to allow subscript label
+  facet_wrap(
+    ~ variable,
+    ncol = 1,
+    scales = "free_y",
+    labeller = as_labeller(c("R" = "R[t]", "reported_cases" = "Reported~cases"), label_parsed),
+    strip.position = 'left'
+  ) +
+  labs(x = NULL, y = NULL, colour = NULL, fill = NULL) +
+  theme_minimal(base_size = 14) +
+  theme(
+    strip.background = element_blank(),
+    strip.placement = 'outside',
+    legend.position = 'bottom'
+  )
 
 ```
 
@@ -136,6 +107,7 @@ pacman::p_load(
    EpiEstim,     # Rt estimation
    projections,  # Incidence projections
    incidence2,   # Handling incidence data
+   incidence,    # Incidence objects for projections
    epitrix,      # Useful epi functions
    distcrete     # Discrete delay distributions
 )
@@ -145,7 +117,7 @@ We will use the cleaned case linelist for all analyses in this section. If you w
 
 ```{r, echo=F}
 # import the linelist into R
-linelist <- rio::import(here::here("data", "case_linelists", "linelist_cleaned.rds"))
+linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds")
 ```
 
 ```{r eval=F}
@@ -228,19 +200,15 @@ mean of 9.1, standard deviation of 7.3 and maximum value of 30 would be
 specified as follows:
 
 ```{r epidemic_models_incubation_literature, eval=F}
-incubation_period_lit <- list(
-  mean = log(9.1),
-  mean_sd = log(0.1),
-  sd = log(7.3),
-  sd_sd = log(0.1),
+incubation_period_lit <- LogNormal(
+  mean = 9.1,
+  sd = 7.3,
   max = 30
 )
 ```
-Note that **EpiNow2** requires these delay distributions to be provided on a **log**
-scale, hence the `log` call around each value (except the `max` parameter which,
-confusingly, has to be provided on a natural scale). The `mean_sd` and `sd_sd`
-define the standard deviation of the mean and standard deviation estimates. As
-these are not known in this case, we choose the fairly arbitrary value of 0.1.
+`LogNormal()` takes the mean and the standard deviation in days, on the natural
+scale, and converts them to the log scale itself. The `max` parameter cuts the
+distribution at 30 days.
 
 In this analysis, we instead estimate the incubation period distribution
 from the linelist itself using the function `bootstrapped_dist_fit`, which will
@@ -301,24 +269,31 @@ generation_time <- bootstrapped_dist_fit(
 Now we just need to calculate daily incidence from the linelist, which we can do
 easily with the **dplyr** functions `group_by()` and `n()`. Note
 that **EpiNow2** requires the column names to  be `date` and `confirm`.
+**EpiNow2** also stops with an error on a missing date, so we drop the cases
+without a date of onset. With gaps between the dates, **EpiNow2** 1.9.0 stopped
+with an error on these data. So `fill_missing()` adds the days without cases,
+with a count of 0.
 
 ```{r epidemic_models_cases, eval=F}
 ## get incidence from onset dates
 cases <- linelist %>%
+  filter(!is.na(date_onset)) %>%
   group_by(date = date_onset) %>%
-  summarise(confirm = n())
+  summarise(confirm = n()) %>%
+  ## add the days without cases, with a count of 0
+  fill_missing(missing_dates = "zero")
 ```
 
 We can then estimate R<sub>t</sub> using the `epinow` function. Some notes on
 the inputs:
 
+* The `generation_time` argument takes the generation time distribution inside
+  the `gt_opts` function.
 * We can provide any number of 'chained' delay distributions to the `delays`
-  argument; we would simply insert them alongside the `incubation_period` object
+  argument. We would simply add them to the `incubation_period` object with `+`
   within the `delay_opts` function.
-* `return_output` ensures the output is returned within R and not just saved to
-  a file.
-* `verbose` specifies that we want a readout of the progress.
-* `horizon` indicates how many days we want to project future incidence for.
+* `horizon` in the `forecast_opts` function indicates how many days we want to
+  project future incidence for.
 * We pass additional options to the `stan` argument to specify how long
   we want to run the inference for. Increasing `samples` and `chains` will give
   you a more accurate estimate that better characterises uncertainty, however
@@ -327,46 +302,85 @@ the inputs:
 ```{r epidemic_models_run_epinow, eval=F}
 ## run epinow
 epinow_res <- epinow(
-  reported_cases = cases,
-  generation_time = generation_time,
+  data = cases,
+  generation_time = gt_opts(generation_time),
   delays = delay_opts(incubation_period),
-  return_output = TRUE,
-  verbose = TRUE,
-  horizon = 21,
+  forecast = forecast_opts(horizon = 21),
   stan = stan_opts(samples = 750, chains = 4)
 )
 ```
 
 #### Analysing outputs {.unnumbered}
 
-Once the code has finished running, we can plot a summary very easily as follows. Scroll the image to see the full extent.  
+This page does not run the fit. The results below come from a fit that is
+stored in the **appliedepidata** package. An earlier version of **EpiNow2** made
+that fit. The code above is the way to make such a fit with **EpiNow2** 1.9.
+
+On a fit from **EpiNow2** 1.9, the `plot()` function draws a summary figure, and
+the `summary()` function gives a summary table. These functions stop with an
+error on the stored fit. So we load the tables of the stored fit and plot them
+with **ggplot2**:
 
 
 ```{r out.width=c('100%', '100%'), fig.show='hold', fig.width = 12, fig.height = 9, message=F, warning=F }
+## load the stored estimates and the case counts that the fit used
+estimates <- appliedepidata::get_data(name = "epidemic_models_summarised_estimates")
+observations <- appliedepidata::get_data(name = "epidemic_models_reported_cases")
+
 ## plot summary figure
-plot(epinow_res)
+ggplot(
+  data = filter(estimates, variable %in% c("R", "reported_cases")),
+  aes(x = date)
+) +
+  ## observed case counts, in the reported cases panel only
+  geom_col(
+    data = mutate(observations, variable = "reported_cases"),
+    aes(y = confirm),
+    fill = "grey70",
+    width = 1
+  ) +
+  ## 90% credible interval and median, coloured by estimate type
+  geom_ribbon(aes(ymin = lower_90, ymax = upper_90, fill = type), alpha = 0.3) +
+  geom_line(aes(y = median, colour = type)) +
+  ## use label_parsed to allow subscript label
+  facet_wrap(
+    ~ variable,
+    ncol = 1,
+    scales = "free_y",
+    labeller = as_labeller(c("R" = "R[t]", "reported_cases" = "Reported~cases"), label_parsed),
+    strip.position = 'left'
+  ) +
+  labs(x = NULL, y = NULL, colour = NULL, fill = NULL) +
+  theme_minimal(base_size = 14) +
+  theme(
+    strip.background = element_blank(),
+    strip.placement = 'outside',
+    legend.position = 'bottom'
+  )
 ```
 
 We can also look at various summary statistics:
 
 ```{r epidemic_models_epinow_summary,}
-## summary table
-epinow_res$summary
+## summary table of the stored fit
+summary_table <- appliedepidata::get_data(name = "epidemic_models_summary")
+summary_table[, c("measure", "estimate")]
 ```
 
 For further analyses and custom plotting, you can access the summarised daily
-estimates via `$estimates$summarised`. We will convert this from the default
-`data.table` to a `tibble` for ease of use with **dplyr**.
+estimates of a fit from **EpiNow2** 1.9 with `summary(epinow_res, type = "parameters")`.
+We will convert this from the default `data.table` to a `tibble` for ease of use
+with **dplyr**. The table below shows the same estimates from the stored fit.
 
 ```{r epidemic_models_to_tibble, eval=F}
 ## extract summary and convert to tibble
-estimates <- as_tibble(epinow_res$estimates$summarised)
+estimates <- as_tibble(summary(epinow_res, type = "parameters"))
 estimates
 ```
 
 ```{r epidemic_models_tibble_show,  echo = F}
 ## show outputs
-estimates <- as_tibble(epinow_res$estimates$summarised)
+estimates <- as_tibble(estimates)
 DT::datatable(
   estimates,
   rownames = FALSE,
@@ -439,7 +453,7 @@ ggplot() +
   labs(
     x = NULL,
     y = NULL,
-    alpha = "Credibel\ninterval"
+    alpha = "Credible\ninterval"
   ) +
   scale_x_date(
     date_breaks = "1 month",
@@ -465,7 +479,7 @@ object from the original **incidence** package. You can even distinguish between
 and locally acquired infections; see the documentation at `?estimate_R` for
 further details.  
 
-We will create the input using **incidence2**. See the page on [Epidemic curves](epicurves.qmd) for more examples with the **incidence2** package. Since there have been updates to the **incidence2** package that don't completely align with `estimateR()`'s expected input, there are some minor additional steps needed. The incidence object consists of a tibble with dates and their respective case counts. We use `complete()` from **tidyr** to ensure all dates are included (even those with no cases), and then `rename()` the columns to align with what is expected by `estimate_R()` in a later step.  
+We will create the input using **incidence2**. See the page on [Epidemic curves](epicurves.qmd) for more examples with the **incidence2** package. Since there have been updates to the **incidence2** package that don't completely align with `estimate_R()`'s expected input, there are some minor additional steps needed. The incidence object consists of a tibble with dates and their respective case counts. We use `complete()` from **tidyr** to ensure all dates are included (even those with no cases), and then `rename()` the columns to align with what is expected by `estimate_R()` in a later step.  
 
 ```{r epidemic_models_epiestim_incidence,}
 ## get incidence from onset date
@@ -475,7 +489,7 @@ cases <- incidence2::incidence(linelist, date_index = "date_onset") %>% # get ca
     to = max(date_index, na.rm=T),
     by = "day"),
     fill = list(count = 0)) %>%                                       # convert NA counts to 0
-  rename(I = count,                                                   # rename to names expected by estimateR
+  rename(I = count,                                                   # rename to names expected by estimate_R()
          dates = date_index)
 ```
 
@@ -488,13 +502,35 @@ cover two of them here.
 Using the option `method = "parametric_si"`, we can manually specify the mean and
 standard deviation of the serial interval in a `config` object created using the
 function `make_config`. We use a mean and standard deviation of 12.0 and 5.2, respectively, defined in
-[this paper](https://bmcmedicine.biomedcentral.com/articles/10.1186/s12916-014-0196-0):
+[this paper](https://bmcmedicine.biomedcentral.com/articles/10.1186/s12916-014-0196-0).
+
+By default, `estimate_R()` uses weekly sliding windows from the second day of the
+data. **EpiEstim** warns that R<sub>t</sub> estimated from very few cases is
+unreliable: with its default settings, it needs at least 11 cases in a window.
+The first weeks of this outbreak hold fewer. So we start the weekly windows at the
+first 7-day window that holds at least 11 cases. Both runs below use these
+windows:
 
 ```{r epidemic_models_epiestim_config,}
+## daily case counts, one row per day
+daily_cases <- cases$I
+
+## number of cases in the 7-day window that starts on each day
+window_cases <- sapply(
+  seq_len(length(daily_cases) - 6),
+  function(t) sum(daily_cases[t:(t + 6)])
+)
+
+## weekly sliding windows from the first window with at least 11 cases
+weekly_start <- max(2, which(window_cases >= 11)[1]):(length(daily_cases) - 6)
+weekly_end <- weekly_start + 6
+
 ## make config
 config_lit <- make_config(
   mean_si = 12.0,
-  std_si = 5.2
+  std_si = 5.2,
+  t_start = weekly_start,
+  t_end = weekly_end
 )
 ```
 
@@ -503,7 +539,7 @@ We can then estimate R<sub>t</sub> with the `estimate_R` function:
 ```{r epidemic_models_epiestim_lit,  warning = FALSE}
 
 cases <- cases %>% 
-     filter(!is.na(date))
+     filter(!is.na(dates))
 
 
 #create a dataframe for the function estimate_R()
@@ -511,7 +547,7 @@ cases_incidence <- data.frame(dates = seq.Date(from = min(cases$dates),
                                to = max(cases$dates), 
                                by = 1))
 
-cases_incidence <- left_join(cases_incidence, cases) %>% 
+cases_incidence <- left_join(cases_incidence, cases, by = "dates") %>% 
      select(dates, I) %>% 
      mutate(I = ifelse(is.na(I), 0, I))
 
@@ -522,10 +558,28 @@ epiestim_res_lit <- estimate_R(
 )
 ```
 
-and plot a summary of the outputs:
+and plot the R<sub>t</sub> estimates. The `plot()` function of **EpiEstim**
+raises a deprecation warning from **ggplot2**, so we write a short function that
+plots the estimates with **ggplot2**. It dates each estimate by the end of its
+time window:
 
 ```{r epidemic_models_epiestim_lit_plot,  warning = FALSE}
-plot(epiestim_res_lit)
+## plot the mean R estimate and its 95% credible interval
+plot_rt <- function(res) {
+  res$R %>%
+    ## drop the time windows without an estimate
+    filter(!is.na(`Mean(R)`)) %>%
+    ## date each estimate by the end of its time window
+    mutate(date = res$dates[t_end]) %>%
+    ggplot(aes(x = date)) +
+    geom_ribbon(aes(ymin = `Quantile.0.025(R)`, ymax = `Quantile.0.975(R)`), alpha = 0.3) +
+    geom_line(aes(y = `Mean(R)`)) +
+    geom_hline(yintercept = 1, linetype = 2) +
+    labs(x = NULL, y = expression(R[t])) +
+    theme_minimal(base_size = 14)
+}
+
+plot_rt(epiestim_res_lit)
 ```
 
 #### Using serial interval estimates from the data {.unnumbered}
@@ -561,8 +615,8 @@ from the **epitrix** package for this fitting procedure, as we require a
 _discretised_ distribution.
 
 ```{r epidemic_models_incubation_estimate_epiestim,  warning = FALSE}
-## estimate gamma serial interval
-serial_interval <- fit_disc_gamma(get_pairwise(epic, "date_onset"))
+## estimate gamma serial interval, without the pairs that have no onset date
+serial_interval <- fit_disc_gamma(na.omit(get_pairwise(epic, "date_onset")))
 ```
 
 We then pass this information to the `config` object, run **EpiEstim**
@@ -572,7 +626,9 @@ again and plot the results:
 ## make config
 config_emp <- make_config(
   mean_si = serial_interval$mu,
-  std_si = serial_interval$sd
+  std_si = serial_interval$sd,
+  t_start = weekly_start,
+  t_end = weekly_end
 )
 
 ## run epiestim
@@ -583,15 +639,13 @@ epiestim_res_emp <- estimate_R(
 )
 
 ## plot outputs
-plot(epiestim_res_emp)
+plot_rt(epiestim_res_emp)
 ```
 
 #### Specifying estimation time windows {.unnumbered}
 
-These default options will provide a weekly sliding estimate and might act as a
-warning that you are estimating R<sub>t</sub> too early in the outbreak for a
-precise estimate. You can change this by setting a later start date for the
-estimation as shown below. Unfortunately, **EpiEstim** only provides a very
+You can also choose the start of the windows yourself, for example to estimate
+R<sub>t</sub> only from 1 June 2014, as shown below. Unfortunately, **EpiEstim** only provides a very
 clunky way of specifying these estimations times, in that you have to provide a
 vector of __integers__ referring to the start and end dates for each time
 window.
@@ -607,7 +661,9 @@ start_dates <- seq.Date(
   ## subtract the starting date to convert to numeric
   `-`(min(cases$dates)) %>%
   ## convert to integer
-  as.integer()
+  as.integer() %>%
+  ## add 1, because day 1 of the incidence data is its first date
+  `+`(1L)
 
 ## add six days for a one week sliding window
 end_dates <- start_dates + 6
@@ -632,7 +688,7 @@ epiestim_res_partial <- estimate_R(
 )
 
 ## plot outputs
-plot(epiestim_res_partial)
+plot_rt(epiestim_res_partial)
 
 ```
 
@@ -656,6 +712,8 @@ df_wide <- epiestim_res_lit$R %>%
     upper_90_r = quantile_0_95_r,
     upper_95_r = quantile_0_975_r,
     ) %>%
+  ## drop the time windows without an estimate
+  filter(!is.na(mean_r)) %>%
   mutate(
     ## extract the median date from t_start and t_end
     dates = epiestim_res_emp$dates[round(map2_dbl(t_start, t_end, median))],
@@ -739,24 +797,23 @@ ggplot() +
 ### EpiNow2 {.unnumbered}
 
 Besides estimating R<sub>t</sub>, **EpiNow2** also supports forecasting of
-R<sub>t</sub> and projections of case numbers by integration with the
-**EpiSoon** package under the hood. All you need to do is specify the `horizon`
-argument in your `epinow` function call, indicating how many days you want to
-project into the future; see the **EpiNow2** section under the "Estimating
-R<sub>t</sub>" for details on how to get **EpiNow2** up and running. In this
-section, we will just plot the outputs from that analysis, stored in the
-`epinow_res` object.
+R<sub>t</sub> and projections of case numbers. All you need to do is give
+`forecast_opts(horizon = 21)` to the `forecast` argument of your `epinow`
+function call. The `horizon` is the number of days you want to project into the
+future. See the **EpiNow2** section under the "Estimating R<sub>t</sub>" for
+details on how to get **EpiNow2** up and running. In this section, we will just
+plot the forecast from the stored fit.
 
 ```{r epidemic_models_episoon, out.width=c('100%', '100%'), fig.show='hold', fig.width = 12, fig.height = 9, message=F, warning=F}
 
 ## define minimum date for plot
 min_date <- as.Date("2015-03-01")
 
-## extract summarised estimates
-estimates <-  as_tibble(epinow_res$estimates$summarised)
+## load the summarised estimates of the stored fit
+estimates <- as_tibble(appliedepidata::get_data(name = "epidemic_models_summarised_estimates"))
 
-## extract raw data on case incidence
-observations <- as_tibble(epinow_res$estimates$observations) %>%
+## load the case counts that the stored fit used
+observations <- as_tibble(appliedepidata::get_data(name = "epidemic_models_reported_cases")) %>%
   filter(date > min_date)
 
 ## extract forecasted estimates of case numbers
@@ -778,11 +835,10 @@ df_long <- df_wide %>%
 
 ## make plot
 ggplot() +
-  geom_histogram(
+  geom_col(
     data = observations,
     aes(x = date, y = confirm),
-    stat = 'identity',
-    binwidth = 1
+    width = 1
   ) +
   geom_ribbon(
     data = df_long,
@@ -853,10 +909,12 @@ is equivalent to calling `dgamma`:
 ```{r epidemic_models_projections_distcrete_plot,}
 
 ## check to make sure the serial interval looks correct
-qplot(
-  x = 0:50, y = serial_interval_lit$d(0:50), geom = "area",
-  xlab = "Serial interval", ylab = "Density"
-)
+ggplot(
+  data = tibble(x = 0:50, y = serial_interval_lit$d(0:50)),
+  aes(x = x, y = y)
+) +
+  geom_area() +
+  labs(x = "Serial interval", y = "Density")
 
 ```
 
@@ -893,8 +951,8 @@ from the **epitrix** package for this fitting procedure, as we require a
 _discretised_ distribution.
 
 ```{r epidemic_models_incubation_estimate_projections,  warning = FALSE}
-## estimate gamma serial interval
-serial_interval <- fit_disc_gamma(get_pairwise(epic, "date_onset"))
+## estimate gamma serial interval, without the pairs that have no onset date
+serial_interval <- fit_disc_gamma(na.omit(get_pairwise(epic, "date_onset")))
 
 ## inspect estimate
 serial_interval[c("mu", "sd")]
@@ -915,8 +973,8 @@ want to use for forward projections.
 
 ```{r epidemic_models_projection_setup,  warning = FALSE}
 
-## create incidence object from dates of onset
-inc <- incidence::incidence(linelist$date_onset)
+## create incidence object from dates of onset, without the cases that have no onset date
+inc <- incidence::incidence(na.omit(linelist$date_onset))
 
 ## extract plausible r values from most recent estimate
 mean_r <- tail(epiestim_res_emp$R$`Mean(R)`, 1)
@@ -925,7 +983,9 @@ shapescale <- gamma_mucv2shapescale(mu = mean_r, cv = sd_r/mean_r)
 plausible_r <- rgamma(1000, shape = shapescale$shape, scale = shapescale$scale)
 
 ## check distribution
-qplot(x = plausible_r, geom = "histogram", xlab = expression(R[t]), ylab = "Counts")
+ggplot(data = tibble(r = plausible_r), aes(x = r)) +
+  geom_histogram(bins = 30) +
+  labs(x = expression(R[t]), y = "Counts")
 
 ```
 
@@ -946,15 +1006,25 @@ proj <- project(
 
 ```
 
-We can then handily plot the incidence and projections using the `plot()` and
-`add_projections()` functions. We can easily subset the `incidence` object to only
-show the most recent cases by using the square bracket operator.
+We can then plot the incidence with **ggplot2** and add the projections with the
+`add_projections()` function. The `plot()` function of **incidence** raises a
+deprecation warning from **ggplot2**, so we do not use it. We can easily subset
+the `incidence` object to only show the most recent cases by using the square
+bracket operator.
 
 ```{r epidemic_models_plot_projection, out.width=c('100%', '100%'), fig.show='hold', fig.width = 12, fig.height = 9, message=F, warning=F}
 
-## plot incidence and projections
-plot(inc[inc$dates > as.Date("2015-03-01")]) %>%
-  add_projections(proj)
+## plot the incidence
+incidence_plot <- ggplot() +
+  geom_col(
+    data = as.data.frame(inc[inc$dates > as.Date("2015-03-01")]),
+    aes(x = dates, y = counts),
+    width = 1
+  ) +
+  theme_minimal(base_size = 14)
+
+## add the projections
+add_projections(incidence_plot, proj)
 
 ```
 

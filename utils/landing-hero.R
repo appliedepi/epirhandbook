@@ -166,7 +166,7 @@ landing_hero <- function(lang, root = here::here()) {
   # chapter loads: hiding the title block there would hide every chapter title.
   # index.qmd keeps its "# Welcome {.unnumbered}" heading, because a Quarto book
   # numbers a chapter that has no unnumbered heading, and that would renumber all
-  # 49 chapters. The heading is hidden here, and the hero carries the real title.
+  # 50 chapters. The heading is hidden here, and the hero carries the real title.
   style <- paste(
     "<style>",
     "#title-block-header { display: none; }",

@@ -332,7 +332,7 @@ it emits no redirect stub either. 31 links from six other chapters point at it: 
 They are deliberately left in place. They start working again the moment the chapter returns.
 Bringing it back needs a render that does not reach an external service.
 
-#### C5. `epidemic_models` — EpiNow2's result API was removed — **DECIDED: CUT**
+#### C5. `epidemic_models` — EpiNow2's result API was removed — **DECIDED: CUT** (reversed on 2026-10-05, see below)
 The chapter does not merely *plot* an EpiNow2 result — it reads the fitted object's internals
 throughout. Those accessors were removed in the 1.4 → 1.9 rewrite. This is not a plotting fix.
 Restoring the chapter means re-teaching it against EpiNow2's new interface. That is a rewrite by
@@ -343,6 +343,13 @@ a subject-matter author, not an upgrade task.
 This is the one piece of teaching content the upgrade loses outright. If the handbook wants
 EpiNow2 back, it needs a newly authored chapter — that work is out of scope here and should be
 tracked separately.
+
+**Reversed on 2026-10-05.** `epidemic_models` is back in the book, in all eight languages. It
+renders with the `analysis` image, which gains **EpiNow2** 1.9.0 for it. The code that a reader
+copies uses the 1.9 interface: `epinow(data = ...)` with `gt_opts()` and `forecast_opts()`, and
+`summary()` for the results. The page does not refit the model. It plots the stored tables of
+the fit in **appliedepidata**, which an earlier EpiNow2 made, and the text says so. A refit
+needs a new **appliedepidata** release.
 
 ---
 

@@ -21,10 +21,10 @@ aliases:
 ```{r out.width=c('100%', '100%'), fig.show='hold', echo=F, fig.width = 12, fig.height = 9, message=F, warning=F}
 
 ## パッケージのインストールとロード
-pacman::p_load(tidyverse, EpiNow2, EpiEstim, here, incidence2, epicontacts, rio, projections)
+pacman::p_load(tidyverse, EpiNow2, EpiEstim, incidence2, incidence, epicontacts, projections)
 
 ## ラインリストのロード
-linelist <- import(here::here("data", "case_linelists", "linelist_cleaned.rds"))
+linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds")
 
 ## コンタクトの作成
 contacts <- linelist %>%
@@ -41,69 +41,40 @@ epic <- make_epicontacts(
   directed = TRUE
 )
 
-## ## estimate gamma generation time
-## generation_time <- bootstrapped_dist_fit(
-##   get_pairwise(epic, "date_infection"),
-##   dist = "gamma",
-##   max_value = 20,
-##   bootstraps = 1
-## )
+## 保存された EpiNow2 の推定値と、当てはめに使ったケース数をロード
+estimates <- appliedepidata::get_data(name = "epidemic_models_summarised_estimates")
+observations <- appliedepidata::get_data(name = "epidemic_models_reported_cases")
 
-## ## export for caching
-## export(
-##   generation_time,
-##   here("data/cache/epidemic_models/generation_time.rds")
-## )
-
-## import cached generation time
-generation_time <- import(here("data/cache/epidemic_models/generation_time.rds"))
-
-## ## estimate incubation period
-## incubation_period <- bootstrapped_dist_fit(
-##   linelist$date_onset - linelist$date_infection,
-##   dist = "lognormal",
-##   max_value = 100,
-##   bootstraps = 1
-## )
-
-## ## export for caching
-## export(
-##   incubation_period,
-##   here("data/cache/epidemic_models/incubation_period.rds")
-## )
-
-## import cached incubation period
-incubation_period <- import(here("data/cache/epidemic_models/incubation_period.rds"))
-
-## get incidence from onset date
-cases <- linelist %>%
-  group_by(date = date_onset) %>%
-  summarise(confirm = n())
-
-## ## run epinow
-## epinow_res <- epinow(
-##   reported_cases = cases,
-##   generation_time = generation_time,
-##   delays = delay_opts(incubation_period),
-##   target_folder = here("data/cache/epidemic_models"),
-##   return_output = TRUE,
-##   output = "samples",
-##   verbose = TRUE,
-##   stan = stan_opts(samples = 750, chains = 4),
-##   horizon = 21
-## )
-
-## ## export for caching
-## export(
-##   epinow_res,
-##   here("data/cache/epidemic_models/epinow_res.rds")
-## )
-
-## import cached epinow results
-epinow_res <- import(here("data/cache/epidemic_models/epinow_res.rds"))
-
-## plot summary figure
-plot(epinow_res)
+## サマリーフィギュアのプロット
+ggplot(
+  data = filter(estimates, variable %in% c("R", "reported_cases")),
+  aes(x = date)
+) +
+  ## 観測されたケース数（報告ケースのパネルのみ）
+  geom_col(
+    data = mutate(observations, variable = "reported_cases"),
+    aes(y = confirm),
+    fill = "grey70",
+    width = 1
+  ) +
+  ## 90% 信用区間と中央値（推定値の種類ごとに色分け）
+  geom_ribbon(aes(ymin = lower_90, ymax = upper_90, fill = type), alpha = 0.3) +
+  geom_line(aes(y = median, colour = type)) +
+  ## label_parsedを使用して、添え字ラベルを許可する
+  facet_wrap(
+    ~ variable,
+    ncol = 1,
+    scales = "free_y",
+    labeller = as_labeller(c("R" = "R[t]", "reported_cases" = "Reported~cases"), label_parsed),
+    strip.position = 'left'
+  ) +
+  labs(x = NULL, y = NULL, colour = NULL, fill = NULL) +
+  theme_minimal(base_size = 14) +
+  theme(
+    strip.background = element_blank(),
+    strip.placement = 'outside',
+    legend.position = 'bottom'
+  )
 
 ```
 
@@ -113,7 +84,7 @@ plot(epinow_res)
 
 R<sub>t</sub> の推定には **EpiNow** パッケージと **EpiEstim** パッケージという2つの異なる手法を使用し、症例（ケース）の発生数の予測には **projections** パッケージを用います。以下のコードチャンクは、（本章の）分析に必要なパッケージのローディングを示しています。
 
-以下のコードを実行すると、分析に必要なパッケージが読み込まれます。このハンドブックでは、パッケージを読み込むために、pacman パッケージの p_load() を主に使用しています。p_load() は、必要に応じてパッケージをインストールし、現在の R セッションで使用するためにパッケージを読み込む関数です。また、すでにインストールされたパッケージは、R の基本パッケージである base （以下、base R）の library() を使用して読み込むこともできます。R のパッケージに関する詳細は [R の基礎](#basics) の章をご覧ください。
+以下のコードを実行すると、分析に必要なパッケージが読み込まれます。このハンドブックでは、パッケージを読み込むために、pacman パッケージの p_load() を主に使用しています。p_load() は、必要に応じてパッケージをインストールし、現在の R セッションで使用するためにパッケージを読み込む関数です。また、すでにインストールされたパッケージは、R の基本パッケージである base （以下、base R）の library() を使用して読み込むこともできます。R のパッケージに関する詳細は [R の基礎](basics.qmd) の章をご覧ください。
 
 ```{r epidemic_models_packages, }
 pacman::p_load(
@@ -125,16 +96,17 @@ pacman::p_load(
    EpiEstim,     # Rt 推定
    projections,  # 発生数のプロジェクション
    incidence2,   # 発生データの取り扱い
+   incidence,    # プロジェクションのための incidence オブジェクト
    epitrix,      # 便利な epi の機能
    distcrete     # 離散的な遅れの分布
 )
 ```
 
-エボラ出血熱の流行をシミュレートしたデータセットをインポートします。お手元の環境でこの章の内容を実行したい方は、 <a href='https://github.com/appliedepi/epirhandbook/raw/main/data/case_linelists/linelist_cleaned.rds' class='download-button'>クリック</a>して「前処理された」ラインリスト（linelist）データをダウンロードしてください>（.rds 形式で取得できます）。データは *rio* パッケージの import() を利用してインポートしましょう（*rio* パッケージは、.xlsx、.csv、.rds など様々な種類のファイルを取り扱うことができます。詳細は、[インポートとエクスポート](#importing) の章をご覧ください）。
+エボラ出血熱の流行をシミュレートしたデータセットをインポートします。お手元の環境でこの章の内容を実行したい方は、 <a href='https://github.com/appliedepi/epirhandbook/raw/main/data/case_linelists/linelist_cleaned.rds' class='download-button'>クリック</a>して「前処理された」ラインリスト（linelist）データをダウンロードしてください>（.rds 形式で取得できます）。データは *rio* パッケージの import() を利用してインポートしましょう（*rio* パッケージは、.xlsx、.csv、.rds など様々な種類のファイルを取り扱うことができます。詳細は、[インポートとエクスポート](importing.qmd) の章をご覧ください）。
 
 ```{r, echo=F}
 # ラインリストの取り込み
-linelist <- rio::import(here::here("data", "case_linelists", "linelist_cleaned.rds"))
+linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds")
 ```
 
 ```{r eval=F}
@@ -174,16 +146,14 @@ linelist <- import("linelist_cleaned.rds")
 エボラ出血熱の潜伏期間を平均9.1日、標準偏差7.3日、最大値を30日とする文献からの推定値（[引用論文](https://www.nejm.org/doi/full/10.1056/nejmoa1411100)）は、以下のように規定されます：
 
 ```{r epidemic_models_incubation_literature, eval=F}
-incubation_period_lit <- list(
-  mean = log(9.1),
-  mean_sd = log(0.1),
-  sd = log(7.3),
-  sd_sd = log(0.1),
+incubation_period_lit <- LogNormal(
+  mean = 9.1,
+  sd = 7.3,
   max = 30
 )
 ```
 
-**EpiNow2** パッケージでは、これらの遅れの分布が対数（**log**）スケールで提供される必要があり、そのため、各値に `log` がついていることに注意してください（紛らわしいことに、自然スケールで提供されなければならない `max` パラメータを除く）。`mean_sd` と `sd_sd` は、平均値と標準偏差の推定値の標準偏差を定義します。上記のケースではこれらは知られていないため、かなり恣意的な値である0.1を選択しました。
+`LogNormal()` は、平均と標準偏差を日数の自然スケールで受け取り、対数スケールへの変換は関数自身が行います。`max` パラメータは、分布を 30 日で打ち切ります。
 
 今回のｂ分析ではその代わりに、`bootstrapped_dist_fit()` を用いて、ラインリストから潜伏期間の分布を推定しました。
 
@@ -197,7 +167,7 @@ incubation_period <- bootstrapped_dist_fit(
 )
 ```
 
-もう一つ必要な分布は、世代時間です。感染時刻**と**感染伝播のリンクに関するデータがあるので、感染者と被感染者のペアの感染時刻の遅れを計算することで、ラインリストからこの分布を推定することができます。これには **epicontacts** パッケージにある便利な `get_pairwise()` を使います。この関数を使うと、感染ペア間のラインリスト上の2組の特性の違いを計算することができます。epicontacts オブジェクトを作成します（詳しくは [感染連鎖の図式化](#transmission-chains) の章を参照してください）：
+もう一つ必要な分布は、世代時間です。感染時刻**と**感染伝播のリンクに関するデータがあるので、感染者と被感染者のペアの感染時刻の遅れを計算することで、ラインリストからこの分布を推定することができます。これには **epicontacts** パッケージにある便利な `get_pairwise()` を使います。この関数を使うと、感染ペア間のラインリスト上の2組の特性の違いを計算することができます。epicontacts オブジェクトを作成します（詳しくは [感染連鎖の図式化](transmission_chains.qmd) の章を参照してください）：
 
 ```{r epidemic_models_epicontacts, eval=F}
 ## コンタクトの作成
@@ -230,63 +200,98 @@ generation_time <- bootstrapped_dist_fit(
 
 #### **EpiNow2** パッケージの実行 {.unnumbered}
 
-あとはラインリストから日々のインシデンスを計算するだけですが、**dplyr** パッケージの `group_by()` と `n()` で簡単にできます。**EpiNow2** パッケージでは、列名が `date` と `confirm` でなければならないことに注意してください。
+あとはラインリストから日々のインシデンスを計算するだけですが、**dplyr** パッケージの `group_by()` と `n()` で簡単にできます。**EpiNow2** パッケージでは、列名が `date` と `confirm` でなければならないことに注意してください。**EpiNow2** パッケージは、日付の欠損があるとエラーで停止するため、発症日のないケースを除きます。日付の間に抜けがあると、**EpiNow2** 1.9.0 はこのデータでエラーで停止しました。そのため、`fill_missing()` でケースのない日をカウント 0 で追加します。
 
 ```{r epidemic_models_cases, eval=F}
 ## 発症日からインシデンスを得る
 cases <- linelist %>%
+  filter(!is.na(date_onset)) %>%
   group_by(date = date_onset) %>%
-  summarise(confirm = n())
+  summarise(confirm = n()) %>%
+  ## ケースのない日を、カウント 0 で追加
+  fill_missing(missing_dates = "zero")
 ```
 
 そして、`epinow()` を使って R<sub>t</sub> を推定することができます。入力に関して、いくつかの注意点を挙げます：
 
--   `delays` の引数には、任意の数の「連鎖した」遅れの分布を与えることができます。`delay_opts()` 内で `incubation_period` オブジェクトと一緒に入れるだけです。
--   `return_output` は、出力ファイルに保存されるのではなく、R の中で貸せされるようになっています。
--   `verbose` は、進捗状況の読み上げを指定します。
--   `horizon` は、将来のインシデンスを何日分予測するかを示します。
+-   `generation_time` 引数には、`gt_opts()` 内で世代時間の分布を与えます。
+-   `delays` の引数には、任意の数の「連鎖した」遅れの分布を与えることができます。`delay_opts()` 内で `incubation_period` オブジェクトに `+` で足すだけです。
+-   `forecast_opts()` 内の `horizon` は、将来のインシデンスを何日分予測するかを示します。
 -   `stan` の因数に追加のオプションを渡して、推定を実行する期間を指定します。`samples` 数と `chains` 数を増やすと、不確実性の特徴をよく表したより正確な推定値が得られますが、実行には時間がかかります。
 
 ```{r epidemic_models_run_epinow, eval=F}
 ## epinow を走らせる
 epinow_res <- epinow(
-  reported_cases = cases,
-  generation_time = generation_time,
+  data = cases,
+  generation_time = gt_opts(generation_time),
   delays = delay_opts(incubation_period),
-  return_output = TRUE,
-  verbose = TRUE,
-  horizon = 21,
+  forecast = forecast_opts(horizon = 21),
   stan = stan_opts(samples = 750, chains = 4)
 )
 ```
 
 #### アウトプットの分析 {.unnumbered}
 
-コードの実行が終了すると、以下のように簡単にサマリーをプロットすることができます。画像をスクロールすると、全体を見ることができます。
+このページでは当てはめ（フィット）を実行しません。以下の結果は、**appliedepidata** パッケージに保存された当てはめ結果から得たものです。この当てはめは、**EpiNow2** パッケージの以前のバージョンで行われました。上記のコードは、**EpiNow2** 1.9 で同様の当てはめを行う方法です。
+
+**EpiNow2** 1.9 による当てはめ結果では、`plot()` がサマリーの図を描き、`summary()` がサマリーテーブルを返します。保存された当てはめ結果に対しては、これらの関数はエラーで停止します。そのため、保存された当てはめ結果のテーブルを読み込み、**ggplot2** パッケージでプロットします：
 
 ```{r out.width=c('100%', '100%'), fig.show='hold', fig.width = 12, fig.height = 9, message=F, warning=F }
+## 保存された推定値と、当てはめに使ったケース数をロード
+estimates <- appliedepidata::get_data(name = "epidemic_models_summarised_estimates")
+observations <- appliedepidata::get_data(name = "epidemic_models_reported_cases")
+
 ## サマリーフィギュアのプロット
-plot(epinow_res)
+ggplot(
+  data = filter(estimates, variable %in% c("R", "reported_cases")),
+  aes(x = date)
+) +
+  ## 観測されたケース数（報告ケースのパネルのみ）
+  geom_col(
+    data = mutate(observations, variable = "reported_cases"),
+    aes(y = confirm),
+    fill = "grey70",
+    width = 1
+  ) +
+  ## 90% 信用区間と中央値（推定値の種類ごとに色分け）
+  geom_ribbon(aes(ymin = lower_90, ymax = upper_90, fill = type), alpha = 0.3) +
+  geom_line(aes(y = median, colour = type)) +
+  ## label_parsedを使用して、添え字ラベルを許可する
+  facet_wrap(
+    ~ variable,
+    ncol = 1,
+    scales = "free_y",
+    labeller = as_labeller(c("R" = "R[t]", "reported_cases" = "Reported~cases"), label_parsed),
+    strip.position = 'left'
+  ) +
+  labs(x = NULL, y = NULL, colour = NULL, fill = NULL) +
+  theme_minimal(base_size = 14) +
+  theme(
+    strip.background = element_blank(),
+    strip.placement = 'outside',
+    legend.position = 'bottom'
+  )
 ```
 
 また、様々なサマリー統計量を見ることもできます：
 
 ```{r epidemic_models_epinow_summary,}
-## サマリーテーブル
-epinow_res$summary
+## 保存された当てはめ結果のサマリーテーブル
+summary_table <- appliedepidata::get_data(name = "epidemic_models_summary")
+summary_table[, c("measure", "estimate")]
 ```
 
-さらなる分析やカスタムプロットのために `$estimates$summarised` を介して要約された毎日の推定値にアクセスすることができます。これをデフォルトの `data.table` から、**dplyr** パッケージで使いやすいように `tibble` に変換します。
+さらなる分析やカスタムプロットのために、**EpiNow2** 1.9 による当てはめ結果では `summary(epinow_res, type = "parameters")` で要約された毎日の推定値にアクセスすることができます。これをデフォルトの `data.table` から、**dplyr** パッケージで使いやすいように `tibble` に変換します。以下のテーブルは、保存された当てはめ結果の同じ推定値を示しています。
 
 ```{r epidemic_models_to_tibble, eval=F}
 ## サマリーを抽出して、tibble に変換
-estimates <- as_tibble(epinow_res$estimates$summarised)
+estimates <- as_tibble(summary(epinow_res, type = "parameters"))
 estimates
 ```
 
 ```{r epidemic_models_tibble_show,  echo = F}
 ## アウトプットの表示
-estimates <- as_tibble(epinow_res$estimates$summarised)
+estimates <- as_tibble(estimates)
 DT::datatable(
   estimates,
   rownames = FALSE,
@@ -356,7 +361,7 @@ ggplot() +
   labs(
     x = NULL,
     y = NULL,
-    alpha = "Credibel\ninterval"
+    alpha = "Credible\ninterval"
   ) +
   scale_x_date(
     date_breaks = "1 month",
@@ -378,7 +383,7 @@ ggplot() +
 
 インシデンスデータは、ベクトル、データフレーム、またはオリジナルの **incidence** パッケージから得られた `incidence` オブジェクトとして、**EpiEstim** パッケージに提供できます。輸入感染例とローカルで感染した例を区別することもできます：詳細は `?estimate_R` のドキュメントを参照してください。
 
-ここでは **incidence2** パッケージを使って、インプットを作成します。**incidence2** パッケージの例については [流行曲線（エピカーブ）](#epicurves) の章を参照してください。**incidence2** パッケージには `estimateR()` が期待するインプットとは完全に一致しないアップデートがあったため、いくつかの小さな追加手順が必要となります。incidence オブジェクトは日付とそれぞれのケースカウントをもつ tibble で構成されています。**tidyr** パッケージの `complete()` を使用して、すべての日付が含まれていることを確認し（症例がない日も含む）、後のステップで `estimate_R()` で期待されるものと一致するように列を `rename()` します。
+ここでは **incidence2** パッケージを使って、インプットを作成します。**incidence2** パッケージの例については [流行曲線（エピカーブ）](epicurves.qmd) の章を参照してください。**incidence2** パッケージには `estimate_R()` が期待するインプットとは完全に一致しないアップデートがあったため、いくつかの小さな追加手順が必要となります。incidence オブジェクトは日付とそれぞれのケースカウントをもつ tibble で構成されています。**tidyr** パッケージの `complete()` を使用して、すべての日付が含まれていることを確認し（症例がない日も含む）、後のステップで `estimate_R()` で期待されるものと一致するように列を `rename()` します。
 
 ```{r epidemic_models_epiestim_incidence,}
 ## 発症日からインシデンスを得る
@@ -388,7 +393,7 @@ cases <- incidence2::incidence(linelist, date_index = "date_onset") %>% # 日ご
     to = max(date_index, na.rm=T),
     by = "day"),
     fill = list(count = 0)) %>%                                       # NA カウントを0に変換する
-  rename(I = count,                                                   # estimateRで期待されるな目に変更
+  rename(I = count,                                                   # estimate_R()で期待されるな目に変更
          dates = date_index)
 ```
 
@@ -398,24 +403,45 @@ cases <- incidence2::incidence(linelist, date_index = "date_onset") %>% # 日ご
 
 オプションの `method = "parametric_si"` を使用すると、 `make_config()` で作成した `config` オブジェクトに発症間隔の平均値と標準偏差を手動で指定することができます。ここでは、[この論文](https://bmcmedicine.biomedcentral.com/articles/10.1186/s12916-014-0196-0)で定義されている平均値12.0、標準偏差5.2を使用しています。
 
+デフォルトでは、`estimate_R()` はデータの 2 日目から始まる 1 週間のスライディングウィンドウを使います。**EpiEstim** パッケージは、非常に少ないケースから推定した R<sub>t</sub> は信頼できないと警告します。デフォルトの設定では、1 つの時間枠に少なくとも 11 ケースが必要です。このアウトブレイクの最初の数週間は、それより少ないケースしかありません。そこで、ケース数が 11 以上の最初の 7 日間の時間枠から週単位の時間枠を始め、以下の 2 つの推定の両方でこの時間枠を使います：
+
 ```{r epidemic_models_epiestim_config,}
+## 日ごとのケース数（1 日 1 行）
+daily_cases <- cases$I
+
+## 各日から始まる 7 日間の時間枠のケース数
+window_cases <- sapply(
+  seq_len(length(daily_cases) - 6),
+  function(t) sum(daily_cases[t:(t + 6)])
+)
+
+## ケース数が 11 以上の最初の時間枠から始まる、1 週間のスライディングウィンドウ
+weekly_start <- max(2, which(window_cases >= 11)[1]):(length(daily_cases) - 6)
+weekly_end <- weekly_start + 6
+
 ## config の作成
 config_lit <- make_config(
   mean_si = 12.0,
-  std_si = 5.2
+  std_si = 5.2,
+  t_start = weekly_start,
+  t_end = weekly_end
 )
 ```
 
 そして、`estimate_R()` で R<sub>t</sub> の推定をすることができます：
 
 ```{r epidemic_models_epiestim_lit,  warning = FALSE}
+
 cases <- cases %>% 
-     filter(!is.na(date))
+     filter(!is.na(dates))
+
+
 #create a dataframe for the function estimate_R()
 cases_incidence <- data.frame(dates = seq.Date(from = min(cases$dates),
                                to = max(cases$dates), 
                                by = 1))
-cases_incidence <- left_join(cases_incidence, cases) %>% 
+
+cases_incidence <- left_join(cases_incidence, cases, by = "dates") %>% 
      select(dates, I) %>% 
      mutate(I = ifelse(is.na(I), 0, I))
 
@@ -426,15 +452,30 @@ epiestim_res_lit <- estimate_R(
 )
 ```
 
-あとはアウトプットのサマリーをプロットします：
+あとは R<sub>t</sub> の推定値をプロットします。**EpiEstim** パッケージの `plot()` は **ggplot2** パッケージの非推奨（deprecation）警告を出すため、**ggplot2** で推定値をプロットする短い関数を書きます。この関数は、各推定値の日付をその時間枠（ウィンドウ）の最終日とします：
 
 ```{r epidemic_models_epiestim_lit_plot,  warning = FALSE}
-plot(epiestim_res_lit)
+## R の平均推定値とその 95% 信用区間をプロットする
+plot_rt <- function(res) {
+  res$R %>%
+    ## 推定値のない時間枠（ウィンドウ）を除く
+    filter(!is.na(`Mean(R)`)) %>%
+    ## 各推定値の日付を、その時間枠（ウィンドウ）の最終日とする
+    mutate(date = res$dates[t_end]) %>%
+    ggplot(aes(x = date)) +
+    geom_ribbon(aes(ymin = `Quantile.0.025(R)`, ymax = `Quantile.0.975(R)`), alpha = 0.3) +
+    geom_line(aes(y = `Mean(R)`)) +
+    geom_hline(yintercept = 1, linetype = 2) +
+    labs(x = NULL, y = expression(R[t])) +
+    theme_minimal(base_size = 14)
+}
+
+plot_rt(epiestim_res_lit)
 ```
 
 #### データから推定した発症間隔の推定値の使用 {.unnumbered}
 
-症状の発症日と感染伝播のリンクデータがあるので、感染者と被感染者のペアの発症日の遅れを計算することで、ラインリストから発症間隔を推定することもできます。**EpiNow2** パッケージのセクションで行ったように、**epicontacts** パッケージの `get_pairwise()` を使います。この関数は感染ペア間のラインリスト上の2組の特性の違いを計算することができます。まず epicontacts オブジェクトを作成します（詳細は [感染連鎖の図式化](#transmission-chains) の章を参照）：
+症状の発症日と感染伝播のリンクデータがあるので、感染者と被感染者のペアの発症日の遅れを計算することで、ラインリストから発症間隔を推定することもできます。**EpiNow2** パッケージのセクションで行ったように、**epicontacts** パッケージの `get_pairwise()` を使います。この関数は感染ペア間のラインリスト上の2組の特性の違いを計算することができます。まず epicontacts オブジェクトを作成します（詳細は [感染連鎖の図式化](transmission_chains.qmd) の章を参照）：
 
 ```{r epidemic_models_epicontacts_epiestim, eval=F}
 ## コンタクトの作成
@@ -456,8 +497,8 @@ epic <- make_epicontacts(
 次に、`get_pairwise()` を用いて感染ペア間の発症日の差をガンマ分布に当てはめます。*離散化された*分布が必要とされるため、このフィッティング手順には **epitrix** パッケージの便利な `fit_disc_gamma()` を使用します。
 
 ```{r epidemic_models_incubation_estimate_epiestim,  warning = FALSE}
-## ガンマ分布に従う発症間隔の推定
-serial_interval <- fit_disc_gamma(get_pairwise(epic, "date_onset"))
+## ガンマ分布に従う発症間隔の推定（発症日のないペアを除く）
+serial_interval <- fit_disc_gamma(na.omit(get_pairwise(epic, "date_onset")))
 ```
 
 その後に、`config` オブジェクトに情報を与え、 **EpiEstim** を再実行して結果を描画しましょう。
@@ -466,7 +507,9 @@ serial_interval <- fit_disc_gamma(get_pairwise(epic, "date_onset"))
 ## config の作成
 config_emp <- make_config(
   mean_si = serial_interval$mu,
-  std_si = serial_interval$sd
+  std_si = serial_interval$sd,
+  t_start = weekly_start,
+  t_end = weekly_end
 )
 
 ## epiestim を走らせる
@@ -477,12 +520,12 @@ epiestim_res_emp <- estimate_R(
 )
 
 ## アウトプットをプロットする
-plot(epiestim_res_emp)
+plot_rt(epiestim_res_emp)
 ```
 
 #### 推定時間枠（ウィンドウ）の設定 {.unnumbered}
 
-デフォルトのオプションでは週単位の平滑化された推定値を提供していますが、正確な推定値を得るために、アウトブレイク初期に R<sub>t</sub> を推定していることを警告する機能もあります。以下に示すように、推定の開始日を遅く設定することで、変更できます。残念ながら、**EpiEstim** パッケージはこれらの推定時間を指定するのに非常に面倒な方法しか提供しておらず、そのためには各時間ウィンドウの開始日と終了日を参照する整数のベクトルを提供しなければなりません。
+時間枠（ウィンドウ）の開始は自分で選ぶこともできます。たとえば、以下に示すように、2014 年 6 月 1 日以降についてのみ R<sub>t</sub> を推定できます。残念ながら、**EpiEstim** パッケージはこれらの推定時間を指定するのに非常に面倒な方法しか提供しておらず、そのためには各時間ウィンドウの開始日と終了日を参照する整数のベクトルを提供しなければなりません。
 
 ```{r epidemic_models_epiestim_config_late,}
 
@@ -495,7 +538,9 @@ start_dates <- seq.Date(
   ## 数字型に変換するために開始日を引く
   `-`(min(cases$dates)) %>%
   ## convert to integer
-  as.integer()
+  as.integer() %>%
+  ## インシデンスデータの 1 日目が最初の日付なので、1 を足す
+  `+`(1L)
 
 ## 1週間の平滑化ウィンドウに6日分を追加する
 end_dates <- start_dates + 6
@@ -521,7 +566,7 @@ epiestim_res_partial <- estimate_R(
 )
 
 ## アウトプットをプロットする
-plot(epiestim_res_partial)
+plot_rt(epiestim_res_partial)
 
 ```
 
@@ -542,6 +587,8 @@ df_wide <- epiestim_res_lit$R %>%
     upper_90_r = quantile_0_95_r,
     upper_95_r = quantile_0_975_r,
     ) %>%
+  ## 推定値のない時間枠（ウィンドウ）を除く
+  filter(!is.na(mean_r)) %>%
   mutate(
     ## t_startからt_endまでの日付の中央値を抽出する
     dates = epiestim_res_emp$dates[round(map2_dbl(t_start, t_end, median))],
@@ -625,18 +672,18 @@ ggplot() +
 
 ### EpiNow2 {.unnumbered}
 
-R<sub>t</sub> の推定に加えて、**EpiNow2** パッケージは **EpiSoon** パッケージとの統合により、R<sub>t</sub> のプロジェクションや症例数のプロジェクションもサポートします。必要なのは、`epinow()` の呼び出しで `horizon` 引数を指定して、何日先までプロジェクションしたいかを示すことだけです。このセクションでは、`epinow_res` オブジェクトに格納されている分析のアウトプットをプロットします。
+R<sub>t</sub> の推定に加えて、**EpiNow2** パッケージは R<sub>t</sub> のプロジェクションや症例数のプロジェクションもサポートします。必要なのは、`epinow()` の呼び出しで `forecast` 引数に `forecast_opts(horizon = 21)` を与えることだけです。`horizon` は、何日先までプロジェクションしたいかを示します。このセクションでは、保存された当てはめ結果のプロジェクションをプロットします。
 
 ```{r epidemic_models_episoon, out.width=c('100%', '100%'), fig.show='hold', fig.width = 12, fig.height = 9, message=F, warning=F}
 
 ## プロットの一番小さい日付を設定する
 min_date <- as.Date("2015-03-01")
 
-## 要約された推定値を抽出する
-estimates <-  as_tibble(epinow_res$estimates$summarised)
+## 保存された当てはめ結果の推定値のサマリーをロード
+estimates <- as_tibble(appliedepidata::get_data(name = "epidemic_models_summarised_estimates"))
 
-## 発生症例数の生データを抽出する
-observations <- as_tibble(epinow_res$estimates$observations) %>%
+## 保存された当てはめ結果が使ったケース数をロード
+observations <- as_tibble(appliedepidata::get_data(name = "epidemic_models_reported_cases")) %>%
   filter(date > min_date)
 
 ## 症例数の予測値を抽出する
@@ -658,11 +705,10 @@ df_long <- df_wide %>%
 
 ## プロットする
 ggplot() +
-  geom_histogram(
+  geom_col(
     data = observations,
     aes(x = date, y = confirm),
-    stat = 'identity',
-    binwidth = 1
+    width = 1
   ) +
   geom_ribbon(
     data = df_long,
@@ -721,16 +767,18 @@ serial_interval_lit <- distcrete::distcrete(
 ```{r epidemic_models_projections_distcrete_plot,}
 
 ## 発症間隔が正しいことを確認する
-qplot(
-  x = 0:50, y = serial_interval_lit$d(0:50), geom = "area",
-  xlab = "Serial interval", ylab = "Density"
-)
+ggplot(
+  data = tibble(x = 0:50, y = serial_interval_lit$d(0:50)),
+  aes(x = x, y = y)
+) +
+  geom_area() +
+  labs(x = "Serial interval", y = "Density")
 
 ```
 
 #### データによる発症間隔の推定値を利用 {.unnumbered}
 
-我々は症状の発症日と感染リンク（transmission links）のデータがあるので、感染者と被感染者のペアの発症日の遅れを計算することで、ラインリストから発症間隔を推定することもできます。**EpiNow2** のセクションで行ったように、**epicontacts** パッケージの `get_pairwise()` を用います。この関数によって、感染ペア（transmission pairs）間のラインリスト上の2組の特性の違いを計算することができます。まず epicontacts オブジェクトを作成します（[感染連鎖の図式化](#transmission-chains) の章を参照）：
+我々は症状の発症日と感染リンク（transmission links）のデータがあるので、感染者と被感染者のペアの発症日の遅れを計算することで、ラインリストから発症間隔を推定することもできます。**EpiNow2** のセクションで行ったように、**epicontacts** パッケージの `get_pairwise()` を用います。この関数によって、感染ペア（transmission pairs）間のラインリスト上の2組の特性の違いを計算することができます。まず epicontacts オブジェクトを作成します（[感染連鎖の図式化](transmission_chains.qmd) の章を参照）：
 
 ```{r epidemic_models_epicontacts_projections, eval=F}
 ## コンタクトの作成
@@ -752,8 +800,8 @@ epic <- make_epicontacts(
 次に、`get_pairwise()` を用いて、計算した感染ペアの発症日の差をガンマ分布にあてはめます。<u>離散化された</u>分布が必要なため、この適合（fitting）手順には **epitrix** パッケージの便利な `fit_disc_gamma()` を使います。
 
 ```{r epidemic_models_incubation_estimate_projections,  warning = FALSE}
-## ガンマ分布に従う発症間隔の分布を推定する
-serial_interval <- fit_disc_gamma(get_pairwise(epic, "date_onset"))
+## ガンマ分布に従う発症間隔の推定（発症日のないペアを除く）
+serial_interval <- fit_disc_gamma(na.omit(get_pairwise(epic, "date_onset")))
 
 ## 推定値
 serial_interval[c("mu", "sd")]
@@ -765,8 +813,8 @@ serial_interval[c("mu", "sd")]
 
 ```{r epidemic_models_projection_setup,  warning = FALSE}
 
-## 発症日からincidenceオブジェクトを作成
-inc <- incidence::incidence(linelist$date_onset)
+## 発症日から incidence オブジェクトを作成（発症日のないケースを除く）
+inc <- incidence::incidence(na.omit(linelist$date_onset))
 
 ## 最新の推定値から妥当な r 値を抽出する
 mean_r <- tail(epiestim_res_emp$R$`Mean(R)`, 1)
@@ -775,7 +823,9 @@ shapescale <- gamma_mucv2shapescale(mu = mean_r, cv = sd_r/mean_r)
 plausible_r <- rgamma(1000, shape = shapescale$shape, scale = shapescale$scale)
 
 ## 分布をチェック
-qplot(x = plausible_r, geom = "histogram", xlab = expression(R[t]), ylab = "Counts")
+ggplot(data = tibble(r = plausible_r), aes(x = r)) +
+  geom_histogram(bins = 30) +
+  labs(x = expression(R[t]), y = "Counts")
 
 ```
 
@@ -794,13 +844,21 @@ proj <- project(
 
 ```
 
-そして、`plot()` と `add_projections()` を使って、インシデンスとプロジェクションを簡単にプロットすることができます。各括弧演算子（[]）を使用すると、`incidence`オブジェクトを簡単に分けることができ、最近のケースのみを表示することができます。
+そして、インシデンスを **ggplot2** パッケージでプロットし、`add_projections()` でプロジェクションを追加します。**incidence** パッケージの `plot()` は **ggplot2** パッケージの非推奨（deprecation）警告を出すため、使用しません。各括弧演算子（[]）を使用すると、`incidence`オブジェクトを簡単に分けることができ、最近のケースのみを表示することができます。
 
 ```{r epidemic_models_plot_projection, out.width=c('100%', '100%'), fig.show='hold', fig.width = 12, fig.height = 9, message=F, warning=F}
 
-## インシデンスとプロジェクションのプロット
-plot(inc[inc$dates > as.Date("2015-03-01")]) %>%
-  add_projections(proj)
+## インシデンスをプロットする
+incidence_plot <- ggplot() +
+  geom_col(
+    data = as.data.frame(inc[inc$dates > as.Date("2015-03-01")]),
+    aes(x = dates, y = counts),
+    width = 1
+  ) +
+  theme_minimal(base_size = 14)
+
+## プロジェクションを追加する
+add_projections(incidence_plot, proj)
 
 ```
 

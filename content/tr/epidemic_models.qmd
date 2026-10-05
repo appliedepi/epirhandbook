@@ -21,10 +21,10 @@ Aşağıda, bu bölümde üreteceğimiz çıktılardan birine bir örnek verilmi
 ```{r out.width=c('100%', '100%'), fig.show='hold', echo=F, fig.width = 12, fig.height = 9, message=F, warning=F}
 
 ## "paketleri kurun ve yükleyin"
-pacman::p_load(tidyverse, EpiNow2, EpiEstim, here, incidence2, epicontacts, rio, projections)
+pacman::p_load(tidyverse, EpiNow2, EpiEstim, incidence2, incidence, epicontacts, projections)
 
 ## satır listesini yükleyin
-linelist <- import(here::here("data", "case_linelists", "linelist_cleaned.rds"))
+linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds")
 
 ## kişileri oluştur
 contacts <- linelist %>%
@@ -41,69 +41,40 @@ epic <- make_epicontacts(
   directed = TRUE
 )
 
-## ## gama üretim zamanını tahmin et
-## generation_time <- bootstrapped_dist_fit(
-##   get_pairwise(epic, "date_infection"),
-##   dist = "gamma",
-##   max_value = 20,
-##   bootstraps = 1
-## )
-
-## ## önbelleğe almak için dışa aktar
-## export(
-##   generation_time,
-##   here("data/cache/epidemic_models/generation_time.rds")
-## )
-
-## önbelleğe alınmış oluşturma süresini içe aktar
-generation_time <- import(here("data/cache/epidemic_models/generation_time.rds"))
-
-## ## inkübasyon zamanını tahmin et
-## incubation_period <- bootstrapped_dist_fit(
-##   linelist$date_onset - linelist$date_infection,
-##   dist = "lognormal",
-##   max_value = 100,
-##   bootstraps = 1
-## )
-
-## ## önbelleğe almak için dışa aktar
-## export(
-##   incubation_period,
-##   here("data/cache/epidemic_models/incubation_period.rds")
-## )
-
-## önbelleğe alınmış inkübasyon dönemini içe aktar
-incubation_period <- import(here("data/cache/epidemic_models/incubation_period.rds"))
-
-## başlangıç tarihinden itibaren insidansı al
-cases <- linelist %>%
-  group_by(date = date_onset) %>%
-  summarise(confirm = n())
-
-## ## epinow'ı çalıştır
-## epinow_res <- epinow(
-##   reported_cases = cases,
-##   generation_time = generation_time,
-##   delays = delay_opts(incubation_period),
-##   target_folder = here("data/cache/epidemic_models"),
-##   return_output = TRUE,
-##   output = "samples",
-##   verbose = TRUE,
-##   stan = stan_opts(samples = 750, chains = 4),
-##   horizon = 21
-## )
-
-## ## önbelleğe almak için dışa aktar
-## export(
-##   epinow_res,
-##   here("data/cache/epidemic_models/epinow_res.rds")
-## )
-
-## önbelleğe alınmış epinow sonuçlarını içe aktar
-epinow_res <- import(here("data/cache/epidemic_models/epinow_res.rds"))
+## kaydedilmiş EpiNow2 tahminlerini ve modelin kullandığı vaka sayılarını yükleyin
+estimates <- appliedepidata::get_data(name = "epidemic_models_summarised_estimates")
+observations <- appliedepidata::get_data(name = "epidemic_models_reported_cases")
 
 ## özet grafiği çiz
-plot(epinow_res)
+ggplot(
+  data = filter(estimates, variable %in% c("R", "reported_cases")),
+  aes(x = date)
+) +
+  ## gözlenen vaka sayıları, yalnızca bildirilen vakalar panelinde
+  geom_col(
+    data = mutate(observations, variable = "reported_cases"),
+    aes(y = confirm),
+    fill = "grey70",
+    width = 1
+  ) +
+  ## %90 güvenilir aralık ve medyan, tahmin türüne göre renklendirilmiş
+  geom_ribbon(aes(ymin = lower_90, ymax = upper_90, fill = type), alpha = 0.3) +
+  geom_line(aes(y = median, colour = type)) +
+  ## alt simge etiketine izin vermek için label_parsed kullanın
+  facet_wrap(
+    ~ variable,
+    ncol = 1,
+    scales = "free_y",
+    labeller = as_labeller(c("R" = "R[t]", "reported_cases" = "Reported~cases"), label_parsed),
+    strip.position = 'left'
+  ) +
+  labs(x = NULL, y = NULL, colour = NULL, fill = NULL) +
+  theme_minimal(base_size = 14) +
+  theme(
+    strip.background = element_blank(),
+    strip.placement = 'outside',
+    legend.position = 'bottom'
+  )
 
 ```
 
@@ -127,6 +98,7 @@ pacman::p_load(
    EpiEstim,     # Rt tahminleme
    projections,  # İnsidans öngörme
    incidence2,   # İnsidans verilerini işleme
+   incidence,    # Projeksiyonlar için incidence nesneleri
    epitrix,      # Faydalı epi fonksiyonları
    distcrete     # Ayrık gecikme dağılımları
 )
@@ -138,7 +110,7 @@ Bu bölümdeki tüm analizler için temizlenmiş vaka satır listesini kullanaca
 
 ```{r, echo=F}
 # Satır listesini R içine aktarma
-linelist <- rio::import(here::here("data", "case_linelists", "linelist_cleaned.rds"))
+linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds")
 ```
 
 ```{r eval=F}
@@ -178,16 +150,14 @@ Bu nedenle hangi paketi kullanmayı seçeceğiniz, size sunulan verilere, zamana
 Ebola'nın kuluçka dönemine ilişkin bir literatür tahmini ([bu makaleden](https://www.nejm.org/doi/full/10.1056/nejmoa1411100) alınmıştır) ortalama 9.1, standart sapma 7.3 ve maksimum değer 30 aşağıdaki gibi belirtilecektir:
 
 ```{r epidemic_models_incubation_literature, eval=F}
-incubation_period_lit <- list(
-  mean = log(9.1),
-  mean_sd = log(0.1),
-  sd = log(7.3),
-  sd_sd = log(0.1),
+incubation_period_lit <- LogNormal(
+  mean = 9.1,
+  sd = 7.3,
   max = 30
 )
 ```
 
-**EpiNow2** bu gecikme dağılımlarının bir **log** ölçeğinde sağlanmasını gerektirdiğini unutmayın, bu nedenle "log" her değerin etrafında çağrılır (kafa karıştırıcı bir şekilde doğal bir değerde sağlanması gereken "max" parametresi hariç). "mean_sd" ve "sd_sd", ortalamanın standart sapması ve standart sapmasının tahminlerini tanımlamaktadır. Bu durumda bunlar bilinmediğinden, oldukça gelişigüzel 0,1 değerini seçiyoruz.
+`LogNormal()` ortalamayı ve standart sapmayı gün olarak, doğal ölçekte alır ve bunları kendisi log ölçeğine çevirir. `max` parametresi dağılımı 30 günde keser.
 
 Bu analizde,  kuluçka dönemi dağılımını tahmin etmemiz gibi değil, satır listesinde enfeksiyon ve başlangıç ​​arasında gözlemlenen gecikmelere uyacak bir lognormal dağılımı 'bootstrapped_dist_fit' fonksiyonu ile tahminliyoruz.
 
@@ -234,64 +204,99 @@ generation_time <- bootstrapped_dist_fit(
 
 #### **EpiNow2** Çalıştırmak {.unnumbered}
 
-Şimdi sadece **dplyr** `group_by()` ve `n()` fonskiyonlarıyla kolayca yapabileceğimiz satır listesinden günlük insidansı hesaplamamız gerekiyor. **EpiNow2** sütun adlarının "date" ve "confirm" olmasını gerektirdiğini unutmayın.
+Şimdi sadece **dplyr** `group_by()` ve `n()` fonskiyonlarıyla kolayca yapabileceğimiz satır listesinden günlük insidansı hesaplamamız gerekiyor. **EpiNow2** sütun adlarının "date" ve "confirm" olmasını gerektirdiğini unutmayın. **EpiNow2** eksik bir tarihte de hatayla durur, bu nedenle başlangıç tarihi olmayan vakaları çıkarıyoruz. Tarihler arasında boşluklar olduğunda **EpiNow2** 1.9.0 bu verilerde hatayla durdu. Bu nedenle `fill_missing()` vaka olmayan günleri 0 sayısıyla ekler.
 
 ```{r epidemic_models_cases, eval=F}
 ## başlangıç tarihlerinden insidans almak
 cases <- linelist %>%
+  filter(!is.na(date_onset)) %>%
   group_by(date = date_onset) %>%
-  summarise(confirm = n())
+  summarise(confirm = n()) %>%
+  ## vaka olmayan günleri 0 sayısıyla ekleyin
+  fill_missing(missing_dates = "zero")
 ```
 
 Daha sonra 'epinow' fonksiyonunu kullanarak R<sub>t</sub> değerini tahmin edebiliriz. Girişlerle ilgili bazı notlar:
 
-* 'delays' değişkenine herhangi bir sayıda 'zincirleme' gecikme dağılımı sağlayabiliriz; onları sadece 'delay_opts' işlevi içindeki incubation_period' nesnesinin yanına ekleyebiliriz.
-* "return_output", çıktının yalnızca bir dosyaya kaydedilmesini değil, R içinde döndürülmesini sağlar.
-* "verbose" ilerlemenin bir okumasını istediğimizi belirtir.
-* "horizon", gelecekteki insidansı kaç gün için tahmin etmek istediğimizi gösterir.
+* `generation_time` değişkeni, jenerasyon süresi dağılımını `gt_opts` fonksiyonu içinde alır.
+* 'delays' değişkenine herhangi bir sayıda 'zincirleme' gecikme dağılımı sağlayabiliriz; onları sadece 'delay_opts' işlevi içinde `+` ile 'incubation_period' nesnesine ekleyebiliriz.
+* `forecast_opts` fonksiyonundaki `horizon`, gelecekteki insidansı kaç gün için tahmin etmek istediğimizi gösterir.
 * Çıkarımı ne kadar süreyle çalıştırmak istediğimizi belirtmek için 'stan' değişkenine ek seçenekler iletiyoruz. Artan "örnekler" ve "zincirler", belirsizliği daha iyi karakterize eden daha doğru bir tahmin verecektir, ancak çalışması daha uzun sürecektir..
 
 ```{r epidemic_models_run_epinow, eval=F}
 ## epinow çalıştır
 epinow_res <- epinow(
-  reported_cases = cases,
-  generation_time = generation_time,
+  data = cases,
+  generation_time = gt_opts(generation_time),
   delays = delay_opts(incubation_period),
-  return_output = TRUE,
-  verbose = TRUE,
-  horizon = 21,
+  forecast = forecast_opts(horizon = 21),
   stan = stan_opts(samples = 750, chains = 4)
 )
 ```
 
 #### Çıktıları analiz etme {.unnumbered}
 
-Kodun çalışması bittiğinde, aşağıdaki gibi çok kolay bir şekilde bir özet çizebiliriz. Resmin tamamını görmek için kaydırınız. 
+Bu sayfa modeli çalıştırmaz. Aşağıdaki sonuçlar, **appliedepidata** paketinde kaydedilmiş bir modelden gelir. Bu modeli **EpiNow2**'nin daha eski bir sürümü oluşturdu. Yukarıdaki kod, böyle bir modeli **EpiNow2** 1.9 ile oluşturmanın yoludur.
+
+**EpiNow2** 1.9 ile oluşturulan bir modelde `plot()` fonksiyonu bir özet şekil çizer ve `summary()` fonksiyonu bir özet tablo verir. Bu fonksiyonlar kaydedilmiş modelde hatayla durur. Bu nedenle kaydedilmiş modelin tablolarını yüklüyor ve **ggplot2** ile çiziyoruz: 
 
 
 ```{r out.width=c('100%', '100%'), fig.show='hold', fig.width = 12, fig.height = 9, message=F, warning=F }
+## kaydedilmiş tahminleri ve modelin kullandığı vaka sayılarını yükleyin
+estimates <- appliedepidata::get_data(name = "epidemic_models_summarised_estimates")
+observations <- appliedepidata::get_data(name = "epidemic_models_reported_cases")
+
 ## özet grafiği çiz
-plot(epinow_res)
+ggplot(
+  data = filter(estimates, variable %in% c("R", "reported_cases")),
+  aes(x = date)
+) +
+  ## gözlenen vaka sayıları, yalnızca bildirilen vakalar panelinde
+  geom_col(
+    data = mutate(observations, variable = "reported_cases"),
+    aes(y = confirm),
+    fill = "grey70",
+    width = 1
+  ) +
+  ## %90 güvenilir aralık ve medyan, tahmin türüne göre renklendirilmiş
+  geom_ribbon(aes(ymin = lower_90, ymax = upper_90, fill = type), alpha = 0.3) +
+  geom_line(aes(y = median, colour = type)) +
+  ## alt simge etiketine izin vermek için label_parsed kullanın
+  facet_wrap(
+    ~ variable,
+    ncol = 1,
+    scales = "free_y",
+    labeller = as_labeller(c("R" = "R[t]", "reported_cases" = "Reported~cases"), label_parsed),
+    strip.position = 'left'
+  ) +
+  labs(x = NULL, y = NULL, colour = NULL, fill = NULL) +
+  theme_minimal(base_size = 14) +
+  theme(
+    strip.background = element_blank(),
+    strip.placement = 'outside',
+    legend.position = 'bottom'
+  )
 ```
 
 Ayrıca çeşitli özet istatistiklere de bakabiliriz:
 
 ```{r epidemic_models_epinow_summary,}
-## özet tablo
-epinow_res$summary
+## kaydedilmiş modelin özet tablosu
+summary_table <- appliedepidata::get_data(name = "epidemic_models_summary")
+summary_table[, c("measure", "estimate")]
 ```
 
-Daha fazla analiz ve özel çizim için, `$estimates$summarised` üzerinden özetlenen günlük tahminlere erişebilirsiniz. **dplyr** ile kullanım kolaylığı için bunu varsayılan 'veri.tablosu'ndan 'tibble'a çevireceğiz.
+Daha fazla analiz ve özel çizim için, **EpiNow2** 1.9 ile oluşturulan bir modelin özetlenen günlük tahminlerine `summary(epinow_res, type = "parameters")` ile erişebilirsiniz. **dplyr** ile kullanım kolaylığı için bunu varsayılan 'veri.tablosu'ndan 'tibble'a çevireceğiz. Aşağıdaki tablo, kaydedilmiş modelin aynı tahminlerini gösterir.
 
 ```{r epidemic_models_to_tibble, eval=F}
 ## özeti çıkar ve tibble'a dönüştür
-estimates <- as_tibble(epinow_res$estimates$summarised)
+estimates <- as_tibble(summary(epinow_res, type = "parameters"))
 estimates
 ```
 
 ```{r epidemic_models_tibble_show,  echo = F}
 ## çıktıları göster
-estimates <- as_tibble(epinow_res$estimates$summarised)
+estimates <- as_tibble(estimates)
 DT::datatable(
   estimates,
   rownames = FALSE,
@@ -361,7 +366,7 @@ ggplot() +
   labs(
     x = NULL,
     y = NULL,
-    alpha = "Credibel\ninterval"
+    alpha = "Credible\ninterval"
   ) +
   scale_x_date(
     date_breaks = "1 month",
@@ -383,7 +388,7 @@ ggplot() +
 İnsidans verileri **EpiEstim**'e bir vektör, veri çerçevesi veya orijinal **insidans** paketinden bir "insidans" nesnesi olarak sağlanabilir. İçe aktamalar ve yerel olarak edinilen enfeksiyonlar arasında bile ayrım yapabilirsiniz. Daha fazla detay için `?estimate_R` adresindeki belgelere bakabilirsiniz.
 
 
-Girdiyi **incidence2** kullanarak oluşturacağız. **incidence2** paketiyle ilgili daha fazla örnek için [Salgın eğrileri] ile ilgili sayfaya bakabilirsiniz. **incidence2** paketinde, "estimateR()"nin beklenen girdisiyle tam olarak uyuşmayan güncellemeler olduğundan, gerekli bazı küçük ek adımlar vardır. İnsidans nesnesi, tarihlerin ve ilgili vaka sayılarının bulunduğu bir tibble'dan oluşur. Tüm tarihlerin dahil edildiğinden emin olmak için **tidyr**'den 'complete()' kullanırız. Daha sonra sonraki bir adımda 'estimate_R()' tarafından beklenenle hizalanacak şekilde sütunları 'yeniden adlandırın()'.
+Girdiyi **incidence2** kullanarak oluşturacağız. **incidence2** paketiyle ilgili daha fazla örnek için [Salgın eğrileri] ile ilgili sayfaya bakabilirsiniz. **incidence2** paketinde, "estimate_R()"nin beklenen girdisiyle tam olarak uyuşmayan güncellemeler olduğundan, gerekli bazı küçük ek adımlar vardır. İnsidans nesnesi, tarihlerin ve ilgili vaka sayılarının bulunduğu bir tibble'dan oluşur. Tüm tarihlerin dahil edildiğinden emin olmak için **tidyr**'den 'complete()' kullanırız. Daha sonra sonraki bir adımda 'estimate_R()' tarafından beklenenle hizalanacak şekilde sütunları 'yeniden adlandırın()'.
 
 ```{r epidemic_models_epiestim_incidence,}
 ## başlangıç tarihinden itibaren insidansı almak
@@ -393,8 +398,7 @@ cases <- incidence2::incidence(linelist, date_index = "date_onset") %>% # günle
     to = max(date_index, na.rm=T),
     by = "day"),
     fill = list(count = 0)) %>%                                       # NA sayılarını 0'a çevir
-  rename(I = count,                                                   # EstimateR'a göre beklenen adlarla yeniden adlandırın
-         
+  rename(I = count,                                                   # estimate_R()'a göre beklenen adlarla yeniden adlandırın
          dates = date_index)
 ```
 
@@ -402,26 +406,47 @@ Paket, ayrıntıları "?estimate_R" adresindeki belgelerde sağlanan seri aralı
 
 #### Literatürden seri aralık tahminlerini kullanma {.unnumbered}
 
-`method = "parametric_si"` seçeneğini kullanarak, make_config` fonksiyonu kullanılarak oluşturulan bir `config` nesnesindeki seri aralığın ortalamasını ve standart sapmasını manuel olarak belirtebiliriz. [Bu belgede] https://bmcmedicine.biomedcentral.com/articles/10.1186/s12916-014-0196-0'da tanımlanan sırasıyla 12,0 ve 5,2'lik bir ortalama ve standart sapma kullanıyoruz:
+`method = "parametric_si"` seçeneğini kullanarak, make_config` fonksiyonu kullanılarak oluşturulan bir `config` nesnesindeki seri aralığın ortalamasını ve standart sapmasını manuel olarak belirtebiliriz. [Bu belgede] https://bmcmedicine.biomedcentral.com/articles/10.1186/s12916-014-0196-0'da tanımlanan sırasıyla 12,0 ve 5,2'lik bir ortalama ve standart sapma kullanıyoruz.
+
+Varsayılan olarak `estimate_R()`, verinin ikinci gününden başlayan haftalık kayan pencereler kullanır. **EpiEstim**, çok az vakadan tahmin edilen R<sub>t</sub>'nin güvenilir olmadığı konusunda uyarır: varsayılan ayarlarıyla bir pencerede en az 11 vakaya ihtiyaç duyar. Bu salgının ilk haftalarında daha az vaka vardır. Bu nedenle haftalık pencereleri en az 11 vaka içeren ilk 7 günlük pencereden başlatıyor ve aşağıdaki iki tahmin için de bu pencereleri kullanıyoruz:
 
 ```{r epidemic_models_epiestim_config,}
-## make config
+## günlük vaka sayıları, her gün için bir satır
+daily_cases <- cases$I
+
+## her gün başlayan 7 günlük penceredeki vaka sayısı
+window_cases <- sapply(
+  seq_len(length(daily_cases) - 6),
+  function(t) sum(daily_cases[t:(t + 6)])
+)
+
+## en az 11 vaka içeren ilk pencereden başlayan haftalık kayan pencereler
+weekly_start <- max(2, which(window_cases >= 11)[1]):(length(daily_cases) - 6)
+weekly_end <- weekly_start + 6
+
+## yapılandırma yap
 config_lit <- make_config(
   mean_si = 12.0,
-  std_si = 5.2
+  std_si = 5.2,
+  t_start = weekly_start,
+  t_end = weekly_end
 )
 ```
 
 Daha sonra `estimate_R` fonksiyonuyla R<sub>t</sub> değerini tahmin edebiliriz:
 
 ```{r epidemic_models_epiestim_lit,  warning = FALSE}
+
 cases <- cases %>% 
-     filter(!is.na(date))
+     filter(!is.na(dates))
+
+
 #create a dataframe for the function estimate_R()
 cases_incidence <- data.frame(dates = seq.Date(from = min(cases$dates),
                                to = max(cases$dates), 
                                by = 1))
-cases_incidence <- left_join(cases_incidence, cases) %>% 
+
+cases_incidence <- left_join(cases_incidence, cases, by = "dates") %>% 
      select(dates, I) %>% 
      mutate(I = ifelse(is.na(I), 0, I))
 
@@ -432,10 +457,25 @@ epiestim_res_lit <- estimate_R(
 )
 ```
 
-ve çıktıların bir özetini çizin:
+ve R<sub>t</sub> tahminlerini çizin. **EpiEstim**'in `plot()` fonksiyonu **ggplot2**'den bir kullanımdan kaldırma uyarısı verir, bu nedenle tahminleri **ggplot2** ile çizen kısa bir fonksiyon yazıyoruz. Fonksiyon her tahmini zaman penceresinin son günüyle tarihlendirir:
 
 ```{r epidemic_models_epiestim_lit_plot,  warning = FALSE}
-plot(epiestim_res_lit)
+## ortalama R tahminini ve %95 güvenilir aralığını çizin
+plot_rt <- function(res) {
+  res$R %>%
+    ## tahmini olmayan zaman pencerelerini çıkarın
+    filter(!is.na(`Mean(R)`)) %>%
+    ## her tahmini, zaman penceresinin son günüyle tarihlendirin
+    mutate(date = res$dates[t_end]) %>%
+    ggplot(aes(x = date)) +
+    geom_ribbon(aes(ymin = `Quantile.0.025(R)`, ymax = `Quantile.0.975(R)`), alpha = 0.3) +
+    geom_line(aes(y = `Mean(R)`)) +
+    geom_hline(yintercept = 1, linetype = 2) +
+    labs(x = NULL, y = expression(R[t])) +
+    theme_minimal(base_size = 14)
+}
+
+plot_rt(epiestim_res_lit)
 ```
 
 #### Verilerden seri aralık tahminlerini kullanma {.unnumbered}
@@ -462,8 +502,8 @@ epic <- make_epicontacts(
 Daha sonra, "get_pairwise" kullanılarak hesaplanan iletim çiftleri arasındaki başlangıç tarihlerindeki farkı bir gama dağılımına uydururuz. Bu yerleştirme prosedürü için **epitrix** paketindeki kullanışlı 'fit_disc_gamma'yı kullanıyoruz, çünkü bir _ayrıştırılmış_ dağıtıma ihtiyacımız var.
 
 ```{r epidemic_models_incubation_estimate_epiestim,  warning = FALSE}
-## gama seri aralığını tahmin et
-serial_interval <- fit_disc_gamma(get_pairwise(epic, "date_onset"))
+## gama seri aralığını tahmin edin, başlangıç tarihi olmayan çiftler hariç
+serial_interval <- fit_disc_gamma(na.omit(get_pairwise(epic, "date_onset")))
 ```
 
 Daha sonra bu bilgiyi `config` nesnesine iletiyoruz, **EpiEstim**'i tekrar çalıştırıyoruz ve sonuçları çiziyoruz:
@@ -472,7 +512,9 @@ Daha sonra bu bilgiyi `config` nesnesine iletiyoruz, **EpiEstim**'i tekrar çal�
 ## yapılandırma yap
 config_emp <- make_config(
   mean_si = serial_interval$mu,
-  std_si = serial_interval$sd
+  std_si = serial_interval$sd,
+  t_start = weekly_start,
+  t_end = weekly_end
 )
 
 ## epiestim çalıştır
@@ -483,12 +525,12 @@ epiestim_res_emp <- estimate_R(
 )
 
 ## grafik çıktısı al
-plot(epiestim_res_emp)
+plot_rt(epiestim_res_emp)
 ```
 
 #### Tahmin zaman pencerelerini belirtme {.unnumbered}
 
-Bu varsayılan seçenekler, haftalık kayan bir tahmin sağlar ve kesin bir tahmin için R<sub>t</sub>'ı salgında çok erken tahmin ettiğinize dair bir uyarı görevi görebilir. Aşağıda gösterildiği gibi tahmin için daha ileri bir başlangıç tarihi ayarlayarak bunu değiştirebilirsiniz. Ne yazık ki, **EpiEstim**, her zaman penceresi için başlangıç ve bitiş tarihlerine atıfta bulunan bir _tam sayı_ vektörü sağlamanız gerektiğinden, bu tahmin sürelerini belirtmek için yalnızca çok hantal bir yol sağlar.
+Pencerelerin başlangıcını kendiniz de seçebilirsiniz; örneğin aşağıda gösterildiği gibi R<sub>t</sub>'yi yalnızca 1 Haziran 2014'ten itibaren tahmin edebilirsiniz. Ne yazık ki, **EpiEstim**, her zaman penceresi için başlangıç ve bitiş tarihlerine atıfta bulunan bir _tam sayı_ vektörü sağlamanız gerektiğinden, bu tahmin sürelerini belirtmek için yalnızca çok hantal bir yol sağlar.
 
 ```{r epidemic_models_epiestim_config_late,}
 
@@ -501,7 +543,9 @@ start_dates <- seq.Date(
   ## sayısala dönüştürmek için başlangıç tarihini çıkarın
   `-`(min(cases$dates)) %>%
   ## tam sayıya çevirin
-  as.integer()
+  as.integer() %>%
+  ## 1 ekleyin, çünkü insidans verisinin 1. günü ilk tarihidir
+  `+`(1L)
 
 ## bir haftalık sürgülü pencere protokolüne altı gün ekleyin
 end_dates <- start_dates + 6
@@ -526,7 +570,7 @@ epiestim_res_partial <- estimate_R(
 )
 
 ## çıktıları grafikleştir
-plot(epiestim_res_partial)
+plot_rt(epiestim_res_partial)
 
 ```
 
@@ -547,12 +591,14 @@ df_wide <- epiestim_res_lit$R %>%
     upper_90_r = quantile_0_95_r,
     upper_95_r = quantile_0_975_r,
     ) %>%
+  ## tahmini olmayan zaman pencerelerini çıkarın
+  filter(!is.na(mean_r)) %>%
   mutate(
     ## medyan tarihini t_start ve t_end'den çıkarın
     dates = epiestim_res_emp$dates[round(map2_dbl(t_start, t_end, median))],
     var = "R[t]"
   ) %>%
-  ## günlük insidans verilerinde birleştirme  
+  ## günlük insidans verilerinde birleştirme
   left_join(cases, "dates") %>%
   ## tüm r tahminlerinde riski hesapla
   mutate(
@@ -629,18 +675,18 @@ ggplot() +
 
 ### EpiNow2 {.unnumbered}
 
-**EpiNow2**, R<sub>t</sub> tahmininin yanı sıra, başlık altındaki **EpiSoon** paketi ile entegrasyon yoluyla R<sub>t</sub> tahminini ve vaka sayılarının projeksiyonlarını da destekler. Tek yapmanız gereken, 'epinow' fonksiyon çağrınızda, geleceğe kaç gün yansıtmak istediğinizi belirten 'horizon' değişkenini belirtmek; **EpiNow2**'nin nasıl kurulup çalıştırılacağına ilişkin ayrıntılar için "R<sub>t</sub> Tahmini" altındaki **EpiNow2** bölümüne bakabilirsiniz. Bu bölümde, "epinow_res" nesnesinde saklanan bu analizin çıktılarını çizeceğiz.
+**EpiNow2**, R<sub>t</sub> tahmininin yanı sıra R<sub>t</sub> tahminini ve vaka sayılarının projeksiyonlarını da destekler. Tek yapmanız gereken, 'epinow' fonksiyon çağrınızda `forecast` değişkenine `forecast_opts(horizon = 21)` vermek. `horizon`, geleceğe kaç gün yansıtmak istediğinizdir. **EpiNow2**'nin nasıl kurulup çalıştırılacağına ilişkin ayrıntılar için "R<sub>t</sub> Tahmini" altındaki **EpiNow2** bölümüne bakabilirsiniz. Bu bölümde, kaydedilmiş modelin tahminini çizeceğiz.
 
 ```{r epidemic_models_episoon, out.width=c('100%', '100%'), fig.show='hold', fig.width = 12, fig.height = 9, message=F, warning=F}
 
 ## grafik için minimum tarihi belirleyin
 min_date <- as.Date("2015-03-01")
 
-## özetlenmiş tahminleri çıkar
-estimates <-  as_tibble(epinow_res$estimates$summarised)
+## kaydedilmiş modelin özet tahminlerini yükleyin
+estimates <- as_tibble(appliedepidata::get_data(name = "epidemic_models_summarised_estimates"))
 
-## vaka insidansı hakkında ham verileri ayıklayın
-observations <- as_tibble(epinow_res$estimates$observations) %>%
+## kaydedilmiş modelin kullandığı vaka sayılarını yükleyin
+observations <- as_tibble(appliedepidata::get_data(name = "epidemic_models_reported_cases")) %>%
   filter(date > min_date)
 
 ## vaka sayılarının öngörülen tahminlerini çıkarın
@@ -662,11 +708,10 @@ df_long <- df_wide %>%
 
 ## çizimi yapın
 ggplot() +
-  geom_histogram(
+  geom_col(
     data = observations,
     aes(x = date, y = confirm),
-    stat = 'identity',
-    binwidth = 1
+    width = 1
   ) +
   geom_ribbon(
     data = df_long,
@@ -725,10 +770,12 @@ serial_interval_lit <- distcrete::distcrete(
 ```{r epidemic_models_projections_distcrete_plot,}
 
 ## seri aralığın doğru göründüğünden emin olmak için kontrol edin
-qplot(
-  x = 0:50, y = serial_interval_lit$d(0:50), geom = "area",
-  xlab = "Serial interval", ylab = "Density"
-)
+ggplot(
+  data = tibble(x = 0:50, y = serial_interval_lit$d(0:50)),
+  aes(x = x, y = y)
+) +
+  geom_area() +
+  labs(x = "Serial interval", y = "Density")
 
 ```
 
@@ -737,7 +784,7 @@ qplot(
 Semptom başlangıç tarihlerine ve iletim bağlantılarına ilişkin verilere sahip olduğumuz için, bulaştırıcı-enfekte çiftlerinin başlangıç tarihleri arasındaki gecikmeyi hesaplayarak satır listesinden seri aralığı da tahmin edebiliriz. **EpiNow2** bölümünde yaptığımız gibi, **epicontacts** paketindeki `get_pairwise` fonksiyonunu kullanacağız. Bu da iletim çiftleri arasındaki satır listesi özelliklerinin ikili farklarını hesaplamamıza izin verir. Önce bir epicontacts nesnesi oluşturuyoruz (daha fazla ayrıntı için [İletim zincirleri] sayfasına bakabilirsiniz:
 
 ```{r epidemic_models_epicontacts_projections, eval=F}
-## kişileri üretin 
+## kişileri üretin
 contacts <- linelist %>%
   transmute(
     from = infector,
@@ -756,8 +803,8 @@ epic <- make_epicontacts(
 Daha sonra iletim çiftleri arasındaki başlangıç tarihlerindeki farkı bir gama dağılımına uydururuz, "get_pairwise" kullanarak hesaplarız. _Ayrık_ bir dağıtım gerektirdiğinden, bu yerleştirme prosedürü için **epitrix** paketindeki kullanışlı 'fit_disc_gamma'yı kullanıyoruz.
 
 ```{r epidemic_models_incubation_estimate_projections,  warning = FALSE}
-## gama seri aralığını tahmin et
-serial_interval <- fit_disc_gamma(get_pairwise(epic, "date_onset"))
+## gama seri aralığını tahmin edin, başlangıç tarihi olmayan çiftler hariç
+serial_interval <- fit_disc_gamma(na.omit(get_pairwise(epic, "date_onset")))
 
 ## tahmini inceleme
 serial_interval[c("mu", "sd")]
@@ -769,8 +816,8 @@ Gelecekteki vakaları tahmin etmek için, yine de bir “insidans” nesnesi şe
 
 ```{r epidemic_models_projection_setup,  warning = FALSE}
 
-## başlangıç tarihlerinden insidans nesnesi oluşturun
-inc <- incidence::incidence(linelist$date_onset)
+## başlangıç tarihlerinden incidence nesnesi oluşturun, başlangıç tarihi olmayan vakalar hariç
+inc <- incidence::incidence(na.omit(linelist$date_onset))
 
 ## en son tahminden makul r değerleri çıkar
 mean_r <- tail(epiestim_res_emp$R$`Mean(R)`, 1)
@@ -779,7 +826,9 @@ shapescale <- gamma_mucv2shapescale(mu = mean_r, cv = sd_r/mean_r)
 plausible_r <- rgamma(1000, shape = shapescale$shape, scale = shapescale$scale)
 
 ## dağıtımı kontrol et
-qplot(x = plausible_r, geom = "histogram", xlab = expression(R[t]), ylab = "Counts")
+ggplot(data = tibble(r = plausible_r), aes(x = r)) +
+  geom_histogram(bins = 30) +
+  labs(x = expression(R[t]), y = "Counts")
 
 ```
 
@@ -798,13 +847,21 @@ proj <- project(
 
 ```
 
-Daha sonra 'plot()' ve 'add_projections()' fonksiyonlarını kullanarak insidansı ve projeksiyonları kolayca çizebiliriz. Köşeli parantez operatörünü kullanarak yalnızca en son durumları göstermek için 'insidans' nesnesini kolayca alt kümeye koyabiliriz.
+Daha sonra insidansı **ggplot2** ile çizebilir ve projeksiyonları 'add_projections()' fonksiyonu ile ekleyebiliriz. **incidence** paketinin `plot()` fonksiyonu **ggplot2**'den bir kullanımdan kaldırma uyarısı verir, bu nedenle onu kullanmıyoruz. Köşeli parantez operatörünü kullanarak yalnızca en son durumları göstermek için 'insidans' nesnesini kolayca alt kümeye koyabiliriz.
 
 ```{r epidemic_models_plot_projection, out.width=c('100%', '100%'), fig.show='hold', fig.width = 12, fig.height = 9, message=F, warning=F}
 
-## insidans ve projeksiyon çizimi
-plot(inc[inc$dates > as.Date("2015-03-01")]) %>%
-  add_projections(proj)
+## insidansı çizin
+incidence_plot <- ggplot() +
+  geom_col(
+    data = as.data.frame(inc[inc$dates > as.Date("2015-03-01")]),
+    aes(x = dates, y = counts),
+    width = 1
+  ) +
+  theme_minimal(base_size = 14)
+
+## projeksiyonları ekleyin
+add_projections(incidence_plot, proj)
 
 ```
 

@@ -27,7 +27,7 @@ then costs minutes, not days.
 ## What "in sync" means
 
 The repository declares its layout in two files. `languages.yml` names the eight languages, and
-`content/en/_quarto.yaml` names the 50 stems. Every chapter file is `content/<lang>/<stem>.qmd`,
+`content/en/_quarto.yaml` names the 51 stems. Every chapter file is `content/<lang>/<stem>.qmd`,
 so a file's language is the folder that holds it.
 
 `checks/langs.py` reads both files for the checks. `read_languages()` returns the main code and
@@ -39,15 +39,16 @@ string, so the Norwegian code `no` stays a code. When a function cannot read a f
 stops with one line that names the file. The causes are a missing file, a file that does not
 parse, and a `languages.yml` with no `main:` or no code.
 
-The landing page hero says 49 chapters. That is a narrower count, and both are right. It is the
-50 stems less `index`, which is a page of the book, not a chapter of it.
+The landing page hero says 50 chapters. That is a narrower count, and both are right. It is the
+51 stems less `index`, which is a page of the book, not a chapter of it.
 
 English is the reference. Checks 1 to 3 pair each translated chapter with
-`content/en/<stem>.qmd`. That set is 49 non-index stems and 7 translation languages. The landing
+`content/en/<stem>.qmd`. That set is 50 non-index stems and 7 translation languages. The landing
 page `index.qmd` and English itself stay out of it. The set was 49 x 7 from 2026-09-02, when
 the GIS chapter returned. It became 51 x 7 on 2026-09-18, when `about.qmd` and
 `acknowledgements.qmd` split off the landing page. It became 49 x 7 again on 2026-10-02, when
-both merged into `editorial_style.qmd`.
+both merged into `editorial_style.qmd`. It became 50 x 7 on 2026-10-05, when `epidemic_models`
+was restored.
 
 | Property | Expected | Check | Remedy |
 |---|---|---|---|
@@ -59,9 +60,9 @@ both merged into `editorial_style.qmd`.
 | inline code spans in prose name things the English names | informational | check 4 | the inline-pass agent workflow over the new suspects |
 | every changed chapter renders without execution, fences balanced | 0 FAIL | check 6, with `--base` or `--render` | read the log under `/tmp/render-gate-<id>/` |
 | no R chunk parses worse than the English chunk | 0 files worse | check 8, with `--base` or `--render` | the sync, or a source defect |
-| every internal link resolves, stays on its page and stays in its language | 0 dead, 0 same-page, 0 cross-language and 0 unterminated links in the 400 declared files | check 5 | `rewrite-links.py`, no agent |
-| no chunk that executes names the `data/` folder, outside the two chapters that teach file paths | 0 lines in the 400 declared files | check 7 | load the data with `appliedepidata::get_data()`, or set `eval=F` |
-| the eight language folders, project files, chapter files, manifest rows and alias lines agree | `8 languages, 50 stems, 432 aliases, drifted: 0` | check 9 | edit the file the DRIFT line names |
+| every internal link resolves, stays on its page and stays in its language | 0 dead, 0 same-page, 0 cross-language and 0 unterminated links in the 408 declared files | check 5 | `rewrite-links.py`, no agent |
+| no chunk that executes names the `data/` folder, outside the two chapters that teach file paths | 0 lines in the 408 declared files | check 7 | load the data with `appliedepidata::get_data()`, or set `eval=F` |
+| the eight language folders, project files, chapter files, manifest rows and alias lines agree | `8 languages, 51 stems, 440 aliases, drifted: 0` | check 9 | edit the file the DRIFT line names |
 
 Each agent workflow named in the Remedy column is a `.js` file in `checks/workflows/`. A
 remedy is a current procedure, so it lives in the tree beside the check it repairs. The other
@@ -71,7 +72,7 @@ ten workflows of the 2026-09 fix pass ran once and are history: they are in the
 Check 4 is informational because a suspect span is often right: a placeholder the reader
 replaces, or a word the author put in code font. The baseline is 357 suspects as of 2026-09-17. All were judged placeholders or noise. The GIS chapter, restored the same
 day, added one more: a French verb in code font. A rise above that is what to look at, not
-the number itself. Check 4 measures the declared set: the 49 non-index stems in the 7 translation
+the number itself. Check 4 measures the declared set: the 50 non-index stems in the 7 translation
 languages. A file that `content/en/_quarto.yaml` does not declare is not measured here, and
 check 9 reports it. A declared file that is missing gets a one-line note, and check 9 reports
 that too.
@@ -79,7 +80,7 @@ that too.
 ## Check 5: internal links
 
 Run `python3 checks/check-links.py`. `check-sync.sh` runs it as check 5. It reads the
-400 declared files, which are `index.qmd` and the 49 other stems, in English and in the 7
+408 declared files, which are `index.qmd` and the 50 other stems, in English and in the 7
 translation languages. It prints one line for each link it rejects, and exits 1 when it finds
 one. It rejects four link forms.
 
@@ -183,7 +184,7 @@ no link there.
 ## Check 7: the data folder
 
 Run `python3 checks/check-data-reads.py`. `check-sync.sh` runs it as check 7. It reads the same
-400 declared files as check 5. Three rules govern the `data/` folder.
+408 declared files as check 5. Three rules govern the `data/` folder.
 
 - A chunk that executes may not name `data/`. The handbook loads its data with
   `appliedepidata::get_data()`.
@@ -304,7 +305,7 @@ The gate stops with exit 2 in five cases.
 
 `check-sync.sh` runs check 9 itself, and it needs no base commit. It reads `languages.yml`, the
 eight `content/<lang>/_quarto.yaml` project files, `docker-images.yml` and the front matter of
-the 400 declared files. PyYAML parses every one of them with `yaml.BaseLoader`, which makes every
+the 408 declared files. PyYAML parses every one of them with `yaml.BaseLoader`, which makes every
 scalar a string. `yaml.safe_load` reads an unquoted `no` as False, so the Norwegian code `no`
 would not survive it. `.github/workflows/translation-sync.yml` installs `python3-yaml` before it
 runs `check-sync.sh`.
@@ -312,7 +313,7 @@ runs `check-sync.sh`.
 It prints one summary line, and one `DRIFT` line for each finding:
 
 ```
-   layout: 8 languages, 50 stems, 432 aliases, drifted: 0
+   layout: 8 languages, 51 stems, 440 aliases, drifted: 0
 ```
 
 A finding sets the DRIFT exit. Check 9 reports ten kinds.

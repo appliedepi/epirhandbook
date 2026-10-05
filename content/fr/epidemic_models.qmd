@@ -25,17 +25,11 @@ Voici un exemple de l'un des résultats que nous produirons dans cette section.
 
 ```{r out.width=c('100%', '100%'), fig.show='hold', echo=F, fig.width = 12, fig.height = 9, message=F, warning=F}
 
-#if (!require("EpiNow2", quietly = TRUE))
-#    remotes::install_github("epiforecasts/EpiNow2")
-
 ## installer et charger les paquets
-pacman::p_load(tidyverse, EpiNow2, EpiEstim, here, incidence2, epicontacts, rio, projections)
-
-
-
+pacman::p_load(tidyverse, EpiNow2, EpiEstim, incidence2, incidence, epicontacts, projections)
 
 ## Chargement de la linelist
-linelist <- import(here::here("data", "case_linelists", "linelist_cleaned.rds"))
+linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds")
 
 ## générer des contacts
 contacts <- linelist %>%
@@ -52,69 +46,40 @@ epic <- make_epicontacts(
   directed = TRUE
 )
 
-## ## estimer le temps de génération gamma
-## generation_time <- bootstrapped_dist_fit(
-## get_pairwise(epic, "date_infection"),
-## dist = "gamma",
-## max_value = 20,
-## bootstraps = 1
-## )
-
-## ## export pour la mise en cache
-## export(
-## generation_time,
-## here("data/cache/epidemic_models/generation_time.rds")
-## )
-
-## importer le temps de génération mis en cache
-generation_time <- import(here("data/cache/epidemic_models/generation_time.rds"))
-
-## ## estimer la période d'incubation
-## incubation_period <- bootstrapped_dist_fit(
-## linelist$date_onset - linelist$date_infection,
-## dist = "lognormal",
-## max_value = 100,
-## bootstraps = 1
-## )
-
-## ## export pour la mise en cache
-## export(
-### incubation_period,
-## here("data/cache/epidemic_models/incubation_period.rds")
-## )
-
-## import période d'incubation en cache
-incubation_period <- import(here("data/cache/epidemic_models/incubation_period.rds"))
-
-## obtenir l'incidence à partir de la date d'apparition
-cases <- linelist %>%
-  group_by(date = date_onset) %>%
-  summarise(confirm = n())
-
- ## exécuter epinow#
-## epinow_res <- epinow(
-## reported_cases = cases,
-## generation_time = generation_times,
-## delays = delay_opts(incubation_period),
-## target_folder = here("data/cache/epidemic_models"),
-## return_output = TRUE,
-## output = "samples",
-## verbose = TRUE,
-## stan = stan_opts(samples = 750, chains = 4),
-## horizon = 21
-## )
-
-## ## export pour la mise en cache
-## export(
-## epinow_res,
-## here("data/cache/epidemic_models/epinow_res.rds")
-## )
-
-## importer les résultats epinow mis en cache
-epinow_res <- import(here("data/cache/epidemic_models/epinow_res.rds"))
+## charger les estimations EpiNow2 stockées et le nombre de cas utilisé pour l'ajustement
+estimates <- appliedepidata::get_data(name = "epidemic_models_summarised_estimates")
+observations <- appliedepidata::get_data(name = "epidemic_models_reported_cases")
 
 ## tracer la figure de synthèse
-plot(epinow_res)
+ggplot(
+  data = filter(estimates, variable %in% c("R", "reported_cases")),
+  aes(x = date)
+) +
+  ## nombre de cas observés, seulement dans le panneau des cas rapportés
+  geom_col(
+    data = mutate(observations, variable = "reported_cases"),
+    aes(y = confirm),
+    fill = "grey70",
+    width = 1
+  ) +
+  ## intervalle de crédibilité à 90 % et médiane, colorés selon le type d'estimation
+  geom_ribbon(aes(ymin = lower_90, ymax = upper_90, fill = type), alpha = 0.3) +
+  geom_line(aes(y = median, colour = type)) +
+  ## utiliser label_parsed pour permettre l'utilisation d'une étiquette en indice
+  facet_wrap(
+    ~ variable,
+    ncol = 1,
+    scales = "free_y",
+    labeller = as_labeller(c("R" = "R[t]", "reported_cases" = "Reported~cases"), label_parsed),
+    strip.position = 'left'
+  ) +
+  labs(x = NULL, y = NULL, colour = NULL, fill = NULL) +
+  theme_minimal(base_size = 14) +
+  theme(
+    strip.background = element_blank(),
+    strip.placement = 'outside',
+    legend.position = 'bottom'
+  )
 
 ```
 
@@ -124,29 +89,30 @@ plot(epinow_res)
 Nous allons utiliser deux méthodes et packages différents pour l'estimation R<sub>t</sub>,
 à savoir **EpiNow** et **EpiEstim**, ainsi que le package **projections** pour la prévision de l'incidence des cas.  
 
-Ce fragment de code montre le chargement des paquets nécessaires aux analyses. Dans ce manuel, nous mettons l'accent sur `p_load()` de **pacman**, qui installe le paquet si nécessaire *et* le charge pour l'utiliser. Vous pouvez également charger les paquets installés avec `library()` de **base** R. Voir la page sur [R basics](#rbasics) pour plus d'informations sur les paquets R.  
+Ce fragment de code montre le chargement des paquets nécessaires aux analyses. Dans ce manuel, nous mettons l'accent sur `p_load()` de **pacman**, qui installe le paquet si nécessaire *et* le charge pour l'utiliser. Vous pouvez également charger les paquets installés avec `library()` de **base** R. Voir la page sur [R basics](basics.qmd) pour plus d'informations sur les paquets R.  
 
 	
 ```{r epidemic_models_packages, }
 pacman::p_load(
-   rio, # Importation de fichiers
-   here, # Localisation de fichiers
-   tidyverse, # Gestion des données + graphiques ggplot2
-   epicontacts, # Analyse des réseaux de transmission
-   EpiNow2, # Estimation de Rt
-   EpiEstim, # Estimation Rt
-   projections, # Projections d'incidence
-   incidence2, # Traitement des données d'incidence
-   epitrix, # Fonctions epi utiles
-   distcrete # Distributions discrètes des délais
+   rio,          # Importation de fichiers
+   here,         # Localisation de fichiers
+   tidyverse,    # Gestion des données + graphiques ggplot2
+   epicontacts,  # Analyse des réseaux de transmission
+   EpiNow2,      # Estimation Rt
+   EpiEstim,     # Estimation Rt
+   projections,  # Projections d'incidence
+   incidence2,   # Traitement des données d'incidence
+   incidence,    # Objets incidence pour les projections
+   epitrix,      # Fonctions epi utiles
+   distcrete     # Distributions discrètes des délais
 )
 ```
 	
-Nous utiliserons la linelist de cas nettoyée pour toutes les analyses de cette section. Si vous voulez suivre, <a href='https://github.com/epirhandbook/Epi_R_handbook/raw/master/data/case_linelists/linelist_cleaned.rds' class='download-button'>cliquez pour télécharger la linelist "propre"</a> (en tant que fichier .rds). Consultez la page [Télécharger le manuel et les données](#download_book_data) pour télécharger tous les exemples de données utilisés dans ce manuel.  
+Nous utiliserons la linelist de cas nettoyée pour toutes les analyses de cette section. Si vous voulez suivre, <a href='https://github.com/epirhandbook/Epi_R_handbook/raw/master/data/case_linelists/linelist_cleaned.rds' class='download-button'>cliquez pour télécharger la linelist "propre"</a> (en tant que fichier .rds). Consultez la page [Télécharger le manuel et les données](data_used.qmd) pour télécharger tous les exemples de données utilisés dans ce manuel.  
 
 ```{r, echo=F}
 # Importez la liste de lignes dans R
-linelist <- rio::import(here::here("data", "case_linelists", "linelist_cleaned.rds"))
+linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds")
 ```
 
 ```{r eval=F}
@@ -188,15 +154,13 @@ Comme nous disposons des dates d'apparition des symptômes pour tous nos cas dan
 Une estimation de la période d'incubation d'Ebola dans la littérature (tirée de [cet article](https://www.nejm.org/doi/full/10.1056/nejmoa1411100)) avec une moyenne de 9,1, un écart-type de 7,3 et une valeur maximale de 30, serait spécifiée comme suit : 
 
 ```{r epidemic_models_incubation_literature, eval=F}
-incubation_period_lit <- list(
-  mean = log(9.1),
-  mean_sd = log(0.1),
-  sd = log(7.3),
-  sd_sd = log(0.1),
+incubation_period_lit <- LogNormal(
+  mean = 9.1,
+  sd = 7.3,
   max = 30
 )
 ```
-Notez que **EpiNow2** exige que ces distributions de délais soient fournies sur une échelle **log** d'où l'appel `log` autour de chaque valeur (sauf le paramètre `max` qui doit être fourni sur une échelle naturelle). Les paramètres `mean_sd` et `sd_sd` définissent l'écart type des estimations de la moyenne. Comme ceux-ci ne sont pas connus dans ce cas, nous choisissons la valeur assez arbitraire de 0.1.
+`LogNormal()` prend la moyenne et l'écart type en jours, sur l'échelle naturelle, et les convertit elle-même sur l'échelle log. Le paramètre `max` coupe la distribution à 30 jours.
 
 Dans cette analyse, nous estimons plutôt la distribution de la période d'incubation à partir de la linelist elle-même en utilisant la fonction `bootstrapped_dist_fit`, ce qui va
 une distribution lognormale aux délais observés entre l'infection et l'apparition de la maladie.
@@ -213,7 +177,7 @@ incubation_period <- bootstrapped_dist_fit(
 
 L'autre distribution dont nous avons besoin est le temps de génération. Comme nous avons des données sur les temps d'infection __et__ les liens de transmission, nous pouvons estimer cette
 distribution à partir de la liste de liens en calculant le délai entre les temps d'infection
-des paires infecteur-infecte. Pour ce faire, nous utilisons la fonction pratique `get_pairwise` du paquet **epicontacts**, qui nous permet de calculer les différences par paire des propriétés de la linelist entre les paires de transmission. Nous créons d'abord un objet epicontacts (voir la page [Chaînes de transmission](#transmission_chains) pour plus de détails) :
+des paires infecteur-infecte. Pour ce faire, nous utilisons la fonction pratique `get_pairwise` du paquet **epicontacts**, qui nous permet de calculer les différences par paire des propriétés de la linelist entre les paires de transmission. Nous créons d'abord un objet epicontacts (voir la page [Chaînes de transmission](transmission_chains.qmd) pour plus de détails) :
 
 ```{r epidemic_models_epicontacts, eval=F}
 ## générer des contacts
@@ -247,23 +211,24 @@ generation_time <- bootstrapped_dist_fit(
 
 #### Exécution de **EpiNow2** {.unnumbered}
 
-Maintenant, il ne nous reste plus qu'à calculer l'incidence journalière à partir de la liste linéaire, ce que nous pouvons faire facilement avec les fonctions **dplyr** `group_by()` et `n()`. Notez que **EpiNow2** exige que les noms des colonnes soient `date` et `confirm`.
+Maintenant, il ne nous reste plus qu'à calculer l'incidence journalière à partir de la liste linéaire, ce que nous pouvons faire facilement avec les fonctions **dplyr** `group_by()` et `n()`. Notez que **EpiNow2** exige que les noms des colonnes soient `date` et `confirm`. **EpiNow2** s'arrête aussi avec une erreur sur une date manquante, donc nous retirons les cas sans date d'apparition des symptômes. Avec des trous entre les dates, **EpiNow2** 1.9.0 s'est arrêté avec une erreur sur ces données. Donc `fill_missing()` ajoute les jours sans cas, avec un nombre de 0.
 
 ```{r epidemic_models_cases, eval=F}
 ## Obtenir l'incidence à partir des dates d'apparition
 cases <- linelist %>%
+  filter(!is.na(date_onset)) %>%
   group_by(date = date_onset) %>%
-  summarise(confirm = n())
+  summarise(confirm = n()) %>%
+  ## ajouter les jours sans cas, avec un nombre de 0
+  fill_missing(missing_dates = "zero")
 ```
 
 Nous pouvons ensuite estimer R<sub>t</sub> en utilisant la fonction `epinow`. Quelques remarques sur les entrées :
 
+* L'argument `generation_time` prend la distribution du temps de génération dans la fonction `gt_opts`.
 * Nous pouvons fournir n'importe quel nombre de distributions de délais "enchaînés" à l'argument `delays`.
-  Nous les insérons simplement à côté de l'objet `incubation_period` dans la fonction `delay_opts`.
-* `return_output` permet de s'assurer que la sortie est retournée dans R et pas seulement
-  un fichier.
-* `verbose` spécifie que nous voulons une lecture de la progression.
-* `horizon` indique pour combien de jours nous voulons projeter l'incidence future.
+  Nous les ajoutons simplement à l'objet `incubation_period` avec `+` dans la fonction `delay_opts`.
+* `horizon` dans la fonction `forecast_opts` indique pour combien de jours nous voulons projeter l'incidence future.
 * Nous passons des options supplémentaires à l'argument `stan` pour spécifier combien de temps
   nous voulons exécuter l'inférence pour. L'augmentation de `samples` et de `chains` vous donnera une estimation plus précise qui caractérisera mieux l'incertitude. 
   
@@ -272,44 +237,77 @@ Cependant, l'exécution sera plus longue.
 ```{r epidemic_models_run_epinow, eval=F}
 ## exécuter epinow
 epinow_res <- epinow(
-  reported_cases = cases,
-  generation_time = generation_time,
+  data = cases,
+  generation_time = gt_opts(generation_time),
   delays = delay_opts(incubation_period),
-  return_output = TRUE,
-  verbose = TRUE,
-  horizon = 21,
+  forecast = forecast_opts(horizon = 21),
   stan = stan_opts(samples = 750, chains = 4)
 )
 ```
 
 #### Analyser les sorties {.unnumbered}
 
-Une fois l'exécution du code terminée, nous pouvons tracer un résumé très facilement comme suit. Faites défiler l'image pour voir l'étendue complète.  
+Cette page n'exécute pas l'ajustement. Les résultats ci-dessous viennent d'un ajustement stocké dans le paquet **appliedepidata**. Une version antérieure de **EpiNow2** a fait cet ajustement. Le code ci-dessus est la façon de faire un tel ajustement avec **EpiNow2** 1.9.
+
+Sur un ajustement fait avec **EpiNow2** 1.9, la fonction `plot()` trace une figure récapitulative, et la fonction `summary()` donne un tableau récapitulatif. Ces fonctions s'arrêtent avec une erreur sur l'ajustement stocké. Nous chargeons donc les tableaux de l'ajustement stocké et les traçons avec **ggplot2** :  
 
 
 ```{r out.width=c('100%', '100%'), fig.show='hold', fig.width = 12, fig.height = 9, message=F, warning=F }
+## charger les estimations stockées et le nombre de cas utilisé pour l'ajustement
+estimates <- appliedepidata::get_data(name = "epidemic_models_summarised_estimates")
+observations <- appliedepidata::get_data(name = "epidemic_models_reported_cases")
+
 ## Tracer la figure récapitulative
-plot(epinow_res)
+ggplot(
+  data = filter(estimates, variable %in% c("R", "reported_cases")),
+  aes(x = date)
+) +
+  ## nombre de cas observés, seulement dans le panneau des cas rapportés
+  geom_col(
+    data = mutate(observations, variable = "reported_cases"),
+    aes(y = confirm),
+    fill = "grey70",
+    width = 1
+  ) +
+  ## intervalle de crédibilité à 90 % et médiane, colorés selon le type d'estimation
+  geom_ribbon(aes(ymin = lower_90, ymax = upper_90, fill = type), alpha = 0.3) +
+  geom_line(aes(y = median, colour = type)) +
+  ## utiliser label_parsed pour permettre l'utilisation d'une étiquette en indice
+  facet_wrap(
+    ~ variable,
+    ncol = 1,
+    scales = "free_y",
+    labeller = as_labeller(c("R" = "R[t]", "reported_cases" = "Reported~cases"), label_parsed),
+    strip.position = 'left'
+  ) +
+  labs(x = NULL, y = NULL, colour = NULL, fill = NULL) +
+  theme_minimal(base_size = 14) +
+  theme(
+    strip.background = element_blank(),
+    strip.placement = 'outside',
+    legend.position = 'bottom'
+  )
 ```
 
 Nous pouvons également examiner diverses statistiques sommaires :
 
 ```{r epidemic_models_epinow_summary,}
-## tableau récapitulatif
-epinow_res$summary
+## tableau récapitulatif de l'ajustement stocké
+summary_table <- appliedepidata::get_data(name = "epidemic_models_summary")
+summary_table[, c("measure", "estimate")]
 ```
 
-Pour des analyses plus approfondies et des tracés personnalisés, vous pouvez accéder aux estimations quotidiennes résumées via `$estimates$summarised`. Nous allons convertir le tableau par défaut `data.table` en un `tibble` pour faciliter l'utilisation avec **dplyr**.
+Pour des analyses plus approfondies et des tracés personnalisés, vous pouvez accéder aux estimations quotidiennes résumées d'un ajustement fait avec **EpiNow2** 1.9 via `summary(epinow_res, type = "parameters")`. Nous allons convertir le tableau par défaut `data.table` en un `tibble` pour faciliter l'utilisation avec **dplyr**. Le tableau ci-dessous montre les mêmes estimations pour l'ajustement stocké.
 
 ```{r epidemic_models_to_tibble, eval=F}
 ## extraire le résumé et le convertir en tibble
-estimates <- as_tibble(epinow_res$estimates$summarised)
+estimates <- as_tibble(summary(epinow_res, type = "parameters"))
 estimates
 ```
 
-```{r epidemic_models_tibble_show, echo = F}
+```{r epidemic_models_tibble_show,  echo = F}
 ## montrer les résultats
-estimates <- as_tibble(epinow_res$estimates$summarised)
+estimates <- as_tibble(estimates)
 DT::datatable(
   estimates,
   rownames = FALSE,
@@ -401,17 +399,17 @@ Pour exécuter **EpiEstim**, nous devons fournir des données sur l'incidence jo
 
 Les données d'incidence peuvent être fournies à **EpiEstim** sous la forme d'un vecteur, d'un cadre de données ou d'un objet `incidence` provenant du paquetage original **incidence**. Vous pouvez même faire la distinction entre les importations et les infections acquises localement ; voir la documentation de `?estimate_R` pour plus de détails.  
 
-Nous allons créer l'entrée en utilisant **incidence2**. Voir la page sur [Epidemic curves](#epicurves) pour plus d'exemples avec le paquet **incidence2**. Comme il y a eu des mises à jour du paquet **incidence2** qui ne correspondent pas complètement à l'entrée attendue de `estimateR()`, quelques étapes supplémentaires mineures sont nécessaires. L'objet incidence consiste en un tibble avec des dates et leurs nombres de cas respectifs. Nous utilisons `complete()` de **tidyr** pour nous assurer que toutes les dates sont incluses (même celles sans cas), puis nous `rename()` les colonnes pour les aligner avec ce qui est attendu par `estimate_R()` dans une étape ultérieure.  
+Nous allons créer l'entrée en utilisant **incidence2**. Voir la page sur [Epidemic curves](epicurves.qmd) pour plus d'exemples avec le paquet **incidence2**. Comme il y a eu des mises à jour du paquet **incidence2** qui ne correspondent pas complètement à l'entrée attendue de `estimate_R()`, quelques étapes supplémentaires mineures sont nécessaires. L'objet incidence consiste en un tibble avec des dates et leurs nombres de cas respectifs. Nous utilisons `complete()` de **tidyr** pour nous assurer que toutes les dates sont incluses (même celles sans cas), puis nous `rename()` les colonnes pour les aligner avec ce qui est attendu par `estimate_R()` dans une étape ultérieure.  
 
 ```{r epidemic_models_epiestim_incidence,}
 ## Obtenir l'incidence à partir de la date d'apparition
 cases <- incidence2::incidence(linelist, date_index = "date_onset") %>% # obtient le nombre de cas par jour
-  tidyr::complete(date_index = seq.Date( # s'assurer que toutes les dates sont représentées
+  tidyr::complete(date_index = seq.Date(                              # s'assurer que toutes les dates sont représentées
     from = min(date_index, na.rm = T),
     to = max(date_index, na.rm=T),
     by = "day"),
-    fill = list(count = 0)) %>% # convertit les comptes NA en 0
-  rename(I = count, # renomme aux noms attendus par estimateR
+    fill = list(count = 0)) %>%                                       # convertit les comptes NA en 0
+  rename(I = count,                                                   # renomme aux noms attendus par estimate_R()
          dates = date_index)
 ```
 
@@ -419,22 +417,39 @@ Le paquetage fournit plusieurs options pour spécifier l'intervalle sériel, don
 
 #### Utiliser des estimations d'intervalles sériels issues de la littérature {.unnumbered}
 
-En utilisant l'option `method = "parametric_si"`, nous pouvons spécifier manuellement la moyenne et l'écart type de l'intervalle sériel dans la littérature ou dans un objet `config` créé à l'aide de la fonction `make_config`. Nous utilisons une moyenne et un écart-type de 12.0 et 5.2, respectivement, définis dans [cet article](https://bmcmedicine.biomedcentral.com/articles/10.1186/s12916-014-0196-0) :
+En utilisant l'option `method = "parametric_si"`, nous pouvons spécifier manuellement la moyenne et l'écart type de l'intervalle sériel dans la littérature ou dans un objet `config` créé à l'aide de la fonction `make_config`. Nous utilisons une moyenne et un écart-type de 12.0 et 5.2, respectivement, définis dans [cet article](https://bmcmedicine.biomedcentral.com/articles/10.1186/s12916-014-0196-0).
+
+Par défaut, `estimate_R()` utilise des fenêtres hebdomadaires glissantes à partir du deuxième jour des données. **EpiEstim** avertit qu'un R<sub>t</sub> estimé à partir de très peu de cas n'est pas fiable : avec ses réglages par défaut, il lui faut au moins 11 cas dans une fenêtre. Les premières semaines de cette épidémie en comptent moins. Nous faisons donc commencer les fenêtres hebdomadaires à la première fenêtre de 7 jours qui compte au moins 11 cas, et nous utilisons ces fenêtres pour les deux estimations ci-dessous :
 
 ```{r epidemic_models_epiestim_config,}
+## nombre de cas quotidiens, une ligne par jour
+daily_cases <- cases$I
+
+## nombre de cas dans la fenêtre de 7 jours qui commence chaque jour
+window_cases <- sapply(
+  seq_len(length(daily_cases) - 6),
+  function(t) sum(daily_cases[t:(t + 6)])
+)
+
+## fenêtres hebdomadaires glissantes à partir de la première fenêtre d'au moins 11 cas
+weekly_start <- max(2, which(window_cases >= 11)[1]):(length(daily_cases) - 6)
+weekly_end <- weekly_start + 6
+
 ## créer config
 config_lit <- make_config(
   mean_si = 12.0,
-  std_si = 5.2
+  std_si = 5.2,
+  t_start = weekly_start,
+  t_end = weekly_end
 )
 ```
 
 Nous pouvons ensuite estimer R<sub>t</sub> avec la fonction `estimate_R` :
 
-```{r epidemic_models_epiestim_lit, warning = FALSE}
+```{r epidemic_models_epiestim_lit,  warning = FALSE}
 
 cases <- cases %>% 
-     filter(!is.na(date))
+     filter(!is.na(dates))
 
 
 #créer un cadre de données pour la fonction estimate_R()
@@ -442,10 +457,9 @@ cases_incidence <- data.frame(dates = seq.Date(from = min(cases$dates),
                                to = max(cases$dates), 
                                by = 1))
 
-cases_incidence <- left_join(cases_incidence, cases) %>% 
+cases_incidence <- left_join(cases_incidence, cases, by = "dates") %>% 
      select(dates, I) %>% 
      mutate(I = ifelse(is.na(I), 0, I))
-
 
 epiestim_res_lit <- estimate_R(
   incid = cases_incidence,
@@ -454,16 +468,31 @@ epiestim_res_lit <- estimate_R(
 )
 ```
 
-et tracer un résumé des résultats :
+et tracer les estimations de R<sub>t</sub>. La fonction `plot()` de **EpiEstim** déclenche un avertissement de dépréciation de **ggplot2**, donc nous écrivons une courte fonction qui trace les estimations avec **ggplot2**. Elle date chaque estimation par la fin de sa fenêtre temporelle :
 
-```{r epidemic_models_epiestim_lit_plot, warning = FALSE}
-plot(epiestim_res_lit)
+```{r epidemic_models_epiestim_lit_plot,  warning = FALSE}
+## tracer l'estimation moyenne de R et son intervalle de crédibilité à 95 %
+plot_rt <- function(res) {
+  res$R %>%
+    ## supprimer les fenêtres temporelles sans estimation
+    filter(!is.na(`Mean(R)`)) %>%
+    ## dater chaque estimation par la fin de sa fenêtre temporelle
+    mutate(date = res$dates[t_end]) %>%
+    ggplot(aes(x = date)) +
+    geom_ribbon(aes(ymin = `Quantile.0.025(R)`, ymax = `Quantile.0.975(R)`), alpha = 0.3) +
+    geom_line(aes(y = `Mean(R)`)) +
+    geom_hline(yintercept = 1, linetype = 2) +
+    labs(x = NULL, y = expression(R[t])) +
+    theme_minimal(base_size = 14)
+}
+
+plot_rt(epiestim_res_lit)
 ```
 
 #### Utilisation d'estimations d'intervalles en série à partir des données {.unnumbered}
 
 Comme nous avons des données sur les dates d'apparition des symptômes _et_ les liens de transmission, nous pouvons également estimer l'intervalle sériel à partir de la liste de liens en calculant le délai entre les dates d'apparition des symptômes des paires infecteur-infecté. 
-Comme nous l'avons fait dans la section **EpiNow2** nous allons utiliser la fonction `get_pairwise` du paquet **epicontacts** qui nous permet de calculer les différences par paires des propriétés de la liste de liens entre les paires de transmission. Nous créons d'abord un objet epicontacts (voir la page [Chaînes de transmission](#transmission_chains) pour plus de détails) :
+Comme nous l'avons fait dans la section **EpiNow2** nous allons utiliser la fonction `get_pairwise` du paquet **epicontacts** qui nous permet de calculer les différences par paires des propriétés de la liste de liens entre les paires de transmission. Nous créons d'abord un objet epicontacts (voir la page [Chaînes de transmission](transmission_chains.qmd) pour plus de détails) :
 
 ```{r epidemic_models_epicontacts_epiestim, eval=F}
 ## générer des contacts
@@ -484,18 +513,20 @@ epic <- make_epicontacts(
 
 Nous ajustons ensuite la différence de dates d'apparition entre les paires de transmissions, calculée en utilisant `get_pairwise`, à une distribution gamma. Nous utilisons l'outil pratique `fit_disc_gamma` du paquet **epitrix** pour cette procédure d'ajustement, car nous avons besoin d'une distribution _discrète_.
 
-```{r epidemic_models_incubation_estimate_epiestim, warning = FALSE}
-## Estimation de l'intervalle sériel gamma
-serial_interval <- fit_disc_gamma(get_pairwise(epic, "date_onset"))
+```{r epidemic_models_incubation_estimate_epiestim,  warning = FALSE}
+## estimation de l'intervalle sériel gamma, sans les paires sans date d'apparition des symptômes
+serial_interval <- fit_disc_gamma(na.omit(get_pairwise(epic, "date_onset")))
 ```
 
 Nous passons ensuite ces informations à l'objet `config`, exécutons **EpiEstim** et traçons les résultats :
 
-```{r epidemic_models_epiestim_emp, warning = FALSE}
+```{r epidemic_models_epiestim_emp,  warning = FALSE}
 ## faire le config
 config_emp <- make_config(
   mean_si = serial_interval$mu,
-  std_si = serial_interval$sd
+  std_si = serial_interval$sd,
+  t_start = weekly_start,
+  t_end = weekly_end
 )
 
 ## Exécuter epiestim
@@ -506,12 +537,12 @@ epiestim_res_emp <- estimate_R(
 )
 
 ## tracer les résultats
-plot(epiestim_res_emp)
+plot_rt(epiestim_res_emp)
 ```
 
 #### Spécification des fenêtres temporelles d'estimation {.unnumbered}
 
-Ces options par défaut fournissent une estimation hebdomadaire glissante et peuvent servir d'avertissement si vous estimez R<sub>t</sub> trop tôt dans l'épidémie pour une estimation précise.Vous pouvez changer cela en fixant une date de début ultérieure pour l'estimation de R<sub>t</sub>, comme indiqué ci-dessous. 
+Vous pouvez aussi choisir vous-même le début des fenêtres, par exemple pour estimer R<sub>t</sub> seulement à partir du 1er juin 2014, comme indiqué ci-dessous. 
 
 Malheureusement, **EpiEstim** n'offre qu'une façon très maladroite de spécifier ces temps d'estimation, en ce sens que vous devez fournir un vecteur d'entiers __ se référant aux dates de début et de fin de chaque fenêtre temporelle.
 
@@ -526,7 +557,9 @@ start_dates <- seq.Date(
   ## soustraire la date de départ pour la convertir en numérique
   `-`(min(cases$dates)) %>%
   ## convertir en entier
-  as.integer()
+  as.integer() %>%
+  ## ajouter 1, car le jour 1 des données d'incidence est leur première date
+  `+`(1L)
 
 ## ajouter six jours pour une fenêtre glissante d'une semaine
 end_dates <- start_dates + 6
@@ -551,7 +584,7 @@ epiestim_res_partial <- estimate_R(
 )
 
 ## tracer les résultats
-plot(epiestim_res_partial)
+plot_rt(epiestim_res_partial)
 
 ```
 
@@ -574,6 +607,8 @@ df_wide <- epiestim_res_lit$R %>%
     upper_90_r = quantile_0_95_r,
     upper_95_r = quantile_0_975_r,
     ) %>%
+  ## supprimer les fenêtres temporelles sans estimation
+  filter(!is.na(mean_r)) %>%
   mutate(
     ## extraire la date médiane de t_start et t_end
     dates = epiestim_res_emp$dates[round(map2_dbl(t_start, t_end, median))],
@@ -627,7 +662,7 @@ ggplot() +
     ncol = 1,
     scales = "free_y",
     labeller = as_labeller(c(r = "R[t]", risk = "Transmission~potential"), label_parsed),
-    strip.position = 'left' 
+    strip.position = 'left'
   ) +
   ## définir manuellement la transparence des quantiles
   scale_alpha_manual(
@@ -646,7 +681,7 @@ ggplot() +
   theme_minimal(base_size = 14) +
   theme(
     strip.background = element_blank(),
-    strip.placement = 'outside' 
+    strip.placement = 'outside'
   )
   
 ```
@@ -657,21 +692,20 @@ ggplot() +
 ### EpiNow2 {.unnumbered}
 
 En plus de l'estimation de R<sub>t</sub>, **EpiNow2** permet également la prévision de
-R<sub>t</sub> et les projections du nombre de cas par l'intégration avec le paquet **EpiSoon** sous le capot. Tout ce que vous avez à faire est de spécifier l'argument `horizon` dans votre appel de fonction `epinow`, indiquant le nombre de jours que vous voulez projeter dans le futur ; voir la section **EpiNow2** sous la rubrique "Estimation
+R<sub>t</sub> et les projections du nombre de cas. Tout ce que vous avez à faire est de donner `forecast_opts(horizon = 21)` à l'argument `forecast` de votre appel de fonction `epinow`. `horizon` est le nombre de jours que vous voulez projeter dans le futur. Voir la section **EpiNow2** sous la rubrique "Estimation
 R<sub>t</sub>" pour plus de détails sur la façon de mettre en place **EpiNow2**. Dans cette
-section, nous allons simplement tracer les sorties de cette analyse, stockées dans le fichier
-l'objet `epinow_res`.
+section, nous allons simplement tracer la prévision de l'ajustement stocké.
 
 ```{r epidemic_models_episoon, out.width=c('100%', '100%'), fig.show='hold', fig.width = 12, fig.height = 9, message=F, warning=F}
 
 ## définir la date minimale pour le tracé
 min_date <- as.Date("2015-03-01")
 
-## extraire les estimations résumées
-estimates <- as_tibble(epinow_res$estimates$summarised)
+## charger les estimations résumées de l'ajustement stocké
+estimates <- as_tibble(appliedepidata::get_data(name = "epidemic_models_summarised_estimates"))
 
-## extraire les données brutes sur l'incidence des cas
-observations <- as_tibble(epinow_res$estimates$observations) %>%
+## charger le nombre de cas utilisé par l'ajustement stocké
+observations <- as_tibble(appliedepidata::get_data(name = "epidemic_models_reported_cases")) %>%
   filter(date > min_date)
 
 ## extraire les estimations prévisionnelles du nombre de cas
@@ -693,11 +727,10 @@ df_long <- df_wide %>%
 
 ## créer un graphique
 ggplot() +
-  geom_histogram(
+  geom_col(
     data = observations,
     aes(x = date, y = confirm),
-    stat = 'identity',
-    binwidth = 1
+    width = 1
   ) +
   geom_ribbon(
     data = df_long,
@@ -723,7 +756,7 @@ ggplot() +
     date_breaks = "1 month",
     date_labels = "%b %d\n%Y"
   ) +
-    theme_minimal(base_size = 14)
+  theme_minimal(base_size = 14)
 
 ```
 
@@ -757,16 +790,18 @@ Voici une vérification rapide pour s'assurer que l'intervalle de série est cor
 ```{r epidemic_models_projections_distcrete_plot,}
 
 ## vérifiez que l'intervalle série est correct
-qplot(
-  x = 0:50, y = serial_interval_lit$d(0:50), geom = "area",
-  xlab = "Serial interval", ylab = "Density"
-)
+ggplot(
+  data = tibble(x = 0:50, y = serial_interval_lit$d(0:50)),
+  aes(x = x, y = y)
+) +
+  geom_area() +
+  labs(x = "Serial interval", y = "Density")
 
 ```
 
 #### Utilisation des estimations d'intervalles sériels à partir des données {.unnumbered}
 
-Comme nous avons des données sur les dates d'apparition des symptômes _et_ les liens de transmission, nous pouvons également estimer l'intervalle sériel à partir de la liste de liens en calculant le délai entre les dates d'apparition des symptômes des paires infecteur-infecté. Comme nous l'avons fait dans la section **EpiNow2**, nous allons utiliser la fonction `get_pairwise` du paquet **epicontacts** qui nous permet de calculer les différences par paires des propriétés de la liste de liens entre les paires de transmission. Nous créons d'abord un objet epicontacts (voir la page [Chaînes de transmission](#transmission_chains) pour plus de détails) :
+Comme nous avons des données sur les dates d'apparition des symptômes _et_ les liens de transmission, nous pouvons également estimer l'intervalle sériel à partir de la liste de liens en calculant le délai entre les dates d'apparition des symptômes des paires infecteur-infecté. Comme nous l'avons fait dans la section **EpiNow2**, nous allons utiliser la fonction `get_pairwise` du paquet **epicontacts** qui nous permet de calculer les différences par paires des propriétés de la liste de liens entre les paires de transmission. Nous créons d'abord un objet epicontacts (voir la page [Chaînes de transmission](transmission_chains.qmd) pour plus de détails) :
 
 ```{r epidemic_models_epicontacts_projections, eval=F}
 ## générer des contacts
@@ -787,9 +822,9 @@ epic <- make_epicontacts(
 
 Nous ajustons ensuite la différence de dates d'apparition entre les paires de transmissions, calculée avec `get_pairwise`, à une distribution gamma. Nous utilisons l'outil pratique `fit_disc_gamma` du paquet **epitrix** pour cette procédure d'ajustement, car nous avons besoin d'une distribution _discrète_.
 
-```{r epidemic_models_incubation_estimate_projections, warning = FALSE}
-## Estimation de l'intervalle sériel gamma
-serial_interval <- fit_disc_gamma(get_pairwise(epic, "date_onset"))
+```{r epidemic_models_incubation_estimate_projections,  warning = FALSE}
+## estimation de l'intervalle sériel gamma, sans les paires sans date d'apparition des symptômes
+serial_interval <- fit_disc_gamma(na.omit(get_pairwise(epic, "date_onset")))
 
 ## inspecter l'estimation
 serial_interval[c("mu", "sd")]
@@ -799,10 +834,10 @@ serial_interval[c("mu", "sd")]
 
 Pour projeter l'incidence future, nous devons fournir l'incidence historique sous la forme d'un objet `incidence`, ainsi qu'un échantillon de valeurs R<sub>t</sub> plausibles. Nous générerons ces valeurs en utilisant les estimations R<sub>t</sub> générées par **EpiEstim** dans la section précédente (sous "Estimation de la valeur de R<sub>t</sub>") et stockées dans l'objet `epiestim_res_emp`. Dans le code ci-dessous nous extrayons les estimations de la moyenne et de l'écart type de R<sub>t</sub> pour la dernière fenêtre de temps de l'épidémie (en utilisant la fonction `tail` pour accéder au dernier élément d'un vecteur), et nous simulons 1000 valeurs à partir d'une distribution gamma en utilisant `rgamma`. Vous pouvez également fournir votre propre vecteur de valeurs R<sub>t</sub> que vous souhaitez utiliser pour les projections.
 
-```{r epidemic_models_projection_setup, warning = FALSE}
+```{r epidemic_models_projection_setup,  warning = FALSE}
 
-## créer un objet d'incidence à partir des dates d'apparition des symptômes
-inc <- incidence::incidence(linelist$date_onset)
+## créer un objet d'incidence à partir des dates d'apparition des symptômes, sans les cas sans date d'apparition
+inc <- incidence::incidence(na.omit(linelist$date_onset))
 
 ## extraire les valeurs r plausibles de l'estimation la plus récente
 mean_r <- tail(epiestim_res_emp$R$`Mean(R)`, 1)
@@ -811,7 +846,9 @@ shapescale <- gamma_mucv2shapescale(mu = mean_r, cv = sd_r/mean_r)
 plausible_r <- rgamma(1000, shape = shapescale$shape, scale = shapescale$scale)
 
 ## vérifier la distribution
-qplot(x = plausible_r, geom = "histogram", xlab = expression(R[t]), ylab = "Counts")
+ggplot(data = tibble(r = plausible_r), aes(x = r)) +
+  geom_histogram(bins = 30) +
+  labs(x = expression(R[t]), y = "Counts")
 
 ```
 
@@ -830,13 +867,21 @@ proj <- project(
 
 ```
 
-Nous pouvons alors facilement tracer l'incidence et les projections en utilisant les fonctions `plot()` et `add_projections()`. On peut facilement sous-évaluer l'objet `incidence` pour ne montrer que les cas les plus récents en utilisant l'opérateur de crochets.
+Nous pouvons alors tracer l'incidence avec **ggplot2** et ajouter les projections avec la fonction `add_projections()`. La fonction `plot()` de **incidence** déclenche un avertissement de dépréciation de **ggplot2**, donc nous ne l'utilisons pas. On peut facilement sous-évaluer l'objet `incidence` pour ne montrer que les cas les plus récents en utilisant l'opérateur de crochets.
 
 ```{r epidemic_models_plot_projection, out.width=c('100%', '100%'), fig.show='hold', fig.width = 12, fig.height = 9, message=F, warning=F}
 
-## Tracer l'incidence et les projections
-plot(inc[inc$dates > as.Date("2015-03-01")]) %>%
-  add_projections(proj)
+## tracer l'incidence
+incidence_plot <- ggplot() +
+  geom_col(
+    data = as.data.frame(inc[inc$dates > as.Date("2015-03-01")]),
+    aes(x = dates, y = counts),
+    width = 1
+  ) +
+  theme_minimal(base_size = 14)
+
+## ajouter les projections
+add_projections(incidence_plot, proj)
 
 ```
 
@@ -848,7 +893,7 @@ proj_df <- as.data.frame(proj)
 proj_df
 ```
 
-```{r epidemic_models_projection_dt, echo = F}
+```{r epidemic_models_projection_dt,  echo = F}
 
 ## convertir en cadre de données pour les données brutes
 proj_df <- as.data.frame(proj)

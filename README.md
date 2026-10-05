@@ -91,9 +91,11 @@ files, named `<stem>.qmd`, and one Quarto book project, `content/<lang>/_quarto.
 project file declares the language, the title and the chapter list. Each language renders under
 its own site path: `/en/`, `/fr/`, and so on.
 
-The eight project files declare the same 50 stems in the same order. Check 9 of
-`checks/check-sync.sh` reports a language that drifts from that. One of the 50 is not a
-chapter: `index.qmd`. That is why the landing page hero counts 49 chapters.
+The eight project files declare the same 51 stems in the same order. Check 9 of
+`checks/check-sync.sh` reports a language that drifts from that. One of the 51 is not a
+chapter: `index.qmd`. That is why the landing page hero counts 50 chapters.
+
+German is not shipped. Its files sit in `_excluded/`, and `_excluded/de/README.md` says why.
 
 Old `/new_pages/...` URLs still work. Every chapter file except `index.qmd` carries an
 `aliases:` entry in its front matter. Quarto turns that into a redirect stub at the old path:
@@ -253,7 +255,7 @@ Run `checks/check-sync.sh` afterwards. Check 9 reports a language you missed.
 **Add a new language.** Six things, all in this repository:
 
 1. An entry in `languages.yml` with four fields: `code`, `lang`, `label` and `title`. `code` names the folder and the site path. `lang` is the BCP-47 tag, and it can differ from the code: Japanese is `code: jp` with `lang: ja`.
-2. A folder `content/<code>/` with a translated `<stem>.qmd` for each of the 50 stems that `content/en/` holds.
+2. A folder `content/<code>/` with a translated `<stem>.qmd` for each of the 51 stems that `content/en/` holds.
 3. A `content/<code>/_quarto.yaml`, copied from `content/en/_quarto.yaml`. Set `lang:` to the `lang` value and `book.title` to the `title` value from `languages.yml`. Keep the chapter list and its order unchanged.
 4. The alias in each chapter's front matter, `/new_pages/<stem>.<code>.html`. In `index.qmd` the alias is `/index.<code>.html` instead. Check 9 does not check `index.qmd`, so get that one right by hand.
 5. A `<code>:` block in `landing.yml` for the landing page strings. A missing string falls back to English. Check 15 names every translatable key the block lacks, apart from the two omissions it allows on purpose.
@@ -271,33 +273,6 @@ successfully and still be wrong — stale output, a broken cross-reference, a
 computed value that silently changed. The build validates its own output as a
 separate step; check what that validation reports, not just whether the render
 job's exit code was 0.
-
-### Excluded chapters
-
-One chapter is excluded from the build: `epidemic_models`. Every
-`content/<lang>/_quarto.yaml` comments it out under `book.chapters`. Its source files sit in
-`_excluded/`.
-
-The chapter fails on a recorded EpiNow2 API break, an `xy.coords()` error. See
-the `epidemic_models` row of aedockerpublic's
-[`BREAKAGE.tsv`](https://github.com/appliedepi/aedockerpublic/blob/b2631a401ff6f2bd00350535bfaf28b0ac7d261b/archive/epirhandbook/2.7/BREAKAGE.tsv)
-for the 2.7 line. aedockerpublic commit `d6d358b` (2026-09-17) deleted its top-level
-`archive/` directory, so the link pins the parent of that commit.
-
-**Its old URL will stop working.** `/new_pages/epidemic_models.html` returns HTTP 200
-today, after a redirect to `/en/new_pages/epidemic_models.html`. It serves the version
-built before the exclusion, and it will stop resolving once this deploys. A chapter
-absent from `book.chapters` never renders, so it never emits the alias redirect stub
-that keeps the old URL alive.
-
-No chapter links to `epidemic_models` in any language. A search for the string across every
-`.qmd` file under `content/` returns nothing, so the exclusion breaks no cross-reference.
-
-**What it would take to bring it back.** Rewrite the chapter's EpiNow2 code against the
-current API. The chapter uses result accessors that EpiNow2 removed. Then render the
-chapter and verify the output.
-
-
 
 <!-- ======================================================= -->
 ## Acknowledgements   
