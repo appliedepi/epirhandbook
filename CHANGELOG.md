@@ -8,6 +8,12 @@ of it, and that is expected of a changelog. Read it as a record, never as curren
 
 ---
 
+## 2026-10-05: live combination plots, and stricter checks 12 and 17
+
+- `combination_analysis` runs its three plot chunks again in all eight languages, with the labels `combination_header`, `combination_ggupset` and `combination_upsetr`. The three saved PNGs in `images/` are deleted. `combination_upsetr` gets `warning=F`, as the other two have, so the page shows no warning.
+- Check 17 accepts in the log the three ggplot2 deprecation warnings that ggupset 0.4.1 and UpSetR 1.4.1 raise in `combination_header` and `combination_upsetr`. `PREFIXES` in `checks/check-render-leg.py` matches each one by the start of its message. Another message from these chunks fails, and so does a log without one of the three. The page MUST NOT show them: a `cell-output-stderr` element with one of them fails. A `cell-output-stderr` failure now shows the text of each element.
+- Check 12 needs the full path of the missing input in the message. Before, a message that named only `checks` passed for a missing `checks/parse-exceptions.tsv`. All 46 cases pass under the new rule.
+
 ## 2026-10-05: six content defects from #460
 
 Each fix is in all eight languages.

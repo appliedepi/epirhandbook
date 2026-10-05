@@ -203,7 +203,7 @@ for script, (script_args, inputs) in sorted(CASES.items()):
                     failures.append(f"{label}: exited 0, so a missing input reads as a pass")
                 elif 'Traceback' in output:
                     failures.append(f"{label}: crashed with a traceback instead of a message")
-                elif missing.split('/')[0] not in output:
+                elif missing not in output:
                     failures.append(f"{label}: the message never names {missing}")
 
 # The rendered page that `check-landing-strings.py --slots` reads. It is the one input

@@ -463,7 +463,8 @@ tree and exits 0. Nothing is measured and the result says success.
 
 For each check and each required input, it builds a fixture without that input. For
 `languages.yml` it also builds a fixture where that file does not parse. It then asserts that the
-run exits non-zero, prints no traceback, and names the missing thing.
+run exits non-zero, prints no traceback, and names the full path of the missing input. A message
+that names only `checks` for a missing `checks/parse-exceptions.tsv` fails.
 
 The two sync scripts run with `--dry-run`, so they write nothing. Checks 6 and 8 compare two
 commits, so they run with `HEAD HEAD` in a fixture that is a git repository. Checks 17 and 18
@@ -474,7 +475,7 @@ with `--summary`. Check 16 needs `Rscript`, so check 12 needs it too.
 It does NOT pass `--fixture`. That flag makes a check derive its file set by globbing. Globbing
 bypasses `languages.yml`, and would exercise a path the repository never runs.
 
-Expected output: `checks that do not fail cleanly: 0`.
+Expected output: `cases: 46` and `checks that do not fail cleanly: 0`.
 
 Remedy: guard the read. Say which file is missing and why the check needs it.
 
@@ -802,18 +803,39 @@ knitr, and one for each error that an `error=TRUE` chunk captures. The line form
 render step tees its full output to `render.log` under `set -o pipefail`. The check removes ANSI
 colour codes from each line before it reads the line.
 
-`ALLOWED` in the script names four chunks that show a warning or an error on purpose:
+`ALLOWED` in the script names six chunks whose warning or error the check accepts:
 
 - `writing_functions.qmd`, label `error-missing-argument`, an error
 - `writing_functions.qmd`, label `error-stop`, an error
 - `missing_data.qmd`, label `warning-coercion-demo`, a warning
 - `ggplot_tips.qmd`, label `warning-na-translate-demo`, a warning
+- `combination_analysis.qmd`, label `combination_header`, a warning
+- `combination_analysis.qmd`, label `combination_upsetr`, a warning
+
+The first four show their warning or error on purpose. The two `combination_analysis` chunks
+raise ggplot2 deprecation warnings from the code of ggupset 0.4.1 and UpSetR 1.4.1.
+
+`PREFIXES` in the script gives the message starts for the two `combination_analysis` chunks. Each
+start MUST occur in the log, and a line for that chunk with another message fails:
+
+- `combination_header`: ``Using `size` aesthetic for lines was deprecated in ggplot2 3.4.0.``
+- `combination_upsetr`: `` `aes_string()` was deprecated in ggplot2 3.0.0. ``
+- `combination_upsetr`: ``The `size` argument of `element_line()` is deprecated as of ggplot2 3.4.0.``
+
+These are the warnings of two English renders in `epirhandbook-data-viz:2.9` on 2026-10-05. The
+page MUST NOT show them, so the three chunks carry `warning=F`.
+`combination_ggupset` raises no warning. ggplot2 gives each deprecation warning once in a
+session, and `combination_header` raises it first. Remove the two entries when UpSetR > 1.4.1 or
+ggupset > 0.4.1 stop warning.
 
 The check fails on each of these:
 
 - an `EHB-WARNING` or `EHB-ERROR` line that `ALLOWED` does not name
 - no line for one of the chunks in `ALLOWED`
-- an element with the class `cell-output-stderr` in a page
+- a line for a chunk in `PREFIXES` whose message starts with none of its prefixes
+- no line for one of the prefixes in `PREFIXES`
+- an element with the class `cell-output-stderr` in a page. The failure shows the text of each
+  such element.
 - a render-machine path in a page: `/tmp/Rtmp`, `/home/runner` or `/book/`
 
 Each chunk in `ALLOWED` always raises its warning or error. A log without
@@ -825,7 +847,8 @@ images.
 
 Quarto puts the messages and the warnings that a chunk prints into a `cell-output-stderr`
 element. The rendered page does not carry the chunk label. So the page of an allowed warning MAY
-carry one such element for each allowed message, when the element shows that message.
+carry one such element for each allowed message, when the element shows that message. A chunk in
+`PREFIXES` gets no such allowance, so a `cell-output-stderr` element with its warning fails.
 
 `NOTES` in the script names messages that one page MAY show. `phylogenetic_trees.html` MAY carry
 any number of `cell-output-stderr` elements whose text is only these lines, in any order:

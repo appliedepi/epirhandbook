@@ -11,19 +11,23 @@ reaches knitr, and one line for each error that an `error=TRUE` chunk captures:
 
 The log colours these lines, so the check removes ANSI escape codes before it reads a line.
 
-ALLOWED names four chunks that show a warning or an error on purpose, by file, chunk label and
-kind. The check fails on each of these:
+ALLOWED names six chunks that raise a warning or an error that the check accepts, by file,
+chunk label and kind. PREFIXES gives the accepted message starts for some of these chunks. The
+check fails on each of these:
 
 1. An `EHB-WARNING` or `EHB-ERROR` line that ALLOWED does not name.
 2. A log with no line for one of the chunks in ALLOWED. Each one always raises its warning or
    error, so a log without it shows that the R profile did not run in that chunk's image. Then
    no warning in that image was logged either. writing_functions, missing_data and ggplot_tips
    render in three different images.
-3. An element with the class `cell-output-stderr` in a page. Quarto puts the messages and the
+3. A line for a chunk in PREFIXES whose message starts with none of the prefixes of that chunk.
+4. A log with no line for one of the prefixes in PREFIXES.
+5. An element with the class `cell-output-stderr` in a page. Quarto puts the messages and the
    warnings that a chunk prints into that element. The page of an ALLOWED warning chunk MAY
-   carry one such element for each allowed message, when its text is that message. A page in
+   carry one such element for each allowed message, when its text is that message. A chunk in
+   PREFIXES gets no such allowance, so its page MUST NOT show its warnings. A page in
    NOTES MAY carry any number of elements whose text is only lines that NOTES gives for it.
-4. A render-machine path in a page, from LEAKS.
+6. A render-machine path in a page, from LEAKS.
 
 Exit 0 when nothing fails, 1 when something fails, and 2 when an input is missing or empty.
 
@@ -41,7 +45,26 @@ ALLOWED = (
     ('writing_functions.qmd', 'error-stop', 'ERROR'),
     ('missing_data.qmd', 'warning-coercion-demo', 'WARNING'),
     ('ggplot_tips.qmd', 'warning-na-translate-demo', 'WARNING'),
+    # Remove when UpSetR > 1.4.1 or ggupset > 0.4.1 stop warning. See PREFIXES.
+    ('combination_analysis.qmd', 'combination_header', 'WARNING'),
+    ('combination_analysis.qmd', 'combination_upsetr', 'WARNING'),
 )
+
+# The message starts that an ALLOWED chunk MUST show in the log, and the only ones it MAY show
+# there. The page MUST NOT show them. A chunk that is not a key here MAY show any message.
+# The values are the ggplot2 deprecation warnings that ggupset 0.4.1 and UpSetR 1.4.1 raised
+# in epirhandbook-data-viz:2.9 on 2026-10-05. combination_ggupset raises none, because ggplot2
+# gives each deprecation warning once per session and combination_header raises it first.
+# Remove when UpSetR > 1.4.1 or ggupset > 0.4.1 stop warning.
+PREFIXES = {
+    ('combination_analysis.qmd', 'combination_header', 'WARNING'): (
+        'Using `size` aesthetic for lines was deprecated in ggplot2 3.4.0.',
+    ),
+    ('combination_analysis.qmd', 'combination_upsetr', 'WARNING'): (
+        '`aes_string()` was deprecated in ggplot2 3.0.0.',
+        'The `size` argument of `element_line()` is deprecated as of ggplot2 3.4.0.',
+    ),
+}
 
 # Messages that a page MAY show, by page stem. ggtree 4.2.0 gheatmap() adds its own y and fill
 # scales. So the gheatmap() chunks of phylogenetic_trees print "Scale for y is already present"
@@ -109,8 +132,8 @@ class StderrCells(HTMLParser):
 
 
 def read_log(log):
-    """Return the failures in the log, the ALLOWED entries it carries, and the allowed
-    warning messages by page stem."""
+    """Return the failures in the log, the ALLOWED entries and the PREFIXES it carries, and
+    the allowed warning messages by page stem."""
     failures, seen, messages = [], set(), {}
     text = log.read_text(encoding='utf-8', errors='replace')
     for number, raw in enumerate(text.splitlines(), 1):
@@ -124,12 +147,20 @@ def read_log(log):
             continue
         kind, source, label, message = m.groups()
         entry = (Path(source).name, label, kind)
+        where = '%s [%s] (%s line %d)' % (source, label, log, number)
+        if entry in PREFIXES:
+            prefix = next((p for p in PREFIXES[entry] if squash(message).startswith(p)), None)
+            if prefix is None:
+                failures.append('R %s in %s, with a message that PREFIXES does not give: %s'
+                                % (kind.lower(), where, message.strip()))
+                continue
+            seen.add(entry + (prefix,))
         if entry in ALLOWED:
             seen.add(entry)
-            if kind == 'WARNING':
+            # A PREFIXES warning is allowed in the log only. Its page MUST NOT show it.
+            if kind == 'WARNING' and entry not in PREFIXES:
                 messages.setdefault(Path(source).stem, set()).add(squash(message))
             continue
-        where = '%s [%s] (%s line %d)' % (source, label, log, number)
         failures.append('R %s in %s: %s' % (kind.lower(), where, message.strip()))
     return failures, seen, messages
 
@@ -161,18 +192,20 @@ def read_pages(pages, root, messages):
         parser.close()
         left = set(messages.get(page.stem, ()))
         notes = NOTES.get(page.stem, ())
-        bad = 0
+        bad = []
         for cell in parser.cells:
             if note_cell(cell, notes):
                 continue
             message = allowed_cell(cell, left)
             if message is None:
-                bad += 1
+                bad.append(cell)
             else:
                 left.discard(message)
         if bad:
-            failures.append('%s: %d cell-output-stderr element(s), output a chunk sent to stderr'
-                            % (shown, bad))
+            # Name each cell, so the reader sees which output to remove.
+            cells = ''.join('\n    %s' % (c[:120] + '...' if len(c) > 120 else c) for c in bad)
+            failures.append('%s: %d cell-output-stderr element(s), output a chunk sent to stderr%s'
+                            % (shown, len(bad), cells))
         for name, pattern in LEAKS:
             n = len(pattern.findall(text))
             if n:
@@ -200,6 +233,12 @@ def main(argv):
             failures.append('%s: no EHB-%s line for %s [%s]. That chunk always raises it, so '
                             'the R profile that logs warnings did not run in its image.'
                             % (log, entry[2], entry[0], entry[1]))
+    for entry, prefixes in PREFIXES.items():
+        for prefix in prefixes:
+            if entry + (prefix,) not in seen:
+                failures.append('%s: no EHB-%s line for %s [%s] that starts "%s". That chunk '
+                                'always raises it, so the warning changed or the R profile did '
+                                'not run.' % (log, entry[2], entry[0], entry[1], prefix))
     failures += read_pages(pages, root, messages)
 
     for f in failures:
