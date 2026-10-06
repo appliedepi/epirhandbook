@@ -8,6 +8,11 @@ of it, and that is expected of a changelog. Read it as a record, never as curren
 
 ---
 
+## 2026-10-06: `tables_descriptive` shows why Fisher's exact test fails
+
+- The Statistics section of `tables_descriptive` now runs `fisher.test(age_by_outcome)` in the new chunk `fisher-exact-fails`, with `error=TRUE`, in all eight languages. The page shows FEXACT error 7. The prose says what the error means, that `workspace = 2e8` also fails, and how `simulate.p.value = TRUE` with `set.seed()` estimates the exact p-value. The translated prose is agent-written and needs native review (#461).
+- Check 17 accepts the error of `fisher-exact-fails` only when its message starts with `FEXACT error 7`. Another error in that chunk fails, and so does a log without that line.
+
 ## 2026-10-06: Russian hero labels, and the bench browser
 
 - The Russian eyebrow is now "Технические партнёры в сфере общественного здравоохранения". The Russian stat labels are now "Количество глав" and "Количество языков". The old labels "глав" and "языков" have the wrong grammatical case for counts that end in 1 to 4 (#459).

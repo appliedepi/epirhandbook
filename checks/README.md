@@ -805,7 +805,7 @@ knitr, and one for each error that an `error=TRUE` chunk captures. The line form
 render step tees its full output to `render.log` under `set -o pipefail`. The check removes ANSI
 colour codes from each line before it reads the line.
 
-`ALLOWED` in the script names six chunks whose warning or error the check accepts:
+`ALLOWED` in the script names seven chunks whose warning or error the check accepts:
 
 - `writing_functions.qmd`, label `error-missing-argument`, an error
 - `writing_functions.qmd`, label `error-stop`, an error
@@ -813,19 +813,27 @@ colour codes from each line before it reads the line.
 - `ggplot_tips.qmd`, label `warning-na-translate-demo`, a warning
 - `combination_analysis.qmd`, label `combination_header`, a warning
 - `combination_analysis.qmd`, label `combination_upsetr`, a warning
+- `tables_descriptive.qmd`, label `fisher-exact-fails`, an error
 
-The first four show their warning or error on purpose. The two `combination_analysis` chunks
-raise ggplot2 deprecation warnings from the code of ggupset 0.4.1 and UpSetR 1.4.1.
+The first four and `fisher-exact-fails` show their warning or error on purpose. The two
+`combination_analysis` chunks raise ggplot2 deprecation warnings from the code of ggupset 0.4.1
+and UpSetR 1.4.1.
 
-`PREFIXES` in the script gives the message starts for the two `combination_analysis` chunks. Each
-start MUST occur in the log, and a line for that chunk with another message fails:
+`PREFIXES` in the script gives the message starts for the two `combination_analysis` chunks and
+for `fisher-exact-fails`. Each start MUST occur in the log, and a line for that chunk with another
+message fails:
 
 - `combination_header`: ``Using `size` aesthetic for lines was deprecated in ggplot2 3.4.0.``
 - `combination_upsetr`: `` `aes_string()` was deprecated in ggplot2 3.0.0. ``
 - `combination_upsetr`: ``The `size` argument of `element_line()` is deprecated as of ggplot2 3.4.0.``
+- `fisher-exact-fails`: `FEXACT error 7`
 
-These are the warnings of two English renders in `epirhandbook-data-viz:2.9` on 2026-10-05. The
-page MUST NOT show them, so the three chunks carry `warning=F`.
+`fisher-exact-fails` runs `fisher.test()` on the table of `age_cat` by `outcome`. The exact test
+stops with FEXACT error 7, also with `workspace = 2e8`, and the prose explains that error. The
+page shows the error. The check does not judge error cells on a page.
+
+The three ggplot2 starts are the warnings of two English renders in `epirhandbook-data-viz:2.9`
+on 2026-10-05. The page MUST NOT show them, so the three chunks carry `warning=F`.
 `combination_ggupset` raises no warning. ggplot2 gives each deprecation warning once in a
 session, and `combination_header` raises it first. Remove the two entries when UpSetR > 1.4.1 or
 ggupset > 0.4.1 stop warning.

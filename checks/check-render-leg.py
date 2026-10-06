@@ -11,7 +11,7 @@ reaches knitr, and one line for each error that an `error=TRUE` chunk captures:
 
 The log colours these lines, so the check removes ANSI escape codes before it reads a line.
 
-ALLOWED names six chunks that raise a warning or an error that the check accepts, by file,
+ALLOWED names seven chunks that raise a warning or an error that the check accepts, by file,
 chunk label and kind. PREFIXES gives the accepted message starts for some of these chunks. The
 check fails on each of these:
 
@@ -48,12 +48,14 @@ ALLOWED = (
     # Remove when UpSetR > 1.4.1 or ggupset > 0.4.1 stop warning. See PREFIXES.
     ('combination_analysis.qmd', 'combination_header', 'WARNING'),
     ('combination_analysis.qmd', 'combination_upsetr', 'WARNING'),
+    # The page shows on purpose that fisher.test() fails on this 8 x 2 table. See PREFIXES.
+    ('tables_descriptive.qmd', 'fisher-exact-fails', 'ERROR'),
 )
 
 # The message starts that an ALLOWED chunk MUST show in the log, and the only ones it MAY show
-# there. The page MUST NOT show them. A chunk that is not a key here MAY show any message.
-# The values are the ggplot2 deprecation warnings that ggupset 0.4.1 and UpSetR 1.4.1 raised
-# in epirhandbook-data-viz:2.9 on 2026-10-05. combination_ggupset raises none, because ggplot2
+# there. The page MUST NOT show a warning from here. A chunk that is not a key here MAY show
+# any message. The two combination_analysis entries are the ggplot2 deprecation warnings that
+# ggupset 0.4.1 and UpSetR 1.4.1 raised in epirhandbook-data-viz:2.9 on 2026-10-05. combination_ggupset raises none, because ggplot2
 # gives each deprecation warning once per session and combination_header raises it first.
 # Remove when UpSetR > 1.4.1 or ggupset > 0.4.1 stop warning.
 PREFIXES = {
@@ -63,6 +65,12 @@ PREFIXES = {
     ('combination_analysis.qmd', 'combination_upsetr', 'WARNING'): (
         '`aes_string()` was deprecated in ggplot2 3.0.0.',
         'The `size` argument of `element_line()` is deprecated as of ggplot2 3.4.0.',
+    ),
+    # fisher.test() stops with this error on the age_cat x outcome table, even with
+    # workspace = 2e8. The page shows the error on purpose, and the prose explains it.
+    # Another error in this chunk fails.
+    ('tables_descriptive.qmd', 'fisher-exact-fails', 'ERROR'): (
+        'FEXACT error 7',
     ),
 }
 

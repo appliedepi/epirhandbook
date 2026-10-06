@@ -263,12 +263,18 @@ knitr::include_graphics(here::here("images", "tabyl_word.png"))
 
 **stats**パッケージの `chisq.test()` や `fisher.test()` のように、以下のように tabyls に統計的検定を用いることができます。欠測値は許容されないため、`show_na = FALSE` で tabyl から除外されることに注意してください。
 
-70+ の行には期待度数が 5 未満のセルがあり、カイ二乗近似は信頼できないため、ここでは `fisher.test()` を使います。この 8 x 2 の表では正確な p 値の計算に必要なメモリが大きすぎるため、`simulate.p.value = TRUE` で p 値を推定し、`set.seed()` で結果を再現可能にします。
+70+ の行には期待度数が 5 未満のセルがあり、カイ二乗近似は信頼できないため、ここでは `fisher.test()` を使います。しかし、この 8 x 2 の表では正確検定がエラーで停止します。
 
-```{r, warning=F, message=F}
+```{r fisher-exact-fails, error=TRUE}
 age_by_outcome <- linelist %>% 
   tabyl(age_cat, outcome, show_na = FALSE) 
 
+fisher.test(age_by_outcome)
+```
+
+`fisher.test()` はネットワークアルゴリズムで正確な p 値を計算します。このアルゴリズムは途中の結果を表に保存し、その表の大きさは引数 `workspace` で決まります。「FEXACT error 7」は、この問題の途中の結果に対してその表が小さすぎることを意味します。ここでは `workspace` を大きくしても解決せず、`workspace = 2e8` でも失敗します。代わりに `simulate.p.value = TRUE` は、行と列の合計が同じランダムな表から、同じ正確な p 値を推定します。`set.seed()` でこの推定値を再現可能にします。
+
+```{r, warning=F, message=F}
 set.seed(1)
 fisher.test(age_by_outcome, simulate.p.value = TRUE)
 ```
