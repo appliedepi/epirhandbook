@@ -8,6 +8,13 @@ of it, and that is expected of a changelog. Read it as a record, never as curren
 
 ---
 
+## 2026-10-06: `sync-chunks.py` keeps each translated heading above its own code
+
+- `merge()` in `checks/sync-chunks.py` paired comment-only lines by position. When English deleted a heading and its code, the next translated heading was wrong: fr `packages_suggested` got `# Apprendre R` above `here,`. A comment-only line now belongs to the next code line below it. A translated comment above a deleted code line is dropped, and an English comment above a new code line stays English. The comments directly above an aligned code line pair by position only when both sides hold the same number. Check 3 runs `checks/test-sync-chunks.py`, the tests of this rule (#461).
+- The rule still fails on a comment that annotates the deleted line above it. The `merge()` docstring says so, and a deletion needs a check by eye.
+- Check 4's baseline is now 374. The restored `epidemic_models` added 18 suspects, all noise. A 19th was a real defect in tr line 409: a missing backtick before `make_config` and a broken link, both fixed.
+- `checks/README.md`: the check 1 table says 350 of 350, and two claims measured on 400 files were re-measured on 408. Both still hold.
+
 ## 2026-10-06: `tables_descriptive` shows why Fisher's exact test fails
 
 - The Statistics section of `tables_descriptive` now runs `fisher.test(age_by_outcome)` in the new chunk `fisher-exact-fails`, with `error=TRUE`, in all eight languages. The page shows FEXACT error 7. The prose says what the error means, that `workspace = 2e8` also fails, and how `simulate.p.value = TRUE` with `set.seed()` estimates the exact p-value. The translated prose is agent-written and needs native review (#461).

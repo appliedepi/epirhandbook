@@ -52,11 +52,11 @@ was restored.
 
 | Property | Expected | Check | Remedy |
 |---|---|---|---|
-| the translated file exists | 357 of 357 | check 1 | translate the chapter |
-| code chunk count equals the English | 357 of 357 | check 1 | the align-chunks agent workflow, one agent per chapter, then `sync-chunks.py` |
-| heading sequence equals the English, count and level, fenced blocks stripped | 357 of 357 | check 1 | the align-headings agent workflow, one agent per chapter |
+| the translated file exists | 350 of 350 | check 1 | translate the chapter |
+| code chunk count equals the English | 350 of 350 | check 1 | the align-chunks agent workflow, one agent per chapter, then `sync-chunks.py` |
+| heading sequence equals the English, count and level, fenced blocks stripped | 350 of 350 | check 1 | the align-headings agent workflow, one agent per chapter |
 | every heading with an English `{#id}` carries that id | 0 headings differ, 0 dead links | check 2 | `sync-anchors.py`, no agent |
-| every aligned chunk's code equals the English, comments free | 0 chunks differ | check 3 | `sync-chunks.py`, no agent |
+| every aligned chunk's code equals the English, comments free | 0 chunks differ, and `test-sync-chunks.py` passes | check 3 | `sync-chunks.py`, no agent |
 | inline code spans in prose name things the English names | informational | check 4 | the inline-pass agent workflow over the new suspects |
 | every changed chapter renders without execution, fences balanced | 0 FAIL | check 6, with `--base` or `--render` | read the log under `/tmp/render-gate-<id>/` |
 | no R chunk parses worse than the English chunk | 0 files worse | check 8, with `--base` or `--render` | the sync, or a source defect |
@@ -70,8 +70,9 @@ ten workflows of the 2026-09 fix pass ran once and are history: they are in the
 [fix-pass record](https://github.com/appliedepi/epirhandbook/tree/621c4b053a1b8cba0d969dad13fb5c2a6e9155a8/archive/modernization/workflows).
 
 Check 4 is informational because a suspect span is often right: a placeholder the reader
-replaces, or a word the author put in code font. The baseline is 357 suspects as of 2026-09-17. All were judged placeholders or noise. The GIS chapter, restored the same
-day, added one more: a French verb in code font. A rise above that is what to look at, not
+replaces, or a word the author put in code font. The baseline is 374 suspects as of 2026-10-06. All were judged placeholders or noise. It was
+356 on 2026-10-05, measured at `31d35f8a`. The restored `epidemic_models` chapter added 18: 17 Japanese function names written with
+`()` and one French formula in code font. A rise above that is what to look at, not
 the number itself. Check 4 measures the declared set: the 50 non-index stems in the 7 translation
 languages. A file that `content/en/_quarto.yaml` does not declare is not measured here, and
 check 9 reports it. A declared file that is missing gets a one-line note, and check 9 reports
@@ -127,7 +128,7 @@ and `name` on an `<a>` element. The links are the `href` of every `<a>` element.
 Pandoc resolves a heading, a div, a span, a metadata title, raw HTML, an HTML comment and a
 character reference into that one page. So the checker does not re-implement pandoc's identifier
 rule, and it does not read markdown itself. A link in a YAML `title` renders on the page, so it
-counts. None of the 400 declared files carries such a link today.
+counts. None of the 408 declared files carries such a link, re-measured on 2026-10-06.
 
 A file that pandoc cannot read is a failure, not a crash. The usual cause is a front matter that
 does not parse as YAML. The checker prints `PANDOC-FAILED <file>` with the first line of the
@@ -257,7 +258,7 @@ The search for the end of an inline R expression stops at the next blank line, b
 expression cannot cross one. Without that bound the match runs to the next backtick anywhere in
 the file, and one unterminated expression swallows whole paragraphs into the placeholder. The
 gate then reads a copy that is missing prose the original carries. An expression that does not
-close inside its paragraph now stops the gate with `FAIL-placeholder`. The 400 declared files
+close inside its paragraph now stops the gate with `FAIL-placeholder`. The 408 declared files
 hold 81 inline R expressions, in 33 of those files, and none of them crosses a line break. That
 count uses the gate's own `INLINE` pattern, on prose only, with fenced blocks skipped. A plain
 count of `` `r `` over the same files gives 105, because it also counts text inside fenced
@@ -958,5 +959,5 @@ Each unused package gives one `UNUSED` line with its line in chapter 5.
 
 Remedy: remove the package from chapter 5 in English. Then run
 `python3 checks/sync-chunks.py --only content/<lang>/packages_suggested.qmd` for the other seven
-languages, and check that each section comment stays above its packages. If a chapter uses the
+languages, and check that each section comment stays above its packages. A translated comment directly above a deleted package is dropped; a comment that annotates the line above it can fall back to English, and the run counts it under "English comments used". If a chapter uses the
 package through another call form, add that form to the check.

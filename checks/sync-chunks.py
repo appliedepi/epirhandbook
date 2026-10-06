@@ -81,15 +81,36 @@ def code_part(line):
 def merge(en_body, tr_body):
     """English code, translated comments where the line aligns. Returns (lines, kept, fallback).
 
-    Lines are aligned with difflib on their code parts. In an aligned pair, a line with the
-    same code keeps the translated line (its comment survives), and a comment-only line
-    keeps the translated comment-only line. Every other line is the English line.
+    Lines are aligned with difflib on their code parts. An aligned pair of lines with a
+    non-empty code part is an anchor. An anchor keeps the translated line, so its comment
+    survives. Every other line is the English line, except a comment-only line in a pair.
 
-    A FULLY COMMENTED LINE NEVER SYNCS FROM ENGLISH, INCLUDING COMMENTED-OUT CODE.
-    Its code part is the empty string on both sides, so the two always compare equal and the
-    translated line always wins. That rule exists to protect a translator's prose comment, and
-    it cannot tell prose from code that happens to be commented out. The caller is told the
-    chunk changed, so a file can report as synced while such a line stays stale.
+    Comment-only lines and blank lines have the same code part, the empty string, so difflib
+    cannot tell them apart. The gap rule pairs them instead. A comment-only line belongs to the
+    next code line below it. A gap is the lines between two consecutive anchors, or before the
+    first anchor, or after the last one. Any code line in a gap is unmatched: English added it,
+    or English deleted it from the translation.
+
+    The trailing segment of a gap, on each side, is its comment-only lines after the last
+    unmatched code line. With no unmatched code line, it is all the comment-only lines of the
+    gap. These lines belong to the anchor that closes the gap. When the two trailing segments
+    hold the same number of lines, the k-th English line pairs with the k-th translated line.
+
+    Every other comment-only line in a gap belongs to an unmatched code line. On the English
+    side it is the English line, because its code is new. On the translated side it is
+    dropped, because its code was deleted. Example: English deletes `# B` and the code line
+    under it. The translated `# b` then belongs to that deleted line, and the translated
+    heading of the next code line stays above it (issue #461).
+
+    The rule fails on a comment that annotates the code line ABOVE it. If that line is
+    deleted, such a comment falls back to English when the counts differ. When the counts
+    match by chance, it pairs with the English heading below and lands above the wrong code.
+    Only a reader can tell the two kinds apart, so check the output of a deletion by eye.
+
+    A PAIRED COMMENT-ONLY LINE NEVER SYNCS FROM ENGLISH, INCLUDING COMMENTED-OUT CODE.
+    The translated line always wins. That rule exists to protect a translator's prose comment,
+    and it cannot tell prose from code that happens to be commented out. The caller is told
+    the chunk changed, so a file can report as synced while such a line stays stale.
 
     This is deliberate, not a bug to fix here. Deciding it needs R: only a parse of the comment
     body separates `# nodos (circulos)`, which is a correct translation, from
@@ -105,14 +126,26 @@ def merge(en_body, tr_body):
     def is_comment_only(l): return l.strip().startswith('#')
     pair = {}
     for blk in difflib.SequenceMatcher(None, ce, ct, autojunk=False).get_matching_blocks():
-        for k in range(blk.size): pair[blk.a + k] = blk.b + k
+        for k in range(blk.size):
+            if ce[blk.a + k].strip(): pair[blk.a + k] = blk.b + k
+    def trailing(body, codes, lo, hi):
+        """The comment-only lines of a gap that follow its last unmatched code line."""
+        start = max([k for k in range(lo, hi) if codes[k].strip()], default=lo - 1) + 1
+        return [k for k in range(start, hi) if is_comment_only(body[k])]
+    # The gap rule: bounds are the anchors, plus a sentinel at each end.
+    bounds = [(-1, -1)] + sorted(pair.items()) + [(len(en_body), len(tr_body))]
+    for (a0, b0), (a1, b1) in zip(bounds, bounds[1:]):
+        ea = trailing(en_body, ce, a0 + 1, a1)
+        tb = trailing(tr_body, ct, b0 + 1, b1)
+        if len(ea) == len(tb):
+            pair.update(zip(ea, tb))
     out, kept, fallback = [], 0, 0
     for i, l in enumerate(en_body):
         j = pair.get(i)
         if j is not None:
             t = tr_body[j]
             if ce[i].strip() and '#' in t and t != l: out.append(t); kept += 1; continue
-            if not ce[i].strip() and is_comment_only(l) and is_comment_only(t) and t != l: out.append(t); kept += 1; continue
+            if not ce[i].strip() and t != l: out.append(t); kept += 1; continue
         out.append(l)
         if '#' in l and (i not in pair or tr_body[pair[i]] != l): fallback += 1
     return out, kept, fallback

@@ -99,6 +99,13 @@ if ! python3 "$here/sync-chunks.py" --dry-run > "$log/chunks.txt" 2>&1; then
 fi
 grep -E '^files|^SKIPPED' "$log/chunks.txt" | sed 's/^/   /'
 grep -q '^files [0-9]*, changed 0,' "$log/chunks.txt" || rc=1
+# The tests of merge(): a translated heading stays above its own code line (issue #461).
+if ! python3 "$here/test-sync-chunks.py" > "$log/chunks-test.txt" 2>&1; then
+  rc=1
+  echo "   test-sync-chunks.py failed. The failures in $log/chunks-test.txt:"
+  grep -E '^(FAIL|ERROR):|^[A-Za-z]*Error' "$log/chunks-test.txt" | sed 's/^/   /'
+fi
+grep -E '^Ran |^OK|^FAILED' "$log/chunks-test.txt" | sed 's/^/   merge() tests: /'
 echo "== 4. Inline code spans in translated prose that occur nowhere in the English chapter (informational)"
 python3 - "$here" <<'PY'
 import re, os, sys, collections
@@ -132,7 +139,7 @@ for lang in langs:
         for span in SPAN.findall(strip(tt)):
             s2 = span.strip()
             if not (s2 in es or s2 in te or s2.strip('r ').strip() in te): per[lang] += 1
-print('   suspect spans by language:', dict(sorted(per.items())), 'total', sum(per.values()), '(baseline 2026-09-17: 357, all judged placeholders or noise. Was 356 from 2026-09-02; the extra one is es/transition_to_r.qmd, where bare R code was wrapped in backticks to stop two dollars pairing as TeX maths)')
+print('   suspect spans by language:', dict(sorted(per.items())), 'total', sum(per.values()), '(baseline 2026-10-06: 374, all judged placeholders or noise. It was 356 on 2026-10-05; the restored epidemic_models added 18: 17 Japanese function names written with () and one French formula)')
 PY
 echo "== 5. Internal links: every internal link in the declared chapter files"
 python3 "$here/check-links.py" --summary | sed 's/^/   /' \
