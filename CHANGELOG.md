@@ -8,6 +8,11 @@ of it, and that is expected of a changelog. Read it as a record, never as curren
 
 ---
 
+## 2026-10-05: chapter 5 lists only packages the book uses
+
+- `packages_suggested` no longer lists `gganimate`, `learnr`, `linelist`, `renv` and `swirl`, in all eight languages. No other English chapter uses them in R code.
+- Check 19, `checks/check-suggested-packages.py`, fails when chapter 5 lists a package that no other English chapter uses. `checks/check-sync.sh` runs it after check 16, and check 12 has 50 cases.
+
 ## 2026-10-05: `epidemic_models` is back
 
 - The chapter moves from `_excluded/` to `content/<lang>/` in all eight languages. Each `_quarto.yaml` declares it after `time_series`, and `docker-images.yml` renders it in `epirhandbook-analysis:2.9`. German stays in `_excluded/`.

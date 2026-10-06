@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Read-only: report how far the translated chapters have drifted from the English.
 # Runs every structural check the 2026-09 fix pass used. Changes nothing. Exit 1 on any drift.
-# Usage: checks/check-sync.sh                 (checks 1, 2, 3, 4, 5, 7, 9, 10, 11, 12, 14, 15 and 16; about three minutes)
+# Usage: checks/check-sync.sh                 (checks 1, 2, 3, 4, 5, 7, 9, 10, 11, 12, 14, 15, 16 and 19; about three minutes)
 #        checks/check-sync.sh --base <sha>    (also checks 6 and 8, over the files changed since <sha>)
 #        checks/check-sync.sh --render        (also checks 6 and 8, over the whole tree, ~20 min)
 # Checks 6 and 8 are the render gate and the chunk parse gate. Both need a base commit. Without
@@ -434,6 +434,9 @@ python3 "$here/check-clean-failure.py" --summary | sed 's/^/   /' \
 echo "== 16. English parse: every English R chunk parses, and no evaluated chunk muffles warnings"
 python3 "$here/check-english-parse.py" --summary | sed 's/^/   /' \
   || { python3 "$here/check-english-parse.py" | sed 's/^/   /'; rc=1; }
+echo "== 19. Suggested packages: every package chapter 5 lists is used in the R code of another English chapter"
+# The summary names each unused package, so the check runs once.
+python3 "$here/check-suggested-packages.py" --summary 2>&1 | sed 's/^/   /' || rc=1
 if [ -n "$base" ]; then
   echo "== 6. Render gate on every translated chapter changed since $base (quarto render --no-execute)"
   "$here/render-gate.sh" "$base" HEAD > "$log/render.txt" 2>&1 || rc=1

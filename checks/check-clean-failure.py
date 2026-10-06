@@ -57,6 +57,8 @@ CASES = {
     'chunk-parse-gate.py': (['HEAD', 'HEAD'], ['languages.yml']),
     # Check 16 reads the English chapters and its list of exempt chunks. It needs R.
     'check-english-parse.py': (['--summary'], ['content', 'checks/parse-exceptions.tsv']),
+    # Check 19 reads the stem list and the English chapters. It needs R too.
+    'check-suggested-packages.py': (['--summary'], ['languages.yml', 'content']),
     'render-gate.sh': (['HEAD', 'HEAD'], ['languages.yml']),
     # Checks 17 and 18 read what a render wrote, so they take paths, not the chapter set.
     'check-render-leg.py': (['html_outputs', 'render.log'], ['html_outputs', 'render.log']),

@@ -470,13 +470,13 @@ that names only `checks` for a missing `checks/parse-exceptions.tsv` fails.
 The two sync scripts run with `--dry-run`, so they write nothing. Checks 6 and 8 compare two
 commits, so they run with `HEAD HEAD` in a fixture that is a git repository. Checks 17 and 18
 read what a render wrote, so they run with the paths `html_outputs render.log` and `site`. Each of
-those three inputs is refused when it is absent and when it is empty. The other seven checks run
-with `--summary`. Check 16 needs `Rscript`, so check 12 needs it too.
+those three inputs is refused when it is absent and when it is empty. The other eight checks run
+with `--summary`. Checks 16 and 19 need `Rscript`, so check 12 needs it too.
 
 It does NOT pass `--fixture`. That flag makes a check derive its file set by globbing. Globbing
 bypasses `languages.yml`, and would exercise a path the repository never runs.
 
-Expected output: `cases: 46` and `checks that do not fail cleanly: 0`.
+Expected output: `cases: 50` and `checks that do not fail cleanly: 0`.
 
 Remedy: guard the read. Say which file is missing and why the check needs it.
 
@@ -914,3 +914,40 @@ render of 2026-10-01, assembled as the job does, gave 105 pages, 17848 relative 
 failures.
 
 Remedy: correct the link in the source chapter, or add the file or the heading id that it names.
+
+## 19. Suggested packages
+
+`checks/check-suggested-packages.py`. Chapter 5, `content/en/packages_suggested.qmd`, MUST list
+only packages that the book uses. It needs no base commit.
+
+A package is listed when it is an argument of a `p_load()` call or the repository of a
+`p_install_gh()` call in chapter 5. A package is used when the R code of another declared English
+chapter names it in one of these ways:
+
+- a `pkg::f` or `pkg:::f` call, which R reads as a `SYMBOL_PACKAGE` token
+- an argument of `library()`, `require()`, `requireNamespace()` or `p_load()`, with or without
+  `pacman::`
+- a repository string that ends in `/<pkg>` or `/<pkg>@<ref>`, in `p_load_gh()`, `p_install_gh()`,
+  `p_load_current_gh()` or `install_github()`
+
+A call counts only without a namespace, or with the namespace of the package that exports the
+function: `base`, `pacman`, or `remotes` and `devtools` for `install_github()`. So
+`other::p_load(x)` names no package. `p_load()`, `p_load_gh()` and `p_load_current_gh()` take
+their packages from every unnamed argument and from `char =`. Each other function takes one: the
+argument named `package` or `repo`, or else the first unnamed argument. So the `ref` in
+`install_github("owner/a", "feature/b")` names no package. A string counts alone or inside `c()`.
+The same rules read the packages of chapter 5.
+
+One R process parses every chunk with `parse()` and `getParseData()`. So a comment that names a
+package does not count, and neither does another string. A chunk that does not parse adds no
+package. Check 16 fails on such a chunk, unless `checks/parse-exceptions.tsv` names it.
+
+The check needs `Rscript` on PATH. Without it the check exits 2 and says so. It never skips.
+
+Expected output: `packages listed in content/en/packages_suggested.qmd 43, used 43, unused 0`.
+Each unused package gives one `UNUSED` line with its line in chapter 5.
+
+Remedy: remove the package from chapter 5 in English. Then run
+`python3 checks/sync-chunks.py --only content/<lang>/packages_suggested.qmd` for the other seven
+languages, and check that each section comment stays above its packages. If a chapter uses the
+package through another call form, add that form to the check.
