@@ -739,8 +739,9 @@ carries no chrome.
 
 A headless browser would close this limit. It would load an assembled page, run the script, and
 assert two things. `.ael-appbar` MUST exist, and `#languages-links-parent` MUST have
-`.ael-appbar-tools` as its parent. `ael-extras.html` makes that move at line 86. This machine
-carries no chromium, no playwright, no puppeteer and no chromote, so the gate does not run it.
+`.ael-appbar-tools` as its parent. `ael-extras.html` makes that move at line 86. The bench
+machine has Python Playwright 1.63.0 with Chromium, but the gate does not use a browser, so it
+does not run this test.
 
 Two flags aim it elsewhere:
 

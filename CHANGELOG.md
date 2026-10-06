@@ -8,6 +8,11 @@ of it, and that is expected of a changelog. Read it as a record, never as curren
 
 ---
 
+## 2026-10-06: Russian hero labels, and the bench browser
+
+- The Russian eyebrow is now "Технические партнёры в сфере общественного здравоохранения". The Russian stat labels are now "Количество глав" and "Количество языков". The old labels "глав" and "языков" have the wrong grammatical case for counts that end in 1 to 4 (#459).
+- The bench machine got Python Playwright 1.63.0 with Chromium on 2026-09-24. `checks/README.md` said that bench had no headless browser, and now names the browser that bench has. The 2026-09-18 entry below said the same, and stays as written.
+
 ## 2026-10-05: chapter 5 lists only packages the book uses
 
 - `packages_suggested` no longer lists `gganimate`, `learnr`, `linelist`, `renv` and `swirl`, in all eight languages. No other English chapter uses them in R code.
