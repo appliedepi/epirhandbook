@@ -14,7 +14,13 @@ Pandoc percent-encodes a link target, so the reported `old_id` and the source te
 differ. The script looks for both forms.
 
 The script rewrites prose only. It skips a fenced code block and an HTML comment, because
-pandoc reads no link there. For each file and each target it counts the links it finds in
+pandoc reads no link there.
+
+A link inside a grid-table row changes the length of that row. The row's borders would then
+miss the `+` of the separators, and pandoc would drop the table: that is how English `basics`
+lost its tables on 2026-09-08. So the script re-pads the cell it edits to the width of its
+column, measured as pandoc measures it (`checks/gridtables.py`). When the new text does not
+fit the column, the script names the row and writes nothing. For each file and each target it counts the links it finds in
 prose. The count must equal the number of findings for that pair. On any other count the
 script reports the pair and writes nothing.
 
@@ -25,6 +31,8 @@ Usage: python3 checks/rewrite-links.py [--dry-run]
 import re, subprocess, sys
 from pathlib import Path
 from urllib.parse import unquote
+
+from gridtables import corners, tables, width
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
@@ -138,7 +146,68 @@ def rewrite(path, wanted, tbl):
         out.append(new)
         at = b
     out.append(text[at:])
-    return ''.join(out), len(edits)
+    return repad(path, text, ''.join(out), edits), len(edits)
+
+
+def repad(path, old, new, edits):
+    """The new text with every edited grid-table row padded back to its borders.
+
+    An edit keeps the line count, so a row keeps its line number. The old row is aligned, so
+    its cells sit between the + columns of the table. Each edit is applied inside its cell,
+    and the cell is padded to the width of its column again. A cell whose text no longer
+    fits, or an edit that crosses a border, stops the run.
+    """
+    old_lines, new_lines = old.split('\n'), new.split('\n')
+    if len(old_lines) != len(new_lines):
+        sys.exit('%s: a link rewrite changed the line count' % path)
+    starts, pos = [], 0
+    for line in old_lines:
+        starts.append(pos)
+        pos += len(line) + 1
+    by_line = {}
+    for a, b, text in edits:
+        k = old.count('\n', 0, a)
+        by_line.setdefault(k, []).append((a - starts[k], b - starts[k], text))
+    for first, last, indent in tables(old_lines):
+        want = corners(old_lines[first][indent:])
+        for k in range(first, last + 1):
+            row = old_lines[k][indent:]
+            if k in by_line and row.startswith('|'):
+                shifted = [(a - indent, b - indent, t) for a, b, t in by_line[k]]
+                new_lines[k] = old_lines[k][:indent] + pad_row(path, k, row, want, shifted)
+    return '\n'.join(new_lines)
+
+
+def pad_row(path, k, row, want, line_edits):
+    """One edited grid-table row: each edit applied inside its cell, each cell padded."""
+    # The character index of each border: the | at each + column of the table.
+    bounds, col = [], 0
+    for i, ch in enumerate(row):
+        if col in want and ch == '|':
+            bounds.append(i)
+        col += width(ch)
+    if len(bounds) != len(want):
+        sys.exit('%s:%d: this grid-table row is not aligned to its separators, so the script '
+                 'cannot tell its cells apart. Run checks/check-grid-tables.py.' % (path, k + 1))
+    out = '|'
+    for c in range(len(bounds) - 1):
+        lo, hi = bounds[c] + 1, bounds[c + 1]
+        cell, shift = row[lo:hi], 0
+        for a, b, text in sorted(line_edits):
+            if lo <= a and b <= hi:
+                cell = cell[:a - lo + shift] + text + cell[b - lo + shift:]
+                shift += len(text) - (b - a)
+            elif a < hi and b > lo:
+                sys.exit('%s:%d: a rewritten link crosses a border of this grid-table row. '
+                         'Rewrite it by hand.' % (path, k + 1))
+        room = want[c + 1] - want[c] - 1
+        text = cell.rstrip()
+        if width(text) > room:
+            sys.exit('%s:%d: the rewritten link makes cell %d of this grid-table row wider '
+                     'than its column. Widen the column by hand, then run the script again.'
+                     % (path, k + 1, c + 1))
+        out += text + ' ' * (room - width(text)) + '|'
+    return out + row[bounds[-1] + 1:]
 
 
 tbl = table()

@@ -848,6 +848,14 @@ The check fails on each of these:
 - an element with the class `cell-output-stderr` in a page. The failure shows the text of each
   such element.
 - a render-machine path in a page: `/tmp/Rtmp`, `/home/runner` or `/book/`
+- a level-1 heading with an id on a page
+- an h2 whose number does not start with the page's chapter number
+
+Quarto writes the chapter title as an h1 with no id. An h1 with an id is text that pandoc read
+as a heading, most often the header row of a grid table that pandoc could not parse, and
+Quarto numbers it as a chapter. Every section after it is renumbered. English `basics`,
+chapter 3, shipped from 2026-09-08 to 2026-10-02 with sections numbered up to 12.1, and these
+two rules are the ones that would have failed it. Check 19 finds the cause in the source.
 
 Each chunk in `ALLOWED` always raises its warning or error. A log without
 its line comes from a render where the R profile did not run in that chunk's image. Then no
@@ -925,6 +933,19 @@ failures.
 
 Remedy: correct the link in the source chapter, or add the file or the heading id that it names.
 
+To run the check locally on a site assembled the way the job assembles it:
+
+```
+checks/site-gate.sh en=html_outputs jp=content/jp/html_outputs
+```
+
+It runs `checks/assemble-site.sh`, the same script the job runs, and then the language-switcher
+injection with a `languages.yml` that holds only the languages given. The deploy has every
+language, so its switcher links to all of them. A local render has one language or a few, and a
+switcher for all eight would link to pages that are not there. With one language, no switcher is
+injected, because there is nothing to switch to. It needs docker and the book's common image.
+Give each language's whole render: a render of a few chapters links to the chapters it left out.
+
 ## 19. Suggested packages
 
 `checks/check-suggested-packages.py`. Chapter 5, `content/en/packages_suggested.qmd`, MUST list
@@ -961,3 +982,57 @@ Remedy: remove the package from chapter 5 in English. Then run
 `python3 checks/sync-chunks.py --only content/<lang>/packages_suggested.qmd` for the other seven
 languages, and check that each section comment stays above its packages. A translated comment directly above a deleted package is dropped; a comment that annotates the line above it can fall back to English, and the run counts it under "English comments used". If a chapter uses the
 package through another call form, add that form to the check.
+
+## 20. Grid tables
+
+`python3 checks/check-grid-tables.py [--summary] [--fixture <dir>]`. `check-sync.sh` runs it
+on every declared chapter in every language. It reads the source, so it needs no render.
+
+In a pandoc grid table every content row MUST hold a `|` at each display column where the
+separator lines hold a `+`, and every separator line MUST put its `+` where the first one does.
+Pandoc slices each row at those columns. A row that misses one makes pandoc drop the table, or
+cut a cell short and lose its text. On 2026-10-02 the check found both:
+
+- In eight chapters pandoc dropped the table, and read each header row above `+===+` as a level-1
+  heading. The English rows broke when a link rewrite changed `dates.html` to `dates.qmd`, one
+  character shorter.
+- In French `basics`, a separator two characters short made pandoc render one cell empty: "Une
+  liste peut contenir un seul nombre..." was on no page.
+
+Pandoc measures display width, so a wide or fullwidth East Asian character is two columns and a
+combining mark is none. `checks/gridtables.py` holds that rule, for this check and for
+`rewrite-links.py`. A `|` anywhere else in a row is cell text, so inline code and `\|` need no
+special case.
+
+The check also fails on a cell that starts with `#`. Pandoc reads it as a heading inside the
+table, and Quarto numbers that too.
+
+It reads a table only where its lines start in column 0, outside fenced code.
+
+Expected output: one line per language, then `misaligned lines 0`.
+
+Remedy: move the `|` of the row, or the `+` of the separator, to the column the first separator
+gives. Where a cell needs more room, widen its column in every line of the table.
+
+`checks/rewrite-links.py` re-pads a grid-table row when it rewrites a link inside it. When the new
+link does not fit the cell, it names the row and writes nothing.
+
+## 21. Message counts
+
+`python3 checks/check-message-counts.py [--summary]`. `check-sync.sh` runs it on every script in
+`checks/`.
+
+A check MUST compute every count it prints. A count typed into its message text goes stale, and
+then the check misstates what it measured: on 2026-10-02 `check-sync.sh` announced "the 416
+declared chapter files" while it scanned 400.
+
+The check reads each line that prints or exits with a message, and fails on a number of two or
+more digits inside quoted text. These are allowed: a check number (`== 19.`, `check 19`), a date,
+a version such as `2.9`, a tail length (`last 20 lines`), and a line that carries the comment
+`count-ok: <reason>`.
+
+It is not in check 12. Its only input is `checks/` itself, which cannot be missing while it runs.
+
+Expected output: `scripts read <n>, typed counts in messages 0`.
+
+Remedy: compute the number, or move it into this README with its date.

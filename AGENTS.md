@@ -8,6 +8,9 @@ them all. Run it from the repository root before you finish.
   `here("data", ...)`, because a reader needs this repository's `data/` folder to follow them.
 - Every other chapter MAY show a `data/` path in an `eval=F` chunk, and MUST NOT run one.
 - A chunk MUST NOT write into `data/`, in any chapter.
+- A grid table's rows MUST hold a `|` at every display column where its separator lines hold a
+  `+`. A wide East Asian character counts as two columns. A row that misses one makes pandoc
+  drop the table or lose a cell's text. Check 19 measures it.
 - A link to a section of the same page is `#id`, never `file.qmd#id`.
 - A link MUST NOT cross languages. Point it at `<stem>.qmd` in the same folder.
 - Every chapter file except `index.qmd` MUST carry an `aliases:` entry that keeps its old URL

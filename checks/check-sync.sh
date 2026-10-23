@@ -139,7 +139,7 @@ for lang in langs:
         for span in SPAN.findall(strip(tt)):
             s2 = span.strip()
             if not (s2 in es or s2 in te or s2.strip('r ').strip() in te): per[lang] += 1
-print('   suspect spans by language:', dict(sorted(per.items())), 'total', sum(per.values()), '(baseline 2026-10-06: 374, all judged placeholders or noise. It was 356 on 2026-10-05; the restored epidemic_models added 18: 17 Japanese function names written with () and one French formula)')
+print('   suspect spans by language:', dict(sorted(per.items())), 'total', sum(per.values()), '(the baseline and its history are in checks/README.md, check 4)')
 PY
 echo "== 5. Internal links: every internal link in the declared chapter files"
 python3 "$here/check-links.py" --summary | sed 's/^/   /' \
@@ -444,6 +444,11 @@ python3 "$here/check-english-parse.py" --summary | sed 's/^/   /' \
 echo "== 19. Suggested packages: every package chapter 5 lists is used in the R code of another English chapter"
 # The summary names each unused package, so the check runs once.
 python3 "$here/check-suggested-packages.py" --summary 2>&1 | sed 's/^/   /' || rc=1
+echo "== 20. Grid tables: every row's borders line up, so pandoc reads the whole table"
+python3 "$here/check-grid-tables.py" --summary | sed 's/^/   /' \
+  || { python3 "$here/check-grid-tables.py" | sed 's/^/   /'; rc=1; }
+echo "== 21. Message counts: no check types a count into its message text"
+python3 "$here/check-message-counts.py" --summary | sed 's/^/   /' || rc=1
 if [ -n "$base" ]; then
   echo "== 6. Render gate on every translated chapter changed since $base (quarto render --no-execute)"
   "$here/render-gate.sh" "$base" HEAD > "$log/render.txt" 2>&1 || rc=1

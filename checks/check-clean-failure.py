@@ -44,6 +44,7 @@ CASES = {
     'check-links.py': (['--summary'], ['languages.yml', 'content']),
     'check-data-reads.py': (['--summary'], ['languages.yml', 'content']),
     'check-unparsed-links.py': (['--summary'], ['content']),
+    'check-grid-tables.py': (['--summary'], ['languages.yml', 'content']),
     'check-image-names.py': (['--summary'], ['content', 'images']),
     'check-landing-strings.py': (['--summary'], [
         'languages.yml', 'landing.yml', 'utils/landing-hero.R', 'content']),

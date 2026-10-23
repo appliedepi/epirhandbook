@@ -60,6 +60,15 @@ Each fix is in all eight languages.
 - `ggplot_tips`: a chunk option `warn=F` is now `warning=F`.
 - `shiny_basics`: the plot function in `global.R` drops rows with a missing `cases_reported` before `ggplot()`, as its two other versions in the chapter do.
 - `characters_strings`: the `separate()` bullet said `remove =` is FALSE by default. It is TRUE.
+## 2026-10-02: four new gates from the design pass
+
+Every defect the design pass found had got past the gates. Each of these would have caught one.
+
+- Check 20, `checks/check-grid-tables.py`, measures every grid table in every declared chapter: each row MUST hold a `|` where the separators hold a `+`, by display width as pandoc measures it. Its first run found four more files that the grid-table fix had missed. In French `basics` a separator two characters short made pandoc render a cell empty, so "Une liste peut contenir un seul nombre..." was on no page. Those four files are re-padded, with the text unchanged.
+- `checks/rewrite-links.py` re-pads a grid-table row when it rewrites a link inside it, and stops when the new link does not fit the cell. The link rewrite of 2026-09-08 broke English `basics` that way.
+- Check 17 fails on a level-1 heading with an id on a page, and on an h2 whose number does not start with the page's chapter number. English `basics` showed sections numbered up to 12.1 for three weeks.
+- Check 21, `checks/check-message-counts.py`, fails on a count typed into a check's message text. `check-sync.sh` had announced 416 declared files while it scanned 400. The README rows for check 1 said 357 pairs, where there are 343.
+- `checks/assemble-site.sh` is the deploy job's assemble step, moved out of the workflow unchanged: the tree it writes is byte-identical. `checks/site-gate.sh` runs it locally, injects the language switcher for the languages given and no others, and runs check 18. Check 18 could not run locally before, because a switcher for all eight languages links to pages a local render does not have.
 
 ## 2026-10-02: the landing page links the intro R course
 

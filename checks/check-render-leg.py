@@ -28,6 +28,11 @@ check fails on each of these:
    PREFIXES gets no such allowance, so its page MUST NOT show its warnings. A page in
    NOTES MAY carry any number of elements whose text is only lines that NOTES gives for it.
 6. A render-machine path in a page, from LEAKS.
+7. A level-1 heading with an id on a page. Quarto writes the chapter title as an h1 with no id,
+   so an h1 with one is text that pandoc read as a heading: most often the header row of a
+   grid table that pandoc could not parse. Quarto numbers it as a chapter.
+8. An h2 whose number does not start with the page's chapter number. A stray chapter heading
+   above it renumbers it, so English `basics`, chapter 3, showed a section 12.1.
 
 Exit 0 when nothing fails, 1 when something fails, and 2 when an input is missing or empty.
 
@@ -173,6 +178,62 @@ def read_log(log):
     return failures, seen, messages
 
 
+class Headings(HTMLParser):
+    """The ids of the h1 elements, the chapter number, and the data-number of each h2.
+
+    The chapter number is the one inside the page title, the h1 with the class title. The
+    breadcrumb carries a .chapter-number too, and comes first in the page.
+    """
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.h1_ids, self.h2_numbers, self.chapter = [], [], None
+        self.in_title, self.in_number, self.number = False, False, []
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        classes = (a.get('class') or '').split()
+        if tag == 'h1' and a.get('id'):
+            self.h1_ids.append(a['id'])
+        if tag == 'h1' and 'title' in classes:
+            self.in_title = True
+        if tag == 'h2' and a.get('data-number'):
+            self.h2_numbers.append(a['data-number'])
+        if tag == 'span' and 'chapter-number' in classes and self.in_title \
+                and self.chapter is None:
+            self.in_number, self.number = True, []
+
+    def handle_endtag(self, tag):
+        if tag == 'span' and self.in_number:
+            self.in_number = False
+            self.chapter = ''.join(self.number).strip() or None
+        if tag == 'h1':
+            self.in_title = False
+
+    def handle_data(self, data):
+        if self.in_number:
+            self.number.append(data)
+
+
+def heading_failures(text, shown):
+    """Rules 5 and 6 for one page."""
+    parser = Headings()
+    parser.feed(text)
+    parser.close()
+    out = []
+    if parser.h1_ids:
+        out.append('%s: %d level-1 heading(s) inside the page (%s). Pandoc read text as a '
+                   'chapter heading, most often the header row of a grid table it could not '
+                   'parse. Run checks/check-grid-tables.py.'
+                   % (shown, len(parser.h1_ids), ', '.join(parser.h1_ids[:3])))
+    if parser.chapter:
+        wrong = [n for n in parser.h2_numbers if n.split('.')[0] != parser.chapter]
+        if wrong:
+            out.append('%s: chapter %s has section number(s) %s. A stray chapter heading '
+                       'renumbered them.' % (shown, parser.chapter, ', '.join(wrong[:3])))
+    return out
+
+
 def allowed_cell(cell, allowed):
     """The allowed message that this stderr text shows, or None."""
     for message in allowed:
@@ -218,6 +279,7 @@ def read_pages(pages, root, messages):
             n = len(pattern.findall(text))
             if n:
                 failures.append('%s: the render path %s appears %d time(s)' % (shown, name, n))
+        failures += heading_failures(text, shown)
     return failures
 
 
