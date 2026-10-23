@@ -192,7 +192,9 @@ landing_hero <- function(lang, root = here::here()) {
   #   above 991px  an inline input, .aa-Input. The script moves #quarto-search
   #                out of the app bar and into the hero box, so the reader types
   #                where they clicked and the results open under the box. It
-  #                moves it back when the viewport narrows.
+  #                moves it back to the app bar when the viewport narrows or
+  #                the box scrolls out of view, so the sticky app bar always has
+  #                a search. It never moves the search while it holds the focus.
   # The 2026-10 review found the old desktop branch: a click on the hero box
   # moved the focus to the small app-bar field, and the box looked dead.
   search_js <- paste(
@@ -216,22 +218,31 @@ landing_hero <- function(lang, root = here::here()) {
     "  }",
     '  var hero = box.parentNode;',
     '  var wide = window.matchMedia("(min-width: 992px)");',
+    "  var inView = true;",
     "  function mount() {",
     '    var search = document.getElementById("quarto-search");',
     '    var slot = document.querySelector(".ael-appbar-search");',
-    "    if (!search) { return; }",
-    "    if (wide.matches && search.parentNode !== hero) {",
+    "    if (!search || search.contains(document.activeElement)) { return; }",
+    "    var here = wide.matches && inView;",
+    "    if (here && search.parentNode !== hero) {",
     "      hero.appendChild(search);",
     '      var input = search.querySelector("input");',
     '      if (input) { input.setAttribute("placeholder", box.placeholder); }',
     '      hero.classList.add("ael-hsearch-live");',
-    "    } else if (!wide.matches && slot && search.parentNode === hero) {",
+    "    } else if (!here && slot && search.parentNode === hero) {",
     "      slot.appendChild(search);",
     '      hero.classList.remove("ael-hsearch-live");',
     "    }",
     "  }",
     '  window.addEventListener("load", mount);',
     '  wide.addEventListener("change", mount);',
+    '  if ("IntersectionObserver" in window) {',
+    "    new IntersectionObserver(function (entries) {",
+    "      inView = entries[0].isIntersecting;",
+    "      mount();",
+    '    }, { rootMargin: "-60px 0px 0px 0px" }).observe(hero);',
+    "  }",
+    '  document.addEventListener("focusout", function () { setTimeout(mount, 0); });',
     "  function handover(e) {",
     "    if (!openSearch()) { return; }",
     '    box.value = "";',
