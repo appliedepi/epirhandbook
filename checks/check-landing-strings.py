@@ -168,10 +168,8 @@ INVARIANT = ('btn_start_href', 'btn_offline_href', 'np_brand', 'np_links')
 # A stale entry is a hole, so the gate names one. Declare the key again and the entry stops
 # matching anything. Rule 10 then reports the entry, and exempts nothing in silence.
 OMISSIONS = (
-    ("stat_used_num", "es",
-     'the pre-plan page reads "3 millón de veces", which is a number-agreement error'),
-    ("stat_used_num", "pt",
-     'the pre-plan page reads "3 milhão de vezes", which is a number-agreement error'),
+    ("stat_used_num", "fr",
+     'French writes the user count as English does, "1 million+"'),
 )
 
 # The four fields of one service card, in the order utils/landing-hero.R writes them into
@@ -187,7 +185,7 @@ CARD = ('h', 'p', 'href', 'link')
 CARDS = 4
 
 # Every scalar slot rule 9 reads out of a rendered page, one value each, in the order
-# utils/landing-hero.R writes them. 16 of them are landing.yml keys and 3 are not. The
+# utils/landing-hero.R writes them. 17 of them are landing.yml keys and 3 are not. The
 # expected slot total is the count of this tuple plus the count of CARD times CARDS. So a
 # slot added to the markup must be added here, or the total stops matching.
 #
@@ -200,7 +198,7 @@ SCALAR_SLOTS = ('eyebrow', 'hero_title', 'subtitle', 'search_placeholder', 'sear
                 'btn_start_href', 'btn_start', 'btn_offline_href', 'btn_offline',
                 'stat_used_num', 'stat_used_label', 'stat_chapters_num',
                 'stat_chapters_label', 'stat_languages_num', 'stat_languages_label',
-                'np_brand', 'np_lead', 'np_trust', 'np_links')
+                'np_brand', 'np_lead', 'np_trust', 'np_notify', 'np_links')
 
 # The three slots landing.yml does not key. Each already has one home, and a second copy of
 # it is the thing that drifts. So rule 9 reads each one from its own home:
@@ -610,7 +608,8 @@ if want_slots:
         ('btn_offline_href', 'btn_offline'): r'<a class="btn out" href="([^"]*)">(.*?)</a>',
         ('np_brand',): r'<div class="nplockup">\s*<img src="[^"]*" alt="([^"]*)">',
         ('np_lead',): r'<p class="nplead">(.*?)</p>',
-        ('np_trust',): r'<div class="nptrust">(.*?)</div>\s*<div class="svcs">',
+        ('np_trust',): r'<div class="nptrust">(.*?)</div>\s*<div class="npnotify">',
+        ('np_notify',): r'<div class="npnotify">(.*?)</div>\s*<div class="svcs">',
         ('np_links',): r'<div class="nplinks">(.*?)</div>',
     }
     CARD_RE = (r'<div class="svc"><div class="svch">(.*?)</div><p class="svcp">(.*?)</p>'
