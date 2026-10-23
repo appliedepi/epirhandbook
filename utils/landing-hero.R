@@ -182,17 +182,19 @@ landing_hero <- function(lang, root = here::here()) {
     sep = "\n"
   )
 
-  # The hero search box is a handle on the real search, never a second one.
-  # Quarto builds one #quarto-search per page and ael-extras.html moves it into
-  # the app bar. What that container holds depends on the viewport, because
-  # quarto-search.js sets detachedMediaQuery to "(max-width: 991px)" for a
-  # textbox search:
+  # The hero search box is the real search, never a second one. Quarto builds
+  # one #quarto-search per page and ael-extras.html moves it into the app bar.
+  # What that container holds depends on the viewport, because quarto-search.js
+  # sets detachedMediaQuery to "(max-width: 991px)" for a textbox search:
   #   below 992px  a button, .aa-DetachedSearchButton. Clicking it opens the
-  #                full-screen search overlay. Nothing else opens it.
-  #   above 991px  an inline input, .aa-Input, configured with openOnFocus.
-  #                Focusing it opens the panel.
-  # The box takes the button first and the input second. Both branches read the
-  # DOM when the reader acts, never at load, so a resize needs no rebinding.
+  #                full-screen search overlay. Nothing else opens it. A click on
+  #                the hero box clicks that button.
+  #   above 991px  an inline input, .aa-Input. The script moves #quarto-search
+  #                out of the app bar and into the hero box, so the reader types
+  #                where they clicked and the results open under the box. It
+  #                moves it back when the viewport narrows.
+  # The 2026-10 review found the old desktop branch: a click on the hero box
+  # moved the focus to the small app-bar field, and the box looked dead.
   search_js <- paste(
     "<script>",
     "(function () {",
@@ -212,6 +214,24 @@ landing_hero <- function(lang, root = here::here()) {
     "    }",
     "    return true;",
     "  }",
+    '  var hero = box.parentNode;',
+    '  var wide = window.matchMedia("(min-width: 992px)");',
+    "  function mount() {",
+    '    var search = document.getElementById("quarto-search");',
+    '    var slot = document.querySelector(".ael-appbar-search");',
+    "    if (!search) { return; }",
+    "    if (wide.matches && search.parentNode !== hero) {",
+    "      hero.appendChild(search);",
+    '      var input = search.querySelector("input");',
+    '      if (input) { input.setAttribute("placeholder", box.placeholder); }',
+    '      hero.classList.add("ael-hsearch-live");',
+    "    } else if (!wide.matches && slot && search.parentNode === hero) {",
+    "      slot.appendChild(search);",
+    '      hero.classList.remove("ael-hsearch-live");',
+    "    }",
+    "  }",
+    '  window.addEventListener("load", mount);',
+    '  wide.addEventListener("change", mount);',
     "  function handover(e) {",
     "    if (!openSearch()) { return; }",
     '    box.value = "";',
@@ -280,7 +300,7 @@ landing_hero <- function(lang, root = here::here()) {
   band <- paste0(
     '<div class="npband">\n',
     '<div class="nplockup">\n',
-    '<img src="../../images/Applied_Epi_logo.png" alt="',
+    '<img src="../../images/applied-epi-logo-2026.png" alt="',
     s("np_brand"),
     '">\n',
     '<p class="nplead">',
@@ -288,6 +308,9 @@ landing_hero <- function(lang, root = here::here()) {
     "</p>\n</div>\n",
     '<div class="nptrust">',
     s("np_trust"),
+    "</div>\n",
+    '<div class="npnotify">',
+    s("np_notify"),
     "</div>\n",
     '<div class="svcs">\n',
     paste(vapply(svcs(), card, character(1)), collapse = "\n"),

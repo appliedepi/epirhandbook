@@ -621,9 +621,9 @@ Expected output:
 ```
 languages declared: 8 (en fr es vn jp pt tr ru)
 project files wired to the theme and the app bar: 8 of 8
-keys the hero reads: 16, plus the svc cards (from utils/landing-hero.R)
-keys declared: 194 across the 7 translated blocks; 'en' declares 32
-translated blocks complete: 7 of 7; a complete block declares 13 keys, and 2 pinned omissions are allowed
+keys the hero reads: 17, plus the svc cards (from utils/landing-hero.R)
+keys declared: 202 across the 7 translated blocks; 'en' declares 33
+translated blocks complete: 7 of 7; a complete block declares 14 keys, and 1 pinned omissions are allowed
 against 'en': 28 values match it and are service-card hrefs, which the href rule allows
 pairwise: 28 ordered language pairs; 112 service-card hrefs and 2 allowed cognates skipped
 problems: 0
@@ -632,8 +632,8 @@ problems: 0
 With `--slots`, after a render, three more lines sit before `problems: 0`:
 
 ```
-slots read: 245 across the 7 rendered page(s); 30 of them fall back to 'en'
-slots expected: 245, which is 7 page(s) x (19 scalar slots + 4 fields x 4 cards)
+slots read: 252 across the 7 rendered page(s); 29 of them fall back to 'en'
+slots expected: 252, which is 7 page(s) x (20 scalar slots + 4 fields x 4 cards)
 slot mismatches: 0
 ```
 
@@ -648,7 +648,7 @@ English after the tagline was removed.
 
 **A translatable key is one the hero reads and `INVARIANT` does not name.** That one line is
 what separates a block nobody translated from a key that falls back on purpose. It comes from
-`utils/landing-hero.R`, so no edit to `landing.yml` can lower it. Today it is 13: the 16 keys
+`utils/landing-hero.R`, so no edit to `landing.yml` can lower it. Today it is 14: the 17 keys
 the hero reads, less the 4 `INVARIANT` names, plus the `svc` list.
 
 Three omissions stay legal, and a rule that rejected every omission would break all three:
@@ -656,9 +656,9 @@ Three omissions stay legal, and a rule that rejected every omission would break 
 - **A language-invariant key.** `INVARIANT` names 4: `btn_start_href`, `btn_offline_href`,
   `np_brand` and `np_links`. Each is a path, a URL or a brand name, so
   a translation of it would be the same string. No block declares one, and rule 10 never asks.
-- **A pinned omission.** `OMISSIONS` names 2, both `stat_used_num`. The Spanish and Portuguese
-  source pages read "3 millón de veces" and "3 milhão de vezes", singular after three. A block
-  that copied one would carry the error into the hero, so the count falls back to English.
+- **A pinned omission.** `OMISSIONS` names 1: `stat_used_num` in French. French writes the user
+  count as English does, "1 million+", and rule 6 rejects a value byte-identical to English, so
+  the count falls back to English.
 - **The fallback itself.** The hero reads `en` for any key the language omits, so the page still
   renders. Rule 10 changes nothing about that. It reports the gap and leaves the choice to a
   reader.
@@ -705,13 +705,13 @@ computed counts, the hero title and 4 of the 6 nonprofit-band fields. Every one 
 rendered slot, `slots read:` counted none of them, and the printed count was honest about its
 own narrower coverage.
 
-**The total is an assertion, not a line of output.** Rule 9 computes it as pages x (19 scalar
+**The total is an assertion, not a line of output.** Rule 9 computes it as pages x (20 scalar
 slots + 4 fields x 4 cards) and fails on any deviation, in either direction. The 4 is pinned in
 the check, never read from `landing.yml`, so the data cannot move the expectation. A printed
 number nobody compares is decoration, and a slot that goes unread lowers the total in silence.
 
 **A pinned total stops the data moving it and cannot stop the slot list moving it.** Delete one
-name from `SCALAR_SLOTS` and `slots read:` and `slots expected:` both fall to 34 per page, in step, and
+name from `SCALAR_SLOTS` and `slots read:` and `slots expected:` both fall to 35 per page, in step, and
 the run stays green. So the check asks `utils/landing-hero.R` for its key list and names any
 key `SCALAR_SLOTS` omits. That assertion needs no rendered page, and it runs in every mode.
 

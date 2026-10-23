@@ -8,6 +8,21 @@ of it, and that is expected of a changelog. Read it as a record, never as curren
 
 ---
 
+## 2026-10-23: the 2026-10 landing and branding review
+
+Each change is in all eight languages. The translated strings are agent-written and need native review.
+
+- The English title is "The Epidemiologist R Handbook" again, as on the old site. The seven translated titles already matched the old site and are unchanged. The app bar reads each language's book title instead of a fixed English "Epi R Handbook".
+- The landing hero has the new subtitle and counts "1 million+ users" in place of "3 million+ page views". French omits the count and falls back to English, because it is the same string. Spanish and Portuguese now declare it, so their two pinned omissions are gone.
+- The nonprofit band has the new Applied Epi description, the full course name "Introduction to R for Applied Epidemiology", "500+" agencies, and a new `np_notify` line that links to LinkedIn and the email list (https://appliedepi.org/contact/contact.html). Check 15 reads `np_notify` as its 20th scalar slot.
+- The first service card is "Free tutorials and case studies" and links to https://appliedepi.org/resources/resources.html. The live training card has the new subtext, and the third card is "R workflow support".
+- The help box beside every chapter says "live training, expert support, and scholarships". It links to the email list and to LinkedIn, and no longer to the community forum.
+- The app bar on every page has a download link to `data_used.html`. Under 600px it shows only its arrow.
+- The 2026 Applied Epi logo (`images/applied-epi-logo-2026.png`) replaces the hex in the app bar, the favicon and the nonprofit band. Dark mode gives it a white ground, because its name is navy.
+- Text and headings use the font stack of appliedepi.org, `'Sequel Sans', sans-serif`. appliedepi.org serves no Sequel Sans file, so most readers see the browser's sans-serif on both sites. Spectral and Source Sans 3 are no longer loaded. Code keeps JetBrains Mono.
+- Body text has a line height of 1.6, down from 1.75. The hero and the band above the description are smaller: at 1366 x 768 the description starts 615px from the top, down from 738px.
+- The hero search box was a handle that moved the focus to the app bar search, so a click on it looked dead. Above 991px the script now moves Quarto's search into the hero box, and the results open under it. Below 992px a click still opens the full-screen search.
+
 ## 2026-10-06: `sync-chunks.py` keeps each translated heading above its own code
 
 - `merge()` in `checks/sync-chunks.py` paired comment-only lines by position. When English deleted a heading and its code, the next translated heading was wrong: fr `packages_suggested` got `# Apprendre R` above `here,`. A comment-only line now belongs to the next code line below it. A translated comment above a deleted code line is dropped, and an English comment above a new code line stays English. The comments directly above an aligned code line pair by position only when both sides hold the same number. Check 3 runs `checks/test-sync-chunks.py`, the tests of this rule (#461).
