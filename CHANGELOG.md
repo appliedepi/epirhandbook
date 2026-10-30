@@ -8,9 +8,9 @@ of it, and that is expected of a changelog. Read it as a record, never as curren
 
 ---
 
-## 2026-10-30: the sync check's timeout is 35 minutes
+## 2026-10-30: the sync check's timeout is 40 minutes
 
-- The 20-minute timeout on `check-sync` cancelled the check on a pull request that changed most chapter files, because check 6 renders every translated chapter the diff changes. It is now 35 minutes. The job installs nothing, so the install hang it was added for cannot recur.
+- The 20-minute timeout on `check-sync` cancelled the check on a pull request that changed most chapter files, because check 6 renders every translated chapter the diff changes. It is now 40 minutes. The job installs nothing, so the install hang it was added for cannot recur.
 
 ## 2026-10-30: the translation sync check runs in the checks image
 
