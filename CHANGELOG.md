@@ -26,6 +26,9 @@ Each change is in all eight languages. The translated strings are agent-written 
 - Text and headings use the font stack of appliedepi.org, `'Sequel Sans', sans-serif`. appliedepi.org serves no Sequel Sans file, so most readers see the browser's sans-serif on both sites. Spectral and Source Sans 3 are no longer loaded. Code keeps JetBrains Mono.
 - Body text has a line height of 1.6, down from 1.75. The hero and the band above the description are smaller: at 1366 x 768 the description starts 615px from the top, down from 738px.
 - The hero search box was a handle that moved the focus to the app bar search, so a click on it looked dead. Above 991px the script now moves Quarto's search into the hero box while the box is on screen, and the results open under it. When the box scrolls out of view the search moves back to the app bar, and it never moves while it has the focus. The box shows a white focus ring. Below 992px a click still opens the full-screen search.
+- The hero subtitle no longer says "community-written".
+- Every "Join our email list" link goes to the sign-up form, https://docs.google.com/forms/d/e/1FAIpQLSdtk7Mg32lYQ3ucbIM-kIwIRxgRwDfG5TJHsVAbFjQ1i6fwiw/viewform, in place of the appliedepi.org contact page: the help box and the `np_notify` line.
+- The help box links read "Live R training", "R workflow support" and "Follow on LinkedIn", in place of "Intro R course", "R Support Desk" and "Follow us on LinkedIn".
 
 ## 2026-10-06: `sync-chunks.py` keeps each translated heading above its own code
 
