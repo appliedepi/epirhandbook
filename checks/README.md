@@ -1036,3 +1036,25 @@ It is not in check 12. Its only input is `checks/` itself, which cannot be missi
 Expected output: `scripts read <n>, typed counts in messages 0`.
 
 Remedy: compute the number, or move it into this README with its date.
+
+## 22. Lowercase names
+
+`python3 checks/check-case.py [--summary]` reads every file under `content/`, `images/` and `data/`, and fails on a name with an uppercase letter, and on two names that differ only by case. The final extension MAY be `.R`, `.Rmd` or `.Rproj`, which is how R spells them. Files a local render writes, which `.gitignore` keeps out of git, are skipped.
+
+A web server and git on Linux treat `Dates.png` and `dates.png` as two files. macOS and Windows treat them as one. So a mixed-case name works on the published site and breaks for a reader who downloads the handbook or the data: two names that differ only by case overwrite each other when unzipped. On 2026-10-30 the English render artifact failed to unzip on macOS for this reason.
+
+`python3 checks/check-case.py --tree DIR` reads one built tree and fails when two of its files differ only by case. The deploy job runs it on each offline copy before zipping it, because that tree also holds third-party files under `site_libs/` that the rule above cannot reach. The offline copy leaves out `new_pages/`, the old-URL redirect stubs, which hold the one pair the site keeps on purpose: `transition_to_R.html` and `transition_to_r.html`.
+
+Expected output: `lowercase names: <n> file(s) in content, images, data, 0 not lowercase, 0 case clash(es)`.
+
+Remedy: rename the file in lowercase, with `_` in place of a space, and change every reference to it. Check 11 then confirms that every image a chapter names exists.
+
+## 23. Interface strings
+
+`python3 checks/check-ui-strings.py [--summary]` compares the language blocks of `var UI = { ... }` in `ael-extras.html`, which build the app bar and the help box beside every chapter. Every block MUST carry the keys of the `en` block and no others, and every `lang:` tag in `languages.yml` MUST have a block.
+
+A block that lacks a key shows the word "undefined" in its place. It does not fall back to English. Only a language with no block at all reads English.
+
+Expected output: `interface strings: <n> block(s), <k> key(s) each in en, 0 finding(s)`.
+
+Remedy: add the missing key to the block, translated.
