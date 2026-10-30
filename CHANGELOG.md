@@ -8,6 +8,11 @@ of it, and that is expected of a changelog. Read it as a record, never as curren
 
 ---
 
+## 2026-10-30: the translation sync check runs beside the render
+
+- `build-deploy.yml` now calls `translation-sync.yml` itself, and `assemble-deploy` needs it. The render no longer waits for the check, which takes about 6 minutes, so a build is about 6 minutes shorter. A commit that fails the check still renders, and is never deployed. `preview.yml` and `staging.yml` no longer call the check.
+- `check-sync` has a 20-minute timeout. On 2026-10-23 its R install hung for 5 hours 20 minutes, and the deploy waited all that time.
+
 ## 2026-10-30: pull request builds also go to `staging`, temporarily
 
 - The preview hostname serves the `staging` branch, not `preview`, so the build of #462 never appeared there. `build-deploy.yml` now pushes every same-repository pull request build to `staging` as well as `preview`. The offline zips and the `offline` release still come from `main` only, and `production.yml` now also refuses a release commit that is not on `main`, so a pull request build on staging cannot be promoted. The staging step is to be removed when the 2026-10 review fixes are merged (#463).
