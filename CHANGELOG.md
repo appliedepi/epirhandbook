@@ -29,6 +29,8 @@ Each change is in all eight languages. The translated strings are agent-written 
 - The hero subtitle no longer says "community-written".
 - Every "Join our email list" link goes to the sign-up form, https://docs.google.com/forms/d/e/1FAIpQLSdtk7Mg32lYQ3ucbIM-kIwIRxgRwDfG5TJHsVAbFjQ1i6fwiw/viewform, in place of the appliedepi.org contact page: the help box and the `np_notify` line.
 - The help box links read "Live R training", "R workflow support" and "Follow on LinkedIn", in place of "Intro R course", "R Support Desk" and "Follow us on LinkedIn".
+- The build writes a `sitemap.xml` into each language folder, and `llms.txt` and `robots.txt` into the main language's folder, with `checks/site-index.py`, which `checks/assemble-site.sh` runs last. A sitemap may list only URLs under its own folder, so each lists only its own language's pages. The published host redirects every root path into `/en/`, so `/llms.txt` and `/robots.txt` are served from there, and `robots.txt` names all eight sitemaps. Each value comes from the file that holds it: the address from the new `site_url:` in `languages.yml`, the pages from each `_quarto.yaml`, the summary from `landing.yml`, and each title from its built page. A declared chapter with no built page fails the build.
+- `assemble-deploy` sets up Python and PyYAML before the assembly step, because `site-index.py` reads YAML.
 
 ## 2026-10-06: `sync-chunks.py` keeps each translated heading above its own code
 
