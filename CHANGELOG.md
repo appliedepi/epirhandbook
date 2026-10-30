@@ -8,6 +8,10 @@ of it, and that is expected of a changelog. Read it as a record, never as curren
 
 ---
 
+## 2026-10-30: the sync check's timeout is 35 minutes
+
+- The 20-minute timeout on `check-sync` cancelled the check on a pull request that changed most chapter files, because check 6 renders every translated chapter the diff changes. It is now 35 minutes. The job installs nothing, so the install hang it was added for cannot recur.
+
 ## 2026-10-30: the translation sync check runs in the checks image
 
 - `check-sync` runs in `ghcr.io/appliedepi/aedockerpublic/epirhandbook-checks:2.9`, which is `epirhandbook-common:2.9` plus git, python3 and PyYAML. The job installs nothing, so no apt install can hang it. The four install steps for pandoc, R, PyYAML and Quarto are gone. The job runs its steps under bash and marks the workspace as safe for git, because the container runs as root.
