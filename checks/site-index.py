@@ -19,6 +19,8 @@ Every value comes from the file that already holds it:
   the parts           the `part:` entries of content/<main>/_quarto.yaml
   the book title      languages.yml title of the main language
   the summary         landing.yml subtitle of the main language
+  the Applied Epi part landing.yml: the publisher, its description, the course line, the
+                      notify line, the contact links and the service cards of the main language
   a page's title      the built page's own <title>
   a language's label  languages.yml label
 
@@ -61,6 +63,12 @@ def outline(path):
     return groups
 
 
+def markdown(fragment):
+    """One landing.yml HTML fragment as Markdown: links kept, other tags dropped."""
+    text = re.sub(r'<a\s+href="([^"]+)"[^>]*>(.*?)</a>', r'[\2](\1)', fragment, flags=re.S)
+    return ' '.join(html.unescape(re.sub(r'<[^>]+>', '', text)).split())
+
+
 def page_title(page):
     """The chapter title of one built page: its <title> before the book title, unnumbered."""
     text = page.read_text(encoding='utf-8', errors='surrogateescape')
@@ -99,12 +107,31 @@ def main(site, mainlang, langs):
     out = site / mainlang
 
     landing = parse(ROOT / 'landing.yml')
-    subtitle = landing.get(mainlang, {}).get('subtitle', '') if isinstance(landing, dict) else ''
-    subtitle = html.unescape(re.sub(r'<[^>]+>', '', subtitle)).strip()
-    if not subtitle:
-        raise Unreadable('landing.yml has no subtitle for %s, and llms.txt uses it as the '
-                         'summary.' % mainlang)
-    lines = ['# %s' % entries[mainlang]['title'], '', '> %s' % subtitle, '']
+    strings = landing.get(mainlang, {}) if isinstance(landing, dict) else {}
+    need = ['subtitle', 'np_brand', 'np_lead', 'np_trust', 'np_notify', 'np_links', 'svc']
+    gone = [k for k in need if not strings.get(k)]
+    if gone:
+        raise Unreadable('landing.yml has no %s for %s, and llms.txt uses it.'
+                         % (' '.join(gone), mainlang))
+    brand = strings['np_brand']
+    home = re.search(r'href="([^"]+)"', strings['np_links'])
+    lines = ['# %s' % entries[mainlang]['title'], '',
+             '> %s' % markdown(strings['subtitle']), '',
+             'Published by [%s](%s).' % (brand, home.group(1) if home else url), '',
+             markdown(strings['np_lead'].replace('{brand}', brand)), '',
+             markdown(strings['np_trust']), '',
+             markdown(strings['np_notify']), '',
+             'Contact: %s' % markdown(strings['np_links']), '',
+             '## What %s offers' % brand, '']
+    cards = strings['svc'] if isinstance(strings['svc'], list) else []
+    for n, c in enumerate(cards, 1):
+        if not isinstance(c, dict) or not all(c.get(k) for k in ('h', 'p', 'href')):
+            raise Unreadable('landing.yml: service card %d of %s lacks h, p or href, and '
+                             'llms.txt lists every card.' % (n, mainlang))
+    if not cards:
+        raise Unreadable('landing.yml: svc of %s is not a list of cards.' % mainlang)
+    lines += ['- [%s](%s): %s' % (markdown(c['h']), c['href'], markdown(c['p'])) for c in cards]
+    lines.append('')
     for part, stems in outline(ROOT / 'content' / mainlang / '_quarto.yaml'):
         lines += ['## %s' % (part or 'Start here'), '']
         lines += ['- [%s](%s/%s/%s.html)' % (page_title(site / mainlang / (s + '.html')),
