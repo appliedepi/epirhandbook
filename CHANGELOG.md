@@ -8,6 +8,10 @@ of it, and that is expected of a changelog. Read it as a record, never as curren
 
 ---
 
+## 2026-10-30: pull request builds also go to `staging`, temporarily
+
+- The preview hostname serves the `staging` branch, not `preview`, so the build of #462 never appeared there. `build-deploy.yml` now pushes every same-repository pull request build to `staging` as well as `preview`. The offline zips and the `offline` release still come from `main` only, and `production.yml` now also refuses a release commit that is not on `main`, so a pull request build on staging cannot be promoted. The staging step is to be removed when the 2026-10 review fixes are merged (#463).
+
 ## 2026-10-06: `sync-chunks.py` keeps each translated heading above its own code
 
 - `merge()` in `checks/sync-chunks.py` paired comment-only lines by position. When English deleted a heading and its code, the next translated heading was wrong: fr `packages_suggested` got `# Apprendre R` above `here,`. A comment-only line now belongs to the next code line below it. A translated comment above a deleted code line is dropped, and an English comment above a new code line stays English. The comments directly above an aligned code line pair by position only when both sides hold the same number. Check 3 runs `checks/test-sync-chunks.py`, the tests of this rule (#461).
