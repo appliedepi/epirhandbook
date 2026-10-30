@@ -35,6 +35,7 @@ Each change is in all eight languages. The translated strings are agent-written 
 - The offline zips leave out `new_pages/`, the old-URL redirect stubs, which nobody reaches offline and which held that pair. The deploy job runs check 22 on each offline copy before zipping it.
 - Check 23 (`checks/check-ui-strings.py`) requires every language block of `var UI` in `ael-extras.html` to carry the keys of `en`. A missing key shows "undefined" on the page.
 - The cookie notice is a bar along the bottom in the theme's colours, one line high on a wide screen, in `theme-ael.scss`, in place of TermsFeed's black box with a yellow button that covered a quarter of the window. Its text no longer claims "personalized content and targeted ads": the site shows none. In all eight languages it says Google Analytics cookies count visits and pages read, and that the site shows no ads. The text is the `cookie` key of each `var UI` block in `ael-extras.html`; check 23 confirms every language has it. The preferences dialog keeps TermsFeed's look. The seven translations are agent-written.
+- The chapter `data_used` is now `download`, in all eight languages: `content/<lang>/download.qmd`. Every link follows. Each copy keeps its `/new_pages/` alias and gains `/data_used.html`, so the old URLs of both layouts still land on it. Check 9 knows the rename (`RENAMED` in `checks/check-sync.sh`). The R argument `data_used` in `writing_functions` is unrelated and unchanged.
 
 ## 2026-10-06: `sync-chunks.py` keeps each translated heading above its own code
 
