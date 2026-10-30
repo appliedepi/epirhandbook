@@ -8,6 +8,10 @@ of it, and that is expected of a changelog. Read it as a record, never as curren
 
 ---
 
+## 2026-10-30: pull request builds also go to `staging`, temporarily
+
+- The preview hostname serves the `staging` branch, not `preview`, so the build of #462 never appeared there. `build-deploy.yml` now pushes every same-repository pull request build to `staging` as well as `preview`. The offline zips and the `offline` release still come from `main` only, and `production.yml` now also refuses a release commit that is not on `main`, so a pull request build on staging cannot be promoted. The staging step is to be removed when the 2026-10 review fixes are merged (#463).
+
 ## 2026-10-23: the 2026-10 landing and branding review
 
 Each change is in all eight languages. The translated strings are agent-written and need native review.
