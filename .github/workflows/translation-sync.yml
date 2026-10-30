@@ -6,7 +6,7 @@ name: Translation sync check
 # It also runs the two gates that need a base commit, over the files changed since that
 # commit: check 6, quarto render --no-execute on every changed translated chapter, and
 # check 8, the R parse gate on every chunk of those chapters.
-# Read-only. Needs python3, git, quarto and R. What each check means and how to repair
+# Read-only. Runs in the epirhandbook-checks image. What each check means and how to repair
 # drift: checks/README.md.
 #
 # build-deploy.yml calls this workflow on the commit it builds, beside the render, and
@@ -32,6 +32,18 @@ jobs:
     # A normal run takes about 6 minutes. On 2026-10-23 the R install hung for
     # 5 hours 20 minutes and held the deploy back all that time.
     timeout-minutes: 20
+    # Every tool the checks call is in this image, so the job installs nothing:
+    # git, python3 with PyYAML, Quarto 1.9.38, and R 4.6.0 with knitr and
+    # rmarkdown. Check 8 parses chunks with R. Check 6 renders with quarto
+    # --no-execute, and quarto's knitr engine still loads knitr and rmarkdown.
+    # The checks call pandoc through `quarto pandoc`. The image is built in
+    # appliedepi/aedockerpublic, epirhandbook/2.9/checks/Dockerfile.
+    container: ghcr.io/appliedepi/aedockerpublic/epirhandbook-checks:2.9
+    # In a container job a run step without a shell runs under sh, and the
+    # base-commit step needs bash for `set -o pipefail`.
+    defaults:
+      run:
+        shell: bash
     permissions:
       contents: read
     steps:
@@ -44,29 +56,11 @@ jobs:
           ref: ${{ inputs.ref }}
           # Checks 6 and 8 read the diff against a base commit, so they need the history.
           fetch-depth: 0
-      - name: Install pandoc
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq pandoc
-      - name: Install R with knitr and rmarkdown
-        # Check 8 parses every chunk with R; r-base-core carries parse(). Check 6 renders with
-        # quarto --no-execute, and quarto's knitr engine still loads rmarkdown and knitr before
-        # it decides not to execute, so both packages must be installed. Proved on 2026-09-09:
-        # with r-base-core alone every render failed with "no package called 'rmarkdown'".
-        run: sudo apt-get install -y -qq r-base-core r-cran-knitr r-cran-rmarkdown
-      - name: Install PyYAML
-        # Checks 1 to 9 and check 15 read languages.yml through checks/langs.py, which imports
-        # PyYAML. Check 12 runs those scripts, so it needs PyYAML too. Check 15 also reads
-        # landing.yml with a yaml.SafeLoader subclass. It carried a hand-written reader
-        # until 2026-09-18, and that reader could not separate the string
-        # "3" from the number 3. Its malformed-value rule could therefore never fire here,
-        # which is worse than a dependency. python3-yaml puts the module at
-        # /usr/lib/python3/dist-packages/yaml/, on the system python3 path.
-        run: sudo apt-get install -y -qq python3-yaml
-      - name: Install Quarto
-        # Check 6 renders with quarto. 1.9.38 is the version the book's build image carries
-        # (rbase/4.6.0/Dockerfile in appliedepi/aedockerpublic).
-        uses: quarto-dev/quarto-actions/setup@v2
-        with:
-          version: 1.9.38
+      - name: Trust the workspace for git
+        # The workspace belongs to the runner's user and the container runs as
+        # root, so git refuses the repository as "dubious ownership". Checkout
+        # trusts it only while checkout runs. The steps below run git too.
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Work out the base commit
         id: base
         env:

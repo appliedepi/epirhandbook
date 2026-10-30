@@ -8,6 +8,10 @@ of it, and that is expected of a changelog. Read it as a record, never as curren
 
 ---
 
+## 2026-10-30: the translation sync check runs in the checks image
+
+- `check-sync` runs in `ghcr.io/appliedepi/aedockerpublic/epirhandbook-checks:2.9`, which is `epirhandbook-common:2.9` plus git, python3 and PyYAML. The job installs nothing, so no apt install can hang it. The four install steps for pandoc, R, PyYAML and Quarto are gone. The job runs its steps under bash and marks the workspace as safe for git, because the container runs as root.
+
 ## 2026-10-30: the translation sync check runs beside the render
 
 - `build-deploy.yml` now calls `translation-sync.yml` itself, and `assemble-deploy` needs it. The render no longer waits for the check, which takes about 6 minutes, so a build is about 6 minutes shorter. A commit that fails the check still renders, and is never deployed. `preview.yml` and `staging.yml` no longer call the check.
