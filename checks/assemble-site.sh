@@ -13,7 +13,9 @@
 #
 # Every language lands under its own <lang>/, the main language included. Each one carries its
 # own images/ copy, so a language folder is a complete site on its own. The site root holds a
-# redirect stub to the main language and nothing else: no page, and no images/ copy.
+# redirect stub to the main language, llms.txt and robots.txt: no page, and no images/ copy.
+# Each language folder also gets a sitemap.xml, and the main one a copy of llms.txt and
+# robots.txt, written last.
 #
 # This script reads <downloaded> and never writes to it. The artifacts are the render legs'
 # only output, and a second run must see what the first one saw.
@@ -126,3 +128,8 @@ printf '%s\n' \
   "<meta http-equiv=\"refresh\" content=\"0;URL='$mainlanguage/'\"><link rel=\"canonical\" href=\"$mainlanguage/\"></head>" \
   '<body></body></html>' \
   > "$site/index.html"
+
+# A sitemap.xml per language, and llms.txt and robots.txt, generated from the chapter lists and
+# the pages just assembled. llms.txt and robots.txt go into the root and into the main
+# language's folder. checks/site-index.py carries the details.
+python3 "$repo/checks/site-index.py" "$site" "$mainlanguage" "$langs"

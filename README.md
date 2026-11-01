@@ -5,7 +5,7 @@
 
 ***Go to www.epiRhandbook.com to see the latest version of the online handbook.***
 
-![Project logo](https://github.com/appliedepi/epirhandbook/blob/main/images/Epi%20R%20Handbook%20Banner%20Beige%201500x500.png)
+![Project logo](https://github.com/appliedepi/epirhandbook/blob/main/images/epi_r_handbook_banner_beige_1500x500.png)
 
 **This book strives to:**  
 
@@ -15,13 +15,13 @@
 * Be accessible in settings with low internet-connectivity via an **offline version**
   
 
-<img src="https://github.com/appliedepi/epirhandbook/blob/main/images/epiRhandbook_HexSticker_500x500.png" width="200" height="200">
+<img src="https://github.com/appliedepi/epirhandbook/blob/main/images/epirhandbook_hexsticker_500x500.png" width="200" height="200">
 
 <span style="color: black;">**Written by epis, for epis**</span>
 We are applied epis from around the world, writing in our spare time to offer this resource to the community. Your encouragement and feedback is most welcome:  
 
 * Structured **[feedback form](https://forms.gle/A5SnRVws7tPD15Js9)**  
-* Email **epiRhandbook@gmail.com** or tweet **[\@epiRhandbook](https://twitter.com/epirhandbook)**  
+* Email **contact@appliedepi.org** or tweet **[\@appliedepi](https://twitter.com/appliedepi)**  
 * Submit issues to our **[Github repository](https://github.com/epirhandbook/Epi_R_handbook)**  
 
 
@@ -339,7 +339,7 @@ More generally, the following sources provided inspiration for this handbook:
 <a rel="license" href="http://creativecommons.org/licenses/by-nc-sa/4.0/"><img alt="Creative Commons License" style="border-width:0" src="https://i.creativecommons.org/l/by-nc-sa/4.0/88x31.png" /></a><br />This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-nc-sa/4.0/">Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License</a>.
 
 
-Academic courses and epidemiologist training programs are welcome to use this handbook with their students. If you have questions about your intended use, email **epirhandbook@gmail.com**.  
+Academic courses and epidemiologist training programs are welcome to use this handbook with their students. If you have questions about your intended use, email **contact@appliedepi.org**.  
 
 
 ## Citation  
