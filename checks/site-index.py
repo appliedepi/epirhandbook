@@ -13,28 +13,30 @@ A sitemap may list only URLs under its own folder, so each language gets its own
 <site>/<lang>/sitemap.xml with its own pages, and robots.txt names every one of them.
 
 `website: llms-txt: true` in each content/<lang>/_quarto.yaml makes Quarto write a Markdown
-copy of every page, <lang>/<stem>.llms.md, and llms.txt links to those copies. Quarto also
-writes a <lang>/llms.txt, but only at the first render of a fresh project, and no later render
-updates it. The build renders one chapter at a time, so that file lists only the first chapter
-rendered (measured on Quarto 1.9.38). So this script writes llms.txt itself and deletes the
-ones in the language folders.
+copy of every page, <lang>/<stem>.llms.md, and a llms.txt. On a single-chapter render Quarto
+writes llms.txt only when it is absent, and lists only that chapter. So the image's
+build_one_chapter.sh moves it to <lang>/llms-parts/<stem>.txt after each render. This script
+joins the main language's parts into one llms.txt: Quarto's header (the book title and
+website.description) and Quarto's entry for each chapter, in chapter order under the part
+headings, with the chapter-number markup removed. It then deletes every llms-parts/ folder.
 
 Every value comes from the file that already holds it:
 
   the address         languages.yml site_url
   the pages           content/<lang>/_quarto.yaml book.chapters, in file order
   the parts           the `part:` entries of content/<main>/_quarto.yaml
-  the book title      languages.yml title of the main language
-  the top of llms.txt website.description of content/<main>/_quarto.yaml, in Markdown
-  a page's title      the built page's own <title>
+  the top of llms.txt Quarto's header in llms-parts/<first stem>.txt, which holds
+                      website.description of content/<main>/_quarto.yaml
+  a page's entry      Quarto's entry in llms-parts/<stem>.txt
   a language's label  languages.yml label
 
-A declared chapter with no built page, or with no Markdown copy, fails the build, because a
-sitemap or llms.txt must not list a dead page.
+A declared chapter with no built page, no Markdown copy or no saved llms.txt part fails the
+build, because a sitemap or llms.txt must not list a dead page or miss a live one.
 """
 import html
 import pathlib
 import re
+import shutil
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
@@ -68,14 +70,34 @@ def outline(path):
     return groups
 
 
-def page_title(page):
-    """The chapter title of one built page: its <title> before the book title, unnumbered."""
-    text = page.read_text(encoding='utf-8', errors='surrogateescape')
-    m = re.search(r'<title>(.*?)</title>', text, re.S)
+def llms_entry(path, prefix):
+    """The one page entry of a llms.txt that Quarto wrote for one render, cleaned.
+
+    Quarto writes a numbered chapter as `- [[2]{.chapter-number}  [Title]{.chapter-title}](x)`,
+    and a chapter whose heading has an id wraps that in `[...]{#id .quarto-section-identifier}`.
+    No Markdown reader parses either as one link. The number goes, every `[text]{attributes}`
+    span becomes its text, and the entry becomes `- [Title](<prefix>/x)`.
+    """
+    pages = path.read_text(encoding='utf-8').rpartition('\n## Pages\n')[2]
+    found = [l for l in pages.splitlines() if l.startswith('- [')]
+    if len(found) != 1:
+        raise Unreadable('%s holds %d page entries. Quarto writes one per render.'
+                         % (path, len(found)))
+    m = re.fullmatch(r'- \[(.*)\]\(([^()]+)\)', found[0])
     if not m:
-        raise Unreadable('%s has no <title>, so llms.txt cannot name it.' % page)
-    title = html.unescape(re.sub(r'<[^>]+>', '', m.group(1))).split(' – ')[0]
-    return re.sub(r'^\d+\s+', '', ' '.join(title.split()))
+        raise Unreadable('%s: the entry %r is not a Markdown link.' % (path, found[0]))
+    title, href = m.groups()
+    if href != path.stem + '.llms.md':
+        raise Unreadable('%s links to %s, not to %s.llms.md.' % (path, href, path.stem))
+    title = re.sub(r'\[[^\[\]]*\]\{\.chapter-number[^{}]*\}\s*', '', title)
+    while True:
+        unwrapped = re.sub(r'\[([^\[\]]*)\]\{[^{}]*\}', r'\1', title)
+        if unwrapped == title:
+            break
+        title = unwrapped
+    if re.search(r'\]\{|\{[.#]', title):
+        raise Unreadable('%s: the entry title %r still holds Pandoc markup.' % (path, title))
+    return '- [%s](%s/%s)' % (title, prefix, href)
 
 
 def main(site, mainlang, langs):
@@ -103,22 +125,23 @@ def main(site, mainlang, langs):
             + ''.join('  <url><loc>%s</loc></url>\n' % html.escape(p) for p in pages)
             + '</urlset>\n', encoding='utf-8')
         total += len(pages)
-        site.joinpath(lang, 'llms.txt').unlink(missing_ok=True)
 
-    project = parse(ROOT / 'content' / mainlang / '_quarto.yaml')
-    website = project.get('website') if isinstance(project, dict) else None
-    desc = website.get('description') if isinstance(website, dict) else None
-    if not isinstance(desc, str) or not desc.strip():
-        raise Unreadable('content/%s/_quarto.yaml has no website.description, and llms.txt '
-                         'starts with it.' % mainlang)
-    first, _, rest = desc.strip().partition('\n\n')
-    lines = ['# %s' % entries[mainlang]['title'], '', '> %s' % ' '.join(first.split()), '']
-    if rest:
-        lines += [rest.strip(), '']
-    for part, stems in outline(ROOT / 'content' / mainlang / '_quarto.yaml'):
+    groups = outline(ROOT / 'content' / mainlang / '_quarto.yaml')
+    parts = site / mainlang / 'llms-parts'
+    for _, stems in groups:
+        for s in stems:
+            if not (parts / (s + '.txt')).is_file():
+                raise Unreadable('the assembled site has no %s/llms-parts/%s.txt. The image\'s '
+                                 'build_one_chapter.sh saves one after each chapter render.'
+                                 % (mainlang, s))
+    first = parts / (groups[0][1][0] + '.txt')
+    head, pages, _ = first.read_text(encoding='utf-8').rpartition('\n## Pages\n')
+    if not pages or not head.startswith('# '):
+        raise Unreadable('%s does not hold the book title and a "## Pages" list.' % first)
+    lines = [head.rstrip(), '']
+    for part, stems in groups:
         lines += ['## %s' % (part or 'Start here'), '']
-        lines += ['- [%s](%s/%s/%s.llms.md)' % (page_title(site / mainlang / (s + '.html')),
-                                               url, mainlang, s) for s in stems]
+        lines += [llms_entry(parts / (s + '.txt'), '%s/%s' % (url, mainlang)) for s in stems]
         lines.append('')
     others = [c for c in langs if c != mainlang]
     if others:
@@ -130,6 +153,8 @@ def main(site, mainlang, langs):
     for out in (site, site / mainlang):
         out.joinpath('llms.txt').write_text('\n'.join(lines), encoding='utf-8')
         out.joinpath('robots.txt').write_text(robots, encoding='utf-8')
+    for lang in langs:
+        shutil.rmtree(site / lang / 'llms-parts', ignore_errors=True)
     print('site-index: wrote %d sitemap.xml files (%d pages), and llms.txt and robots.txt '
           'into the site root and %s/' % (len(langs), total, mainlang))
 
