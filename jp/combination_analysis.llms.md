@@ -1,0 +1,179 @@
+# 36  複数回答データの分析
+
+[![](combination_analysis_files/figure-html/combination_header-1.png)](combination_analysis_files/figure-html/combination_header-1.png)
+
+この章では、異なる値や回答の**組み合わせ**の頻度分析をプロットする方法を説明します。上記のプロットでは、複数の症状が発現した感染者の頻度分析をプロットしています。
+
+このような頻度分析は、以下のように呼ばれることもあります。
+
+- 複数回答データの分析（**Multiple response analysis**）
+- セット分析（**Sets analysis**）
+- 組み合わせ分析（**Combinations analysis**）
+
+上記のプロット例では、5 つの症状が示されており、それぞれの縦棒の下には、反映されている症状の組み合わせを示す線と点があります。
+
+まず初めに **ggupset** パッケージを使用した方法を説明し、次に **UpSetR** パッケージを使用した方法を紹介します。
+
+## 36.1 データ準備
+
+### パッケージを読む込む
+
+以下のコードを実行すると、分析に必要なパッケージが読み込まれます。このハンドブックでは、パッケージを読み込むために、**pacman** パッケージの `p_load()` を主に使用しています。p_load() は、必要に応じてパッケージをインストールし、現在の R セッションで使用するためにパッケージを読み込む関数です。また、すでにインストールされたパッケージは、R の基本パッケージである **base** （以下、**base** R）の `library()` を使用して読み込むこともできます。R のパッケージに関する詳細は [R の基礎](basics.llms.md) の章をご覧ください。
+
+``` r
+pacman::p_load(
+  tidyverse,     # データ管理と可視化
+  UpSetR,        # 複数回答データ分析用のパッケージ
+  ggupset,       # 複数回答データ分析用のパッケージ
+  appliedepidata) # 本ハンドブックで使用するサンプルデータ
+```
+
+### データをインポートする
+
+エボラ出血熱の流行をシミュレートしたデータセットをインポートします。`appliedepidata::get_data(name = "linelist_cleaned_rds")` で直接読み込めます（詳細は[ハンドブックとデータのダウンロード](download.llms.md)のページを参照）。
+
+``` r
+# ラインリストをインポートする 
+linelist_sym <- appliedepidata::get_data(name = "linelist_cleaned_rds")
+```
+
+このラインリストには、報告された 5 つの症状について、症状あり（yes）か症状なし（no）を示す変数（列）が含まれています。**ggupset** パッケージを使ってプロットを作成するために、変数の前処理が必要です。まず、データを確認しましょう（症状の変数（列）を確認するには、以下の表を右にスクロールしてください）。
+
+### 変数の値を変換する
+
+**ggupset** パッケージが求めるフォーマットに合わせるため、**dplyr** パッケージの `case_when()` を使用し、症状あり（yes）と症状なし（no）を実際の症状名に変換します。症状なし（no）の場合は、値を空白にします。以下のコードを実行すると、症状に関するすべての値が NA か症状名のどちらかに変換されます。
+
+``` r
+# 症状ごとに変数（列）の値を変換する
+linelist_sym_1 <- linelist_sym %>% 
+
+  # 症状あり（yes）または症状なし（no）を、症状名に変換する
+  # 変換前の値が (yes) であれば症状名 (fever) に置き換え、それ以外の値を NA に置き換える
+mutate(fever = ifelse(fever == "yes", "fever", NA), 
+       chills = ifelse(chills == "yes", "chills", NA),
+       cough = ifelse(cough == "yes", "cough", NA),
+       aches = ifelse(aches == "yes", "aches", NA),
+       vomit = ifelse(vomit == "yes", "vomit", NA))
+```
+
+次に、最終的にプロットに使用する 2 つの変数（列）を作成します。
+
+1.  患者ごとに、5 つすべての症状を結合した文字型変数（列）
+2.  **ggupset** パッケージが求めるフォーマットに合わせるため、その文字型変数（列）を*リスト型*に変換する
+
+以下のコードで使用されている **stringr** パッケージの `unite()` 関数についての詳細は、[文字型データ](characters_strings.llms.md)をご覧ください。
+
+``` r
+linelist_sym_1 <- linelist_sym_1 %>% 
+  unite(col = "all_symptoms",
+        c(fever, chills, cough, aches, vomit), 
+        sep = "; ",
+        remove = TRUE,
+        na.rm = TRUE) %>% 
+  mutate(
+    # 作成した all_symptoms 列をリストで複製する（次のステップで使用する ggupset() 関数のため、リスト型への変換が必要）
+    all_symptoms_list = as.list(strsplit(all_symptoms, "; "))
+    )
+```
+
+上記のコードで作成したデータを以下に表示します。右端にある 2 つの列、すなわち複数の症状を結合した文字列型の列と、それをリスト型に変換した列に注目してください。
+
+## 36.2 **ggupset** パッケージでプロットを作成する
+
+最初に、パッケージを読み込みます。
+
+``` r
+pacman::p_load(ggupset)
+```
+
+プロットを作成していきます。まず、`ggplot()` と `geom_bar()` を使用し、次に **ggupset** パッケージの `scale_x_upset()` 関数を使用します。
+
+``` r
+# 最も頻度の高い10の組み合わせ（n_intersections = 10 が表示するもの）を残す
+top_combinations <- linelist_sym_1 %>% 
+  count(all_symptoms, sort = TRUE) %>% 
+  slice_head(n = 10) %>% 
+  pull(all_symptoms)
+
+ggplot(
+  data = filter(linelist_sym_1, all_symptoms %in% top_combinations),
+  mapping = aes(x = all_symptoms_list)) +
+geom_bar() +
+scale_x_upset(
+  reverse = FALSE,
+  n_intersections = 10,
+  sets = c("fever", "chills", "cough", "aches", "vomit"))+
+labs(
+  title = "Signs & symptoms",
+  subtitle = "10 most frequent combinations of signs and symptoms",
+  caption = "Caption here.",
+  x = "Symptom combination",
+  y = "Frequency in dataset")
+```
+
+[![](combination_analysis_files/figure-html/combination_ggupset-1.png)](combination_analysis_files/figure-html/combination_ggupset-1.png)
+
+**ggupset** パッケージについての詳細は、[こちらのページ](https://rdrr.io/cran/ggupset/man/scale_x_upset.html) をご覧ください。オフラインの場合は、RStudio の Help タブに表示されるパッケージのドキュメント `?ggupset` で詳細を確認することができます。
+
+## 36.3 `UpSetR` でプロットを作成する
+
+**UpSetR** パッケージを使用すると、 プロットを細かくカスタマイズすることができますが、**ggupset** パッケージよりも難易度が高いです。
+
+最初に、パッケージを読み込みます。
+
+``` r
+pacman::p_load(UpSetR)
+```
+
+次に、データの前処理を行います。
+
+`linelist` オブジェクトの各症状の変数（列）について、症状あり（yes）の値は 1 に、症状ない（no）の値は 0 に変換する必要があります。
+
+``` r
+linelist_sym_2 <- linelist_sym %>% 
+     # convert the "yes" and "no" values into 1s and 0s
+     mutate(fever = ifelse(fever == "yes", 1, 0), 
+            chills = ifelse(chills == "yes", 1, 0),
+            cough = ifelse(cough == "yes", 1, 0),
+            aches = ifelse(aches == "yes", 1, 0),
+            vomit = ifelse(vomit == "yes", 1, 0))
+```
+
+より効率的に処理する関数に興味がある場合は、論理構文に基づいて値を 1 と 0 に置き換える関数 `+()` を利用できます。この関数は、`across()` を利用し、複数の列を一度に置き換えます。（詳しくは[データクリーニングと主要関数](cleaning.llms.md)を参照してください）。
+
+``` r
+# "yes" という値を 1 や 0 に効率的に変換するコード
+linelist_sym_2 <- linelist_sym %>% 
+  
+  # "yes" を 1 へ "no" を 0 へ置き換える
+  mutate(across(c(fever, chills, cough, aches, vomit), .fns = ~+(.x == "yes")))
+```
+
+プロットをカスタマイズする `upset()` 関数で、症状に関する変数（列）のみを使用し、プロットを作成していきます。`sets =` 引数で、比較する症状の「集合（sets）」を指定する必要があります（組み合わせに使用するすべての症状の列の名前を指定する）。また、`nsets =` 引数と `order.by = "freq"` 引数を使用し、頻度の多い上位 X 個の組み合わせ（X は任意の数）のみを表示することもできます。
+
+``` r
+# プロットを作成する
+linelist_sym_2 %>% 
+  drop_na(fever, chills, cough, aches, vomit) %>% 
+  UpSetR::upset(
+       sets = c("fever", "chills", "cough", "aches", "vomit"),
+       order.by = "freq",
+       sets.bar.color = c("blue", "red", "yellow", "darkgreen", "orange"), # optional colors
+       empty.intersections = "on",
+       # nsets = 3,
+       number.angles = 0,
+       point.size = 3.5,
+       line.size = 2, 
+       mainbar.y.label = "Symptoms Combinations",
+       sets.x.label = "Patients with Symptom")
+```
+
+[![](combination_analysis_files/figure-html/combination_upsetr-1.png)](combination_analysis_files/figure-html/combination_upsetr-1.png)
+
+## 36.4 参考資料
+
+[UpSetR パッケージの Github ページ](https://github.com/hms-dbmi/UpSetR)
+
+[試用できる UpSetR の Shiny アプリ](https://gehlenborglab.shinyapps.io/upsetr/)
+
+[UpSetR のドキュメント（高難易度）](https://cran.r-project.org/web/packages/UpSetR/UpSetR.pdf)

@@ -1,0 +1,85 @@
+# 6  Proyectos en R
+
+Un proyecto de R permite agrupar tu trabajo en una carpeta portátil y autónoma que contiene todos los archivos vínculados al mismo, facilitando su manejo. Dentro del proyecto, todos los scripts relevantes, los archivos de datos, las figuras/resultados y el historial se almacenan en subcarpetas y, lo que es más importante, el *directorio de trabajo* de dicho proyecto constituye la carpeta raíz del mismo.
+
+## 6.1 Uso sugerido
+
+Una forma común, eficiente y sencilla de utilizar R es combinar 3 elementos. Un proyecto de trabajo concreto se aloja dentro de un proyecto R. Cada uno de los tres elementos anteriores se describe a continuación.
+
+1.  Un **proyecto en R**
+
+- Un entorno de trabajo autónomo con carpetas para datos, scripts, salidas (outputs), etc
+
+2.  El paquete **here**, el cual se utiliza para indicar las rutas relativas de los archivos
+
+- Las rutas de los archivos se escriben en relación con la ubicación de la carpeta raíz del proyecto R - véase [Importar y exportar](importing.llms.md) para más información
+
+3.  El paquete **rio** para importar/exportar -`import()` y `export()` manejan cualquier tipo de archivo por su extensión (por ejemplo, .csv, .xlsx, .png)
+
+## 6.2 Creación de un proyecto R
+
+Para crear un proyecto R, selecciona “New proyect” en el menú File (Archivo).
+
+- Si quieres crear una nueva carpeta para el proyecto, selecciona “New directory” e indica dónde quieres crear la carpeta.
+- Si deseas crear el proyecto dentro de una carpeta existente, cliquea en “Existing Directory” e indica la carpeta.
+- Si quieres clonar un repositorio de Github, selecciona la tercera opción “Version Control” y luego “Git”. Consulta la página [Control de versiones y colaboración con Git y Github](collaboration.llms.md) para más detalles.
+
+[![](../../images/create_project.png)](../../images/create_project.png)
+
+El proyecto R que has creado estará en una carpeta que contiene un archivo *.Rproj*. Este archivo es un acceso directo y probablemente la forma más directa de abrir tu proyecto. También puedes abrir un proyecto seleccionando “Open Project” en el menú File. Alternativamente, en el extremo superior derecho de RStudio verás un icono de R projects y un menú desplegable de proyectos disponibles.
+
+Para salir de un proyecto R, abre un nuevo proyecto o cierra el proyecto actual (Archivo - Cerrar proyecto).
+
+### Cambiar de proyecto
+
+Para cambiar entre proyectos, clica en el icono de R projects en el menú desplegable en la parte superior derecha de RStudio. Verás las opciones de Cerrar proyecto, Abrir proyecto y una lista de proyectos recientes.
+
+[![](../../images/rproject_dropdown.png)](../../images/rproject_dropdown.png)
+
+### Ajustes
+
+Generalmente se aconseja que inicies RStudio cada vez con una “pizarra limpia” - es decir, con tu espacio de trabajo **no** arrastrado de la sesión anterior. Esto significará que los objetos y resultados de una sesión no persistirán en la siguiente sesión (deberás volver a crearlos al ejecutar tus scripts). Esto es bueno, porque te obligará a escribir mejores scripts y evitar errores a largo plazo.
+
+Para configurar RStudio para que haga “borrón y cuenta nueva” cada vez que se inicie:
+
+- Selecciona “Project Options” en el menú Tools (Herramientas).
+
+- En la pestaña “General”, configura RStudio para que **no** restaure .RData en el espacio de trabajo al iniciar, y para que **no** guarde el espacio de trabajo en .RData al salir.
+
+### Organización
+
+Es habitual tener subcarpetas en tu proyecto. Piensa en tener carpetas como “datos”, “scripts”, “figuras” y “presentaciones”. Puedes añadir carpetas de la forma típica en que añadirías una nueva carpeta en tu ordenador. Alternativamente, puedes ver en la página sobre [interacciones con directorios](directories.llms.md) para aprender a crear nuevas carpetas con los comandos de R.
+
+### Control de versiones
+
+Considera utilizar un sistema de control de versiones. Podría ser algo tan simple como tener fechas en los nombres de los scripts (por ejemplo, “transmission_analysis_2020-10-03.R”) y una carpeta de “archivado”. También es buena idea tener un texto de cabecera agregando al comienzo de cada script una descripción, etiquetas, autores y un registro de cambios.
+
+Un método más complicado implicaría utilizar Github o una plataforma similar para el control de versiones. Consulta la página sobre [Control de versiones y colaboración con Git y Github](collaboration.llms.md).
+
+Un consejo es que puedes realizar búsquedas en todo un proyecto o carpeta utilizando la herramienta “Buscar en archivos” (menú Edición). Puedes buscar e incluso reemplazar cadenas de texto en varios archivos.
+
+## 6.3 Ejemplos
+
+A continuación se muestran algunos ejemplos de importación/exportación/guardado utilizando `here()` desde un proyecto R. Lea más sobre el uso del paquete **here** en la página de [importación y exportación](importing.llms.md).
+
+*Importación de `linelist_raw.xlsx` desde la carpeta “data” de tu proyecto R*
+
+``` r
+linelist <- import(here("data", "linelist_raw.xlsx"))
+```
+
+*Exportar linelist de objetos de R como “my_linelist.rds” a la carpeta “clean” dentro de la carpeta “data” de tu proyecto R.*
+
+``` r
+export(linelist, here("data","clean", "my_linelist.rds"))
+```
+
+*Guardando el último gráfico mostrado como “epicurve_2021-02-15.png” dentro de la carpeta “epicurves” en la carpeta “outputs” de tu proyecto R.*
+
+``` r
+ggsave(here("outputs", "epicurves", "epicurve_2021-02-15.png"))
+```
+
+## 6.4 Recursos
+
+Página web de RStudio sobre [uso de proyectos R](https://support.rstudio.com/hc/en-us/articles/200526207-Using-Projects)

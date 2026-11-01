@@ -1,0 +1,1509 @@
+# 32  Salgın eğrileri
+
+[![](../../images/epicurve_top.png)](../../images/epicurve_top.png)
+
+Bir salgın eğrisi (“epi curve” olarak da bilinir), tipik olarak bir vaka kümesi veya salgın arasında geçici hastalık başlangıcı modelini görselleştirmek için kullanılan temel bir epidemiyolojik çizelgedir.
+
+Salgın eğrisi analizi, zamansal eğilimleri, aykırı değerleri, salgının büyüklüğünü, en olası maruz kalma süresini, vaka nesilleri arasındaki zaman sonlarını ortaya çıkarabilir ve hatta tanımlanamayan bir hastalığın bulaşma şeklini belirlemeye yardımcı olabilir (örn. nokta kaynak, sürekli ortak kaynak, kişiden kişiye yayılma). \[ABD CDC\]’nin web sitesinde(https://www.cdc.gov/training/quicklearns/epimode/index.html) salgın eğrilerinin yorumlanmasıyla ilgili bir online ders bulunabilir.
+
+Bu sayfada, gelişmiş özelleştirilebilirlik sağlayan **ggplot2** paketi ile salgın eğrilerinin nasıl oluşturulacağını gösteriyoruz.
+
+Ayrıca aşağıdakiler gibi özel kullanım durumları da ele alınmaktadır:
+
+- Toplu sayım verilerini çizme
+- Küçük-katları kaplama veya üretme
+- Hareketli ortalamaları uygulama
+- Hangi verilerin “geçici” olduğunu veya raporlama gecikmelerine tabi olduğunu gösterme
+- İkinci bir eksen kullanarak kümülatif vaka insidansını bindirme
+
+**incidence2** paketi daha kolay komutlarla alternatif bir yaklaşım sunar, ancak bu yazının yazıldığı sırada paket revizyondan geçiyordu ve kararlı değildi. Paket kararlı hale geldiğinde bu bölüme yeniden eklenecektir.
+
+## 32.1 Hazırlık
+
+### Paketler
+
+Bu kod parçası, analizler için gerekli olan paketlerin yüklenmesini gösterir. Bu el kitabında, gerekirse paketi kuran *ve* kullanım için yükleyen **pacman**’ın `p_load()`işlevini vurguluyoruz. Ayrıca, R **tabanı**’ndan `library()`ile kurulu paketleri yükleyebilirsiniz. R paketleri hakkında daha fazla bilgi için \[R temelleri\] ile ilgili sayfaya bakın.
+
+``` r
+pacman::p_load(
+  rio,          # file import/export
+  here,         # relative filepaths 
+  lubridate,    # working with dates/epiweeks
+  aweek,        # alternative package for working with dates/epiweeks
+  incidence2,   # epicurves of linelist data
+  i2extras,     # supplement to incidence2
+  stringr,      # search and manipulate character strings
+  forcats,      # working with factors
+  RColorBrewer, # Color palettes from colorbrewer2.org
+  tidyverse, # data management + ggplot2 graphics
+  appliedepidata # example datasets used in this handbook
+) 
+```
+
+### Verileri içe aktarma
+
+Bu bölümde iki örnek veri seti kullanılmıştır:
+
+- Simüle edilmiş bir salgından bireysel vakaların sıra listesi
+- Aynı simüle edilmiş salgından hastaneye göre toplu sayımlar
+
+Veri setleri, **rio** paketinden `import()`fonksiyonu kullanılarak içe aktarılır. Verileri içe aktarmanın çeşitli yolları için \[İçe ve dışa aktarma\] sayfasına bakın.
+
+**Vaka satır listesi**
+
+Simüle edilmiş bir Ebola salgınından vakaların veri setini içe aktarıyoruz. Adım adım izlenecek verileri indirmek istiyorsanız, \[El kitabını ve verileri indir\] sayfasındaki talimata bakın. Dosyanın çalışma dizininde olduğunu varsayıyoruz, bu nedenle bu dosya yolunda hiçbir alt klasör belirtilmemiştir.
+
+``` r
+linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds")
+```
+
+İlk 50 satır aşağıda gösterilmiştir.
+
+**Hastane tarafından toplanan vaka sayıları**
+
+El kitabının amaçları doğrultusunda, hastane tarafından haftalık toplu sayımların veri seti, aşağıdaki kodla `linelist` ‘den oluşturulur.
+
+``` r
+# import the counts data into R
+count_data <- linelist %>% 
+  group_by(hospital, date_hospitalisation) %>% 
+  summarize(n_cases = dplyr::n()) %>% 
+  filter(date_hospitalisation > as.Date("2013-06-01")) %>% 
+  ungroup()
+```
+
+İlk 50 satır aşağıda görüntülenir:
+
+### Parametreleri ayarlamak
+
+Bir raporun hazırlanması için, verilerin güncel olduğu tarih (“veri tarihi”) gibi düzenlenebilir parametreleri ayarlamak isteyebilirsiniz. Ardından, filtre uygularken veya dinamik altyazılarda kodunuzdaki `data_date` nesnesine başvurabilirsiniz.
+
+``` r
+## set the report date for the report
+## note: can be set to Sys.Date() for the current date
+data_date <- as.Date("2015-05-15")
+```
+
+### Tarihleri doğrulama
+
+Her ilgili tarih sütununun Date sınıfı olduğunu ve uygun bir değer aralığına sahip olduğunu doğrulayın. Bunu, histogramlar için `hist()`’i veya `na.rm=TRUE` ile `range()`’i veya aşağıdaki gibi `ggplot()`’u kullanarak yapabilirsiniz.
+
+``` r
+# check range of onset dates
+ggplot(data = linelist %>% drop_na(date_onset))+
+  geom_histogram(aes(x = date_onset))
+```
+
+[![](epicurves_files/figure-html/unnamed-chunk-8-1.png)](epicurves_files/figure-html/unnamed-chunk-8-1.png)
+
+## 32.2 ggplot2 ile salgın eğrileri
+
+Salgın eğrinizi oluşturmak için `ggplot()`’u kullanmak daha fazla esneklik ve özelleştirme sağlar, ancak `ggplot()`’un nasıl çalıştığına dair daha fazla çaba ve anlayış gerektirir.
+
+Vakaların zamana (haftalara, aylara vb.) göre toplanmasını *ve* tarih eksenindeki etiketlerin sonlanmalarını *manuel* olarak kontrol etmelisiniz. Bu dikkatle yönetilmelidir.
+
+Bu örnekler, `linelist` veri kümesinin bir alt kümesini kullanır - yalnızca Central Hospital’daki vakalar.
+
+``` r
+central_data <- linelist %>% 
+  filter(hospital == "Central Hospital")
+```
+
+`ggplot()` ile bir salgın eğrisi oluşturmak için üç ana unsur vardır:
+
+- Belirli “sonlanlanma” noktalarıyla ayırt edilen “bölmelere” toplanmış satır listesi vakaları içeren bir histogram,  
+- Eksenler ve etiketleri için ölçekler,  
+- Başlıklar, etiketler, altyazılar vb. dahil olmak üzere grafik görünümü için temalar.
+
+### Vaka bölmelerini belirtin
+
+Burada, vakaların histogram bölmelerinde (“çubuklar”) nasıl toplanacağını belirteceğiz. Vakaların histogram bölmelerinde toplanmasının, x ekseninde görünecek tarihlerle mutlaka aynı sonlanmalar **olmadığını** bilmek önemlidir.
+
+Aşağıda, günlük ve haftalık salgın eğrileri üretmek için belki de en basit kod verilmiştir.
+
+Aşırı kemerli `ggplot()` komutunda, veri kümesi `data =` olarak sağlanır. Bu temel üzerine, bir histogramın geometrisi `+` ile eklenir. `geom_histogram()` içinde, `date_onset` sütunu x eksenine eşlenecek şekilde estetiği eşleriz. Ayrıca `geom_histogram()` içinde ama `aes()` içinde *değil*, histogram bölmelerinin `binwidth =` değerini gün olarak ayarladık. Bu **ggplot2** sözdizimi kafa karıştırıcıysa, \[ggplot temelleri\] hakkındaki sayfayı inceleyin.
+
+***DİKKAT:*** `binwidth = 7` kullanarak haftalık vakaları grafiklendirmek, ilk durumda ilk 7 günlük bölmeyi başlatır, bu haftanın herhangi bir günü olabilir! Belirli haftalar oluşturmak için aşağıdaki bölüme bakın.
+
+``` r
+# daily 
+ggplot(data = central_data %>% drop_na(date_onset)) +          # set data
+  geom_histogram(                      # add histogram
+    mapping = aes(x = date_onset),     # map date column to x-axis
+    binwidth = 1)+                     # cases binned by 1 day 
+  labs(title = "Central Hospital - Daily")                # title
+
+# weekly
+ggplot(data = central_data %>% drop_na(date_onset)) +          # set data 
+  geom_histogram(                      # add histogram
+      mapping = aes(x = date_onset),   # map date column to x-axis
+      binwidth = 7)+                   # cases binned every 7 days, starting from first case (!) 
+  labs(title = "Central Hospital - 7-day bins, starting at first case") # title
+```
+
+[![](epicurves_files/figure-html/ggplot_simple-1.png)](epicurves_files/figure-html/ggplot_simple-1.png)
+
+[![](epicurves_files/figure-html/ggplot_simple-2.png)](epicurves_files/figure-html/ggplot_simple-2.png)
+
+Bu Central Hopital veri setindeki ilk vakanın aşağıdakilerde semptom başlangıcı olduğunu not edelim:
+
+``` r
+format(min(central_data$date_onset, na.rm=T), "%A %d %b, %Y")
+```
+
+    [1] "Thursday 01 May, 2014"
+
+**Histogram bölme kesmelerini manuel olarak belirtmek için bölme `binwidth =` argümanını *kullanmayın* ve bunun yerine `breaks =` için bir tarih vektörü sağlayın.**
+
+R **tabanı** işlevi `seq.Date()`ile tarihlerin vektörünü oluşturun. Bu fonksiyon `to =`, `from =` ve `by =` argümanlarını bekler. Örneğin, aşağıdaki komut, 15 Ocak’ta başlayan ve 28 Haziran’a kadar biten aylık tarihleri döndürür.
+
+``` r
+monthly_breaks <- seq.Date(from = as.Date("2014-02-01"),
+                           to = as.Date("2015-07-15"),
+                           by = "months")
+
+monthly_breaks   # print
+```
+
+     [1] "2014-02-01" "2014-03-01" "2014-04-01" "2014-05-01" "2014-06-01"
+     [6] "2014-07-01" "2014-08-01" "2014-09-01" "2014-10-01" "2014-11-01"
+    [11] "2014-12-01" "2015-01-01" "2015-02-01" "2015-03-01" "2015-04-01"
+    [16] "2015-05-01" "2015-06-01" "2015-07-01"
+
+Bu vektör `geom_histogram()`’a `breaks =` olarak sağlanabilir:
+
+``` r
+# monthly 
+ggplot(data = central_data %>% drop_na(date_onset)) +  
+  geom_histogram(
+    mapping = aes(x = date_onset),
+    breaks = monthly_breaks)+         # provide the pre-defined vector of breaks                    
+  labs(title = "Monthly case bins")   # title
+```
+
+[![](epicurves_files/figure-html/unnamed-chunk-14-1.png)](epicurves_files/figure-html/unnamed-chunk-14-1.png)
+
+Basit bir haftalık tarih dizisi, `by = "week"` ile ayarlanarak döndürülebilir. Örneğin:
+
+``` r
+weekly_breaks <- seq.Date(from = as.Date("2014-02-01"),
+                          to = as.Date("2015-07-15"),
+                          by = "week")
+```
+
+Belirli başlangıç ve bitiş tarihlerini sağlamaya bir alternatif, haftalık bölmelerin *ilk durumdan önceki Pazartesi günü* başlaması için *dinamik* kod yazmaktır. **Aşağıdaki örneklerde bu tarih vektörlerini kullanacağız.**
+
+``` r
+# Sequence of weekly Monday dates for CENTRAL HOSPITAL
+weekly_breaks_central <- seq.Date(
+  from = floor_date(min(central_data$date_onset, na.rm=T),   "week", week_start = 1), # monday before first case
+  to   = ceiling_date(max(central_data$date_onset, na.rm=T), "week", week_start = 1), # monday after last case
+  by   = "week")
+```
+
+Yukarıdaki oldukça göz korkutucu kodu açalım:
+
+- “from” değeri (dizinin en erken tarihi) şu şekilde oluşturulur: `date_onset` sütunundaki minimum tarih değeri (`min()` ile `na.rm=TRUE`) **lubridate** paketinden `floor_date()` öğesine beslenir. `floor_date()` “hafta” olarak ayarlandığında, her haftanın başlangıç gününün Pazartesi olması koşuluyla (`week_start = 1`) bu vakaların “hafta”sının başlangıç tarihini döndürür.  
+- Benzer şekilde, “to” değeri (dizinin bitiş tarihi), son vakadan *sonraki* Pazartesi gününü döndürmek için `ceiling_date()` ters işlevi kullanılarak oluşturulur.  
+- `seq.Date()` öğesinin “by” argümanı herhangi bir sayıda gün, hafta veya aya ayarlanabilir.  
+- Pazar haftaları için `week_start = 7` kullanın.
+
+Bu sayfa boyunca bu veri vektörlerini kullanacağımız için, tüm salgın için bir tane de tanımladık (yukarıdakiler sadece Central Hospital içindir).
+
+``` r
+# Sequence for the entire outbreak
+weekly_breaks_all <- seq.Date(
+  from = floor_date(min(linelist$date_onset, na.rm=T),   "week", week_start = 1), # monday before first case
+  to   = ceiling_date(max(linelist$date_onset, na.rm=T), "week", week_start = 1), # monday after last case
+  by   = "week")
+```
+
+Bu `seq.Date()`çıktıları, histogram bölme sonlanmalarını oluşturmak için kullanılabilir, ancak aynı zamanda bölmelerden bağımsız olabilen tarih etiketleri için sonlanmalar da kullanılabilir. Sonraki bölümlerde tarih etiketleri hakkında daha fazla bilgi edinin.
+
+***İPUCU:*** Daha basit bir `ggplot()` komutu için, bölme sonlanmalarını ve etiket sonlanmalarını önceden adlandırılmış vektörler olarak kaydedin ve yalnızca adlarını `breaks =` olarak değiştirin.
+
+### Haftalık salgın eğrisi örneği
+
+**Aşağıda, hizalanmış çubuklar, tarih etiketleri ve dikey kılavuz çizgileri ile Pazartesi haftaları için haftalık salıgın eğrileri oluşturmak için ayrıntılı örnek kod verilmiştir.** Bu bölüm, hızlı bir şekilde koda ihtiyaç duyan kullanıcı içindir. Her yönü (temalar, tarih etiketleri vb.) derinlemesine anlamak için sonraki bölümlere geçin. Önemli:
+
+- *Histogram bölme araları*, en erken vakadan önceki Pazartesi günü başlayacak ve son vakadan sonraki Pazartesi günü sona erecek şekilde yukarıda açıklandığı gibi `seq.Date()`ile tanımlanır.  
+- *Tarih etiketleri*nin aralığı, `scale_x_date()` içinde `date_breaks =` ile belirtilir.  
+- Tarih etiketleri arasındaki küçük dikey kılavuz çizgilerinin aralığı, `date_minor_breaks =` olarak belirtilir.
+- Tarihlerin doğru bölmelerde sayılmasını sağlamak için `geom_histogram()` içinde `closed = "left"` kullanıyoruz.
+- x ve y ölçeklerinde `expand = c(0,0)`eksenlerin her iki yanındaki fazla boşluğu kaldırır, bu da tarih etiketlerinin ilk çubuktan başlamasını sağlar.
+
+``` r
+# TOTAL MONDAY WEEK ALIGNMENT
+#############################
+# Define sequence of weekly breaks
+weekly_breaks_central <- seq.Date(
+      from = floor_date(min(central_data$date_onset, na.rm=T),   "week", week_start = 1), # Monday before first case
+      to   = ceiling_date(max(central_data$date_onset, na.rm=T), "week", week_start = 1), # Monday after last case
+      by   = "week")    # bins are 7-days 
+
+
+ggplot(data = central_data %>% drop_na(date_onset)) + 
+  
+  # make histogram: specify bin break points: starts the Monday before first case, end Monday after last case
+  geom_histogram(
+    
+    # mapping aesthetics
+    mapping = aes(x = date_onset),  # date column mapped to x-axis
+    
+    # histogram bin breaks
+    breaks = weekly_breaks_central, # histogram bin breaks defined previously
+      
+    closed = "left",  # count cases from start of breakpoint
+    
+    # bars
+    color = "darkblue",     # color of lines around bars
+    fill = "lightblue"      # color of fill within bars
+  )+ 
+    
+  # x-axis labels
+  scale_x_date(
+    expand            = c(0,0),           # remove excess x-axis space before and after case bars
+    date_breaks       = "4 weeks",        # date labels and major vertical gridlines appear every 3 Monday weeks
+    date_minor_breaks = "week",           # minor vertical lines appear every Monday week
+    date_labels       = "%a\n%d %b\n%Y")+ # date labels format
+  
+  # y-axis
+  scale_y_continuous(
+    expand = c(0,0))+             # remove excess y-axis space below 0 (align histogram flush with x-axis)
+  
+  # aesthetic themes
+  theme_minimal()+                # simplify plot background
+  
+  theme(
+    plot.caption = element_text(hjust = 0,        # caption on left side
+                                face = "italic"), # caption in italics
+    axis.title = element_text(face = "bold"))+    # axis titles in bold
+  
+  # labels including dynamic caption
+  labs(
+    title    = "Weekly incidence of cases (Monday weeks)",
+    subtitle = "Note alignment of bars, vertical gridlines, and axis labels on Monday weeks",
+    x        = "Week of symptom onset",
+    y        = "Weekly incident cases reported",
+    caption  = stringr::str_glue("n = {nrow(central_data)} from Central Hospital; Case onsets range from {format(min(central_data$date_onset, na.rm=T), format = '%a %d %b %Y')} to {format(max(central_data$date_onset, na.rm=T), format = '%a %d %b %Y')}\n{nrow(central_data %>% filter(is.na(date_onset)))} cases missing date of onset and not shown"))
+```
+
+[![](epicurves_files/figure-html/unnamed-chunk-18-1.png)](epicurves_files/figure-html/unnamed-chunk-18-1.png)
+
+#### Pazar haftaları
+
+Pazar haftaları için yukarıdaki grafiği elde etmek için birkaç değişiklik gereklidir, çünkü `date_breaks = "weeks"` sadece Pazartesi haftaları için çalışır.
+
+- *Histogram bölmeleri*nin sonlanma noktaları Pazar günleri olarak ayarlanmalıdır (`week_start = 7`).
+- `scale_x_date()` içinde, tarih etiketlerinin ve dikey kılavuz çizgilerinin Pazar günleri hizalanmasını sağlamak için `breaks =` ve `minor_breaks =` için benzer tarih sonlanmaları sağlanmalıdır.
+
+Örneğin, Pazar haftaları için `scale_x_date()` komutu şöyle görünebilir:
+
+``` r
+scale_x_date(
+    expand = c(0,0),
+    
+    # specify interval of date labels and major vertical gridlines
+    breaks = seq.Date(
+      from = floor_date(min(central_data$date_onset, na.rm=T),   "week", week_start = 7), # Sunday before first case
+      to   = ceiling_date(max(central_data$date_onset, na.rm=T), "week", week_start = 7), # Sunday after last case
+      by   = "4 weeks"),
+    
+    # specify interval of minor vertical gridline 
+    minor_breaks = seq.Date(
+      from = floor_date(min(central_data$date_onset, na.rm=T),   "week", week_start = 7), # Sunday before first case
+      to   = ceiling_date(max(central_data$date_onset, na.rm=T), "week", week_start = 7), # Sunday after last case
+      by   = "week"),
+   
+    # date label format
+    #date_labels = "%a\n%d %b\n%Y")+         # day, above month abbrev., above 2-digit year
+    label = scales::label_date_short()) # automatic label formatting
+```
+
+### Değere göre grup/renk
+
+Histogram çubukları, grup ve “yığılmış” olarak renklendirilebilir. Gruplandırma sütununu atamak için aşağıdaki değişiklikleri yapın. Ayrıntılar için \[ggplot temelleri\] sayfasına bakın.
+
+- Histogram estetik haritalama `aes()`içinde, sütun adını `group =` ve `fill =` bağımsız değişkenini eşleştirin.
+- `aes()` *dışındaki* herhangi bir `fill =` argümanını kaldırın, çünkü içindekini geçersiz kılar.  
+- `aes()` *içindeki* argümanlar *gruba göre* uygulanırken, *dışındaki* herhangi bir argüman tüm çubuklara uygulanacaktır (örneğin, yine de `color =` dışarıda isteyebilirsiniz, böylece her çubuk aynı kenarlığa sahip olur).
+
+Çubukları cinsiyete göre gruplamak ve renklendirmek için `aes()`komutu şöyle görünür:
+
+``` r
+aes(x = date_onset, group = gender, fill = gender)
+```
+
+Burada uygulanır:
+
+``` r
+ggplot(data = linelist %>% drop_na(date_onset)) +     # begin with linelist (many hospitals)
+  
+  # make histogram: specify bin break points: starts the Monday before first case, end Monday after last case
+  geom_histogram(
+    mapping = aes(
+      x = date_onset,
+      group = hospital,       # set data to be grouped by hospital
+      fill = hospital),       # bar fill (inside color) by hospital
+    
+    # bin breaks are Monday weeks
+    breaks = weekly_breaks_all,   # sequence of weekly Monday bin breaks for whole outbreak, defined in previous code       
+    
+    closed = "left",          # count cases from start of breakpoint
+
+    # Color around bars
+    color = "black")
+```
+
+[![](epicurves_files/figure-html/unnamed-chunk-21-1.png)](epicurves_files/figure-html/unnamed-chunk-21-1.png)
+
+### Renkleri ayarlamak
+
+- Her grup için dolguyu *manuel* olarak ayarlamak için `scale_fill_manual()` öğesini kullanın (not: `scale_color_manual()` farklıdır!).
+  - Bir renk vektörü uygulamak için `values =` argümanını kullanın.  
+  - `NA` değerleri için bir renk belirtmek için `na.value =` kullanın.  
+  - Gösterge öğelerinin metnini değiştirmek için `labels =` argümanını kullanın. Güvende olmak için, `c("old" = "new", "old" = "new")` gibi adlandırılmış bir vektör sağlayın veya verilerin kendisindeki değerleri ayarlayın.  
+  - Açıklamaya uygun bir başlık koymak için `name =` kullanın.
+- Renk ölçekleri ve paletler hakkında daha fazla ipucu için \[ggplot temelleri\] sayfasına bakın.
+
+``` r
+ggplot(data = linelist %>% drop_na(date_onset))+           # begin with linelist (many hospitals)
+  
+  # make histogram
+  geom_histogram(
+    mapping = aes(x = date_onset,
+        group = hospital,          # cases grouped by hospital
+        fill = hospital),          # bar fill by hospital
+    
+    # bin breaks
+    breaks = weekly_breaks_all,        # sequence of weekly Monday bin breaks, defined in previous code
+    
+    closed = "left",               # count cases from start of breakpoint
+
+    # Color around bars
+    color = "black")+              # border color of each bar
+  
+  # manual specification of colors
+  scale_fill_manual(
+    values = c("black", "orange", "grey", "beige", "blue", "brown"),
+    labels = c("St. Mark's Maternity Hospital (SMMH)" = "St. Mark's"),
+    name = "Hospital") # specify fill colors ("values") - attention to order!
+```
+
+[![](epicurves_files/figure-html/unnamed-chunk-22-1.png)](epicurves_files/figure-html/unnamed-chunk-22-1.png)
+
+### Seviye sırasını ayarlamak
+
+Gruplandırılmış çubukların istiflendiği sıra, en iyi şekilde gruplandırma sütununu sınıf Faktörü olarak sınıflandırarak ayarlanır. Daha sonra faktör düzeyi sırasını (ve bunların görüntü etiketlerini) belirleyebilirsiniz. Ayrıntılar için \[Faktörler\] veya \[ggplot ipuçları\] sayfasına bakın.
+
+Grafiği yapmadan önce, gruplandırma sütununu sınıf faktörüne dönüştürmek için **forcats** paketindeki `fct_relevel()` işlevini kullanın ve \[Faktörler\] sayfasında ayrıntılı olarak açıklandığı gibi seviye sırasını manuel olarak ayarlayın.
+
+``` r
+# load forcats package for working with factors
+pacman::p_load(forcats)
+
+# Define new dataset with hospital as factor
+plot_data <- linelist %>% 
+  mutate(hospital = fct_relevel(hospital, c("Missing", "Other"))) # Convert to factor and set "Missing" and "Other" as top levels to appear on epicurve top
+
+levels(plot_data$hospital) # print levels in order
+```
+
+    [1] "Missing"                             
+    [2] "Other"                               
+    [3] "Central Hospital"                    
+    [4] "Military Hospital"                   
+    [5] "Port Hospital"                       
+    [6] "St. Mark's Maternity Hospital (SMMH)"
+
+Aşağıdaki çizimde, öncekinden tek fark, `hospital` sütununu yukarıdaki gibi konsolide edilmiş olmasıdır ve gösterge sırasını tersine çevirmek için `guides()`kullanıyoruz, böylece “Eksik” göstergenin alt kısmındadır.
+
+``` r
+ggplot(plot_data %>% drop_na(date_onset)) +                     # Use NEW dataset with hospital as re-ordered factor
+  
+  # make histogram
+  geom_histogram(
+    mapping = aes(x = date_onset,
+        group = hospital,               # cases grouped by hospital
+        fill = hospital),               # bar fill (color) by hospital
+    
+    breaks = weekly_breaks_all,         # sequence of weekly Monday bin breaks for whole outbreak, defined at top of ggplot section
+    
+    closed = "left",                    # count cases from start of breakpoint
+
+    color = "black")+                   # border color around each bar
+    
+  # x-axis labels
+  scale_x_date(
+    expand            = c(0,0),         # remove excess x-axis space before and after case bars
+    date_breaks       = "3 weeks",      # labels appear every 3 Monday weeks
+    date_minor_breaks = "week",         # vertical lines appear every Monday week
+    label = scales::label_date_short()) + # efficient label formatting
+  
+  # y-axis
+  scale_y_continuous(
+    expand = c(0,0))+                   # remove excess y-axis space below 0
+  
+  # manual specification of colors, ! attention to order
+  scale_fill_manual(
+    values = c("grey", "beige", "black", "orange", "blue", "brown"),
+    labels = c("St. Mark's Maternity Hospital (SMMH)" = "St. Mark's"),
+    name = "Hospital")+ 
+  
+  # aesthetic themes
+  theme_minimal()+                      # simplify plot background
+  
+  theme(
+    plot.caption = element_text(face = "italic", # caption on left side in italics
+                                hjust = 0), 
+    axis.title = element_text(face = "bold"))+   # axis titles in bold
+  
+  # labels
+  labs(
+    title    = "Weekly incidence of cases by hospital",
+    subtitle = "Hospital as re-ordered factor",
+    x        = "Week of symptom onset",
+    y        = "Weekly cases")
+```
+
+[![](epicurves_files/figure-html/unnamed-chunk-24-1.png)](epicurves_files/figure-html/unnamed-chunk-24-1.png)
+
+***İPUCU:*** Yalnızca göstergenin sırasını tersine çevirmek için bu **ggplot2** komutunu ekleyin: `guides(fill = guide_legend(reverse = TRUE))`.
+
+### Göstergeyi ayarlamak
+
+\[ggplot ipuçları\] sayfasında göstergeler ve ölçekler hakkında daha fazla bilgi edinin. İşte birkaç önemli nokta:
+
+- Gösterge başlığını ölçek işlevinde veya `labs(fill = "Legend title")` ile düzenleyin (`color =` estetik kullanıyorsanız, `labs(color = "")` kullanın)  
+- Gösterge başlığının olmaması için `theme(legend.title = element_blank())` kulanın.  
+- `theme(legend.position = "top")` (göstergeyi kaldırmak için “alt”, “sol”, “sağ” veya “yok”) kullanın.
+- Yatay gösterge için `theme(legend.direction = "horizontal")` kullanın.
+- Göstergenin sırasını tersine çevirmek için `guides(fill = guide_legend(reverse = TRUE))` kullanın.
+
+### Yan yana çubuklar
+
+Grup çubuklarının yan yana gösterimi (yığılmışın aksine) `geom_histogram()`içinde, `position = "dodge"` `aes()` dışına yerleştirilerek belirtilir.
+
+İkiden fazla değer grubu varsa, bunların okunması zorlaşabilir. Bunun yerine fasetli bir grafik (küçük katlar) kullanmayı düşünün. Bu örnekte okunabilirliği artırmak için eksik cinsiyet değerleri kaldırılmıştır.
+
+``` r
+ggplot(central_data %>% drop_na(gender, date_onset))+   # begin with Central Hospital cases dropping missing gender
+    geom_histogram(
+        mapping = aes(
+          x = date_onset,
+          group = gender,         # cases grouped by gender
+          fill = gender),         # bars filled by gender
+        
+        # histogram bin breaks
+        breaks = weekly_breaks_central,   # sequence of weekly dates for Central outbreak - defined at top of ggplot section
+        
+        closed = "left",          # count cases from start of breakpoint
+        
+        color = "black",          # bar edge color
+        
+        position = "dodge")+      # SIDE-BY-SIDE bars
+                      
+  
+  # The labels on the x-axis
+  scale_x_date(expand            = c(0,0),         # remove excess x-axis space below and after case bars
+               date_breaks       = "3 weeks",      # labels appear every 3 Monday weeks
+               date_minor_breaks = "week",         # vertical lines appear every Monday week
+               label = scales::label_date_short())+ # efficient date labels
+  
+  # y-axis
+  scale_y_continuous(expand = c(0,0))+             # removes excess y-axis space between bottom of bars and the labels
+  
+  #scale of colors and legend labels
+  scale_fill_manual(values = c("brown", "orange"),  # specify fill colors ("values") - attention to order!
+                    na.value = "grey" )+     
+
+  # aesthetic themes
+  theme_minimal()+                                               # a set of themes to simplify plot
+  theme(plot.caption = element_text(face = "italic", hjust = 0), # caption on left side in italics
+        axis.title = element_text(face = "bold"))+               # axis titles in bold
+  
+  # labels
+  labs(title    = "Weekly incidence of cases, by gender",
+       subtitle = "Subtitle",
+       fill     = "Gender",                                      # provide new title for legend
+       x        = "Week of symptom onset",
+       y        = "Weekly incident cases reported")
+```
+
+[![](epicurves_files/figure-html/unnamed-chunk-25-1.png)](epicurves_files/figure-html/unnamed-chunk-25-1.png)
+
+### Eksen sınırları
+
+Eksen değerlerinin kapsamını sınırlamanın iki yolu vardır:
+
+Genellikle tercih edilen yol, `xlim = c(min, max)` ve `ylim = c(min, max)` (min ve max değerlerini sağladığınız) kabul eden `coord_cartesian()`komutunu kullanmaktır. Bu, istatistikler ve özet ölçümler için önemli olan herhangi bir veriyi fiilen kaldırmadan bir “yakınlaştırma” görevi görür.
+
+Alternatif olarak, `scale_x_date()`içinde `limits = c()` kullanarak maksimum ve minimum tarih değerlerini ayarlayabilirsiniz. Örneğin:
+
+``` r
+scale_x_date(limits = c(as.Date("2014-04-01"), NA)) # sets a minimum date but leaves the maximum open.  
+```
+
+Benzer şekilde, x ekseninin belirli bir tarihe (örn. geçerli tarih) uzanmasını istiyorsanız, yeni vaka bildirilmemiş olsa bile şunları kullanabilirsiniz:
+
+``` r
+scale_x_date(limits = c(NA, Sys.Date())) # ensures date axis will extend until current date  
+```
+
+***TEHLİKE:*** y ekseni ölçek sonları veya sınırlarını ayarlarken dikkatli olun (örn. 0 ila 30 by 5: `seq(0, 30, 5)`). Bu tür statik sayılar, veriler sınırı aşacak şekilde değişirse grafiğinizi çok kısa kesebilir!.
+
+### Tarih ekseni etiketleri/kılavuz çizgileri
+
+***İPUCU:*** Tarih ekseni **etiketlerinin** verilerin çubuklar halinde toplanmasından bağımsız olduğunu, ancak görsel olarak bölmeleri, tarih etiketlerini ve dikey kılavuz çizgilerini hizalamanın önemli olabileceğini unutmayın.
+
+**Tarih etiketlerini ve kılavuz çizgilerini değiştirmek** için, şu yollardan biriyle `scale_x_date()` kullanın:
+
+- **Histogram bölmeleriniz günler, Pazartesi haftaları, aylar veya yıllar ise:**
+  - Etiketlerin ve ana kılavuz çizgilerinin aralığını belirtmek için `date_breaks =` kullanın (ör. “gün”, “hafta”, “3 hafta”, “ay” veya “yıl”).
+  - Küçük dikey kılavuz çizgilerinin aralığını belirtmek için `date_minor_breaks =` kullanın (tarih etiketleri arasında).  
+  - Etiketlere ilk çubuktan başlamak için `expand = c(0,0)` ekleyin.
+  - Tarih etiketlerinin biçimini belirtmek için `date_labels =` kullanın - ipuçları için tarihler sayfasına bakın (yeni bir satır için `\n` kullanın).  
+- **Histogram bölmeleriniz Pazar haftalarıysa:**
+  - Her biri için bir tarih sonları dizisi sağlayarak `breaks =` ve `minor_breaks =` kullanın.
+  - Yukarıda açıklandığı gibi biçimlendirme için hala d`date_labels =` ve `expand =` kullanabilirsiniz.
+
+Bazı notlar:
+
+- `seq.Date()` kullanarak bir tarih dizisinin nasıl oluşturulacağına ilişkin talimatlar için açılış ggplot bölümüne bakın.  
+- Tarih etiketleri oluşturmaya ilişkin ipuçları için [bu sayfaya](https://rdrr.io/r/base/strptime.html) veya \[Tarihlerle çalışma sayfasına\] bakın.
+
+#### Sunumlar
+
+Aşağıda, bölmeler ve grafik etiketlerinin/kılavuz çizgilerinin hizalandığı ve hizalanmadığı grafiklerin bir gösterimi bulunmaktadır:
+
+``` r
+# 7-day bins + Monday labels
+#############################
+ggplot(central_data %>% drop_na(date_onset)) +
+  geom_histogram(
+    mapping = aes(x = date_onset),
+    binwidth = 7,                 # 7-day bins with start at first case
+    color = "darkblue",
+    fill = "lightblue") +
+  
+  scale_x_date(
+    expand = c(0,0),               # remove excess x-axis space below and after case bars
+    date_breaks = "3 weeks",       # Monday every 3 weeks
+    date_minor_breaks = "week",    # Monday weeks
+    label = scales::label_date_short())+ # automatic label formatting
+  
+  scale_y_continuous(
+    expand = c(0,0))+              # remove excess space under x-axis, make flush
+  
+  labs(
+    title = "MISALIGNED",
+    subtitle = "! CAUTION: 7-day bars start Thursdays at first case\nDate labels and gridlines on Mondays\nNote how ticks don't align with bars")
+
+
+
+# 7-day bins + Months
+#####################
+ggplot(central_data %>% drop_na(date_onset)) +
+  geom_histogram(
+    mapping = aes(x = date_onset),
+    binwidth = 7,
+    color = "darkblue",
+    fill = "lightblue") +
+  
+  scale_x_date(
+    expand = c(0,0),                  # remove excess x-axis space below and after case bars
+    date_breaks = "months",           # 1st of month
+    date_minor_breaks = "week",       # Monday weeks
+    label = scales::label_date_short())+ # label formatting
+  
+  scale_y_continuous(
+    expand = c(0,0))+                # remove excess space under x-axis, make flush 
+  
+  labs(
+    title = "MISALIGNED",
+    subtitle = "! CAUTION: 7-day bars start Thursdays with first case\nMajor gridlines and date labels at 1st of each month\nMinor gridlines weekly on Mondays\nNote uneven spacing of some gridlines and ticks unaligned with bars")
+
+
+# TOTAL MONDAY ALIGNMENT: specify manual bin breaks to be mondays
+#################################################################
+ggplot(central_data %>% drop_na(date_onset)) + 
+  geom_histogram(
+    mapping = aes(x = date_onset),
+    
+    # histogram breaks set to 7 days beginning Monday before first case
+    breaks = weekly_breaks_central,    # defined earlier in this page
+    
+    closed = "left",                   # count cases from start of breakpoint
+    
+    color = "darkblue",
+    
+    fill = "lightblue") + 
+  
+  scale_x_date(
+    expand = c(0,0),                   # remove excess x-axis space below and after case bars
+    date_breaks = "4 weeks",           # Monday every 4 weeks
+    date_minor_breaks = "week",        # Monday weeks 
+    label = scales::label_date_short())+ # label formatting
+  
+  scale_y_continuous(
+    expand = c(0,0))+                # remove excess space under x-axis, make flush 
+  
+  labs(
+    title = "ALIGNED Mondays",
+    subtitle = "7-day bins manually set to begin Monday before first case (28 Apr)\nDate labels and gridlines on Mondays as well")
+
+
+# TOTAL MONDAY ALIGNMENT WITH MONTHS LABELS:
+############################################
+ggplot(central_data %>% drop_na(date_onset)) + 
+  geom_histogram(
+    mapping = aes(x = date_onset),
+    
+    # histogram breaks set to 7 days beginning Monday before first case
+    breaks = weekly_breaks_central,            # defined earlier in this page
+    
+    closed = "left",                   # count cases from start of breakpoint
+    
+    color = "darkblue",
+    
+    fill = "lightblue") + 
+  
+  scale_x_date(
+    expand = c(0,0),                   # remove excess x-axis space below and after case bars
+    date_breaks = "months",            # Monday every 4 weeks
+    date_minor_breaks = "week",        # Monday weeks 
+    label = scales::label_date_short())+ # label formatting
+  
+  scale_y_continuous(
+    expand = c(0,0))+                # remove excess space under x-axis, make flush 
+  
+  theme(panel.grid.major = element_blank())+  # Remove major gridlines (fall on 1st of month)
+          
+  labs(
+    title = "ALIGNED Mondays with MONTHLY labels",
+    subtitle = "7-day bins manually set to begin Monday before first case (28 Apr)\nDate labels on 1st of Month\nMonthly major gridlines removed")
+
+
+# TOTAL SUNDAY ALIGNMENT: specify manual bin breaks AND labels to be Sundays
+############################################################################
+ggplot(central_data %>% drop_na(date_onset)) + 
+  geom_histogram(
+    mapping = aes(x = date_onset),
+    
+    # histogram breaks set to 7 days beginning Sunday before first case
+    breaks = seq.Date(from = floor_date(min(central_data$date_onset, na.rm=T),   "week", week_start = 7),
+                      to   = ceiling_date(max(central_data$date_onset, na.rm=T), "week", week_start = 7),
+                      by   = "7 days"),
+    
+    closed = "left",                    # count cases from start of breakpoint
+
+    color = "darkblue",
+    
+    fill = "lightblue") + 
+  
+  scale_x_date(
+    expand = c(0,0),
+    # date label breaks and major gridlines set to every 3 weeks beginning Sunday before first case
+    breaks = seq.Date(from = floor_date(min(central_data$date_onset, na.rm=T),   "week", week_start = 7),
+                      to   = ceiling_date(max(central_data$date_onset, na.rm=T), "week", week_start = 7),
+                      by   = "3 weeks"),
+    
+    # minor gridlines set to weekly beginning Sunday before first case
+    minor_breaks = seq.Date(from = floor_date(min(central_data$date_onset, na.rm=T),   "week", week_start = 7),
+                            to   = ceiling_date(max(central_data$date_onset, na.rm=T), "week", week_start = 7),
+                            by   = "7 days"),
+    
+    label = scales::label_date_short())+ # automatic label formatting
+  
+  scale_y_continuous(
+    expand = c(0,0))+                # remove excess space under x-axis, make flush 
+  
+  labs(title = "ALIGNED Sundays",
+       subtitle = "7-day bins manually set to begin Sunday before first case (27 Apr)\nDate labels and gridlines manually set to Sundays as well")
+```
+
+[![](epicurves_files/figure-html/unnamed-chunk-28-1.png)](epicurves_files/figure-html/unnamed-chunk-28-1.png)
+
+[![](epicurves_files/figure-html/unnamed-chunk-28-2.png)](epicurves_files/figure-html/unnamed-chunk-28-2.png)
+
+[![](epicurves_files/figure-html/unnamed-chunk-28-3.png)](epicurves_files/figure-html/unnamed-chunk-28-3.png)
+
+[![](epicurves_files/figure-html/unnamed-chunk-28-4.png)](epicurves_files/figure-html/unnamed-chunk-28-4.png)
+
+[![](epicurves_files/figure-html/unnamed-chunk-28-5.png)](epicurves_files/figure-html/unnamed-chunk-28-5.png)
+
+### Toplu veri
+
+Genellikle bir satır listesi yerine tesislerden, bölgelerden vb. toplu sayımlarla başlarsınız. `ggplot()` ile bir salgın eğrisi oluşturabilirsiniz ancak kod biraz farklı olacaktır. Bu bölüm, veri hazırlama bölümünde daha önce içe aktarılan `count_data` veri setini kullanacaktır. Bu veri seti, günlük hastane sayımlarına göre toplanan `linelist`’dir. İlk 50 satır aşağıda gösterilmiştir.
+
+#### Komut Dosyası Çizimi günlük sayımlar
+
+Bu *günlük sayımlardan* günlük bir salgın eğrisi çizebiliriz. İşte koddaki farklar:
+
+- Estetik haritalama `aes()` içinde, sayımlar sütunu olarak `y =` belirtin (bu durumda, sütun adı `n_cases` ’dir).
+- `stat = "identity"` argümanını `geom_bar()`içine ekleyin; bu, çubuk yüksekliğinin varsayılan olarak satır sayısı değil, `y =` değeri olması gerektiğini belirtir.  
+- Çubuklar arasında dikey beyaz çizgileri önlemek için `width =` argümanını ekleyin. 1’e ayarlanmış günlük veriler için 7’ye ayarlanmış haftalık sayım verileri için Aylık sayım verileri için beyaz çizgiler bir sorundur (her ayın farklı gün sayısı vardır) - x ekseninizi kategorik sıralı bir faktöre (aylar) dönüştürmeyi ve `geom_col()`kullanmayı düşünün.
+
+``` r
+ggplot(data = count_data)+
+  geom_bar(
+   mapping = aes(x = date_hospitalisation, y = n_cases),
+   stat = "identity",
+   width = 1)+                # for daily counts, set width = 1 to avoid white space between bars
+  labs(
+    x = "Date of report", 
+    y = "Number of cases",
+    title = "Daily case incidence, from daily count data")
+```
+
+[![](epicurves_files/figure-html/unnamed-chunk-30-1.png)](epicurves_files/figure-html/unnamed-chunk-30-1.png)
+
+#### Haftalık sayıların çizilmesi
+
+Verileriniz zaten haftaya göre vaka sayılarıysa, bu veri kümesine benzeyebilirler (`count_data_weekly` olarak adlandırılır):
+
+`count_data_weekly` ’nin ilk 50 satırı aşağıda gösterilmiştir. Sayıların haftalar halinde toplandığını görebilirsiniz. Her hafta, haftanın ilk gününe göre görüntülenir (varsayılan olarak Pazartesi).
+
+Şimdi `x =` salgın haftası sütunu olacak şekilde çizin. Estetik haritalamaya `y =` sayı sütununu eklemeyi ve yukarıda açıklandığı gibi `stat = "identity"` eklemeyi unutmayın.
+
+``` r
+ggplot(data = count_data_weekly)+
+  
+  geom_bar(
+    mapping = aes(
+      x = epiweek,           # x-axis is epiweek (as class Date)
+      y = n_cases_weekly,    # y-axis height in the weekly case counts
+      group = hospital,      # we are grouping the bars and coloring by hospital
+      fill = hospital),
+    stat = "identity")+      # this is also required when plotting count data
+     
+  # labels for x-axis
+  scale_x_date(
+    date_breaks = "2 months",      # labels every 2 months 
+    date_minor_breaks = "1 month", # gridlines every month
+    label = scales::label_date_short())+ # automatic label formatting
+     
+  # Choose color palette (uses RColorBrewer package)
+  scale_fill_brewer(palette = "Pastel2")+ 
+  
+  theme_minimal()+
+  
+  labs(
+    x = "Week of onset", 
+    y = "Weekly case incidence",
+    fill = "Hospital",
+    title = "Weekly case incidence, from aggregated count data by hospital")
+```
+
+[![](epicurves_files/figure-html/unnamed-chunk-33-1.png)](epicurves_files/figure-html/unnamed-chunk-33-1.png)
+
+### Hareketli ortalamalar
+
+Ayrıntılı bir açıklama ve çeşitli seçenekler için [Hareketli ortalamalar](#hareketli-ortalamalar) sayfasına bakın. Aşağıda, **slider** paketi ile hareketli ortalamaları hesaplamak için bir seçenek bulunmaktadır. Bu yaklaşımda, *hareketli ortalama, çizimden önce veri setinde hesaplanır*:
+
+1.  Verileri gerektiği gibi sayımlar halinde toplayın (günlük, haftalık vb.) (bkz. \[Verileri gruplandırma\] sayfası).  
+2.  **slider** paketinden `slide_index()` ile oluşturulan hareketli ortalamayı tutmak için yeni bir sütun oluşturun.  
+3.  Hareketli ortalamayı, salgın eğrisi histogramının üstüne (sonra) bir `geom_line()`olarak çizin.
+
+Yararlı çevrimiçi [**slider** paketi için belirtece](https://cran.r-project.org/web/packages/slider/vignettes/slider.html) bakın.
+
+``` r
+# load package
+pacman::p_load(slider)  # slider used to calculate rolling averages
+
+# make dataset of daily counts and 7-day moving average
+#######################################################
+ll_counts_7day <- linelist %>%    # begin with linelist
+  
+  ## count cases by date
+  count(date_onset, name = "new_cases") %>%   # name new column with counts as "new_cases"
+  drop_na(date_onset) %>%                     # remove cases with missing date_onset
+  
+  ## calculate the average number of cases in 7-day window
+  mutate(
+    avg_7day = slider::slide_index(    # create new column
+      new_cases,                       # calculate based on value in new_cases column
+      .i = date_onset,                 # index is date_onset col, so non-present dates are included in window 
+      .f = ~mean(.x, na.rm = TRUE),    # function is mean() with missing values removed
+      .before = 6,                     # window is the day and 6-days before
+      .complete = FALSE),              # must be FALSE for unlist() to work in next step
+    avg_7day = unlist(avg_7day))       # convert class list to class numeric
+
+
+# plot
+######
+ggplot(data = ll_counts_7day) +  # begin with new dataset defined above 
+    geom_bar(              # create epicurve histogram
+      mapping = aes(
+        x = date_onset,          # date column as x-axis
+        y = new_cases),          # height is number of daily new cases
+        stat = "identity",       # height is y value
+        fill="#92a8d1",          # cool color for bars
+        colour = "#92a8d1",      # same color for bar border
+        )+ 
+    geom_line(                   # make line for rolling average
+      mapping = aes(
+        x = date_onset,          # date column for x-axis
+        y = avg_7day,            # y-value set to rolling average column
+        lty = "7-day \nrolling avg"), # name of line in legend
+      color="red",               # color of line
+      linewidth = 1) +                # width of line
+    scale_x_date(                # date scale
+      date_breaks = "1 month",
+      label = scales::label_date_short(), # automatic label formatting
+      expand = c(0,0)) +
+    scale_y_continuous(          # y-axis scale
+      expand = c(0,0),
+      limits = c(0, NA)) +       
+    labs(
+      x="",
+      y ="Number of confirmed cases",
+      fill = "Legend")+ 
+    theme_minimal()+
+    theme(legend.title = element_blank())  # removes title of legend
+```
+
+[![](epicurves_files/figure-html/unnamed-chunk-34-1.png)](epicurves_files/figure-html/unnamed-chunk-34-1.png)
+
+### Fasetleme/küçük-katlar
+
+Diğer ggplot’larda olduğu gibi, fasetli grafikler (“küçük katlar”) oluşturabilirsiniz. Bu el kitabının \[ggplot ipuçları\] sayfasında açıklandığı gibi, ya `facet_wrap()` ya da `facet_grid()`kullanabilirsiniz. Burada `facet_wrap()`ile gösteriyoruz. Salgın eğrileri için, `facet_wrap()`genellikle daha kolaydır, çünkü muhtemelen yalnızca bir sütunda fasetleme yapmanız gerekir.
+
+Genel sözdizimi `facet_wrap(rows ~ cols)`şeklindedir; burada yaklaşık işaretinin (~) solunda fasetli grafiğin “satırları”na yayılacak bir sütunun adı ve yaklaşık işaretinin sağında, fasetli grafiğin “sütunlarına” yayılacak bir sütunun adı bulunur. En basitinden, yaklaşık işaretinin sağındaki bir sütun adı kullanın: `facet_wrap(~age_cat)`.
+
+**Serbest eksenler**  
+Her bir faset için eksenlerin ölçeklerinin aynı boyutlara “sabit” (varsayılan) veya “serbest” (yani, faset içindeki verilere göre değişecekleri) olup olmadığına karar vermeniz gerekecektir. Bunu, “free_x” veya “free_y” veya “free” belirterek `facet_wrap()` içindeki `scales =` argümanı ile yapın.
+
+**Fasetlerin sütun ve satır sayısı**  
+Bu, `facet_wrap()`içinde `ncol =` ve `nrow =` ile belirtilebilir.
+
+**Panellerin sırası**  
+Görünüm sırasını değiştirmek için, fasetleri oluşturmak için kullanılan faktör sütununun düzeylerinin temel sırasını değiştirin.
+
+**Estetik**  
+Yazı tipi boyutu ve yüzü, şerit rengi vb., `theme()` aracılığıyla aşağıdaki gibi argümanlarla değiştirilebilir:
+
+- `strip.text = element_text()` (boyut, renk, yüz, açı…)
+- `strip.background = element_rect()` (ör. element_rect(dolgu=“gri”))  
+- `strip.position =` ((“alt”, “üst”, “sol” veya “sağ” şeridin konumu)
+
+**Şerit etiketleri**  
+Faset grafiklerinin etiketleri, bir faktör olarak sütunun “etiketleri” aracılığıyla veya bir “etiketleyici” kullanılarak değiştirilebilir.
+
+**ggplot2**’deki `as_labeller()`işlevini kullanarak böyle bir etiketleyici yapın. Ardından, etiketleyiciyi, aşağıda gösterildiği gibi `facet_wrap()`öğesinin `labeller =` argümanına yerleştirin.
+
+``` r
+my_labels <- as_labeller(c(
+     "0-4"   = "Ages 0-4",
+     "5-9"   = "Ages 5-9",
+     "10-14" = "Ages 10-14",
+     "15-19" = "Ages 15-19",
+     "20-29" = "Ages 20-29",
+     "30-49" = "Ages 30-49",
+     "50-69" = "Ages 50-69",
+     "70+"   = "Over age 70"))
+```
+
+**Örnek bir fasetli grafik** - `age_cat` sütunu ile fasetli.
+
+``` r
+# make plot
+###########
+ggplot(central_data %>% drop_na(date_onset)) + 
+  
+  geom_histogram(
+    mapping = aes(
+      x = date_onset,
+      group = age_cat,
+      fill = age_cat),    # arguments inside aes() apply by group
+      
+    color = "black",      # arguments outside aes() apply to all data
+        
+    # histogram breaks
+    breaks = weekly_breaks_central, # pre-defined date vector (see earlier in this page)
+    closed = "left" # count cases from start of breakpoint
+    )+  
+                      
+  # The labels on the x-axis
+  scale_x_date(
+    expand            = c(0,0),         # remove excess x-axis space below and after case bars
+    date_breaks       = "2 months",     # labels appear every 2 months
+    date_minor_breaks = "1 month",      # vertical lines appear every 1 month 
+    label = scales::label_date_short())+     # date labels format
+  
+  # y-axis
+  scale_y_continuous(expand = c(0,0))+                       # removes excess y-axis space between bottom of bars and the labels
+  
+  # aesthetic themes
+  theme_minimal()+                                           # a set of themes to simplify plot
+  theme(
+    plot.caption = element_text(face = "italic", hjust = 0), # caption on left side in italics
+    axis.title = element_text(face = "bold"),
+    legend.position = "bottom",
+    strip.text = element_text(face = "bold", size = 10),
+    strip.background = element_rect(fill = "grey"))+         # axis titles in bold
+  
+  # create facets
+  facet_wrap(
+    ~age_cat,
+    ncol = 4,
+    strip.position = "top",
+    labeller = my_labels)+             
+  
+  # labels
+  labs(
+    title    = "Weekly incidence of cases, by age category",
+    subtitle = "Subtitle",
+    fill     = "Age category",                                      # provide new title for legend
+    x        = "Week of symptom onset",
+    y        = "Weekly incident cases reported",
+    caption  = stringr::str_glue("n = {nrow(central_data)} from Central Hospital; Case onsets range from {format(min(central_data$date_onset, na.rm=T), format = '%a %d %b %Y')} to {format(max(central_data$date_onset, na.rm=T), format = '%a %d %b %Y')}\n{nrow(central_data %>% filter(is.na(date_onset)))} cases missing date of onset and not shown"))
+```
+
+[![](epicurves_files/figure-html/unnamed-chunk-36-1.png)](epicurves_files/figure-html/unnamed-chunk-36-1.png)
+
+Etiketleyiciler hakkında daha fazla bilgi için bu [bağlantıya](https://ggplot2.tidyverse.org/reference/labellers.html) bakın.
+
+#### Faset arka planında toplam salgın
+
+Her fasetin arka planında toplam salgını göstermek için, ggplot’a boş parantezlerle `gghighlight()` işlevini ekleyin. Bu, **gghighlight** paketinden bir komuttur. Tüm yönlerdeki maksimum y ekseninin artık tüm salgının zirvesine dayandığını unutmayın. \[ggplot ipuçları\] sayfasında bu paketin daha fazla örneği mevcuttur.
+
+``` r
+ggplot(central_data %>% drop_na(date_onset)) + 
+  
+  # epicurves by group
+  geom_histogram(
+    mapping = aes(
+      x = date_onset,
+      group = age_cat,
+      fill = age_cat),  # arguments inside aes() apply by group
+    
+    color = "black",    # arguments outside aes() apply to all data
+    
+    # histogram breaks
+    breaks = weekly_breaks_central, # pre-defined date vector (see earlier in this page)
+    
+    closed = "left", # count cases from start of breakpoint
+    )+     # pre-defined date vector (see top of ggplot section)                
+  
+  # add grey epidemic in background to each facet
+  gghighlight::gghighlight()+
+  
+  # labels on x-axis
+  scale_x_date(
+    expand            = c(0,0),         # remove excess x-axis space below and after case bars
+    date_breaks       = "2 months",     # labels appear every 2 months
+    date_minor_breaks = "1 month",      # vertical lines appear every 1 month 
+    label = scales::label_date_short())+     # date labels format
+  
+  # y-axis
+  scale_y_continuous(expand = c(0,0))+  # removes excess y-axis space below 0
+  
+  # aesthetic themes
+  theme_minimal()+                                           # a set of themes to simplify plot
+  theme(
+    plot.caption = element_text(face = "italic", hjust = 0), # caption on left side in italics
+    axis.title = element_text(face = "bold"),
+    legend.position = "bottom",
+    strip.text = element_text(face = "bold", size = 10),
+    strip.background = element_rect(fill = "white"))+        # axis titles in bold
+  
+  # create facets
+  facet_wrap(
+    ~age_cat,                          # each plot is one value of age_cat
+    ncol = 4,                          # number of columns
+    strip.position = "top",            # position of the facet title/strip
+    labeller = my_labels)+             # labeller defines above
+  
+  # labels
+  labs(
+    title    = "Weekly incidence of cases, by age category",
+    subtitle = "Subtitle",
+    fill     = "Age category",                                      # provide new title for legend
+    x        = "Week of symptom onset",
+    y        = "Weekly incident cases reported",
+    caption  = stringr::str_glue("n = {nrow(central_data)} from Central Hospital; Case onsets range from {format(min(central_data$date_onset, na.rm=T), format = '%a %d %b %Y')} to {format(max(central_data$date_onset, na.rm=T), format = '%a %d %b %Y')}\n{nrow(central_data %>% filter(is.na(date_onset)))} cases missing date of onset and not shown"))
+```
+
+[![](epicurves_files/figure-html/unnamed-chunk-37-1.png)](epicurves_files/figure-html/unnamed-chunk-37-1.png)
+
+#### Veri içeren bir faset
+
+Tüm verileri içeren bir model kutusuna sahip olmak istiyorsanız, tüm veri setini çoğaltın ve kopyaları tek bir model değeri olarak değerlendirin. Aşağıdaki bir “yardımcı” işlevi `CreateAllFacet()` bu konuda yardımcı olabilir (bu [blog yazısı](https://stackoverflow.com/questions/18933575/easily-add-an-all-facet-to-facet-wrap-in-ggplot2) sayesinde). Çalıştırıldığında, satır sayısı iki katına çıkar ve yinelenen satırların “tümü” değerine sahip olacağı ve orijinal satırların faset sütununun orijinal değerine sahip olacağı, `facet` adlı yeni bir sütun olacaktır. Şimdi sadece `facet` sütununda faset yapmanız gerekiyor.
+
+Kullanabilmeniz için çalıştırılması gereken yardımcı fonksiyon buradadır:
+
+``` r
+# Define helper function
+CreateAllFacet <- function(df, col){
+     df$facet <- df[[col]]
+     temp <- df
+     temp$facet <- "all"
+     merged <-rbind(temp, df)
+     
+     # ensure the facet value is a factor
+     merged[[col]] <- as.factor(merged[[col]])
+     
+     return(merged)
+}
+```
+
+Şimdi yardımcı işlevi veri setine `age_cat` sütununda uygulayın:
+
+``` r
+# Create dataset that is duplicated and with new column "facet" to show "all" age categories as another facet level
+central_data2 <- CreateAllFacet(central_data, col = "age_cat") %>%
+  
+  # set factor levels
+  mutate(facet = factor(facet, levels = c("all", "0-4", "5-9",
+                                          "10-14", "15-19", "20-29",
+                                          "30-49", "50-69", "70+")))
+
+# check levels
+table(central_data2$facet, useNA = "always")
+```
+
+
+      all   0-4   5-9 10-14 15-19 20-29 30-49 50-69   70+  <NA> 
+      454    84    84    82    58    73    57     7     0     9 
+
+`ggplot()` komutundaki dikkate değer değişiklikler şunlardır:
+
+- Kullanılan veriler artık central_data2’dir (yeni “facet” sütunu ile satırları ikiye katlayın).
+- Etiketleyici kullanılıyorsa güncellenmesi gerekecek.  
+- ● İsteğe bağlı: dikey olarak yığılmış yüzeyler elde etmek için: model sütunu denklemin satır tarafına taşınır ve sağdaki “.” ile değiştirilir. (`facet_wrap(facet~.)`) ve `ncol = 1`. Kaydedilmiş png çizim görüntüsünün genişliğini ve yüksekliğini de ayarlamanız gerekebilir (\[ggplot ipuçlarında\] `ggsave()`’e bakın).
+
+``` r
+ggplot(central_data2 %>% drop_na(date_onset)) + 
+  
+  # actual epicurves by group
+  geom_histogram(
+        mapping = aes(
+          x = date_onset,
+          group = age_cat,
+          fill = age_cat),  # arguments inside aes() apply by group
+        color = "black",    # arguments outside aes() apply to all data
+        
+        # histogram breaks
+        breaks = weekly_breaks_central, # pre-defined date vector (see earlier in this page)
+        
+        closed = "left", # count cases from start of breakpoint
+        )+    # pre-defined date vector (see top of ggplot section)
+                     
+  # Labels on x-axis
+  scale_x_date(
+    expand            = c(0,0),         # remove excess x-axis space below and after case bars
+    date_breaks       = "2 months",     # labels appear every 2 months
+    date_minor_breaks = "1 month",      # vertical lines appear every 1 month 
+    label = scales::label_date_short())+     # date labels format
+  
+  # y-axis
+  scale_y_continuous(expand = c(0,0))+  # removes excess y-axis space between bottom of bars and the labels
+  
+  # aesthetic themes
+  theme_minimal()+                                           # a set of themes to simplify plot
+  theme(
+    plot.caption = element_text(face = "italic", hjust = 0), # caption on left side in italics
+    axis.title = element_text(face = "bold"),
+    legend.position = "bottom")+               
+  
+  # create facets
+  facet_wrap(facet~. ,                            # each plot is one value of facet
+             ncol = 1)+            
+
+  # labels
+  labs(title    = "Weekly incidence of cases, by age category",
+       subtitle = "Subtitle",
+       fill     = "Age category",                                      # provide new title for legend
+       x        = "Week of symptom onset",
+       y        = "Weekly incident cases reported",
+       caption  = stringr::str_glue("n = {nrow(central_data)} from Central Hospital; Case onsets range from {format(min(central_data$date_onset, na.rm=T), format = '%a %d %b %Y')} to {format(max(central_data$date_onset, na.rm=T), format = '%a %d %b %Y')}\n{nrow(central_data %>% filter(is.na(date_onset)))} cases missing date of onset and not shown"))
+```
+
+[![](epicurves_files/figure-html/unnamed-chunk-40-1.png)](epicurves_files/figure-html/unnamed-chunk-40-1.png)
+
+## 32.3 Geçici veriler
+
+Salgın eğrilerinde gösterilen en son veriler genellikle geçici olarak işaretlenmeli veya raporlama gecikmelerine tabi olmalıdır. Bu, belirli sayıda gün boyunca dikey bir çizgi ve/veya dikdörtgen eklenerek yapılabilir. İşte iki seçenek:
+
+1.  `annotate()` kullanın:
+    - Bir satır için `annotate(geom = "segment")` kullanın. `x`, `xend`, `y`, ve `yend`’i temin edin. Boyutu, çizgi tipini (`lty`) ve rengi ayarlayın.  
+    - Dikdörtgen için `annotate(geom = "rect")` kullanın. xmin/xmax/ymin/ymax’ı temin edin. Rengi ve alfayı ayarlayın.  
+2.  Verileri geçici duruma göre gruplandırın ve bu çubukları farklı şekilde renklendirin.
+
+***DİKKAT:*** Bir dikdörtgen çizmek için `geom_rect()`’i deneyebilirsiniz, ancak şeffaflığı ayarlamak bir satır listesi bağlamında çalışmaz. Bu işlev, her gözlem/sıra için bir dikdörtgeni kaplar!. Çok düşük bir alfa (ör. 0.01) veya başka bir yaklaşım kullanın.
+
+### `annotate()` kullanma
+
+- `annotate(geom = "rect")` içinde, `xmin` ve `xmax` argümanlarına Date sınıfının girdileri verilmelidir.  
+- Bu veriler haftalık çubuklar halinde toplandığından ve son çubuk, son veri noktasından sonraki Pazartesi gününe kadar uzandığından, gölgeli bölgenin 4 haftayı kapsıyor gibi görünebileceğini unutmayın.  
+- İşte bir `annotate()` [online örneği](https://ggplot2.tidyverse.org/reference/annotate.html).
+
+``` r
+ggplot(central_data %>% drop_na(date_onset)) + 
+  
+  # histogram
+  geom_histogram(
+    mapping = aes(x = date_onset),
+    
+    breaks = weekly_breaks_central,   # pre-defined date vector - see top of ggplot section
+    
+    closed = "left", # count cases from start of breakpoint
+    
+    color = "darkblue",
+    
+    fill = "lightblue") +
+
+  # scales
+  scale_y_continuous(expand = c(0,0))+
+  scale_x_date(
+    expand = c(0,0),                   # remove excess x-axis space below and after case bars
+    date_breaks = "1 month",           # 1st of month
+    date_minor_breaks = "1 month",     # 1st of month
+    label = scales::label_date_short())+          # label format
+  
+  # labels and theme
+  labs(
+    title = "Using annotate()\nRectangle and line showing that data from last 21-days are tentative",
+    x = "Week of symptom onset",
+    y = "Weekly case indicence")+ 
+  theme_minimal()+
+  
+  # add semi-transparent red rectangle to tentative data
+  annotate(
+    "rect",
+    xmin  = as.Date(max(central_data$date_onset, na.rm = T) - 21), # note must be wrapped in as.Date()
+    xmax  = as.Date(Inf),                                          # note must be wrapped in as.Date()
+    ymin  = 0,
+    ymax  = Inf,
+    alpha = 0.2,          # alpha easy and intuitive to adjust using annotate()
+    fill  = "red")+
+  
+  # add black vertical line on top of other layers
+  annotate(
+    "segment",
+    x     = max(central_data$date_onset, na.rm = T) - 21, # 21 days before last data
+    xend  = max(central_data$date_onset, na.rm = T) - 21, 
+    y     = 0,         # line begins at y = 0
+    yend  = Inf,       # line to top of plot
+    linewidth  = 2,         # line size
+    color = "black",
+    lty   = "solid")+   # linetype e.g. "solid", "dashed"
+
+  # add text in rectangle
+  annotate(
+    "text",
+    x = max(central_data$date_onset, na.rm = T) - 15,
+    y = 15,
+    label = "Subject to reporting delays",
+    angle = 90)
+```
+
+[![](epicurves_files/figure-html/unnamed-chunk-41-1.png)](epicurves_files/figure-html/unnamed-chunk-41-1.png)
+
+Aynı siyah dikey çizgi aşağıdaki kodla da elde edilebilir, ancak `geom_vline()` fonksiyonunu kullanarak yüksekliği kontrol etme yeteneğinizi kaybedersiniz:
+
+``` r
+geom_vline(xintercept = max(central_data$date_onset, na.rm = T) - 21,
+           linewidth = 2,
+           color = "black")
+```
+
+### Çubukların rengi
+
+Alternatif bir yaklaşım, geçici veri çubuklarının rengini veya görüntüsünü ayarlamak olabilir. Veri hazırlama aşamasında yeni bir sütun oluşturabilir ve bunu, geçici verilerin `aes(fill = )`değeri diğer çubuklardan farklı bir renk veya alfa olacak şekilde verileri gruplamak için kullanabilirsiniz.
+
+``` r
+# add column
+############
+plot_data <- central_data %>% 
+  mutate(tentative = case_when(
+    date_onset >= max(date_onset, na.rm=T) - 7 ~ "Tentative", # tenative if in last 7 days
+    TRUE                                       ~ "Reliable")) # all else reliable
+
+# plot
+######
+ggplot(plot_data %>% drop_na(date_onset), aes(x = date_onset, fill = tentative)) + 
+  
+  # histogram
+  geom_histogram(
+    breaks = weekly_breaks_central,   # pre-defined data vector, see top of ggplot page
+    closed = "left", # count cases from start of breakpoint
+    color = "black") +
+
+  # scales
+  scale_y_continuous(expand = c(0,0))+
+  scale_fill_manual(values = c("lightblue", "grey"))+
+  scale_x_date(
+    expand = c(0,0),                   # remove excess x-axis space below and after case bars
+    date_breaks = "3 weeks",           # Monday every 3 weeks
+    date_minor_breaks = "week",        # Monday weeks 
+    label = scales::label_date_short())+      # label format
+  
+  # labels and theme
+  labs(title = "Show days that are tentative reporting",
+    subtitle = "")+ 
+  theme_minimal()+
+  theme(legend.title = element_blank())                 # remove title of legend
+```
+
+[![](epicurves_files/figure-html/unnamed-chunk-43-1.png)](epicurves_files/figure-html/unnamed-chunk-43-1.png)
+
+## 32.4 Çok seviyeli tarih etiketleri
+
+*Alt etiket düzeylerini çoğaltmadan* çok düzeyli tarih etiketleri (ör. ay ve yıl) istiyorsanız, aşağıdaki yaklaşımlardan birini göz önünde bulundurun:
+
+Unutmayın - her bir etiketin parçalarını aşağıdaki yeni bir satıra koymak için `date_labels` veya `labels` argümanları *içinde* `\n` gibi araçları kullanabilirsiniz. Bununla birlikte, aşağıdaki kod, daha düşük bir satırda ve *yalnızca bir kez* yıllar veya aylar (örneğin) almanıza yardımcı olur.
+
+En kolay yöntem, `scale_x_date()` içindeki `labels =` argümanına **scales** paketinden `label_date_short()` fonksiyonunu atamaktır (not: boş parantezleri () eklemeyi unutmayın). Bu fonksiyon, verimli tarih etiketlerini otomatik olarak oluşturur (daha fazlası için [buraya](https://scales.r-lib.org/reference/label_date.html) bakın). Bu fonksiyonun ek bir faydası da, verileriniz zaman içinde günlerden haftalara, aylara ve yıllara doğru genişledikçe etiketlerin kendiliğinden ayarlanmasıdır.
+
+``` r
+ggplot(central_data %>% drop_na(date_onset)) + 
+  
+  # histogram
+  geom_histogram(
+    mapping = aes(x = date_onset),
+    breaks = weekly_breaks_central,   # pre-defined date vector - see top of ggplot section
+    closed = "left",                  # count cases from start of breakpoint
+    color = "darkblue",
+    fill = "lightblue") +
+
+  # y-axis scale as before
+  scale_y_continuous(expand = c(0,0))+
+  
+  # x-axis scale sets efficient date labels
+  scale_x_date(
+    expand = c(0,0),                      # remove excess x-axis space below and after case bars
+    labels = scales::label_date_short())+ # auto efficient date labels
+  
+  # labels and theme
+  labs(
+    title = "Using label_date_short()\nTo make automatic and efficient date labels",
+    x = "Week of symptom onset",
+    y = "Weekly case indicence")+ 
+  theme_minimal()
+```
+
+[![](epicurves_files/figure-html/unnamed-chunk-44-1.png)](epicurves_files/figure-html/unnamed-chunk-44-1.png)
+
+İkinci bir seçenek de yüzey oluşturmayı kullanmaktır. Aşağıdaki kodla ilgili birkaç not:
+
+- Vaka sayıları estetik nedenlerle haftalar halinde toplanır. Ayrıntılar için salgın eğrisi sayfasına (toplanmış veri sekmesi) bakın..  
+- Aşağıdaki yüzey oluşturma yaklaşımı histogramlarla iyi çalışmadığından, histogram yerine `geom_area()`çizgisi kullanılır.
+
+**Haftalık sayımlara toplayın**
+
+``` r
+# Create dataset of case counts by week
+#######################################
+central_weekly <- linelist %>%
+  filter(hospital == "Central Hospital") %>%   # filter linelist
+  mutate(week = lubridate::floor_date(date_onset, unit = "weeks")) %>%  
+  count(week) %>%                              # summarize weekly case counts
+  drop_na(week) %>%                            # remove cases with missing onset_date
+  complete(                                    # fill-in all weeks with no cases reported
+    week = seq.Date(
+      from = min(week),   
+      to   = max(week),
+      by   = "week"),
+    fill = list(n = 0))                        # convert new NA values to 0 counts
+```
+
+**Grafik yapın**
+
+``` r
+# plot with no box border on year
+#################################
+ggplot(central_weekly,
+       aes(x = week, y = n)) +              # establish x and y for entire plot
+  geom_line(stat = "identity",              # make line, line height is count number
+            color = "#69b3a2") +            # line color
+  geom_point(size=1, color="#69b3a2") +     # make points at the weekly data points
+  geom_area(fill = "#69b3a2",               # fill area below line
+            alpha = 0.4)+                   # fill transparency
+  scale_x_date(date_labels="%b",            # date label format show month 
+               date_breaks="month",         # date labels on 1st of each month
+               expand=c(0,0)) +             # remove excess space
+  scale_y_continuous(
+    expand  = c(0,0))+                      # remove excess space below x-axis
+  facet_grid(~lubridate::year(week),        # facet on year (of Date class column)
+             space="free_x",                
+             scales="free_x",               # x-axes adapt to data range (not "fixed")
+             switch="x") +                  # facet labels (year) on bottom
+  theme_bw() +
+  theme(strip.placement = "outside",                     # facet label placement
+          strip.background = element_blank(),            # no facet lable background
+          panel.grid.minor.x = element_blank(),          
+          panel.border = element_blank(),             # no border for facet panel
+          panel.spacing=unit(0,"cm"))+                   # No space between facet panels
+  labs(title = "Nested year labels - points, shaded, no label border")
+```
+
+[![](epicurves_files/figure-html/unnamed-chunk-46-1.png)](epicurves_files/figure-html/unnamed-chunk-46-1.png)
+
+Yukarıdaki teknikler [bu](https://stackoverflow.com/questions/44616530/axis-labels-on-two-lines-with-nested-x-variables-year-below-months) ve stackoverflow.com’daki [bu](https://stackoverflow.com/questions/20571306/multi-row-x-axis-labels-in-ggplot-line-chart) gönderiden uyarlanmıştır.
+
+## 32.5 Çift eksen
+
+Veri görselleştirme topluluğu içinde ikili eksenlerin geçerliliği hakkında şiddetli tartışmalar olmasına rağmen, birçok salgın süpervizör hala ikinci bir eksenle kaplanmış yüzde içeren bir salgın eğrisi veya benzer bir grafik görmek istiyor. Bu, \[ggplot ipuçları\] sayfasında daha kapsamlı bir şekilde tartışılmıştır, ancak **cowplot** yöntemini kullanan bir örnek aşağıda gösterilmiştir:
+
+- İki farklı grafik yapılır ve daha sonra **cowplot** paketi ile birleştirilir.  
+- Grafikler tam olarak aynı x eksenine (belirlenen sınırlar) sahip olmalıdır, aksi takdirde veriler ve etiketler hizalanmayacaktır.  
+- Her biri `theme_cowplot()`kullanır ve birinin y ekseni grafiğin sağ tarafına hareket ettirilir.
+
+``` r
+#load package
+pacman::p_load(cowplot)
+
+# Make first plot of epicurve histogram
+#######################################
+plot_cases <- linelist %>%
+  drop_na(date_onset) %>%
+  
+  # plot cases per week
+  ggplot()+
+  
+  # create histogram  
+  geom_histogram(
+    
+    mapping = aes(x = date_onset),
+    
+    # bin breaks every week beginning monday before first case, going to monday after last case
+    breaks = weekly_breaks_all)+  # pre-defined vector of weekly dates (see top of ggplot section)
+        
+  # specify beginning and end of date axis to align with other plot
+  scale_x_date(
+    limits = c(min(weekly_breaks_all), max(weekly_breaks_all)))+  # min/max of the pre-defined weekly breaks of histogram
+  
+  # labels
+  labs(
+      y = "Daily cases",
+      x = "Date of symptom onset"
+    )+
+  theme_cowplot()
+
+
+# make second plot of percent died per week
+###########################################
+plot_deaths <- linelist %>%                        # begin with linelist
+  group_by(week = floor_date(date_onset, "week")) %>%  # create week column
+  
+  # summarise to get weekly percent of cases who died
+  summarise(n_cases = n(),
+            died = sum(outcome == "Death", na.rm=T),
+            pct_died = 100*died/n_cases) %>%
+  filter(week >= min(weekly_breaks_all), week <= max(weekly_breaks_all)) %>%
+  
+  # begin plot
+  ggplot()+
+  
+  # line of weekly percent who died
+  geom_line(                                # create line of percent died
+    mapping = aes(x = week, y = pct_died),  # specify y-height as pct_died column
+    stat = "identity",                      # set line height to the value in pct_death column, not the number of rows (which is default)
+    linewidth = 2,
+    color = "black")+
+  
+  # Same date-axis limits as the other plot - perfect alignment
+  scale_x_date(
+    limits = c(min(weekly_breaks_all), max(weekly_breaks_all)))+  # min/max of the pre-defined weekly breaks of histogram
+  
+  
+  # y-axis adjustments
+  scale_y_continuous(                # adjust y-axis
+    breaks = seq(0,100, 10),         # set break intervals of percent axis
+    limits = c(0, 100),              # set extent of percent axis
+    position = "right")+             # move percent axis to the right
+  
+  # Y-axis label, no x-axis label
+  labs(x = "",
+       y = "Percent deceased")+      # percent axis label
+  
+  theme_cowplot()                   # add this to make the two plots merge together nicely
+```
+
+Şimdi iki grafiiği kaplamak için **cowplot** kullanın. x ekseni hizalamasına, y ekseninin yanına ve `theme_cowplot()`kullanımına dikkat edin.
+
+``` r
+aligned_plots <- cowplot::align_plots(plot_cases, plot_deaths, align="hv", axis="tblr")
+ggdraw(aligned_plots[[1]]) + draw_plot(aligned_plots[[2]])
+```
+
+[![](epicurves_files/figure-html/unnamed-chunk-48-1.png)](epicurves_files/figure-html/unnamed-chunk-48-1.png)
+
+## 32.6 Kümülatif İnsidans
+
+Bir vaka satır listesiyle başlıyorsanız, R **tabanından** `cumsum()` kullanarak bir salgındaki günlük kümülatif vaka sayısını içeren yeni bir sütun oluşturun:
+
+``` r
+cumulative_case_counts <- linelist %>% 
+  count(date_onset) %>%                # count of rows per day (returned in column "n")   
+  mutate(                         
+    cumulative_cases = cumsum(n)       # new column of the cumulative number of rows at each date
+    )
+```
+
+İlk 10 satır aşağıda gösterilmiştir:
+
+Bu kümülatif sütun daha sonra `geom_line()`kullanılarak `date_onset`’e göre çizilebilir:
+
+``` r
+plot_cumulative <- ggplot()+
+  geom_line(
+    data = cumulative_case_counts %>% drop_na(date_onset),
+    aes(x = date_onset, y = cumulative_cases),
+    linewidth = 2,
+    color = "blue")
+
+plot_cumulative
+```
+
+[![](epicurves_files/figure-html/unnamed-chunk-51-1.png)](epicurves_files/figure-html/unnamed-chunk-51-1.png)
+
+Ayrıca yukarıda ve \[ggplot ipuçları\] sayfasında açıklanan **cowplot** yöntemi kullanılarak çift eksenli salgın eğrisi üzerine bindirilebilir:
+
+``` r
+#load package
+pacman::p_load(cowplot)
+
+# Make first plot of epicurve histogram
+plot_cases <- ggplot()+
+  geom_histogram(          
+    data = linelist %>% drop_na(date_onset),
+    aes(x = date_onset),
+    binwidth = 1)+
+  labs(
+    y = "Daily cases",
+    x = "Date of symptom onset"
+  )+
+  theme_cowplot()
+
+# make second plot of cumulative cases line
+plot_cumulative <- ggplot()+
+  geom_line(
+    data = cumulative_case_counts %>% drop_na(date_onset),
+    aes(x = date_onset, y = cumulative_cases),
+    linewidth = 2,
+    color = "blue")+
+  scale_y_continuous(
+    position = "right")+
+  labs(x = "",
+       y = "Cumulative cases")+
+  theme_cowplot()+
+  theme(
+    axis.line.x = element_blank(),
+    axis.text.x = element_blank(),
+    axis.title.x = element_blank(),
+    axis.ticks = element_blank())
+```
+
+Şimdi iki grafiği kaplamak için **cowplot** kullanın. x ekseni hizalamasına, y ekseninin kenarına ve `theme_cowplot()`kullanımına dikkat edildi.
+
+``` r
+aligned_plots <- cowplot::align_plots(plot_cases, plot_cumulative, align="hv", axis="tblr")
+ggdraw(aligned_plots[[1]]) + draw_plot(aligned_plots[[2]])
+```
+
+[![](epicurves_files/figure-html/unnamed-chunk-53-1.png)](epicurves_files/figure-html/unnamed-chunk-53-1.png)
+
+## 32.7 Kaynaklar

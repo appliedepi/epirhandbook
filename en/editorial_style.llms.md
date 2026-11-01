@@ -1,0 +1,241 @@
+# 1  Editorial and technical notes
+
+In this page we describe the philosophical approach, style, and specific editorial decisions made during the creation of this handbook.
+
+## 1.1 R for applied epidemiology and public health
+
+**Objective:** Serve as a quick R code reference manual (online and [**offline**](download.llms.md)) with task-centered examples that address common epidemiological problems.
+
+### How to use this handbook
+
+- Browse the pages in the Table of Contents, or use the search box
+- Click the “copy” icons to copy code  
+- You can follow-along with [the example data](download.llms.md)
+
+**Offline version**
+
+See instructions in the [Download handbook and data](download.llms.md) page.
+
+## 1.2 Approach and style
+
+The potential audience for this book is large. It will surely be used by people very new to R, and also by experienced R users looking for best practices and tips. So it must be both accessible and succinct. Therefore, our approach was to provide *just enough* text explanation that someone very new to R can apply the code and follow what the code is doing.
+
+A few other points:
+
+- This is a code reference book accompanied by relatively brief examples - *not* a thorough textbook on R or data science  
+- This is a *R handbook* for use within applied epidemiology - not a manual on the methods or science of applied epidemiology  
+- This is intended to be a living document - optimal R packages for a given task change often and we welcome discussion about which to emphasize in this handbook
+
+### R packages
+
+**So many choices**
+
+One of the most challenging aspects of learning R is knowing which R package to use for a given task. It is a common occurrence to struggle through a task only later to realize - hey, there’s an R package that does all that in one command line!
+
+In this handbook, we try to offer you at least two ways to complete each task: one tried-and-true method (probably in **base** R or **tidyverse**) and one special R package that is custom-built for that purpose. We want you to have a couple options in case you can’t download a given package or it otherwise does not work for you.
+
+In choosing which packages to use, we prioritized R packages and approaches that have been tested and vetted by the community, minimize the number of packages used in a typical work session, that are stable (not changing very often), and that accomplish the task simply and cleanly
+
+This handbook generally prioritizes R packages and functions from the **tidyverse**. Tidyverse is a collection of R packages designed for data science that share underlying grammar and data structures. All tidyverse packages can be installed or loaded via the **tidyverse** package. Read more at the [tidyverse website](https://www.tidyverse.org/).
+
+When applicable, we also offer code options using **base** R - the packages and functions that come with R at installation. This is because we recognize that some of this book’s audience may not have reliable internet to download extra packages.
+
+**Linking functions to packages explicitly**
+
+It is often frustrating in R tutorials when a function is shown in code, but you don’t know which package it is from! We try to avoid this situation.
+
+In the narrative text, package names are written in bold (e.g. **dplyr**) and functions are written like this: `mutate()`. We strive to be explicit about which package a function comes from, either by referencing the package in nearby text or by specifying the package explicitly in the code like this: `dplyr::mutate()`. It may look redundant, but we are doing it on purpose.
+
+See the page on [R basics](basics.llms.md) to learn more about packages and functions.
+
+### Code style
+
+In the handbook, we frequently utilize “new lines”, making our code appear “long”. We do this for a few reasons:
+
+- We can write explanatory comments with `#` that are adjacent to each little part of the code  
+- Generally, longer (vertical) code is easier to read  
+- It is easier to read on a narrow screen (no sideways scrolling needed)  
+- From the indentations, it can be easier to know which arguments belong to which function
+
+As a result, code that *could* be written like this:
+
+``` r
+linelist %>% 
+  group_by(hospital) %>%  # group rows by hospital
+  slice_max(date, n = 1, with_ties = F) # if there's a tie (of date), take the first row
+```
+
+…is written like this:
+
+``` r
+linelist %>% 
+  group_by(hospital) %>% # group rows by hospital
+  slice_max(
+    date,                # keep row per group with maximum date value 
+    n = 1,               # keep only the single highest row 
+    with_ties = F)       # if there's a tie (of date), take the first row
+```
+
+R code is generally not affected by new lines or indentations. When writing code, if you initiate a new line after a comma it will apply automatic indentation patterns.
+
+We also use lots of spaces (e.g. `n = 1` instead of `n=1`) because it is easier to read. Be kind to the people reading your code!
+
+### Nomenclature
+
+In this handbook, we generally reference “columns” and “rows” instead of “variables” and “observations”. As explained in this primer on [“tidy data”](https://tidyr.tidyverse.org/articles/tidy-data.html), most epidemiological statistical datasets consist structurally of rows, columns, and values.
+
+*Variables* contain the values that measure the same underlying attribute (like age group, outcome, or date of onset). *Observations* contain all values measured on the same unit (e.g. a person, site, or lab sample). So these aspects can be more difficult to tangibly define.
+
+In “tidy” datasets, each column is a variable, each row is an observation, and each cell is a single value. However some datasets you encounter will not fit this mold - a “wide” format dataset may have a variable split across several columns (see an example in the [Pivoting data](pivoting.llms.md) page). Likewise, observations could be split across several rows.
+
+Most of this handbook is about managing and transforming data, so referring to the concrete data structures of rows and columns is more relevant than the more abstract observations and variables. Exceptions occur primarily in pages on data analysis, where you will see more references to variables and observations.
+
+### Notes
+
+Here are the types of notes you may encounter in the handbook:
+
+***NOTE:*** This is a note  
+***TIP:*** This is a tip.  
+***CAUTION:*** This is a cautionary note.  
+***DANGER:*** This is a warning.
+
+## 1.3 Editorial decisions
+
+Below, we track significant editorial decisions around package and function choice. If you disagree or want to offer a new tool for consideration, please join/start a conversation on our [Github page](https://github.com/appliedepi/epirhandbook_eng).
+
+**Table of package, function, and other editorial decisions**
+
+| Subject | Considered | Outcome | Brief rationale |
+|----|----|----|----|
+| General coding approach | **tidyverse**, **data.table**, **base** | **tidyverse**, with a page on **data.table**, and mentions of **base** alternatives for readers with no internet | **tidyverse** readability, universality, most-taught |
+| Package loading | `library()`,`install.packages()`, `require()`, **pacman** | **pacman** | Shortens and simplifies code for most multi-package install/load use-cases |
+| Import and export | **rio**, many other packages | **rio** | Ease for many file types |
+| Grouping for summary statistics | **dplyr** `group_by()`, **stats** `aggregate()` | **dplyr** `group_by()` | Consistent with **tidyverse** emphasis |
+| Pivoting | **tidyr** (pivot functions), **reshape2** (melt/cast), **tidyr** (spread/gather) | **tidyr** (pivot functions) | **reshape2** is retired, **tidyr** uses pivot functions as of v1.0.0 |
+| Clean column names | **linelist**, **janitor** | **janitor** | Consolidation of packages emphasized |
+| Epiweeks | **lubridate**, **aweek**, **tsibble**, **zoo** | **lubridate** generally, the others for specific cases | **lubridate’s** flexibility, consistency, package maintenance prospects |
+| ggplot labels | `labs()`, `ggtitle()`/`ylab()`/`xlab()` | `labs()` | all labels in one place, simplicity |
+| Convert to factor | `factor()`, **forcats** | **forcats** | its various functions also convert to factor in same command |
+| Epidemic curves | **incidence**, **ggplot2**, **EpiCurve** | **incidence2** as quick, **ggplot2** as detailed | dependability |
+| Concatenation | `paste()`, `paste0()`, `str_glue()`, `glue()` | `str_glue()` | More simple syntax than paste functions; within **stringr** |
+
+## 1.4 Major revisions
+
+| Date        | Major changes            |
+|-------------|--------------------------|
+| 10 May 2021 | Release of version 1.0.0 |
+| 20 Nov 2022 | Release of version 1.0.1 |
+
+**NEWS** With version 1.0.1 the following changes have been implemented:
+
+- Update to R version 4.2  
+- Data cleaning: switched {linelist} to {matchmaker}, removed unnecessary line from `case_when()` example  
+- Dates: switched {linelist} `guess_date()` to {parsedate} `parse_date()`
+- Pivoting: slight update to `pivot_wider()` `id_cols=`  
+- Survey analysis: switched `plot_age_pyramid()` to `age_pyramid()`, slight change to alluvial plot code  
+- Heat plots: added `ungroup()` to `agg_weeks` chunk  
+- Interactive plots: added `ungroup()` to chunk that makes `agg_weeks` so that `expand()` works as intended  
+- Time series: added `data.frame()` around objects within all `trending::fit()` and `predict()` commands  
+- Combinations analysis: Switch `case_when()` to `ifelse()` and added optional `across()` code for preparing the data  
+- Transmission chains: Update to more recent version of {epicontacts}
+
+## 1.5 Acknowledgements
+
+This handbook is produced by an independent collaboration of epidemiologists from around the world drawing upon experience with organizations including local, state, provincial, and national health agencies, the World Health Organization (WHO), Doctors without Borders (MSF), hospital systems, and academic institutions.
+
+This handbook is **not** an approved product of any specific organization. Although we strive for accuracy, we provide no guarantee of the content in this book.
+
+### Contributors
+
+**Editor:** [Neale Batra](https://www.linkedin.com/in/neale-batra/)
+
+**Authors**: [Neale Batra](https://www.linkedin.com/in/neale-batra/), [Alex Spina](https://github.com/aspina7), [Paula Blomquist](https://www.linkedin.com/in/paula-bianca-blomquist-53188186/), [Finlay Campbell](https://github.com/finlaycampbell), [Henry Laurenson-Schafer](https://github.com/henryls1), [Isaac Florence](https://www.Twitter.com/isaacatflorence), [Natalie Fischer](https://www.linkedin.com/in/nataliefischer211/), [Aminata Ndiaye](https://twitter.com/aminata_fadl), [Liza Coyer](https://www.linkedin.com/in/liza-coyer-86022040/), [Jonathan Polonsky](https://twitter.com/jonny_polonsky), [Yurie Izawa](https://ch.linkedin.com/in/yurie-izawa-a1590319), [Chris Bailey](https://twitter.com/cbailey_58?lang=en), [Daniel Molling](https://www.linkedin.com/in/daniel-molling-4005716a/), [Isha Berry](https://twitter.com/ishaberry2), [Emma Buajitti](https://twitter.com/buajitti), [Mathilde Mousset](https://mathildemousset.wordpress.com/research/), [Sara Hollis](https://www.linkedin.com/in/saramhollis/), Wen Lin
+
+**Reviewers and supporters**: Pat Keating, [Amrish Baidjoe](https://twitter.com/Ammer_B), Annick Lenglet, Margot Charette, Danielly Xavier, Marie-Amélie Degail Chabrat, Esther Kukielka, Michelle Sloan, Aybüke Koyuncu, Rachel Burke, Kate Kelsey, [Berhe Etsay](https://www.linkedin.com/in/berhe-etsay-5752b1154/), John Rossow, Mackenzie Zendt, James Wright, Laura Haskins, [Flavio Finger](https://ffinger.github.io), Tim Taylor, [Jae Hyoung Tim Lee](https://www.linkedin.com/in/jaehyoungtlee/), [Brianna Bradley](https://www.linkedin.com/in/brianna-bradley-bb8658155), [Wayne Enanoria](https://www.linkedin.com/in/wenanoria), Manual Albela Miranda, [Molly Mantus](https://www.linkedin.com/in/molly-mantus-174550150/), Pattama Ulrich, Joseph Timothy, Adam Vaughan, Olivia Varsaneux, Lionel Monteiro, Joao Muianga
+
+**Illustrations**: Calder Fong
+
+### Funding and support
+
+This book was primarily a volunteer effort that took thousands of hours to create.
+
+The handbook received some supportive funding via a COVID-19 emergency capacity-building grant from [TEPHINET](https://www.tephinet.org/), the global network of Field Epidemiology Training Programs (FETPs).
+
+Administrative support was provided by the EPIET Alumni Network ([EAN](https://epietalumni.net/)), with special thanks to Annika Wendland. EPIET is the European Programme for Intervention Epidemiology Training.
+
+Special thanks to Médecins Sans Frontières (MSF) Operational Centre Amsterdam (OCA) for their support during the development of this handbook.
+
+*This publication was supported by Cooperative Agreement number NU2GGH001873, funded by the Centers for Disease Control and Prevention through TEPHINET, a program of The Task Force for Global Health. Its contents are solely the responsibility of the authors and do not necessarily represent the official views of the Centers for Disease Control and Prevention, the Department of Health and Human Services, The Task Force for Global Health, Inc. or TEPHINET.*
+
+### Inspiration
+
+The multitude of tutorials and vignettes that provided knowledge for development of handbook content are credited within their respective pages.
+
+More generally, the following sources provided inspiration for this handbook:  
+[The “R4Epis” project](https://r4epis.netlify.app/) (a collaboration between MSF and RECON)  
+[R Epidemics Consortium (RECON)](https://www.repidemicsconsortium.org/)  
+[R for Data Science book (R4DS)](https://r4ds.had.co.nz/)  
+[bookdown: Authoring Books and Technical Documents with R Markdown](https://bookdown.org/yihui/bookdown/)  
+[Netlify](https://www.netlify.com) hosts this website
+
+## 1.6 Terms of Use and Contribution
+
+### License
+
+[![Creative Commons License](https://i.creativecommons.org/l/by-nc-sa/4.0/88x31.png)](http://creativecommons.org/licenses/by-nc-sa/4.0/) Applied Epi Incorporated, 2021  
+This work is licensed by Applied Epi Incorporated under a [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License](http://creativecommons.org/licenses/by-nc-sa/4.0/).
+
+Academic courses and epidemiologist training programs are welcome to contact us about use or adaptation of this material (email **contact@appliedepi.org**).
+
+### Citation
+
+Batra, Neale, et al. The Epidemiologist R Handbook. 2021. [![DOI](https://zenodo.org/badge/231610102.svg)](https://zenodo.org/badge/231610102.svg)  
+
+### Contribution
+
+If you would like to make a content contribution, please contact with us first via Github issues or by email. We are implementing a schedule for updates and are creating a contributor guide.
+
+Please note that the epiRhandbook project is released with a [Contributor Code of Conduct](https://contributor-covenant.org/version/2/0/CODE_OF_CONDUCT.html). By contributing to this project, you agree to abide by its terms.
+
+## 1.7 Session info (R, RStudio, packages)
+
+Below is the information on the versions of R, RStudio, and R packages used during this rendering of the Handbook.
+
+``` r
+sessioninfo::session_info()
+```
+
+    ─ Session info ───────────────────────────────────────────────────────────────
+     setting  value
+     version  R version 4.6.0 (2026-04-24)
+     os       Ubuntu 26.04 LTS
+     system   x86_64, linux-gnu
+     ui       X11
+     language en_US:en
+     collate  en_US.UTF-8
+     ctype    en_US.UTF-8
+     tz       Etc/UTC
+     date     2026-11-01
+     pandoc   3.7.0.2 @ /usr/bin/ (via rmarkdown)
+     quarto   1.9.38 @ /usr/local/bin/quarto
+
+    ─ Packages ───────────────────────────────────────────────────────────────────
+     package     * version date (UTC) lib source
+     cli           3.6.6   2026-04-09 [1] RSPM
+     digest        0.6.39  2025-11-19 [1] RSPM
+     evaluate      1.0.5   2025-08-27 [1] RSPM
+     fastmap       1.2.0   2024-05-15 [1] RSPM
+     htmltools     0.5.9   2025-12-04 [1] RSPM
+     htmlwidgets   1.6.4   2023-12-06 [1] RSPM
+     jsonlite      2.0.0   2025-03-27 [1] RSPM
+     knitr         1.51    2025-12-20 [1] RSPM
+     otel          0.2.0   2025-08-29 [1] RSPM
+     rlang         1.2.0   2026-04-06 [1] RSPM
+     rmarkdown     2.31    2026-03-26 [1] RSPM
+     sessioninfo   1.2.4   2026-06-04 [1] RSPM
+     xfun          0.59    2026-06-19 [1] RSPM
+     yaml          2.3.12  2025-12-10 [1] RSPM
+
+     [1] /opt/R/4.6.0/lib/R/library
+
+    ──────────────────────────────────────────────────────────────────────────────

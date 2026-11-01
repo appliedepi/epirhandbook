@@ -1,0 +1,242 @@
+# 1  Notes techniques et choix éditoriaux
+
+Nous décrivons ici les choix pédagogiques, le style et les décisions éditoriales spécifiques prises lors de l’écriture de ce guide.
+
+## 1.1 R pour l’épidémiologie appliquée et la santé publique
+
+**Objectif:** Servir de manuel de référence rapide du code R (en ligne et **[hors line](download.llms.md)**) avec des exemples centrés sur la tâche qui traitent des problèmes épidémiologiques courants.
+
+### Comment utiliser ce manuel
+
+- Parcourez les pages de la table des matières ou utilisez la boîte de recherche.
+- Cliquez sur les icônes “copier” pour copier le code.  
+- Vous pouvez suivre avec [les données d’exemple de le chapitre](download.llms.md).
+
+**Version hors ligne**
+
+Voir les instructions de la page [Télécharger le manuel et les données](download.llms.md).
+
+## 1.2 Approche et style
+
+Le public visé par ce manuel est large. Nous espérons qu’il sera utile aux épidémiologistes novices en R, mais aussi aux utilisateurs expérimentés à la recherche de bonnes pratiques et d’astuces. L’ouvrage doit donc être à la fois accessible et succinct. Notre cherchons à fournir *juste assez* d’explications textuelles pour qu’une personne débutante en R puisse appliquer le code et comprendre ce qu’il fait.
+
+En conséquences de quoi, ce guide est :
+
+- un ouvrage de référence de code, accompagné d’exemples relativement brefs, *et non* un manuel complet sur R ou la science des données  
+- un *guide R* à utiliser dans le cadre de l’épidémiologie appliquée, *et non* un manuel sur les méthodes ou la science de l’épidémiologie appliquée  
+- un document évolutif : les paquets R optimaux pour une tâche donnée changent souvent et nous sommes ouverts à toute discussion sur les paquets à privilégier dans ce manuel.
+
+### Paquets R
+
+**Tellement de possibilités…**
+
+Un aspect difficile de l’apprentissage de R est de savoir quel paquet R utiliser pour une tâche donnée. Il n’est pas rare que l’on se décarcasse à écrire vingt (cent ?) lignes de code, pour se rendre compte plus tard qu’il existe un paquet R qui donne le même résultat recheré en une seule ligne de commande !
+
+Dans ce guide, nous essayons de vous proposer au moins deux façons de réaliser chaque tâche : une méthode éprouvée (probablement dans R de **base** ou utilisant le **tidyverse**) et un paquet R spécialement conçu à cet effet. Nous voulons que vous ayez les deux options, au cas où vous ne pourriez pas télécharger un paquet donné ou si celui-ci ne vous convient pas.
+
+Pour choisir les paquets à utiliser, nous avons donné la priorité aux paquets R et aux approches qui ont été testés et approuvés par la communauté, qui minimisent le nombre de paquets utilisés dans une session de travail typique, qui sont stables (ne changent pas très souvent) et qui accomplissent la tâche simplement et proprement.
+
+Ce manuel donne généralement la priorité aux paquets et fonctions R du méta-paquet **tidyverse**. Tidyverse est une *collection de paquets R* conçus pour la science des données, et qui partagent une grammaire et des structures de données sous-jacentes. Tous les paquets du Tidyverse peuvent être installés ou chargés séparément, ou en masse via le paquet **tidyverse**. Pour en savoir plus, consultez le [site Web du tidyverse](https://www.tidyverse.org/).
+
+Nous proposons également souvent des options de code utilisant R de **base** (les paquets et fonctions fournis avec R à l’installation). En effet, nous sommes conscients que certains lecteurs de ce livre ne disposent pas d’un accès Internet fiable pour télécharger des paquets supplémentaires.
+
+**Expliciter quelle fonction appartient à quel paquet**
+
+Il est souvent frustrant lorsque l’on suit un tutoriel R de ne pas savoir de quel paquet provient une fonction (et donc de ne pas pouvoir l’utiliser immédiatement dans notre code) !
+
+Dans ce guide, les noms des paquets seront écrits en gras (par exemple **dplyr**) et les fonctions sont écrites comme ceci : `mutate()`. Nous nous efforçons d’être explicites quant au paquet dont provient une fonction, soit en faisant référence au paquet dans le texte voisin, soit en spécifiant le paquet explicitement dans le code, comme ceci : `dplyr::mutate()`. Cela peut sembler redondant, mais nous le faisons volontairement.
+
+Consultez la page sur les [Bases de R](basics.llms.md) pour en savoir plus sur les paquets et les fonctions.
+
+### Choix d’yn style de code
+
+Dans le manuel, nous allons fréquemment à la ligne, ce qui rend notre code “long”. Nous faisons cela pour plusieurs raisons :
+
+- cela permet d’écrire des commentaires explicatifs avec `#` adjacents à la commande qu’ils décrivent,  
+- généralement, un code plus long (vertical) est plus facile à lire,  
+- il est plus facile à lire sur un écran étroit (pas de défilement latéral nécessaire),  
+- il est plus facile de savoir quels arguments appartiennent à quelle fonction grâce aux indentations.
+
+Par conséquent, un bout de code code qui *pourrait* être écrit comme ceci :
+
+``` r
+linelist %>% 
+  group_by(hospital) %>%  # group rows by hospital
+  slice_max(date, n = 1, with_ties = F) # s'il y a égalité de date, prendre la première
+```
+
+…est écrit comme cela :
+
+``` r
+linelist %>% 
+  group_by(hospital) %>% # groupe les lignes par hopital
+  slice_max(
+    date,                # Garde les lignes avec la date maximun à l'intérieur de chaque groupe
+    n = 1,               # Ne garder que la date maximum
+    with_ties = F)       # S'il y a égalité de date, prendre la première
+```
+
+Le code R n’est généralement pas affecté par les nouvelles lignes ou les indentations. Lorsque vous écrivez du code, si vous allez à la ligne après une virgule, l’indentation automatique s’applique.
+
+Nous utilisons beaucoup d’espaces (par exemple `n = 1` au lieu de `n=1`) parce que c’est plus facile à lire pour beaucoup de personnes. Pensez aux gens qui lisent votre code !
+
+### Nomenclature
+
+Dans ce manuel, nous faisons généralement référence aux “colonnes” et aux “lignes” plutôt qu’aux “variables” et “observations”. Comme l’explique cette introduction aux [“données ordonnées”](https://tidyr.tidyverse.org/articles/tidy-data.html), la plupart des jeux de données statistiques épidémiologiques se composent structurellement de lignes, de colonnes et de valeurs.
+
+Les *variables* contiennent les valeurs qui mesurent le même attribut sous-jacent (comme le groupe d’âge, le résultat ou la date d’apparition des symptomes). Les *observations* contiennent toutes les valeurs mesurées sur la même unité (par exemple, une personne, un site ou un échantillon de laboratoire). Ces aspects peuvent donc être plus difficiles à définir de manière tangible.
+
+Dans les ensembles de données “ordonnés” (*tidy data* en anglais), chaque colonne est une variable, chaque ligne est une observation et chaque cellule est une valeur unique. Cependant, certains jeux de données que vous rencontrerez ne correspondront pas à ce modèle - un ensemble de données au format “large” peut avoir une variable répartie sur plusieurs colonnes (voir un exemple à la page [Transformation long-large](pivoting.llms.md)). De même, les observations peuvent être réparties sur plusieurs lignes.
+
+La majeure partie de ce manuel porte sur le nettoyage et la transformation des données, et il est donc plus pertinent de se référer aux structures de données concrètes que sont les lignes et les colonnes qu’aux observations et aux variables plus abstraites. Les exceptions se produisent principalement dans les pages sur l’analyse des données, où vous verrez davantage de références aux “variables” et aux “observations”.
+
+### Notes
+
+Voici les types de notations utilisées dans le guide :
+
+***NOTE:*** Ceci est une note  
+***TIP:*** Ceci est un conseil ou une astuce.  
+***CAUTION:*** Ceci vous invite à bien prêter attention.  
+***DANGER:*** Ceci est un avertissement.
+
+## 1.3 Choix techniques
+
+Ci-dessous, nous décrivons les principales décisions concernant le choix des paquets et des fonctions. Si vous n’êtes pas d’accord ou si vous souhaitez proposer un nouvel outil à examiner, veuillez rejoindre/démarrer une conversation sur notre [page Github](https://github.com/appliedepi/epirhandbook_eng).
+
+**Tableau des paquets, fonction et autres choix techniques**
+
+| Sujet | Considéré | Choisi | Explication brève |
+|----|----|----|----|
+| Approche générale | **tidyverse**, **data.table**, **base** | **tidyverse**, avec un chapitre sur **data.table**, et mentions d’alternatives en R de **base** pour les lecteurs avec une connexion Internet faible | lisibilité accrue, universel, paquets très répandus |
+| Importation des paquets | `library()`,`install.packages()`, `require()`, **pacman** | **pacman** | Simplification et code plus court pour les cas avec de nombreux paquets à installer puis importer |
+| Import et export de données | **rio**, de nombreux paquets spécialisés | **rio** | Gère un grand nombre de format de jeux de données |
+| Résumer des données agrégées | **dplyr** `group_by()`, **stats** `aggregate()` | **dplyr** `group_by()` | Reste cohérent avec nos choix d’utiliser le **tidyverse** |
+| Transformation long-large | **tidyr** (fonctions `pivot_XXX`), **reshape2** (melt/cast), **tidyr** (spread/gather) | **tidyr** (fonctions `pivot_XXX`) | **reshape2** est en fin de vie, **tidyr** utilise les fonctions `pivot_XXX` dès la versions v1.0.0 |
+| Nettoyer les noms des colonnes | **linelist**, **janitor** | **janitor** | Janitor est utilisé pour plusieus tâches dans le guide (optimisation des paquets) |
+| Semaines epi | **lubridate**, **aweek**, **tsibble**, **zoo** | **lubridate** en général, avec utilisation ponctuelle d’autres paquets pour des cas spécifiques | La grande flexibilité de **lubridate**, la cohérence avec le **tidyverse**, une meilleure maintenance future (?) |
+| Labels ggplot | `labs()`, `ggtitle()`/`ylab()`/`xlab()` | `labs()` | Simplicité, tous les labels dans la même commande |
+| Conversion en facteur | `factor()`, **forcats** | **forcats** | ses différentes fonctions convertissent aussi en facteur dans la même commande |
+| Courbes épidémiques | **incidence**, **ggplot2**, **EpiCurve** | **incidence2** pour le plus rapide, **ggplot2** pour les détails | fiabilité |
+| Concaténation | `paste()`, `paste0()`, `str_glue()`, `glue()` | `str_glue()` | syntaxe plus simple que `paste()`; dans **stringr** |
+
+## 1.4 Révisions majeures
+
+| Date        | Changements majeurs             |
+|-------------|---------------------------------|
+| 10 Mai 2021 | Publication de la version 1.0.0 |
+| 20 Nov 2022 | Publication de la version 1.0.1 |
+
+**NEWS** Avec la version 1.0.1, les changements suivants ont été mis en œuvre :
+
+- Mise à jour vers la version 4.2 de R  
+- Nettoyage des données : remplacement de {linelist} par {matchmaker}, suppression d’une ligne inutile dans l’exemple `case_when()`.  
+- Dates : remplacement de {linelist} `guess_date()` par {parsedate} `parse_date()`.
+- Pivot : légère mise à jour de `pivot_wider()`id_cols=\`.  
+- Analyse d’enquête : remplacement de `plot_age_pyramid()` par `age_pyramid()`, légère modification du code du tracé alluvial.  
+- Graphiques de chaleur : ajout de `ungroup()` au chunk `agg_weeks`.  
+- Graphiques interactifs : ajout de `ungroup()` au chunk qui fait `agg_weeks` pour que `expand()` fonctionne comme prévu.  
+- Séries temporelles : ajout de `data.frame()` autour des objets dans toutes les commandes `trending::fit()` et `predict()`.  
+- Analyse des combinaisons : Remplacer `case_when()` par `ifelse()` et ajouter le code optionnel `across()` pour préparer les données.
+- Chaînes de transmission : Mise à jour vers une version plus récente de {epicontacts}
+
+## 1.5 Remmerciements
+
+Cet ouvrage est le fruit du travail d’une équipe internationale d’épidémiologistes, qui se sont appuyés sur leur expérience auprès d’organisations telles que les agences sanitaires locales, régionales, provinciales et nationales de divers pays, l’Organisation mondiale de la santé (OMS), Médecins Sans Frontières (MSF), les systèmes hospitaliers et les institutions universitaires.
+
+Ce guide n’est **pas** un produit approuvé par une organisation spécifique. Bien que nous nous soyons efforcés à être précis, nous ne pouvons fournir aucune garantie quant au contenu de ce livre.
+
+### Auteurs et contributeurs
+
+**Editeur:** [Neale Batra](https://www.linkedin.com/in/neale-batra/)
+
+**Commité éditorial** [Neale Batra](https://www.linkedin.com/in/neale-batra/), [Alex Spina](https://github.com/aspina7), [Amrish Baidjoe](https://twitter.com/Ammer_B), Pat Keating, [Henry Laurenson-Schafer](https://github.com/henryls1), [Finlay Campbell](https://github.com/finlaycampbell)
+
+**Auteurs et autrices**: [Neale Batra](https://www.linkedin.com/in/neale-batra/), [Alex Spina](https://github.com/aspina7), [Paula Blomquist](https://www.linkedin.com/in/paula-bianca-blomquist-53188186/), [Finlay Campbell](https://github.com/finlaycampbell), [Henry Laurenson-Schafer](https://github.com/henryls1), [Isaac Florence](https://www.Twitter.com/isaacatflorence), [Natalie Fischer](https://www.linkedin.com/in/nataliefischer211/), [Aminata Ndiaye](https://twitter.com/aminata_fadl), [Liza Coyer](https://www.linkedin.com/in/liza-coyer-86022040/), [Jonathan Polonsky](https://twitter.com/jonny_polonsky), [Yurie Izawa](https://ch.linkedin.com/in/yurie-izawa-a1590319), [Chris Bailey](https://twitter.com/cbailey_58?lang=en), [Daniel Molling](https://www.linkedin.com/in/daniel-molling-4005716a/), [Isha Berry](https://twitter.com/ishaberry2), [Emma Buajitti](https://twitter.com/buajitti), [Mathilde Mousset](https://mathildemousset.wordpress.com/research/), [Sara Hollis](https://www.linkedin.com/in/saramhollis/), Wen Lin, Olivia Boyd
+
+**Relecture**: Pat Keating, Annick Lenglet, Margot Charette, Danielly Xavier, Esther Kukielka, Michelle Sloan, Aybüke Koyuncu, Rachel Burke, Kate Kelsey, [Berhe Etsay](https://www.linkedin.com/in/berhe-etsay-5752b1154/), John Rossow, Mackenzie Zendt, James Wright, Laura Haskins, [Flavio Finger](https://ffinger.github.io), Tim Taylor, [Jae Hyoung Tim Lee](https://www.linkedin.com/in/jaehyoungtlee/), [Brianna Bradley](https://www.linkedin.com/in/brianna-bradley-bb8658155), [Wayne Enanoria](https://www.linkedin.com/in/wenanoria), Manual Albela Miranda, [Molly Mantus](https://www.linkedin.com/in/molly-mantus-174550150/), Pattama Ulrich, Joseph Timothy, Adam Vaughan, Olivia Varsaneux, Lionel Monteiro, Joao Muianga
+
+**Illustrations**: Calder Fong
+
+**Traduction**: Aminata Ndiaye, Olivia Boyd, Anais Legrand, Marie-Amelie Degail-Chabrat, Yves Amevoin, Laura Downham, Lise Grout, Margot Charette, Mathilde Mousset, Noe Guincko, Mor Ndiaye, Elysée Junior, Nerisson Joseph, Bryan Tegomoh, Marcel Woung, Amy Mikhail, Lucie Fournier, Paul-Evans Ehouman, Kelly McCain
+
+### Financements
+
+Le manuel a reçu un financement de soutien via une subvention d’urgence COVID-19 pour le renforcement des capacités de la part de [TEPHINET](https://www.tephinet.org/), le réseau mondial des programmes de formation en épidémiologie de terrain (FETP).
+
+Le réseau des anciens d’EPIET ([EAN](https://epietalumni.net/)) a fourni un soutien administratif (Annika Wendland en particulier). EPIET est le programme européen de formation en épidémiologie d’intervention.
+
+Nous remercions tout particulièrement le Centre Opérationnel d’Amsterdam de Médecins Sans Frontières (MSF OCA) pour son soutien lors de l’élaboration de ce manuel.
+
+**Cette publication a été soutenue par l’accord de coopération numéro NU2GGH001873, financé par les Centers for Disease Control and Prevention par le biais de TEPHINET, un programme de “The Task Force for Global Health”. Son contenu relève de la seule responsabilité des auteurs et ne reflète pas les opinions officielles des Centers for Disease Control and Prevention, du Department of Health and Human Services, de The Task Force for Global Health, Inc. ou de TEPHINET.**
+
+### Inspirations
+
+Nous nous sommes inspiré de multiples tutoriels, livres et vignettes développés par la communauté pour développer ce manuel. Ces ressources, sont crédités dans les chapitres respectifs, mais nous souhaitons citer quelques sources d’inspiration générales que nous utilisons de manière récurrente :
+
+[The “R4Epis” project](https://r4epis.netlify.app/) (une collaboration entre MSF et RECON)  
+[R Epidemics Consortium (RECON)](https://www.repidemicsconsortium.org/)  
+[R for Data Science book (R4DS)](https://r4ds.had.co.nz/)  
+[bookdown: Authoring Books and Technical Documents with R Markdown](https://bookdown.org/yihui/bookdown/)  
+[Netlify](https://www.netlify.com) qui héberge ce site
+
+## 1.6 Conditions d’utilisation et contribution
+
+### License
+
+[![Creative Commons License](https://i.creativecommons.org/l/by-nc-sa/4.0/88x31.png)](http://creativecommons.org/licenses/by-nc-sa/4.0/)  
+Ce document est mis à disposition selon les termes de lalicence [Creative Commons Attribution - Pas d’Utilisation Commerciale - Partage dans les Mêmes Conditions 4.0 International (CC BY-NC-SA 4.0)](https://creativecommons.org/licenses/by-nc-sa/4.0/deed.fr) .
+
+N’hésitez pas à utiliser les contenus de ce manuel dans vos cours et formations en épidémiologie, ou à le conseiller à vos étudiants. Si vous avez des questions sur l’utilisation que vous souhaitez en faire, envoyez un courriel à **contact@appliedepi.org**.
+
+### Citation
+
+Batra, Neale, et al. The Epidemiologist R Handbook. 2021. [![DOI](https://zenodo.org/badge/231610102.svg)](https://zenodo.org/badge/231610102.svg)  
+
+### Contribuer
+
+Si vous souhaitez contribuer à cet ouvrage, veuillez d’abord nous contacter via les tickets (*issues*) Github ou par courriel. Nous sommes en train de développer un calendrier de mise à jour et un guide du contributeur.
+
+Veuillez noter que le projet epiRhandbook est publié avec un [code de conduite du contributeur](https://contributor-covenant.org/version/2/0/CODE_OF_CONDUCT.html). En contribuant à ce projet, vous acceptez de vous conformer à ses conditions.
+
+## 1.7 Information de session (R, RStudio, paquets)
+
+Vous trouverez ci-dessous les informations sur les versions de R, RStudio et les paquets R utilisés lors de la compilation du guide.
+
+``` r
+sessioninfo::session_info()
+```
+
+    ─ Session info ───────────────────────────────────────────────────────────────
+     setting  value
+     version  R version 4.6.0 (2026-04-24)
+     os       Ubuntu 26.04 LTS
+     system   x86_64, linux-gnu
+     ui       X11
+     language en_US:en
+     collate  en_US.UTF-8
+     ctype    en_US.UTF-8
+     tz       Etc/UTC
+     date     2026-11-01
+     pandoc   3.7.0.2 @ /usr/bin/ (via rmarkdown)
+     quarto   1.9.38 @ /usr/local/bin/quarto
+
+    ─ Packages ───────────────────────────────────────────────────────────────────
+     package     * version date (UTC) lib source
+     cli           3.6.6   2026-04-09 [1] RSPM
+     digest        0.6.39  2025-11-19 [1] RSPM
+     evaluate      1.0.5   2025-08-27 [1] RSPM
+     fastmap       1.2.0   2024-05-15 [1] RSPM
+     htmltools     0.5.9   2025-12-04 [1] RSPM
+     htmlwidgets   1.6.4   2023-12-06 [1] RSPM
+     jsonlite      2.0.0   2025-03-27 [1] RSPM
+     knitr         1.51    2025-12-20 [1] RSPM
+     otel          0.2.0   2025-08-29 [1] RSPM
+     rlang         1.2.0   2026-04-06 [1] RSPM
+     rmarkdown     2.31    2026-03-26 [1] RSPM
+     sessioninfo   1.2.4   2026-06-04 [1] RSPM
+     xfun          0.59    2026-06-19 [1] RSPM
+     yaml          2.3.12  2025-12-10 [1] RSPM
+
+     [1] /opt/R/4.6.0/lib/R/library
+
+    ──────────────────────────────────────────────────────────────────────────────

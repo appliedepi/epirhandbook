@@ -1,0 +1,179 @@
+# 36  Kombinasyon analizi
+
+[![](combination_analysis_files/figure-html/combination_header-1.png)](combination_analysis_files/figure-html/combination_header-1.png)
+
+Bu analiz grafikleri, değerlerin/yanıtların farklı **kombinasyonlarının** sıklığını gösterir. Bu örnekte, vakaların çeşitli semptom kombinasyonları sergilediği sıklığı çiziyoruz.
+
+Bu analize genellikle şu ad verilir:
+
+- **“Çoklu yanıt analizi”**
+- **“Küme analizi”**
+- **“Kombinasyon analizi”**
+
+Yukarıdaki örnek çizimde, beş belirti gösterilmektedir. Her dikey çubuğun altında, yukarıdaki çubuk tarafından yansıtılan semptomların kombinasyonunu gösteren bir çizgi ve noktalar bulunur.
+
+Gösterdiğimiz ilk yöntem **ggupset** paketini, ikincisi ise **UpSetR** paketini kullanmaktadır.
+
+## 36.1 Hazırlık
+
+### Paketleri yükleyin
+
+Bu kod parçası, analizler için gerekli olan paketlerin yüklenmesini gösterir. Bu el kitabında, gerekirse paketi kuran *ve* kullanım için yükleyen **pacman**’dan `p_load()` vurgusu yapıyoruz. R **tabanı**ndan `library()` ile kurulu paketleri de yükleyebilirsiniz. R paketleri hakkında daha fazla bilgi için [R basics](basics.llms.md) sayfasına bakabilirsiniz.
+
+``` r
+pacman::p_load(
+  tidyverse,     # veri yönetimi ve görselleştirme
+  UpSetR,        # kombinasyon grafikleri için özel paket
+  ggupset,       # kombinasyon grafikleri için özel paket
+  appliedepidata) # bu el kitabında kullanılan örnek veriler
+```
+
+### Verileri içe aktar
+
+Başlamak için, simüle edilmiş bir Ebola salgınından temizlenmiş vaka listesini içe aktarıyoruz. Doğrudan `appliedepidata::get_data(name = "linelist_cleaned_rds")` ile yükleyin (ayrıntılar için [El kitabı ve veri indirme](download.llms.md) sayfasına bakın).
+
+``` r
+# Vaka satırlistesini içe aktarın
+linelist_sym <- appliedepidata::get_data(name = "linelist_cleaned_rds")
+```
+
+Bu satır listesi, bildirilen semptomlarla ilgili beş “evet/hayır” değişkeni içerir. Grafiğimizi oluşturmak için **ggupset** paketini kullanmak için bu değişkenleri biraz dönüştürmemiz gerekecek. Verileri görüntüleyin (semptom değişkenlerini görmek için sağa kaydırın).
+
+### Değerleri yeniden biçimlendir
+
+**ggupset** tarafından beklenen formata uyum sağlamak için temel R’dan `ifelse()` kullanarak “evet” ve “hayır” değerlerini gerçek semptom adına dönüştürürüz. “Hayır” ise, değeri boş olarak ayarlarız, bu nedenle değerler “NA” veya semptomdur.
+
+``` r
+# noktalı virgülle ayrılmış olarak adlandırılmış belirtilerle sütun oluşturun
+linelist_sym_1 <- linelist_sym %>% 
+
+  # "evet" ve "hayır" değerlerini semptom adının kendisine dönüştürün
+  # if old value is "yes", new value is "fever", otherwise set to missing (NA)
+mutate(fever = ifelse(fever == "yes", "fever", NA), 
+       chills = ifelse(chills == "yes", "chills", NA),
+       cough = ifelse(cough == "yes", "cough", NA),
+       aches = ifelse(aches == "yes", "aches", NA),
+       vomit = ifelse(vomit == "yes", "vomit", NA))
+```
+
+Şimdi iki son sütun yapıyoruz:
+
+1.  Hastanın tüm semptomlarını birleştirmek (birbirine yapıştırmak) (bir karakter sütunu)
+2.  Yukarıdaki sütunu *list* sınıfına dönüştürmek, böylece grafik yapmak için **ggupset** tarafından kabul edilebilir.
+
+**stringr**’den `unite()` fonksiyonu hakkında daha fazla bilgi edinmek için [Karakterler ve dizeler](characters_strings.llms.md) hakkındaki sayfaya bakabilirsiniz.
+
+``` r
+linelist_sym_1 <- linelist_sym_1 %>% 
+  unite(col = "all_symptoms",
+        c(fever, chills, cough, aches, vomit), 
+        sep = "; ",
+        remove = TRUE,
+        na.rm = TRUE) %>% 
+  mutate(
+    # all_symptoms sütununun, "list" sınıfının (bir sonraki adımda ggupset() kullanmak için gereklidir) bir kopyasını yapın
+    all_symptoms_list = as.list(strsplit(all_symptoms, "; "))
+    )
+```
+
+Yeni verileri görüntüleyin. Sağ uca doğru iki sütuna dikkat edin - yapıştırılan birleştirilmiş değerler ve liste
+
+## 36.2 **ggupset**
+
+Paketi yükleme
+
+``` r
+pacman::p_load(ggupset)
+```
+
+Grafik oluşturun. Bir `ggplot()` ve `geom_bar()` ile başlıyoruz, ancak sonra **ggupset**’ten `scale_x_upset()` özel fonksiyonunu ekliyoruz.
+
+``` r
+# en sık görülen 10 kombinasyonu tutun, n_intersections = 10'un gösterdikleri
+top_combinations <- linelist_sym_1 %>% 
+  count(all_symptoms, sort = TRUE) %>% 
+  slice_head(n = 10) %>% 
+  pull(all_symptoms)
+
+ggplot(
+  data = filter(linelist_sym_1, all_symptoms %in% top_combinations),
+  mapping = aes(x = all_symptoms_list)) +
+geom_bar() +
+scale_x_upset(
+  reverse = FALSE,
+  n_intersections = 10,
+  sets = c("fever", "chills", "cough", "aches", "vomit"))+
+labs(
+  title = "Signs & symptoms",
+  subtitle = "10 most frequent combinations of signs and symptoms",
+  caption = "Caption here.",
+  x = "Symptom combination",
+  y = "Frequency in dataset")
+```
+
+[![](combination_analysis_files/figure-html/combination_ggupset-1.png)](combination_analysis_files/figure-html/combination_ggupset-1.png)
+
+**ggupset** hakkında daha fazla bilgiyi [çevrimiçi](https://rdrr.io/cran/ggupset/man/scale_x_upset.html) veya çevrimdışı olarak RStudio Yardım sekmeniz `?ggupset` içindeki paket belgelerinde bulabilirsiniz.
+
+## 36.3 `UpSetR`
+
+**UpSetR** paketi grafiğin daha fazla özelleştirilmesine izin verir, ancak yürütülmesi daha zor olabilir:
+
+**Paketi yüklemek**
+
+``` r
+pacman::p_load(UpSetR)
+```
+
+**Veri temizliği**
+
+‘satırlistesi’ semptom değerlerini 1 / 0’a çevirmeliyiz.
+
+``` r
+linelist_sym_2 <- linelist_sym %>% 
+  # "evet" ve "hayır" değerlerini 1'lere ve 0'lara dönüştürün
+     mutate(fever = ifelse(fever == "yes", 1, 0), 
+            chills = ifelse(chills == "yes", 1, 0),
+            cough = ifelse(cough == "yes", 1, 0),
+            aches = ifelse(aches == "yes", 1, 0),
+            vomit = ifelse(vomit == "yes", 1, 0))
+```
+
+Daha verimli bir komutla ilgileniyorsanız, mantıksal bir ifadeye dayalı olarak 1’lere ve 0’lara dönüştüren `+()` işlevinden yararlanabilirsiniz. Bu komut, aynı anda birden fazla sütunu değiştirmek için `across()` fonksiyonunu kullanır (daha fazla bilgi için [Veri temizleme ve temel fonksiyonlar](cleaning.llms.md#clean_across)).
+
+``` r
+# Efficiently convert "yes" to 1 and 0
+linelist_sym_2 <- linelist_sym %>% 
+  
+  # convert the "yes" and "no" values into 1s and 0s
+  mutate(across(c(fever, chills, cough, aches, vomit), .fns = ~+(.x == "yes")))
+```
+
+Şimdi ‘upset()’ özel fonksiyonunu kullanarak grafiği yapın - yalnızca belirtiler sütunlarını kullanarak. Hangi “kümelerin” karşılaştırılacağını belirlemelisiniz (semptom sütunlarının adları). Alternatif olarak, yalnızca en iyi X kombinasyonlarını göstermek için `nsets =` ve `order.by = "freq"` kullanın.
+
+``` r
+# Grafiği çizin
+linelist_sym_2 %>% 
+  drop_na(fever, chills, cough, aches, vomit) %>% 
+  UpSetR::upset(
+       sets = c("fever", "chills", "cough", "aches", "vomit"),
+       order.by = "freq",
+       sets.bar.color = c("blue", "red", "yellow", "darkgreen", "orange"), # optional colors
+       empty.intersections = "on",
+       # nsets = 3,
+       number.angles = 0,
+       point.size = 3.5,
+       line.size = 2, 
+       mainbar.y.label = "Symptoms Combinations",
+       sets.x.label = "Patients with Symptom")
+```
+
+[![](combination_analysis_files/figure-html/combination_upsetr-1.png)](combination_analysis_files/figure-html/combination_upsetr-1.png)
+
+## 36.4 Kaynaklar
+
+[UpSetR üzerine github sayfası](https://github.com/hms-dbmi/UpSetR)
+
+[A Shiny uygulama versiyonu - kendi verinizi yükleyebilirsiniz](https://gehlenborglab.shinyapps.io/upsetr/)
+
+[\*belgeler - yorumlanması zor](https://cran.r-project.org/web/packages/UpSetR/UpSetR.pdf)

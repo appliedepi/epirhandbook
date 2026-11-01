@@ -1,0 +1,244 @@
+# 1  Biên tập và ghi chú kỹ thuật
+
+Trong chương này, chúng tôi sẽ mô tả triết lý và phong cách viết code, cũng như các quyết định biên tập cụ thể được thực hiện trong việc tạo ra cuốn sổ tay này.
+
+## 1.1 Phân tích dữ liệu dịch tễ học và y tế công cộng với R
+
+**Mục tiêu:** Là một tài liệu tham khảo R một cách nhanh chóng (trực tuyến và **[ngoại tuyến](download.llms.md)**), cung cấp các ví dụ tập trung vào nhiệm vụ giải quyết các vấn đề dịch tễ học phổ biến.
+
+### Sổ tay này được sử dụng như thế nào
+
+- Truy cập các trang trong phần Mục lục, hoặc sử dụng ô tìm kiếm
+- Nhấn biểu tượng “copy” để sao chép code  
+- Kết hợp theo dõi cùng với các bộ [dữ liệu minh họa](download.llms.md)  
+- Xem phần “Tài nguyên” trong từng chương để tìm thêm tài liệu
+
+**Phiên bản ngoại tuyến**
+
+Xem hướng dẫn tại trang [Tải sách và dữ liệu](download.llms.md).
+
+## 1.2 Cách tiếp cận và phong cách
+
+Độc giả tiềm năng của cuốn sách này là rất lớn, bao gồm những người hoàn toàn mới đối với R, và cả những người dùng R có kinh nghiệm đang tìm kiếm cho mình các phương pháp và mẹo hay nhất. Vì vậy, cuốn sách cần phải vừa dễ tiếp cận vừa ngắn gọn. Do đó, cách tiếp cận của chúng tôi là cung cấp lượng văn bản giải thích *vừa đủ* để một người mới sử dụng R cũng có thể áp dụng code và hiểu code đang làm gì.
+
+Một vài điểm lưu ý:
+
+- Đây là cuốn sách tham khảo về code đi kèm với những ví dụ tương đối ngắn gọn - *không phải* một cuốn sách giáo khoa về R hay khoa học dữ liệu  
+- Đây là một cuốn *sổ tay về R* sử dụng trong dịch tễ học ứng dụng - không phải là một hướng dẫn về các phương pháp của dịch tễ học ứng dụng  
+- Cuốn sách dự kiến sẽ luôn được thay đổi và cập nhập do các R packages tối ưu cho một nhiệm vụ luôn được thay đổi thường xuyên, vì vậy chúng tôi hoan nghênh những thảo luận về những điều được nhấn mạnh trong cuốn sách này
+
+### R packages
+
+**Quá nhiều lựa chọn**
+
+Một trong những khía cạnh thách thức nhất của việc học R là bạn biết package nào được sử dụng trong trường hợp nào. Việc vật lộn với một công việc mà chỉ sau này bạn nhận ra là có một package R giúp bạn thực hiện tất cả những điều đó trong một dòng lệnh là điều không hề hiếm gặp!
+
+Trong sổ tay này, chúng tôi cố gắng cung cấp cho bạn ít nhất hai cách để hoàn thành công việc: một phương pháp đã thử và đúng (có thể là **base** R hoặc **tidyverse**) và một R package đặc biệt được thiết kế riêng cho mục đích đó. Chúng tôi muốn bạn có một số tùy chọn trong trường hợp bạn không thể tải xuống một package nhất định hoặc package đó không hoạt động với bạn.
+
+Khi lựa chọn package để làm việc, chúng tôi ưu tiên các R package và phương pháp tiếp cận đã được cộng đồng thử nghiệm và hiệu chỉnh, giảm thiểu số lượng package được sử dụng trong một phiên làm việc điển hình, bao gồm sự ổn định (không thay đổi thường xuyên) và giúp hoàn thành nhiệm vụ một cách đơn giản và gọn gàng
+
+Cuốn sách này ưu tiện các package và câu lệnh từ thư viện **tidyverse**. Tidyverse là một tuyển tập các R package được thiết kế dành riêng cho khoa học dữ liệu, trong đó các package này chia sẻ nền tảng ngữ pháp và cấu trúc dữ liệu chung. Tất cả các package từ thư viện tidyverse có thể được cài đặt hoặc gọi thông qua thư viện **tidyverse**. Đọc thêm tại [tidyverse website](https://www.tidyverse.org/).
+
+Khi thích hợp, chúng tôi cũng cung cấp các tùy chọn code sử dụng **base** R - là các packages và hàm có sẵn của R khi cài đặt. Điều này là do chúng tôi nhận thấy rằng một số độc giả của cuốn sách này có thể không có Internet tốt để tải xuống các package bổ sung.
+
+**Liên kết các hàm và packages một cách rõ ràng**
+
+Trong các hướng dẫn về R thường rất khó chịu khi một hàm được hiển thị trong code, nhưng bạn không biết hàm đó đến từ package nào! Chúng tôi cố gắng tránh tình trạng này.
+
+Trong các đoạn văn bản trần thuật, tên các package được viết in đậm (ví dụ: **dplyr**) và các hàm được viết như sau: `mutate()`. Chúng tôi cố gắng nói rõ ràng về một hàm đến từ package nào, bằng cách tham chiếu package đó trong đoạn văn bản gần đó hoặc nhấn mạnh package đó một cách rõ ràng trong đoạn code như sau: `dplyr::mutate()`. Điều này nhìn có vẻ thừa thãi, nhưng chúng tôi làm điều đó là có mục đích.
+
+Tham khảo thêm chương [R cơ bản](basics.llms.md) để hiểu thêm về package và hàm.
+
+### Phong cách viết code
+
+Trong sổ tay này, chúng tôi thường viết theo phong cách “thêm dòng mới”, điều này làm cho code trông có vẻ “dài hơn”. Chúng tôi làm vậy vì một vài lý do sau đây:
+
+- Chúng tôi có thể viết các giải thích bằng `#` bên cạnh mỗi phần nhỏ của code  
+- Nhìn chung, code dài hơn (theo chiều dọc) thì dễ đọc hơn  
+- Nó cũng dễ đọc hơn trong một diện tích màn hình hẹp (không cần kéo thanh điều hướng trái phải)  
+- Từ việc thụt lề, có thể dễ dàng hơn để biết arguments nào thuộc về hàm nào
+
+Kết quả là, code *lẽ ra* sẽ được viết trông như thế này:
+
+``` r
+linelist %>% 
+  group_by(hospital) %>%  # group rows by hospital
+  slice_max(date, n = 1, with_ties = F) # if there's a tie (of date), take the first row
+```
+
+…bây giờ sẽ được viết như thế này:
+
+``` r
+linelist %>% 
+  group_by(hospital) %>% # group rows by hospital
+  slice_max(
+    date,                # keep row per group with maximum date value 
+    n = 1,               # keep only the single highest row 
+    with_ties = F)       # if there's a tie (of date), take the first row
+```
+
+Code R thường không bị ảnh hưởng bởi thêm các dòng mới hoặc thụt lề. Khi viết code, nếu bạn xuống dòng ngay sau dấu phẩy thì R sẽ tự động thụt lề cho bạn.
+
+Chúng tôi cũng sử dụng rất nhiều những khoảng cách (ví dụ `n = 1` thay vì `n=1`) vì nó giúp dễ đọc hơn. Hãy văn minh với những người đang đọc code của bạn!
+
+### Danh pháp
+
+Trong sổ tay này, chúng tôi thường đề cập đến “cột” và “hàng” thay vì dùng “biến” và “quan sát”. Như đã giải thích trong phần sơ lược về [“tidy data”](https://tidyr.tidyverse.org/articles/tidy-data.html), hầu hết các bộ dữ liệu thống kê dịch tễ học bao gồm các hàng, cột và giá trị theo cấu trúc
+
+*Biến số* chứa các giá trị đo lường của cùng một thuộc tính (như nhóm tuổi, kết cục hoặc ngày khởi phát). *Các quan sát* bao gồm tất cả các giá trị được đo trên cùng một đơn vị (ví dụ: người, địa điểm hoặc mẫu phòng thí nghiệm). Vì vậy, những khía cạnh này có thể khó được định nghĩa một cách cụ thể.
+
+Trong một bộ dữ liệu “tidy”, mỗi cột là một biến số, mỗi hàng là một quan sát và mỗi ô là một giá trị duy nhất. Tuy nhiên, bạn có thể gặp một số bộ dữ liệu không phù hợp với quy luật này - bộ dữ liệu định dạng “ngang” có thể có một biến số được chia thành nhiều cột (xem ví dụ trong chương Pivoting dữ liệu). Tương tự như vậy, các quan sát có thể được trải thành nhiều hàng.
+
+Phần lớn cuốn sách này tập trung vào quản lý và biến đổi dữ liệu, vì vậy việc đề cập đến cấu trúc dữ liệu cụ thể của các hàng và cột sẽ liên quan hơn là đề cập tới các khái niệm trừu tượng như các quan sát và biến. Các trường hợp ngoại lệ chủ yếu xảy ra trong các chương về phân tích dữ liệu, ở đó chúng tôi đề cập nhiều hơn đến các biến số và quan sát.
+
+### Lưu ý
+
+Dưới đây là một vài lưu ý bạn có thể gặp trong cuốn sách:
+
+***GHI CHÚ:*** Đây là ghi chú  
+***MẸO:*** Đây là mẹo.  
+***CẨN TRỌNG:*** Đây là ghi chú cẩn trọng.  
+***NGUY HIỂM:*** Đây là một cảnh báo.
+
+## 1.3 Quyết định biên tập
+
+Dưới đây, chúng tôi ghi lại các quyết định biên tập quan trọng về việc lựa chọn package và hàm. Nếu bạn không đồng ý hoặc muốn đưa ra một công cụ mới để xem xét, vui lòng tham gia/bắt đầu cuộc thảo luận trên [Trang Github](https://github.com/appliedepi/epirhandbook_eng) của chúng tôi.
+
+**Bảng các package, hàm, và các quyết định biên tập khác**
+
+| Chủ đề | Cân nhắc | Lựa chọn | Lý do ngắn gọn |
+|----|----|----|----|
+| Phương pháp code chung | **tidyverse**, **data.table**, **base** | **tidyverse**, với 1 chương về **data.table**, các giải pháp thay thế từ **base** R cho người đọc không có internet | **tidyverse** dễ đọc, phổ biến, được dạy nhiều nhất |
+| Gọi Package | `library()`,`install.packages()`, `require()`, **pacman** | **pacman** | Rút ngắn và đơn giản hóa code cho hầu hết các trường hợp cài đặt / tải nhiều package |
+| Nhập và xuất | **rio**, và các package khác | **rio** | Dễ dàng cho nhiều kiểu file |
+| Nhóm để tổng hợp thống kê | **dplyr** `group_by()`, **stats** `aggregate()` | **dplyr** `group_by()` | Thống nhất với **tidyverse** |
+| Pivoting | **tidyr** (các hàm pivot), **reshape2** (melt/cast), **tidyr** (spread/gather) | **tidyr** (các hàm pivot) | **reshape2** đã nghỉ hưu **tidyr** sử dụng các hàm pivot ở phiên bản v1.0.0 |
+| Làm sạch tên cột | **linelist**, **janitor** | **janitor** | Hợp nhất các package được nhắc đến |
+| Epiweeks | **lubridate**, **aweek**, **tsibble**, **zoo** | thông thường là **lubridate** ,các package khác tùy trường hợp cụ thể | **lubridate** linh hoạt, có tính nhất quán, và triển vọng bảo trì gói |
+| Nhãn ggplot | `labs()`, `ggtitle()`/`ylab()`/`xlab()` | `labs()` | tất cả các nhãn ở một nơi, đơn giản |
+| Chuyển sang factor | `factor()`, **forcats** | **forcats** | các hàm khác nhau của nó cũng chuyển đổi thành factor trong cùng một lệnh |
+| Đường cong dịch bệnh | **incidence**, **ggplot2**, **EpiCurve** | **incidence2** thì nhanh, **ggplot2** thì chi tiết | độ tin cậy |
+| Sự kết hợp | `paste()`, `paste0()`, `str_glue()`, `glue()` | `str_glue()` | Nhiều cú pháp đơn giản hơn hàm paste; nằm bên trong **stringr** |
+
+## 1.4 Các bản sửa đổi chính
+
+| Ngày                   | Thay đổi chính            |
+|------------------------|---------------------------|
+| 10 Tháng Năm 2021      | Phát hành phiên bản 1.0.0 |
+| 20 Tháng Mười Một 2022 | Phát hành phiên bản 1.0.1 |
+
+**NEWS** Với phiên bản 1.0.1, những thay đổi sau đã được thực hiện:
+
+- Cập nhật lên R phiên bản 4.2
+- Làm sạch dữ liệu: chuyển từ {linelist} sang {matchmaker}, bỏ một dòng không cần thiết trong ví dụ về `case_when()`
+- Ngày tháng: chuyển từ `guess_date()` của {linelist} sang `parse_date()` của {parsedate}
+- Xoay trục dữ liệu: cập nhật nhỏ cho `id_cols=` của `pivot_wider()`
+- Phân tích điều tra: chuyển từ `plot_age_pyramid()` sang `age_pyramid()`, thay đổi nhỏ trong code vẽ biểu đồ alluvial
+- Biểu đồ nhiệt: thêm `ungroup()` vào đoạn code `agg_weeks`
+- Biểu đồ tương tác: thêm `ungroup()` vào đoạn code tạo `agg_weeks` để `expand()` hoạt động đúng như mong muốn
+- Chuỗi thời gian: thêm `data.frame()` bao quanh các đối tượng bên trong tất cả các lệnh `trending::fit()` và `predict()`
+- Phân tích kết hợp: chuyển `case_when()` sang `ifelse()` và thêm code `across()` tùy chọn để chuẩn bị dữ liệu
+- Chuỗi lây truyền: cập nhật lên phiên bản {epicontacts} mới hơn
+
+## 1.5 Lời cảm ơn
+
+Sổ tay này được tạo ra bởi sự hợp tác của các nhà dịch tễ học từ khắp nơi trên thế giới, đúc kết kinh nghiệm cùng với các tổ chức khác bao gồm các cơ quan y tế địa phương, tiểu bang, tỉnh và quốc gia, Tổ chức Y tế Thế giới (WHO), Tổ chức Bác sỹ không biên giới (MSF), hệ thống các bệnh viện, và các đơn vị nghiên cứu.
+
+Sổ tay này **không phải** là sản phẩm đã được phê duyệt của bất kỳ tổ chức cụ thể nào. Mặc dù chúng tôi cố gắng đảm bảo tính chính xác, nhưng chúng tôi không chịu trách nhiệm về nội dung trong cuốn sách này.
+
+### Những người đóng góp
+
+**Chủ biên:** [Neale Batra](https://www.linkedin.com/in/neale-batra/)
+
+**Nhóm tác giả**: [Neale Batra](https://www.linkedin.com/in/neale-batra/), [Alex Spina](https://github.com/aspina7), [Paula Blomquist](https://www.linkedin.com/in/paula-bianca-blomquist-53188186/), [Finlay Campbell](https://github.com/finlaycampbell), [Henry Laurenson-Schafer](https://github.com/henryls1), [Isaac Florence](https://www.Twitter.com/isaacatflorence), [Natalie Fischer](https://www.linkedin.com/in/nataliefischer211/), [Aminata Ndiaye](https://twitter.com/aminata_fadl), [Liza Coyer](https://www.linkedin.com/in/liza-coyer-86022040/), [Jonathan Polonsky](https://twitter.com/jonny_polonsky), [Yurie Izawa](https://ch.linkedin.com/in/yurie-izawa-a1590319), [Chris Bailey](https://twitter.com/cbailey_58?lang=en), [Daniel Molling](https://www.linkedin.com/in/daniel-molling-4005716a/), [Isha Berry](https://twitter.com/ishaberry2), [Emma Buajitti](https://twitter.com/buajitti), [Mathilde Mousset](https://mathildemousset.wordpress.com/research/), [Sara Hollis](https://www.linkedin.com/in/saramhollis/), Wen Lin
+
+**Nhóm dịch giả**: [Nguyễn Thanh Lương](https://www.linkedin.com/in/ntluong95/), Võ Hữu Thuận, Nguyễn Trung Thành, Vũ Thu Hà, [Hồ Hoàng Dung](https://www.linkedin.com/in/dzunggg/)
+
+**Nhóm phản biện**: Pat Keating, [Amrish Baidjoe](https://twitter.com/Ammer_B), Annick Lenglet, Margot Charette, Danielly Xavier, Marie-Amélie Degail Chabrat, Esther Kukielka, Michelle Sloan, Aybüke Koyuncu, Rachel Burke, Kate Kelsey, [Berhe Etsay](https://www.linkedin.com/in/berhe-etsay-5752b1154/), John Rossow, Mackenzie Zendt, James Wright, Laura Haskins, [Flavio Finger](https://ffinger.github.io), Tim Taylor, [Jae Hyoung Tim Lee](https://www.linkedin.com/in/jaehyoungtlee/), [Brianna Bradley](https://www.linkedin.com/in/brianna-bradley-bb8658155), [Wayne Enanoria](https://www.linkedin.com/in/wenanoria), Manual Albela Miranda, [Molly Mantus](https://www.linkedin.com/in/molly-mantus-174550150/), Pattama Ulrich, Joseph Timothy, Adam Vaughan, Olivia Varsaneux, Lionel Monteiro, Joao Muianga
+
+**Hình minh họa**: Calder Fong
+
+### Tài trợ và hỗ trợ
+
+Sổ tay này là sản phẩm chủ yếu được hình thành từ các nỗ lực tình nguyện hàng nghìn giờ để tạo ra.
+
+Nó cũng nhận được một phần tài trợ thông qua kinh phí hỗ trợ trợ xây dựng năng lực khẩn cấp COVID-19 từ [TEPHINET](https://www.tephinet.org/), mạng lưới toàn cầu của các Chương trình Đào tạo Dịch tễ học Thực địa (FETPs).
+
+Các hỗ trợ hành chính được cung cấp bởi mạng lưới cựu sinh EPIET ([EAN](https://epietalumni.net/)), với lời cảm ơn đặc biệt tới Annika Wendland. EPIET là Chương trình đào tạo Dịch tễ học can thiệp tại Châu Âu.
+
+Đặc biệt gửi lời cảm ơn tới Trung tâm Điều hành Amsterdam (OCA) của Tổ chức Bác sỹ không biên giới (MSF) cho những sự hỗ trợ của họ trong quá trình phát triển cuốn sổ tay này.
+
+*Ấn phẩm này được hỗ trợ bởi Hợp đồng Hợp tác số NU2GGH001873, được tài trợ bởi Trung tâm Kiểm soát và Phòng ngừa Dịch bệnh thông qua TEPHINET, một chương trình của Lực lượng đặc nhiệm về sức khỏe toàn cầu. Nội dung của sổ tay hoàn toàn do tác giả chịu trách nhiệm và đại diện cho quan điểm chính thức của Trung tâm Kiểm soát và Phòng ngừa Dịch bệnh, Bộ Y tế và Dịch vụ Nhân sinh, Lực lượng Đặc nhiệm về Sức khỏe Toàn cầu, hoặc TEPHINET*
+
+### Cảm hứng
+
+Rất nhiều các hướng dẫn và tóm tắt cung cấp kiến thức sử dụng để phát triển nội dung sổ tay này được tham khảo trong các trang nội dung tương ứng.
+
+Một cách tổng quát hơn, các nguồn sau đây đã truyền nguồn cảm hứng cho cuốn sổ tay này:  
+[The “R4Epis” project](https://r4epis.netlify.app/) (một sự hợp tác giữa MSF và RECON)  
+[R Epidemics Consortium (RECON)](https://www.repidemicsconsortium.org/)  
+[R for Data Science book (R4DS)](https://r4ds.had.co.nz/)  
+[bookdown: Authoring Books and Technical Documents with R Markdown](https://bookdown.org/yihui/bookdown/)  
+[Netlify](https://www.netlify.com) để lưu trữ trang web này
+
+## 1.6 Điều khoản sử dụng và đóng góp
+
+### Giấy phép
+
+[![Creative Commons License](https://i.creativecommons.org/l/by-nc-sa/4.0/88x31.png)](http://creativecommons.org/licenses/by-nc-sa/4.0/)  
+Sổ tay này được cấp phép theo [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License](http://creativecommons.org/licenses/by-nc-sa/4.0/).
+
+Chúng tôi khuyến khích các khóa học và các chương trình đào tạo dịch tễ sử dụng cuốn sổ tay này cho sinh viên của mình. Nếu bạn có thắc mắc về mục đích sử dụng của mình, hãy gửi email tới [**epiRhandbook@gmail.com**](mailto:epiRhandbook@gmail.com).
+
+### Trích dẫn
+
+Neale Batra và cộng sự, Cẩm nang Dịch tễ học với R. [![DOI](https://zenodo.org/badge/231610102.svg)](https://zenodo.org/badge/231610102.svg)  
+
+### Đóng góp
+
+Nếu bạn muốn đóng góp nội dung, vui lòng liên hệ với chúng tôi thông qua Github hoặc email. Chúng tôi đang triển khai lịch trình cập nhật cho cuốn sách cũng như xây dựng hướng dẫn dành cho cộng tác viên.
+
+Xin lưu ý rằng dự án epiRhandbook được phát hành cùng với bộ [Quy tắc ứng xử của cộng tác viên](https://contributor-covenant.org/version/2/0/CODE_OF_CONDUCT.html). Bằng cách đóng góp cho dự án này, bạn đồng ý tuân theo các điều khoản của nó.
+
+## 1.7 Thông tin phiên làm việc (R, RStudio, packages)
+
+Dưới đây là thông tin về các phiên bản của các R package, RStudio và R được sử dụng trong quá trình rendering cuốn sách này.
+
+``` r
+sessioninfo::session_info()
+```
+
+    ─ Session info ───────────────────────────────────────────────────────────────
+     setting  value
+     version  R version 4.6.0 (2026-04-24)
+     os       Ubuntu 26.04 LTS
+     system   x86_64, linux-gnu
+     ui       X11
+     language en_US:en
+     collate  en_US.UTF-8
+     ctype    en_US.UTF-8
+     tz       Etc/UTC
+     date     2026-11-01
+     pandoc   3.7.0.2 @ /usr/bin/ (via rmarkdown)
+     quarto   1.9.38 @ /usr/local/bin/quarto
+
+    ─ Packages ───────────────────────────────────────────────────────────────────
+     package     * version date (UTC) lib source
+     cli           3.6.6   2026-04-09 [1] RSPM
+     digest        0.6.39  2025-11-19 [1] RSPM
+     evaluate      1.0.5   2025-08-27 [1] RSPM
+     fastmap       1.2.0   2024-05-15 [1] RSPM
+     htmltools     0.5.9   2025-12-04 [1] RSPM
+     htmlwidgets   1.6.4   2023-12-06 [1] RSPM
+     jsonlite      2.0.0   2025-03-27 [1] RSPM
+     knitr         1.51    2025-12-20 [1] RSPM
+     otel          0.2.0   2025-08-29 [1] RSPM
+     rlang         1.2.0   2026-04-06 [1] RSPM
+     rmarkdown     2.31    2026-03-26 [1] RSPM
+     sessioninfo   1.2.4   2026-06-04 [1] RSPM
+     xfun          0.59    2026-06-19 [1] RSPM
+     yaml          2.3.12  2025-12-10 [1] RSPM
+
+     [1] /opt/R/4.6.0/lib/R/library
+
+    ──────────────────────────────────────────────────────────────────────────────

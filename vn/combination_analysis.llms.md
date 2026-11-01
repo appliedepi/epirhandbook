@@ -1,0 +1,179 @@
+# 36  Biểu đồ kết hợp
+
+[![](combination_analysis_files/figure-html/combination_header-1.png)](combination_analysis_files/figure-html/combination_header-1.png)
+
+Phân tích này vẽ biểu đồ tần suất của các **kết hợp** giá trị/phản hồi khác nhau. Trong ví dụ này, chúng ta sẽ vẽ biểu đồ tần suất các trường hợp có biểu hiện kết hợp nhiều triệu chứng khác nhau.
+
+Phân tích này còn thường được gọi bằng những tên khác như:
+
+- **“Phân tích nhiều lựa chọn”**  
+- **“Phân tích các bộ (sets)”**  
+- **“Phân tích kết hợp”**
+
+Trong biểu đồ minh họa bên trên, năm triệu chứng được trình bày. Bên dưới mỗi thanh dọc là một đường và dấu chấm biểu thị sự kết hợp của các triệu chứng được phản ánh bởi thanh ở trên.
+
+Phương pháp đầu tiên chúng tôi sẽ trình bày sử dụng package **ggupset**, phương pháp thứ hai sử dụng package **UpSetR**.
+
+## 36.1 Chuẩn bị
+
+### Gọi package
+
+Đoạn code này hiển thị việc gọi các gói cần thiết cho các phân tích. Trong cuốn sách này, chúng tôi nhấn mạnh việc sử dụng hàm `p_load()` từ package **pacman**, giúp cài đặt các package nếu cần thiết *và* gọi chúng ra để sử dụng. Bạn cũng có thể gọi các packages đã cài đặt với hàm `library()` của **base** R. Xem thêm chương [R cơ bản](basics.llms.md) để có thêm thông tin về các packages trong R.
+
+``` r
+pacman::p_load(
+  tidyverse,     # data management and visualization
+  UpSetR,        # special package for combination plots
+  ggupset,       # special package for combination plots
+  appliedepidata) # example datasets used in this handbook
+```
+
+### Nhập dữ liệu
+
+Để bắt đầu, chúng ta nhập bộ dữ liệu có tên linelist đã làm sạch bao gồm các trường hợp từ vụ dịch Ebola mô phỏng. Tải trực tiếp bằng `appliedepidata::get_data(name = "linelist_cleaned_rds")` (xem trang [Tải sách và dữ liệu](download.llms.md) để biết chi tiết).
+
+``` r
+# import case linelist 
+linelist_sym <- appliedepidata::get_data(name = "linelist_cleaned_rds")
+```
+
+Bộ số liệu linelist bao gồm năm biến “có/không” về các triệu chứng được ghi nhận. Chúng ta sẽ cần phải biến đổi các biến số này một chút trước khi sử dụng package **ggupset** để tạo biểu đồ. Xem dữ liệu (cuộn sang phải để xem các biến triệu chứng).
+
+### Định dạng lại giá trị
+
+Để tương đồng với định dạng của package **ggupset**, chúng ta cần đổi giá trị “yes” và “no” thành tên các triệu chứng thực tế, sử dụng hàm `case_when()` từ package **dplyr**. Nếu giá trị là “no”, chúng ta sẽ bỏ trống, nghĩa là biến mới sẽ có giá trị hoặc là `NA` hoặc là triệu chứng.
+
+``` r
+# create column with the symptoms named, separated by semicolons
+linelist_sym_1 <- linelist_sym %>% 
+
+  # convert the "yes" and "no" values into the symptom name itself
+  # if old value is "yes", new value is "fever", otherwise set to missing (NA)
+mutate(fever = ifelse(fever == "yes", "fever", NA), 
+       chills = ifelse(chills == "yes", "chills", NA),
+       cough = ifelse(cough == "yes", "cough", NA),
+       aches = ifelse(aches == "yes", "aches", NA),
+       vomit = ifelse(vomit == "yes", "vomit", NA))
+```
+
+Bây giờ chúng ta tạo hai cột cuối cùng:
+
+1.  Kết hợp (ghép lại với nhau) tất cả các triệu chứng của bệnh nhân (thành một cột ký tự)  
+2.  Chuyển đổi định dạng cột bên trên thành kiểu *danh sách* để được chấp nhận bởi package **ggupset** khi vẽ biểu đồ
+
+Xem thêm chương [Ký tự và chuỗi](characters_strings.llms.md) để biết thêm về hàm `unite()` trong package **stringr**
+
+``` r
+linelist_sym_1 <- linelist_sym_1 %>% 
+  unite(col = "all_symptoms",
+        c(fever, chills, cough, aches, vomit), 
+        sep = "; ",
+        remove = TRUE,
+        na.rm = TRUE) %>% 
+  mutate(
+    # make a copy of all_symptoms column, but of class "list" (which is required to use ggupset() in next step)
+    all_symptoms_list = as.list(strsplit(all_symptoms, "; "))
+    )
+```
+
+Bây giờ chúng ta cùng xem dữ liệu mới. Lưu ý hai cột ở cuối bên phải - các giá trị kết hợp được ghép và danh sách
+
+## 36.2 **ggupset**
+
+Gọi package
+
+``` r
+pacman::p_load(ggupset)
+```
+
+Vẽ biểu đồ. Chúng ta bắt đầu bằng hàm `ggplot()` và `geom_bar()`, nhưng sau đó chúng ta thêm hàm đặc biệt `scale_x_upset()` từ package **ggupset**.
+
+``` r
+# giữ lại 10 tổ hợp phổ biến nhất, là các tổ hợp mà n_intersections = 10 hiển thị
+top_combinations <- linelist_sym_1 %>% 
+  count(all_symptoms, sort = TRUE) %>% 
+  slice_head(n = 10) %>% 
+  pull(all_symptoms)
+
+ggplot(
+  data = filter(linelist_sym_1, all_symptoms %in% top_combinations),
+  mapping = aes(x = all_symptoms_list)) +
+geom_bar() +
+scale_x_upset(
+  reverse = FALSE,
+  n_intersections = 10,
+  sets = c("fever", "chills", "cough", "aches", "vomit"))+
+labs(
+  title = "Signs & symptoms",
+  subtitle = "10 most frequent combinations of signs and symptoms",
+  caption = "Caption here.",
+  x = "Symptom combination",
+  y = "Frequency in dataset")
+```
+
+[![](combination_analysis_files/figure-html/combination_ggupset-1.png)](combination_analysis_files/figure-html/combination_ggupset-1.png)
+
+Bạn có thể đọc thêm về package **ggupset** [ở tài liệu online này](https://rdrr.io/cran/ggupset/man/scale_x_upset.html) hoặc trong tài liệu trợ giúp của package bằng cách gõ vào cửa RStudio Help lệnh `?ggupset`.
+
+## 36.3 `UpSetR`
+
+Package **UpSetR** cho phép tùy chỉnh biểu đồ sâu hơn, nhưng nó cũng khó thực hiện hơn:
+
+**Gọi package**
+
+``` r
+pacman::p_load(UpSetR)
+```
+
+**Làm sạch dữ liệu**
+
+Chúng ta phải chuyển đổi các triệu chứng trong bộ dữ liệu `linelist` thành các giá trị 1 / 0.
+
+``` r
+linelist_sym_2 <- linelist_sym %>% 
+     # convert the "yes" and "no" values into 1s and 0s
+     mutate(fever = ifelse(fever == "yes", 1, 0), 
+            chills = ifelse(chills == "yes", 1, 0),
+            cough = ifelse(cough == "yes", 1, 0),
+            aches = ifelse(aches == "yes", 1, 0),
+            vomit = ifelse(vomit == "yes", 1, 0))
+```
+
+Nếu bạn muốn một lệnh hiệu quả hơn, bạn có thể tận dụng hàm `+()`, hàm này chuyển giá trị thành 1 và 0 dựa trên một mệnh đề logic. Lệnh này dùng kết hợp với hàm `across()` để thực hiện thay đổi trên nhiều cột cùng lúc (đọc thêm tại chương [Các hàm làm sạch dữ liệu](cleaning.llms.md#clean_across)).
+
+``` r
+# Efficiently convert "yes" to 1 and 0
+linelist_sym_2 <- linelist_sym %>% 
+  
+  # convert the "yes" and "no" values into 1s and 0s
+  mutate(across(c(fever, chills, cough, aches, vomit), .fns = ~+(.x == "yes")))
+```
+
+Bây giờ chúng ta hãy vẽ biểu đồ bằng hàm tùy chỉnh `upset()` - chỉ sử dụng các cột triệu chứng. Bạn phải chỉ định “bộ” nào để so sánh (tên của các cột triệu chứng). Một cách khác, sử dụng `nsets =` và `order.by = "freq"` để chỉ hiện thị X các sự kết hợp nhiều nhất.
+
+``` r
+# Make the plot
+linelist_sym_2 %>% 
+  drop_na(fever, chills, cough, aches, vomit) %>% 
+  UpSetR::upset(
+       sets = c("fever", "chills", "cough", "aches", "vomit"),
+       order.by = "freq",
+       sets.bar.color = c("blue", "red", "yellow", "darkgreen", "orange"), # optional colors
+       empty.intersections = "on",
+  # nsets = 3,
+       number.angles = 0,
+       point.size = 3.5,
+       line.size = 2, 
+       mainbar.y.label = "Symptoms Combinations",
+       sets.x.label = "Patients with Symptom")
+```
+
+[![](combination_analysis_files/figure-html/combination_upsetr-1.png)](combination_analysis_files/figure-html/combination_upsetr-1.png)
+
+## 36.4 Nguồn
+
+[The github page on UpSetR](https://github.com/hms-dbmi/UpSetR)
+
+[A Shiny App version - you can upload your own data](https://gehlenborglab.shinyapps.io/upsetr/)
+
+[\*documentation - difficult to interpret](https://cran.r-project.org/web/packages/UpSetR/UpSetR.pdf)

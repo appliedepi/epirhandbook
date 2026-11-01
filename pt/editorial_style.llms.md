@@ -1,0 +1,247 @@
+# 1  Notas editoriais e técnicas
+
+Nesta página descrevemos a abordagem filosófica, o estilo e as decisões editoriais específicas tomadas durante a criação deste manual.
+
+## 1.1 R para epidemiologia aplicada e saúde pública
+
+**Objetivo:** Servir como um guia de referência rápido para escrever código em R (online e [**offline**](download.llms.md)) com exemplos centrados em exercícios que abordam problemas epidemiológicos comuns.
+
+Esta é uma versão traduzida para Português. Se você quer colaborar em melhorá-la, corrigindo algum erro, ou traduzir para outro idoma, por favor, nos contate!
+
+### Como usar este manual
+
+- Navegue pelas páginas do Índice, ou use a caixa de busca
+- Clique nos ícones “copiar” para copiar o código  
+- Você pode seguir - junto com [os dados do exemplo](download.llms.md).  
+- Consulte a seção “Recursos” de cada página para obter mais material
+
+**Versão off-line**
+
+Veja as instruções na página [Fazer o Download do manual e dos dados](download.llms.md).
+
+## 1.2 Abordagem e estilo
+
+O público em potencial para este livro é grande. Ele será certamente utilizado por pessoas muito novas no R, e também por usuários experientes do R que procuram as melhores práticas e dicas. Portanto, deve ser ao mesmo tempo acessível e sucinto. Portanto, a nossa abordagem foi fornecer o *suficiente* no texto para que alguém muito novo no R possa aplicar o código e seguir o que o código está fazendo.
+
+Alguns outros pontos:
+
+- Este é um livro de referência de códigos, acompanhado de exemplos relativamente breves - *não* um livro de texto completo sobre R ou sobre ciência de dados  
+- Este é um *manual de R* para utilização no âmbito da epidemiologia aplicada - não um manual sobre os métodos ou a ciência da epidemiologia aplicada  
+- Este destina-se a ser um documento “vivo” - os pacotes R que são ideais para uma determinada tarefa tendem a mudar frequentemente, e estamos abertos a discussão sobre qual pacote deveríamos enfatizar neste manual
+
+### Pacotes do R
+
+**São tantas escolhas**
+
+Um dos aspectos mais desafiadores da aprendizagem de R é saber qual o pacote R utilizar para uma dada tarefa. É uma ocorrência comum esforçar-se demais em uma tarefa e só mais tarde perceber - ei, há um pacote R que faz tudo isso numa única linha de código!
+
+Neste manual, tentamos oferecer-lhe pelo menos duas formas de completar cada tarefa: um método experimentado e validado (provavelmente em R **base** ou **tidyverse**) e um pacote especial R que tenha sido construído para esse fim. Queremos que tenham algumas opções caso não consigam fazer o *download* de um determinado pacote ou que este não funcione.
+
+Ao escolher os pacotes a utilizar, nós demos prioridade aos pacotes R e às abordagens que foram testados e aprovados pela comunidade. Também minimizamos o número de pacotes utilizados numa sessão de trabalho típica, e escolhemos aqueles que são estáveis (não mudam com muita frequência), e que cumprem a tarefa de forma simples e limpa
+
+Este manual dá, de modo geral, prioridade aos pacotes e funções R do **tidyverse**. Tidyverse é uma colecção de pacotes de R concebidos para a ciência de dados que partilham gramática e estruturas de dados em comum. Todos os pacotes do tidyverse podem ser instalados ou carregados através do pacote **tidyverse**. Leia mais em [tidyverse website](https://www.tidyverse.org/).
+
+Quando aplicável, também oferecemos opções de código usando o R **base** - os pacotes e funções que já vêm com R na sua instalação. Isto porque reconhecemos que parte do público deste livro podem não ter Internet estável para realizar o *download* de pacotes extra.
+
+**Explicitando os pacotes de origem de cada função**
+
+Geralmente é frustrante quando, nos tutoriais de R, uma função é mostrada em código, mas não se sabe de que pacote ela é! Tentamos evitar esta situação.
+
+No texto narrativo, os nomes dos pacotes são escritos a negrito (por exemplo **dplyr**) e as funções são escritas desta forma: `mutate()`. Esforçamo-nos por ser explícitos sobre de que pacote vem uma função, seja referenciando o pacote em texto próximo ou especificando o pacote explicitamente no código: `dplyr::mutate()`. Pode parecer redundante, mas estamos fazendo isso de propósito.
+
+Veja a página em [Introdução ao R](basics.llms.md) para saber mais sobre pacotes e funções.
+
+### Estilo do código
+
+No manual, nós utilizamos frequentemente “novas linhas”, fazendo o nosso código parecer “longo”. Fazemos isso por algumas razões:
+
+- Dessa forma podemos escrever comentários explicativos com \`#’, colocando-os posicionados de forma adjacente a cada pequena parte do código  
+- Geralmente, o código mais longo (vertical) é mais fácil de ler  
+- É mais fácil de ler em uma tela estreita (não é necessária rolagem lateral)  
+- A partir das indentações, pode ser mais fácil saber que argumentos pertencem a que função
+
+Como resultado, código que *poderia* ser escrito desta forma:
+
+``` r
+linelist %>% 
+  group_by(hospital) %>%  # agrupe as linhas por hospital
+  slice_max(date, n = 1, with_ties = F) # se houver um empate (de data), pegue a primeira linha
+```
+
+…é escrito assim:
+
+``` r
+linelist %>% 
+  group_by(hospital) %>% # agrupe as linhas por hospital
+  slice_max(
+    date,                # mantenha a linha que contem o valor máximo de data para cada grupo k
+    n = 1,               # mantenha unicamente a linha com o valor mais alto
+    with_ties = F)       # se houver um empate (de data), pegue a primeira linha
+```
+
+O código R não é geralmente afetado por novas linhas ou indentações. Ao escrever o código, se você iniciar uma nova linha após uma vírgula, ele aplicará padrões de recuo automáticamente.
+
+Também utilizamos muitos espaços (por exemplo `n = 1` em vez de `n=1`) porque é mais fácil de ler. Seja gentil com as pessoas que lêem o seu código!
+
+### Nomenclatura
+
+Neste manual, referimos geralmente “colunas” e “linhas” em vez de “variáveis” e “observações”. Como explicado neste manual em [“tidy data”](https://tidyr.tidyverse.org/articles/tidy-data.html), a maioria dos conjuntos de dados estatísticos epidemiológicos consistem estruturalmente em linhas, colunas e valores.
+
+*As variáveis* contêm os valores que medem o mesmo atributo subjacente (como grupo etário, resultado, ou data de início). *Observações* contêm todos os valores medidos na mesma unidade (por exemplo, uma pessoa, local, ou amostra de laboratório). Portanto, estes aspectos podem ser mais difíceis de definir de forma tangível.
+
+Em conjuntos de dados “arrumados” (*tidy*), cada coluna é uma variável, cada linha é uma observação, e cada célula é um valor único. No entanto, alguns conjuntos de dados que encontrarem podem não seguir esse modelo - um conjunto de dados de formato “largo” pode ter uma variável dividida em várias colunas (ver um exemplo na página [Pivoteando Dados](pivoting.llms.md)). Da mesma forma, uma única observação pode estar divididas em várias linhas.
+
+A maior parte deste manual trata da gestão e transformação de dados, e por isso, se referir às estruturas concretas de dados (linhas e colunas) é mais relevante do que se referir às observações e às variáveis de forma mais abstractas. As exceções ocorrem principalmente em páginas sobre análise de dados, onde se verá mais referências a variáveis e observações.
+
+### Notas
+
+Aqui estão os tipos de notas que você poderá encontrar neste manual:
+
+***NOTA:*** Isso é uma nota  
+***DICA:*** Isso é uma dica.  
+***CUIDADO:*** Esta é uma nota de precaução.  
+***PERIGO:*** Isso é uma advertência.
+
+## 1.3 Decisões editoriais
+
+Abaixo, relacionamos decisões editoriais significativas em torno da escolha do pacote e da função. Se discordar ou quiser oferecer uma nova ferramenta para consideração, por favor, junte-se/ inicie uma conversa na nossa [página Github](https://github.com/appliedepi/epirhandbook_eng).
+
+**Tabela de pacote, função, e outras decisões editoriais**\*
+
+| Assunto | POssibilidades | Escolha | Breve justificativa |
+|----|----|----|----|
+| Abordagem geral para escrita do código | **tidyverse**, **data.table**, **base** | **tidyverse**, com uma página sobre **data.table**, e menções a alternativas em R **base** para leitores sem internet | A facilidade de leitura proporcionada pelo **tidyverse**, elém da sua universalidade e maior utilização para ensino. |
+| Carregamento de pacotes | `library()`,`install.packages()`, `require()`, **pacman** | **pacman** | Encurta e simplifica o código para a maioria dos casos de instalação/carregamento de vários pacotes |
+| Importar e Exportar | **rio**, muitos outros pacotes | **rio** | Fácil para muitos tipos de arquivo |
+| Agrupamento para estatísticas resumo | **dplyr** `group_by()`, **stats** `aggregate()` | **dplyr** `group_by()` | Compatível com a ênfase em **tidyverse** |
+| Pivotamento ( | **tidyr** (funções de pivotamento), **reshape2** (melt/cast), **tidyr** (spread/gather) | **tidyr** (funções de pivotamento) | **reshape2** está em desuso, **tidyr** usa funções de pivotamento desde a versão v1.0.0 |
+| Limpar nome das colunas | **linelist**, **janitor** | **janitor** | Consolidação de pacotes enfatizada |
+| Epiweeks | **lubridate**, **aweek**, **tsibble**, **zoo** | **lubridate** de modo geral, os outros em casos específicos | A flexibilidade, consistência e perspectiva de manutenção do pacote **lubridate** |
+| Rótulos/Legendas do ggplot | `labs()`, `ggtitle()`/`ylab()`/`xlab()` | `labs()` | todos os rótulos em um lugar, simplicidade |
+| Converter para fator | `factor()`, **forcats** | **forcats** | suas várias funções tembém convertem para o formato de fator em um memso comando |
+| Curvas epidêmicas | **incidence**, **ggplot2**, **EpiCurve** | **incidence2** para rapidez, **ggplot2** para detalhamento | fiabilidade |
+| Concatenação | `paste()`, `paste0()`, `str_glue()`, `glue()` | `str_glue()` | Funções com sintaxe mais simples do que as funções *paste*; está contido **stringr** |
+
+## 1.4 Principais revisões
+
+| Data         | Principais mudanças        |
+|--------------|----------------------------|
+| 10 Maio 2021 | Lançamento da versão 1.0.0 |
+| 20 Nov 2022  | Lançamento da versão 1.0.1 |
+
+**NOVIDADES** Com a versão 1.0.1, as seguintes mudanças foram implementadas:
+
+- Atualização para a versão 4.2 do R
+- Limpeza de dados: troca de {linelist} por {matchmaker}, remoção de uma linha desnecessária do exemplo de `case_when()`
+- Datas: troca de `guess_date()`, do {linelist}, por `parse_date()`, do {parsedate}
+- Pivoteando dados: pequena atualização em `id_cols=`, de `pivot_wider()`
+- Análise de pesquisas: troca de `plot_age_pyramid()` por `age_pyramid()`, pequena mudança no código do gráfico aluvial
+- Gráficos de calor: adição de `ungroup()` ao bloco de código `agg_weeks`
+- Gráficos interativos: adição de `ungroup()` ao bloco de código que cria `agg_weeks`, para que `expand()` funcione como esperado
+- Séries temporais: adição de `data.frame()` em torno dos objetos dentro de todos os comandos `trending::fit()` e `predict()`
+- Análise de combinações: troca de `case_when()` por `ifelse()` e adição de código opcional com `across()` para preparar os dados
+- Cadeias de transmissão: atualização para uma versão mais recente do {epicontacts}
+
+## 1.5 Agradecimentos
+
+Este manual é produzido por uma colaboração de epidemiologistas de todo o mundo, aproveitando a experiência de organizações que incluem agências de saúde locais, estaduais, provinciais e nacionais, a Organização Mundial da Saúde (OMS), Médicos Sem Fronteiras / Médicos sem Fronteiras (MSF), sistemas hospitalares e instituições acadêmicas.
+
+Este manual **não** é um produto aprovado de qualquer organização específica. Embora nos esforcemos para ser precisos, não damos nenhuma garantia do conteúdo deste livro.
+
+### Colaboradores
+
+**Editor:** [Neale Batra](https://www.linkedin.com/in/neale-batra/)
+
+**Autores**: [Neale Batra](https://www.linkedin.com/in/neale-batra/), [Alex Spina](https://github.com/aspina7), [Paula Blomquist](https://www.linkedin.com/in/paula-bianca-blomquist-53188186/), [Finlay Campbell](https://github.com/finlaycampbell), [Henry Laurenson-Schafer](https://github.com/henryls1), [Isaac Florence](https://www.Twitter.com/isaacatflorence), [Natalie Fischer](https://www.linkedin.com/in/nataliefischer211/), [Aminata Ndiaye](https://twitter.com/aminata_fadl), [Liza Coyer](https://www.linkedin.com/in/liza-coyer-86022040/), [Jonathan Polonsky](https://twitter.com/jonny_polonsky), [Yurie Izawa](https://ch.linkedin.com/in/yurie-izawa-a1590319), [Chris Bailey](https://twitter.com/cbailey_58?lang=en), [Daniel Molling](https://www.linkedin.com/in/daniel-molling-4005716a/), [Isha Berry](https://twitter.com/ishaberry2), [Emma Buajitti](https://twitter.com/buajitti), [Mathilde Mousset](https://mathildemousset.wordpress.com/research/), [Sara Hollis](https://www.linkedin.com/in/saramhollis/), Wen Lin
+
+**Revisores**: Pat Keating, Annick Lenglet, Margot Charette, Danielly Xavier, Esther Kukielka, Michelle Sloan, Aybüke Koyuncu, Rachel Burke, Kate Kelsey, [Berhe Etsay](https://www.linkedin.com/in/berhe-etsay-5752b1154/), John Rossow, Mackenzie Zendt, James Wright, Laura Haskins, [Flavio Finger](https://ffinger.github.io), Tim Taylor, [Jae Hyoung Tim Lee](https://www.linkedin.com/in/jaehyoungtlee/), [Brianna Bradley](https://www.linkedin.com/in/brianna-bradley-bb8658155), [Wayne Enanoria](https://www.linkedin.com/in/wenanoria), Manual Albela Miranda, [Molly Mantus](https://www.linkedin.com/in/molly-mantus-174550150/), Pattama Ulrich, Joseph Timothy, Adam Vaughan, Olivia Varsaneux, Lionel Monteiro, Joao Muianga
+
+**Ilustradores**: Calder Fong
+
+**Tradutores da versão em língua portuguesa (Brasil)**: [Carolina Musso](https://www.linkedin.com/in/carolina-musso-29b627128/), [César Augusto Galvão](https://www.linkedin.com/mwlite/in/cesaraspgalvao) , [Halian Vilela](https://www.linkedin.com/in/halian/), [Laís Relvas](https://www.linkedin.com/in/laís-relvas-35429a5b/), [Felipe Cardoso](https://br.linkedin.com/in/felipe-daniel-cardoso-b7015ba1), [Rafaela Tadei](https://www.linkedin.com/in/rafaela-tadei-1aaa9b142/), [Pauliana Galvão](https://www.linkedin.com/in/pauliana-galvão-2462ab48/), [Nathalia Zini](https://www.linkedin.com/in/nathalia-zini-b12a58196/), [Paula Maçaira](https://www.linkedin.com/in/paulamacaira/), [João Pedro Angelici](https://www.linkedin.com/in/joão-pedro-angelici-4b2701193/), [Ademar Barbosa Dantas Junior](https://www.linkedin.com/in/ademar-dantas-junior/), [Eucilene Santana](https://www.linkedin.com/in/eucilene-santana-92856234/), [Hudson Gabriel Virtuoso Fontenele](https://www.linkedin.com/in/hudson-fontenele-04b148180/), [Lucca Nielsen](https://www.linkedin.com/in/lucca-nielsen-53b2a9181/)
+
+Os tradutores agradecem [ProEpi](https://proepi.org.br) pelo apoio para tradução e contato com a Applied Epi.
+
+### Financiamento e apoio
+
+O manual recebeu financiamento de apoio através de uma subvenção de emergência COVID-19 da [TEPHINET](https://www.tephinet.org/), a rede global de Programas de Treinamento em Epidemiologia de Campo (FETPs).
+
+O apoio administrativo foi fornecido pela EPIET Alumni Network ([EAN](https://epietalumni.net/)), com agradecimentos especiais à Annika Wendland. O EPIET é o Programa Europeu de Treinamento em Epidemiologia de Intervenção.
+
+Agradecimentos especiais aos Médicos Sem Fronteiras (MSF) Centro Operacional Amsterdã (OCA) por seu apoio durante o desenvolvimento deste manual.
+
+*Esta publicação foi apoiada pelo Acordo Cooperativo número NU2GGH001873, financiado pelos Centros de Controle e Prevenção de Doenças através do TEPHINET, um programa da Força Tarefa para a Saúde Global. Seu conteúdo é de responsabilidade exclusiva dos autores e não representa necessariamente a visão oficial dos Centros de Controle e Prevenção de Doenças, do Departamento de Saúde e Serviços Humanos, The Task Force for Global Health, Inc. ou TEPHINET.*
+
+### Inspiração
+
+A infinidade de tutoriais e vinhetas que forneceram conhecimento para o desenvolvimento do conteúdo do manual são creditados dentro de suas respectivas páginas.
+
+De modo mais geral, as seguintes fontes forneceram inspiração para este manual:
+
+[The “R4Epis” project](https://r4epis.netlify.app/) (colaboração entre MSF e RECON)  
+[R Epidemics Consortium (RECON)](https://www.repidemicsconsortium.org/)  
+[R for Data Science book (R4DS)](https://r4ds.had.co.nz/)  
+[bookdown: Authoring Books and Technical Documents with R Markdown](https://bookdown.org/yihui/bookdown/)  
+[Netlify](https://www.netlify.com) hosts this website
+
+## 1.6 Termos de Uso e Contribuição
+
+### Licença
+
+[![Creative Commons License](https://i.creativecommons.org/l/by-nc-sa/4.0/88x31.png)](http://creativecommons.org/licenses/by-nc-sa/4.0/)  
+Esta obra está licenciada sob uma [Licença Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International](http://creativecommons.org/licenses/by-nc-sa/4.0/).
+
+Cursos acadêmicos e programas de treinamento de epidemiologistas são bem-vindos para usar este manual com seus alunos. Se você tiver dúvidas sobre o uso pretendido, envie um e-mail para [**contact@appliedepi.org**](mailto:contact@appliedepi.org).
+
+### Citação
+
+Batra, Neale, et ai. O Manual do Epidemiologista R. 2021. [![DOI](https://zenodo.org/badge/231610102.svg)](https://zenodo.org/badge/231610102.svg)  
+
+### Contribuição
+
+Se você quiser fazer uma contribuição de conteúdo, entre em contato conosco primeiro por meio de questões do Github ou por e-mail. Estamos implementando um cronograma de atualizações e criando um guia do contribuidor.
+
+Observe que o projeto epiRhandbook é lançado com um [Código de Conduta do Contribuidor](https://contributor-covenant.org/version/2/0/CODE_OF_CONDUCT.html). Ao contribuir para este projeto, você concorda em respeitar seus termos.
+
+## 1.7 Informação da sessão (R, RStudio, pacotes)
+
+Abaixo estão as informações sobre as versões dos pacotes R, RStudio, e R utilizados durante esta elaboração deste Manual.
+
+``` r
+sessioninfo::session_info()
+```
+
+    ─ Session info ───────────────────────────────────────────────────────────────
+     setting  value
+     version  R version 4.6.0 (2026-04-24)
+     os       Ubuntu 26.04 LTS
+     system   x86_64, linux-gnu
+     ui       X11
+     language en_US:en
+     collate  en_US.UTF-8
+     ctype    en_US.UTF-8
+     tz       Etc/UTC
+     date     2026-11-01
+     pandoc   3.7.0.2 @ /usr/bin/ (via rmarkdown)
+     quarto   1.9.38 @ /usr/local/bin/quarto
+
+    ─ Packages ───────────────────────────────────────────────────────────────────
+     package     * version date (UTC) lib source
+     cli           3.6.6   2026-04-09 [1] RSPM
+     digest        0.6.39  2025-11-19 [1] RSPM
+     evaluate      1.0.5   2025-08-27 [1] RSPM
+     fastmap       1.2.0   2024-05-15 [1] RSPM
+     htmltools     0.5.9   2025-12-04 [1] RSPM
+     htmlwidgets   1.6.4   2023-12-06 [1] RSPM
+     jsonlite      2.0.0   2025-03-27 [1] RSPM
+     knitr         1.51    2025-12-20 [1] RSPM
+     otel          0.2.0   2025-08-29 [1] RSPM
+     rlang         1.2.0   2026-04-06 [1] RSPM
+     rmarkdown     2.31    2026-03-26 [1] RSPM
+     sessioninfo   1.2.4   2026-06-04 [1] RSPM
+     xfun          0.59    2026-06-19 [1] RSPM
+     yaml          2.3.12  2025-12-10 [1] RSPM
+
+     [1] /opt/R/4.6.0/lib/R/library
+
+    ──────────────────────────────────────────────────────────────────────────────

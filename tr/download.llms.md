@@ -1,0 +1,294 @@
+# 2  El Kitabı ve verileri indirme
+
+## 2.1 Çevrimdışı el kitabı indirme
+
+Bu el kitabını indirip internet bağlantısı olmadan okuyabilirsiniz. Her dil, sitenin tamamını içeren bir zip dosyasıdır: her bölüm, her görsel ve gezinme çubuğu.
+
+- Kendi dilinizin zip dosyasını indirin ve arşivden çıkarın.
+- Okumaya başlamak için çıkarılan klasördeki `index.html` dosyasını açın.
+- Bağlantınızı kaybetmeden önce ihtiyacınız olan R paketlerini kurmak için [Önerilen paketler](packages_suggested.llms.md) sayfasına bakın.
+
+**El kitabını indirmek için:**
+
+[El kitabını indir (zip)](https://github.com/appliedepi/epirhandbook/releases/download/offline/epirhandbook-tr.zip)
+
+Zip dosyası otomatik olarak yeniden oluşturulur, bu yüzden her zaman el kitabının en son sürümünü izler.
+
+## 2.2 Örnek bazlı verileri indirme
+
+El kitabının sayfalarını takip etmek için, örnek verileri tamamlayıcı R paketimiz **appliedepidata** ile doğrudan R’a yükleyebilirsiniz. Paket, bu el kitabında kullanılan bütün örnek veri setlerini içerir.
+
+### Paketi kurmak
+
+**appliedepidata** CRAN’de değildir; **pak** ile [Github deposundan](https://github.com/appliedepi/appliedepidata) kurun:
+
+``` r
+# appliedepidata paketinin en son sürümünü kurun
+pak::pak("appliedepi/appliedepidata")
+```
+
+### Bir veri setini doğrudan yüklemek
+
+Veri setini doğrudan R’a yüklemek için `get_data()` fonksiyonunu veri setinin `name =` argümanıyla kullanın — indirme yok, dosya yolu yok, `import()` adımı yok. Fonksiyon veri setini bir R nesnesi olarak döndürür (veri setine göre bir veri çerçevesi, bir `sf` nesnesi, bir `phylo` ağacı vb.).
+
+``` r
+# temizlenmiş satır listesini doğrudan R'a yükleyin
+linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds")
+```
+
+Örnek veri kullanan her sayfa, o sayfa için gereken `get_data(name = "...")` çağrısını verinin ilk kullanıldığı yerde gösterir.
+
+### Bir veri setini dosya olarak kaydetmek
+
+Bazı sayfalar bir R nesnesi yerine bir *dosyayı* (örneğin bir Excel çalışma kitabını veya bir dosya klasörünü) içe aktarmayı öğretir. Bunlar için gerçek dosyaları seçtiğiniz bir klasöre yazmak üzere `save_data()` fonksiyonunu `name =` ve `path =` ile kullanın:
+
+``` r
+# ham satır listesinin Excel dosyasını çalışma dizinine yazın
+appliedepidata::save_data(name = "case_linelists_linelist_raw", path = getwd())
+```
+
+Ardından bilgisayarınızdaki herhangi bir dosya gibi `import()` ile içe aktarabilirsiniz — ayrıntılar için [İçe ve dışa aktarma](importing.llms.md) sayfasına bakın. `save_data()` fonksiyonunun .zip arşivi olarak dağıtılan veri setlerini (örneğin çok dosyalı şekil dosyaları veya dosya klasörleri) otomatik olarak açmadığını unutmayın; kaydedilen .zip için sonrasında `utils::unzip()` kullanın.
+
+### Mevcut verilere göz atmak
+
+- `appliedepidata::search_data()` paketteki bütün veri setlerini dile ve anahtar kelimeye göre filtreleyip aramanız için etkileşimli bir Shiny uygulaması başlatır.
+- `appliedepidata::list_data()` betiklerde kullanmak üzere bütün veri seti adlarını listeleyen bir veri çerçevesi döndürür.
+
+``` r
+# veri setlerine etkileşimli olarak göz atın
+appliedepidata::search_data()
+
+# bütün veri seti adlarını listeleyin
+appliedepidata::list_data()
+```
+
+İsterseniz **appliedepidata** Github deposundaki **[“data” klasöründe](https://github.com/appliedepi/appliedepidata/tree/main/inst/extdata)** ham veri dosyalarını da inceleyebilirsiniz.
+
+### Sayfaya göre veri seti başvurusu
+
+Aşağıda, bu el kitabının her sayfasında adı geçen örnek veriler için `get_data()`/`save_data()` ile kullanılacak ad verilmiştir.
+
+#### Vaka satır listesi
+
+Bu, **outbreaks** paketindeki `ebola_sim` uygulama veri kümesinde yer alan kitabın ekibi tarafından genişletilen kurgusal bir Ebola salgınıdır.
+
+``` r
+# the "raw" linelist - an Excel spreadsheet with messy data
+# use this to follow along with the Cleaning data and core functions page
+raw_linelist <- appliedepidata::get_data(name = "case_linelists_linelist_raw")
+
+# the "clean" linelist - an R-specific .rds file that preserves column classes
+# use this for all other pages of this handbook that use the linelist
+linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds")
+
+# the "clean" linelist, as an Excel file instead
+linelist_excel <- appliedepidata::get_data(name = "linelist_cleaned_excel")
+```
+
+Temizleme sayfasının bir kısmı bir “temizleme sözlüğü” (.csv dosyası) kullanır. Aşağıdaki komutu çalıştırarak doğrudan R’a yükleyebilirsiniz:
+
+``` r
+cleaning_dict <- appliedepidata::get_data(name = "case_linelists_cleaning_dict")
+```
+
+#### Tarihlerle çalışma
+
+[Tarihlerle çalışma](dates.llms.md) sayfası, ilçeye ve tarihe göre vaka sayılarını kullanır:
+
+``` r
+counts <- appliedepidata::get_data(name = "example_district_weekly_count_data")
+```
+
+#### Yazma fonksiyonları
+
+[Yazma fonksiyonları](writing_functions.llms.md) sayfası, Çin’deki 2013 H7N9 grip salgınının satır listesini kullanır:
+
+``` r
+flu_china <- appliedepidata::get_data(name = "fluH7N9_China_2013")
+```
+
+#### Yineleme, döngüler ve listeler
+
+[Yineleme, döngüler ve listeler](iteration.llms.md) sayfası, her hastane için bir sayfa içeren bir Excel çalışma kitabını içe aktarır. Önce onu dosya olarak kaydedin:
+
+``` r
+appliedepidata::save_data(name = "example_hospital_linelists", path = getwd())
+```
+
+#### İçe ve dışa aktar
+
+[İçe ve dışa aktar](importing.llms.md) sayfası, satır listesini Excel dosyalarından içe aktarır. Önce onları dosya olarak kaydedin:
+
+``` r
+# ham satır listesi
+appliedepidata::save_data(name = "linelist_raw", path = getwd())
+
+# temizlenmiş satır listesi
+appliedepidata::save_data(name = "linelist_cleaned", path = getwd())
+```
+
+#### Sıtma sayısı verileri
+
+Bu veriler, yaş grubu, tesis ve güne göre sıtma vakalarının kurgusal sayılarıdır. Rds dosyası, sütun sınıflarını koruyan R’a özgü bir dosya türüdür. Bu, verileri R’a aktardıktan sonra temizlik yapma ihtiyacını azaltır.
+
+``` r
+malaria_data <- appliedepidata::get_data(name = "malaria_facility_count_data")
+```
+
+#### Likert ölçekli veri
+
+Bunlar, [Demografik Piramitler ve Likert Ölçekleri](age_pyramid.llms.md) sayfasında kullanılan likert tarzı bir anketten alınan kurgusal verilerdir. Aşağıdaki komutları çalıştırarak bu verileri doğrudan R’a yükleyebilirsiniz:
+
+``` r
+likert_data <- appliedepidata::get_data(name = "likert_data")
+```
+
+#### Esnek pano
+
+Aşağıda [R Markdown ile Kontrol Panelleri](flexdashboard.llms.md)’ndeki sayfayla ilişkili dosyaya bağlantılar verilmiştir. Bunlar örnek veri setleri değil, R Markdown/HTML kaynak dosyalarıdır; bu nedenle **appliedepidata** paketinin parçası değildirler. Bunları doğrudan Github’dan indirin:
+
+- Salgın panosu ile ilgili R Markdown’ı indirmek için [linke](https://github.com/appliedepi/epirhandbook/raw/main/data/flexdashboard/outbreak_dashboard.Rmd) sağ fare tuşuyla tıklayın (Mac için Cmd + tıkla) ve “Farklı Kaydet” seçeneğini seçin.  
+- HTML kontrol panelini indirmek için [linke](https://github.com/appliedepi/epirhandbook/raw/main/data/flexdashboard/outbreak_dashboard_test.html) sağ fare tuşuyla tıklayın (Mac için Cmd + tıkla) ve “Farklı Kaydet” seçeneğini seçin.
+
+#### Temaslı İzleme
+
+[Temaslı İzleme](contact_tracing.llms.md) sayfası, [Go.Data](https://github.com/WorldHealthOrganization/godata/tree/master/analytics/r-reporting) kaynaklı örnek temaslı izleme verilerini analiz eder. Bu veriler **appliedepidata** paketinin parçasıdır:
+
+``` r
+# vaka inceleme verileri
+cases <- appliedepidata::get_data(name = "cases_clean")
+
+# temaslı kayıt verileri
+contacts <- appliedepidata::get_data(name = "contacts_clean")
+
+# temaslı takip verileri
+followups <- appliedepidata::get_data(name = "followups_clean")
+
+# vakalar ile temaslılar arasındaki bağlantılar
+relationships <- appliedepidata::get_data(name = "relationships_clean")
+```
+
+***NOT:*** Diğer yazılımlarda (örn. KoBo, DHIS2 Tracker, CommCare) yapılandırılmış temaslı izleme verileri farklı görünebilir. Bu sayfa için alternatif örnek veri veya içeriğe katkıda bulunmak isterseniz lütfen [bize ulaşın](index.llms.md).
+
+***İPUCU:*** Go.Data kullanmak istiyorsanız ve örneklerinizin API’sine bağlanmak istiyorsanız, İçe ve Dışa Aktarma sayfasına [(API bölümü)](importing.llms.md#import_api) ve [Go.Data Uygulama Topluluğu](https://community-godata.who.int/)’na bakabilirsiniz.
+
+#### GIS
+
+Şekil dosyaları her biri farklı uzantıya sahip pek çok alt bileşen dosyasından oluşur. Bir dosyanın uzantısı “.shp” olur, diğerlerinin “.dbf”, “.prj” vb. olabilir. **appliedepidata** her şekil dosyasının alt bileşenlerini tek bir .zip içinde toplar; bu yüzden `save_data()` kullanıp ardından açın:
+
+``` r
+# Sierra Leone admin-3 şekil dosyasını doğrudan sf nesnesi olarak yükleyin
+sle_adm3 <- appliedepidata::get_data(name = "sle_adm3")
+
+# sağlık tesisi noktalarını sf nesnesi olarak yükleyin
+sle_hf <- appliedepidata::get_data(name = "sle_hf")
+
+# ADM3'e göre nüfus tablosunu yükleyin
+sle_adm3_pop <- appliedepidata::get_data(name = "sle_admpop_adm3_2020")
+
+# YA DA şekil dosyasının ham alt bileşenlerini bir klasöre kaydedin
+shp_dir <- "sle_adm3_files"
+dir.create(shp_dir)
+appliedepidata::save_data(name = "sle_adm3", path = shp_dir)
+utils::unzip(file.path(shp_dir, "sle_adm3.zip"), exdir = shp_dir)
+```
+
+[GIS temelleri](gis.llms.md) sayfası şu üç veri kümesinin tümünü yükler: admin-3 sınırları `sle_adm3`, sağlık tesisi noktaları `sle_hf` ve nüfus tablosu `sle_admpop_adm3_2020`. Kendi dosya yolunuzdaki bir şekil dosyasını okumak için **sf** paketindeki `read_sf()` fonksiyonunu kullanın. Aynı sayfa, başka şekil dosyalarını sıkıştırılmış olarak indirebileceğiniz *Humanitarian Data Exchange* sitesine de bağlantı verir. Örneğin sağlık tesisi nokta verileri [buradadır](https://data.humdata.org/dataset/hotosm_sle_health_facilities).
+
+#### Filogenetik ağaçlar
+
+[Filogenetik ağaçlar](phylogenetic_trees.llms.md) sayfayasında, 299 Shigella sonnei örneğinin tüm genom dizilimi ve buna karşılık gelen vaka verilerinden (bir metin dosyası halinde) oluşturulan filogenetik ağacı Newick dosyası göreceksiniz. Belçika örneklerinden elde edilen veriler, ECDC EUPHEM asistanı tarafından yürütülen bir proje kapsamında üretilmiştir. Bu veriler, Belçika Salmonella ve Shigella NRC’si tarafından sağlanmaktadır.Bu veriler yayına dönüştürülme aşamasındadır. Kullanılan uluslararası veriler kamuya açık veri tabanlarına (ncbi) kayıtlı ve yayınlanmış verilerden elde edilmiştir.
+
+``` r
+# the phylogenetic tree, as a "phylo" object (ape package)
+tree <- appliedepidata::get_data(name = "Shigella_tree")
+
+# additional information on each sample
+sample_data <- appliedepidata::get_data(name = "sample_data_Shigella_tree")
+
+# the subset-tree created later in the page
+subtree <- appliedepidata::get_data(name = "Shigella_subtree_2")
+```
+
+#### Standardizasyon
+
+[Standartlaştırılmış oranlar](standardization.llms.md) ile ilgili sayfaya bakın. Verileri aşağıdaki komutlarla doğrudan yükleyebilirsiniz:
+
+``` r
+##############
+# A Ülkesi
+##############
+# A ülkesi demografi bilgileri
+A_demo <- appliedepidata::get_data(name = "country_demographics")
+
+# A ülkesi ölüm bilgileri
+A_deaths <- appliedepidata::get_data(name = "deaths_countryA")
+
+##############
+# B Ülkesi
+##############
+# B ülkesi demografi bilgileri
+B_demo <- appliedepidata::get_data(name = "country_demographics_2")
+
+# B ülkesi ölüm bilgileri
+B_deaths <- appliedepidata::get_data(name = "deaths_countryB")
+
+
+# Referans
+###############
+# standart referans nüfusu
+# world standard population, by sex
+standard_pop_data <- appliedepidata::get_data(name = "world_standard_population_by_sex")
+```
+
+#### Zaman serileri ve salgın tespiti
+
+[Zaman serisi ve salgın tespiti](time_series.llms.md) sayfasında Almanya 2002-2011’de rapor edilen Campylobacter vakalarını **surveillance** R paketinde olduğu gibi kullanıyoruz. (*ek bilgi:* bu veri seti orijinalinden uyarlanmıştır, 2011’in son 3 aylık verileri demo amacıyla silinmiştir)
+
+``` r
+counts <- appliedepidata::get_data(name = "campylobacter_germany")
+```
+
+Kitapta ayrıca Almanya 2002-2011 iklim verilerini kullanıyoruz (santigrat derece cinsinden sıcaklık ve milimetre cinsinden yağış bilgileri mevcut). Bu veriler, **ecmwfr** paketi kullanılarak EU Copernicus uydu yeniden analiz veri setinden indirilmiştir. **appliedepidata** bunları on yıllık .nc dosyasından oluşan tek bir .zip içinde toplar. `get_data()` bütün paketi doğrudan tek bir **stars** nesnesi olarak okur; ham .nc dosyalarını kendiniz incelemek veya işlemek isterseniz `save_data()` bunları verir.
+
+``` r
+# birleştirilmiş iklim verilerini doğrudan stars nesnesi olarak okuyun
+weather_data <- appliedepidata::get_data(name = "germany_weather")
+
+# YA DA ham yıllık .nc dosyalarını bir klasöre kaydedin
+weather_dir <- "germany_weather_files"
+dir.create(weather_dir)
+appliedepidata::save_data(name = "germany_weather", path = weather_dir)
+utils::unzip(file.path(weather_dir, "germany_weather.zip"), exdir = weather_dir)
+```
+
+#### Anket analizi
+
+[Anket analizi](survey_analysis.llms.md) sayfası için MSF OCA anket şablonlarına dayalı kurgusal ölüm anketi verilerini kullandık. Bu kurgusal veriler [“R4Epis” projesi](https://r4epis.netlify.app/) kapsamında oluşturulmuştur.
+
+``` r
+# fictional survey data
+survey_data <- appliedepidata::get_data(name = "survey_data")
+
+# fictional survey data dictionary
+survey_dict <- appliedepidata::get_data(name = "survey_dict")
+
+# fictional survey population data
+population <- appliedepidata::get_data(name = "population")
+```
+
+#### Shiny
+
+[Shiny Gösterge Tabloları](shiny_basics.llms.md) ile ilgili sayfa, sıtma verilerini görüntülemek için uygulamanın yapısını göstermektedir. Uygulamanın verileri **appliedepidata** paketinin bir parçasıdır:
+
+``` r
+malaria_data <- appliedepidata::get_data(name = "malaria_facility_count_data")
+```
+
+Uygulamanın R betikleri örnek veri değildir; bu yüzden **appliedepidata** içinde yer almazlar — doğrudan Github’dan indirin:
+
+[Shiny uygulaması için hem kullanıcı arayüzünü hem de sunucu kodunu içeren app.R dosyasını indirmek için burayı tıklayabilirsiniz.](https://github.com/appliedepi/epirhandbook/raw/main/data/malaria_app/app.R)
+
+[Sayfada açıklandığı gibi, uygulama açılmadan önce çalışması gereken global.R dosyasını indirmek için burayı tıklayabilirsiniz.](https://github.com/appliedepi/epirhandbook/raw/main/data/malaria_app/global.R) Sayfada açıklandığı gibi, uygulama açılmadan önce çalıştırmayı unutmayın.
+
+[global.R tarafından source() ile yüklenen plot_epicurve.R dosyasını indirmek için burayı tıklayabilirsiniz.](https://github.com/appliedepi/epirhandbook/raw/main/data/malaria_app/funcs/plot_epicurve.R) `here()` fonksiyonlarının doğru çalışması için onu bir “funcs” klasöründe saklamayı unutmayın.

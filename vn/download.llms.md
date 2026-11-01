@@ -1,0 +1,294 @@
+# 2  Tải sách và dữ liệu
+
+## 2.1 Tải sách ngoại tuyến
+
+Bạn có thể tải sổ tay này về và đọc mà không cần kết nối internet. Mỗi ngôn ngữ là một tệp zip chứa toàn bộ trang web: mọi chương, mọi hình ảnh và thanh điều hướng.
+
+- Tải tệp zip cho ngôn ngữ của bạn, sau đó giải nén.
+- Mở `index.html` trong thư mục đã giải nén để bắt đầu đọc.
+- Xem trang [Package đề xuất](packages_suggested.llms.md) để cài đặt các gói R bạn cần trước khi mất kết nối.
+
+**Để tải sổ tay:**
+
+[Tải sổ tay (zip)](https://github.com/appliedepi/epirhandbook/releases/download/offline/epirhandbook-vn.zip)
+
+Tệp zip được dựng lại tự động, nên nó luôn theo phiên bản mới nhất của sổ tay.
+
+## 2.2 Tải dữ liệu xuống để tiện theo dõi
+
+Để làm theo các chương của sổ tay, bạn có thể tải dữ liệu mẫu trực tiếp vào R bằng package R đồng hành của chúng tôi, **appliedepidata**. Package này chứa toàn bộ các bộ dữ liệu mẫu được dùng trong sổ tay.
+
+### Cài đặt package
+
+**appliedepidata** không có trên CRAN, vì vậy hãy cài đặt từ [Github repository](https://github.com/appliedepi/appliedepidata) bằng **pak**:
+
+``` r
+# cài đặt phiên bản mới nhất của package appliedepidata
+pak::pak("appliedepi/appliedepidata")
+```
+
+### Tải một bộ dữ liệu trực tiếp
+
+Dùng `get_data()` với `name =` của bộ dữ liệu để tải trực tiếp vào R — không cần tải xuống, không cần đường dẫn tệp, không cần bước `import()`. Hàm này trả về bộ dữ liệu dưới dạng một đối tượng R (một data frame, một đối tượng `sf`, một cây `phylo`, v.v., tùy theo bộ dữ liệu).
+
+``` r
+# tải linelist đã làm sạch trực tiếp vào R
+linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds")
+```
+
+Mỗi chương của sổ tay có dùng dữ liệu mẫu đều hiển thị lệnh `get_data(name = "...")` cần thiết cho chương đó, ngay tại nơi dữ liệu được dùng lần đầu.
+
+### Lưu một bộ dữ liệu thành tệp
+
+Một số chương hướng dẫn bạn nhập một *tệp* (ví dụ một workbook Excel, hoặc một thư mục chứa nhiều tệp) thay vì một đối tượng R. Với những chương này, hãy dùng `save_data()` với `name =` và `path =` để ghi tệp thật ra thư mục bạn chọn:
+
+``` r
+# ghi tệp Excel của linelist thô ra thư mục làm việc
+appliedepidata::save_data(name = "case_linelists_linelist_raw", path = getwd())
+```
+
+Sau đó bạn có thể dùng `import()` như với bất kỳ tệp nào trên máy tính — xem chương [Nhập xuất dữ liệu](importing.llms.md) để biết chi tiết. Lưu ý rằng `save_data()` không tự động giải nén các bộ dữ liệu được phân phối dưới dạng .zip (ví dụ shapefile gồm nhiều tệp, hoặc thư mục chứa tệp); hãy dùng `utils::unzip()` với tệp .zip đã lưu.
+
+### Xem các dữ liệu có sẵn
+
+- `appliedepidata::search_data()` mở một ứng dụng Shiny tương tác để bạn lọc và tìm kiếm toàn bộ bộ dữ liệu trong package theo ngôn ngữ và từ khóa.
+- `appliedepidata::list_data()` trả về một data frame liệt kê tên của mọi bộ dữ liệu, để dùng trong script.
+
+``` r
+# xem các bộ dữ liệu một cách tương tác
+appliedepidata::search_data()
+
+# liệt kê tên của mọi bộ dữ liệu
+appliedepidata::list_data()
+```
+
+Nếu muốn, bạn cũng có thể xem các tệp dữ liệu gốc trong **[thư mục “data”](https://github.com/appliedepi/appliedepidata/tree/main/inst/extdata)** của Github repository **appliedepidata**.
+
+### Danh mục bộ dữ liệu, theo chương
+
+Dưới đây là tên cần dùng với `get_data()`/`save_data()` cho dữ liệu mẫu được nhắc đến ở mỗi chương của sổ tay.
+
+#### Dữ liệu linelist
+
+Đây là số liệu bùng phát Ebola giả định, được nhóm tác giả cẩm nang mở rộng từ bộ dữ liệu thực hành `ebola_sim` trong package **outbreaks**.
+
+``` r
+# the "raw" linelist - an Excel spreadsheet with messy data
+# use this to follow along with the Cleaning data and core functions page
+raw_linelist <- appliedepidata::get_data(name = "case_linelists_linelist_raw")
+
+# the "clean" linelist - an R-specific .rds file that preserves column classes
+# use this for all other pages of this handbook that use the linelist
+linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds")
+
+# the "clean" linelist, as an Excel file instead
+linelist_excel <- appliedepidata::get_data(name = "linelist_cleaned_excel")
+```
+
+Một phần của chương làm sạch sử dụng “từ điển làm sạch” (tệp .csv). Bạn có thể tải nó trực tiếp vào R bằng cách chạy các lệnh sau:
+
+``` r
+cleaning_dict <- appliedepidata::get_data(name = "case_linelists_cleaning_dict")
+```
+
+#### Làm việc với ngày tháng
+
+Chương [Làm việc với ngày tháng](dates.llms.md) dùng số ca bệnh theo huyện và ngày:
+
+``` r
+counts <- appliedepidata::get_data(name = "example_district_weekly_count_data")
+```
+
+#### Viết hàm
+
+Chương [Viết hàm](writing_functions.llms.md) dùng linelist của vụ dịch cúm H7N9 năm 2013 tại Trung Quốc:
+
+``` r
+flu_china <- appliedepidata::get_data(name = "fluH7N9_China_2013")
+```
+
+#### Lặp, vòng lặp, và danh sách
+
+Chương [Lặp, vòng lặp, và danh sách](iteration.llms.md) nhập một bảng tính Excel có một trang tính cho mỗi bệnh viện. Hãy lưu nó thành tệp trước:
+
+``` r
+appliedepidata::save_data(name = "example_hospital_linelists", path = getwd())
+```
+
+#### Nhập xuất dữ liệu
+
+Chương [Nhập xuất dữ liệu](importing.llms.md) nhập linelist từ các tệp Excel. Hãy lưu chúng thành tệp trước:
+
+``` r
+# linelist thô
+appliedepidata::save_data(name = "linelist_raw", path = getwd())
+
+# linelist đã làm sạch
+appliedepidata::save_data(name = "linelist_cleaned", path = getwd())
+```
+
+#### Dữ liệu số trường hợp sốt rét
+
+Đây là số liệu giả định về số lượng trường hợp sốt rét theo nhóm tuổi, cơ sở điều trị và ngày. Tệp mở rộng .rds là một kiểu file của R có khả năng lưu trữ các thông tin cột. Điều này đảm bảo bạn sẽ có ít việc phải làm khi làm sạch số liệu sau khi nhập số liệu vào R.
+
+``` r
+malaria_data <- appliedepidata::get_data(name = "malaria_facility_count_data")
+```
+
+#### Dữ liệu thang đo Likert
+
+Đây là dữ liệu giả định từ một cuộc khảo sát sử dụng thang đo Likert, được sử dụng trong chương [Tháp dân số và thang đo Likert](age_pyramid.llms.md). Bạn có thể tải những dữ liệu này trực tiếp vào R bằng cách chạy các lệnh sau:
+
+``` r
+likert_data <- appliedepidata::get_data(name = "likert_data")
+```
+
+#### Flexdashboard
+
+Dưới đây là các liên kết đến tệp được dùng trong chương [Dashboards với R Markdown](flexdashboard.llms.md). Đây là các tệp nguồn R Markdown/HTML, không phải bộ dữ liệu minh họa, nên chúng không thuộc package **appliedepidata** - hãy tải chúng trực tiếp từ Github:
+
+- Để tải xuống R Markdown dashboard về một đợt bùng phát dịch, bấm phải chuột vào [link](https://github.com/appliedepi/epirhandbook/raw/main/data/flexdashboard/outbreak_dashboard.Rmd) này (Cmd+click đối với Mac) và chọn “Save link as”.  
+- Để tải xuống HTML dashboard, bấm phải chuột vào [link](https://github.com/appliedepi/epirhandbook/raw/main/data/flexdashboard/outbreak_dashboard_test.html) này (Cmd+click đối với Mac) và chọn “Save link as”.
+
+#### Truy vết tiếp xúc
+
+Chương [Truy vết tiếp xúc](contact_tracing.llms.md) phân tích dữ liệu truy vết tiếp xúc minh họa từ [Go.Data](https://github.com/WorldHealthOrganization/godata/tree/master/analytics/r-reporting). Dữ liệu này thuộc package **appliedepidata**:
+
+``` r
+# dữ liệu điều tra ca bệnh
+cases <- appliedepidata::get_data(name = "cases_clean")
+
+# dữ liệu đăng ký người tiếp xúc
+contacts <- appliedepidata::get_data(name = "contacts_clean")
+
+# dữ liệu theo dõi người tiếp xúc
+followups <- appliedepidata::get_data(name = "followups_clean")
+
+# liên kết giữa ca bệnh và người tiếp xúc
+relationships <- appliedepidata::get_data(name = "relationships_clean")
+```
+
+***LƯU Ý:*** Dữ liệu truy vết tiếp xúc có cấu trúc từ phần mềm khác (ví dụ: KoBo, DHIS2 Tracker, CommCare) có thể sẽ khác. Nếu bạn muốn đóng góp dữ liệu hoặc nội dung mẫu thay thế cho trang này, vui lòng [liên hệ chúng tôi](index.llms.md).
+
+***MẸO:*** Nếu bạn đang triển khai Go.Data và muốn kết nối với API phiên bản của bạn, vui lòng xem chương Nhập xuất dữ liệu [(mục API)](importing.llms.md#import_api) và [Go.Data Cộng đồng thực hành](https://community-godata.who.int/).
+
+#### GIS
+
+Shapefile gồm nhiều tệp thành phần, mỗi tệp có một phần mở rộng khác nhau. Một tệp có phần mở rộng “.shp”, các tệp khác có thể là “.dbf”, “.prj”, v.v. **appliedepidata** đóng gói các tệp thành phần của mỗi shapefile thành một tệp .zip duy nhất, vì vậy hãy dùng `save_data()` rồi giải nén:
+
+``` r
+# tải shapefile admin-3 của Sierra Leone trực tiếp thành đối tượng sf
+sle_adm3 <- appliedepidata::get_data(name = "sle_adm3")
+
+# tải các điểm cơ sở y tế thành đối tượng sf
+sle_hf <- appliedepidata::get_data(name = "sle_hf")
+
+# tải bảng dân số theo ADM3
+sle_adm3_pop <- appliedepidata::get_data(name = "sle_admpop_adm3_2020")
+
+# HOẶC lưu các tệp thành phần gốc của shapefile vào một thư mục
+shp_dir <- "sle_adm3_files"
+dir.create(shp_dir)
+appliedepidata::save_data(name = "sle_adm3", path = shp_dir)
+utils::unzip(file.path(shp_dir, "sle_adm3.zip"), exdir = shp_dir)
+```
+
+Chương [Cơ bản về GIS](gis.llms.md) nạp cả ba bộ dữ liệu: ranh giới admin-3 `sle_adm3`, các điểm cơ sở y tế `sle_hf` và bảng dân số `sle_admpop_adm3_2020`. Để đọc một shapefile từ đường dẫn tệp của riêng bạn, hãy dùng `read_sf()` từ package **sf**. Chương đó cũng dẫn tới trang *Humanitarian Data Exchange*, nơi bạn có thể tải thêm shapefile dưới dạng tệp nén. Ví dụ, dữ liệu điểm cơ sở y tế có [tại đây](https://data.humdata.org/dataset/hotosm_sle_health_facilities).
+
+#### Cây phả hệ
+
+Xem chương [Cây phả hệ](phylogenetic_trees.llms.md). Tệp có tên Newick về cây phả hệ được xây dựng từ việc giải trình tự toàn bộ bộ gen của 299 mẫu Shigella sonnei và dữ liệu mẫu tương ứng (được chuyển đổi thành tệp văn bản). Các mẫu và kết quả từ nước Bỉ được cung cấp thông qua Trung tâm tham khảo quốc gia về Salmonella và Shigella (NRC Bỉ) trong phạm vi dự án do EUPHEM Fellow của ECDC thực hiện, và cũng sẽ được xuất bản dưới dạng bản thảo. Dữ liệu quốc tế được cung cấp công khai trên cơ sở dữ liệu công cộng (ncbi) và đã được xuất bản trước đó.
+
+``` r
+# the phylogenetic tree, as a "phylo" object (ape package)
+tree <- appliedepidata::get_data(name = "Shigella_tree")
+
+# additional information on each sample
+sample_data <- appliedepidata::get_data(name = "sample_data_Shigella_tree")
+
+# the subset-tree created later in the page
+subtree <- appliedepidata::get_data(name = "Shigella_subtree_2")
+```
+
+#### Chuẩn hóa
+
+Xem trong chương [Tỷ lệ chuẩn hóa](standardization.llms.md). Bạn có thể tải dữ liệu trực tiếp bằng các lệnh sau:
+
+``` r
+##############
+# Country A
+##############
+# nhân khẩu học quốc gia A
+A_demo <- appliedepidata::get_data(name = "country_demographics")
+
+# số tử vong quốc gia A
+A_deaths <- appliedepidata::get_data(name = "deaths_countryA")
+
+##############
+# Country B
+##############
+# nhân khẩu học quốc gia B
+B_demo <- appliedepidata::get_data(name = "country_demographics_2")
+
+# số tử vong quốc gia B
+B_deaths <- appliedepidata::get_data(name = "deaths_countryB")
+
+
+# Reference Pop
+###############
+# dân số chuẩn tham chiếu
+# world standard population, by sex
+standard_pop_data <- appliedepidata::get_data(name = "world_standard_population_by_sex")
+```
+
+#### Chuỗi thời gian và phát hiện ổ dịch
+
+Xem trong chương [Chuỗi thời gian và phát hiện ổ dịch](time_series.llms.md). Chúng tôi sử dụng các trường hợp campylobacter được báo cáo ở Đức từ 2002-2011, có sẵn từ package **surveillance** của R. (*lưu ý.* tập dữ liệu này đã được điều chỉnh từ bản gốc, trong đó 3 tháng dữ liệu cuối năm 2011 đã bị xóa để dùng với mục đích minh họa)
+
+``` r
+counts <- appliedepidata::get_data(name = "campylobacter_germany")
+```
+
+Chúng tôi cũng sử dụng dữ liệu khí hậu ở Đức từ 2002-2011 (nhiệt độ tính bằng độ C và lượng mưa tính bằng milimet). Dữ liệu được tải xuống từ tập dữ liệu phân tích vệ tinh Copernicus của EU bằng cách sử dụng package **ecmwfr** . **appliedepidata** đóng gói chúng thành một tệp .zip duy nhất gồm mười tệp .nc theo năm. `get_data()` đọc toàn bộ gói này trực tiếp thành một đối tượng **stars** hợp nhất; `save_data()` cung cấp các tệp .nc gốc nếu bạn muốn tự kiểm tra hoặc xử lý.
+
+``` r
+# đọc dữ liệu khí hậu hợp nhất trực tiếp thành đối tượng stars
+weather_data <- appliedepidata::get_data(name = "germany_weather")
+
+# HOẶC lưu các tệp .nc theo năm ra một thư mục
+weather_dir <- "germany_weather_files"
+dir.create(weather_dir)
+appliedepidata::save_data(name = "germany_weather", path = weather_dir)
+utils::unzip(file.path(weather_dir, "germany_weather.zip"), exdir = weather_dir)
+```
+
+#### Phân tích điều tra
+
+Đối với chương [phân tích điều tra](survey_analysis.llms.md), chúng tôi sử dụng dữ liệu khảo sát tử vong giả định dựa trên mẫu khảo sát của MSF OCA. Dữ liệu giả định này là một phần của [Dự án “R4Epis”](https://r4epis.netlify.app/).
+
+``` r
+# fictional survey data
+survey_data <- appliedepidata::get_data(name = "survey_data")
+
+# fictional survey data dictionary
+survey_dict <- appliedepidata::get_data(name = "survey_dict")
+
+# fictional survey population data
+population <- appliedepidata::get_data(name = "population")
+```
+
+#### Shiny
+
+Chương [Dashboards với Shiny](shiny_basics.llms.md) trình diễn việc xây dựng một ứng dụng đơn giản để hiển thị dữ liệu bệnh sốt rét. Dữ liệu của ứng dụng là một phần của **appliedepidata**:
+
+``` r
+malaria_data <- appliedepidata::get_data(name = "malaria_facility_count_data")
+```
+
+Các script R của ứng dụng không phải là dữ liệu mẫu nên không nằm trong **appliedepidata** — hãy tải trực tiếp từ Github:
+
+Bạn có thể [bấm vào đây để tải xuống tệp app.R trong đó chứa code của cả UI và Server của ứng dụng Shiny.](https://github.com/appliedepi/epirhandbook/raw/main/data/malaria_app/app.R)
+
+Bạn có thể [bấm vào đây để tải tệp global.R](https://github.com/appliedepi/epirhandbook/raw/main/data/malaria_app/global.R) mà sẽ được chạy trước khi mở ứng dụng, như đã được giải thích trong chương.
+
+Bạn có thể [bấm vào đây để tải tệp plot_epicurve.R](https://github.com/appliedepi/epirhandbook/raw/main/data/malaria_app/funcs/plot_epicurve.R) được global.R nạp bằng source(). Lưu ý rằng bạn có thể cần phải lưu trữ nó trong thư mục “funcs” để các đường dẫn tệp here () hoạt động chính xác.
