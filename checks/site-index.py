@@ -4,19 +4,20 @@
 Usage: python3 checks/site-index.py <site> <mainlanguage> "<langs>"
 
 checks/assemble-site.sh runs this on the tree it assembled, so the deploy job and
-checks/site-gate.sh write the same files. Nothing goes into the site root: the published host
-redirects every root path into /<mainlanguage>/ (checked on 2026-10-30). So llms.txt and
-robots.txt go into <site>/<mainlanguage>/ and are served at /llms.txt and /robots.txt through
-that redirect.
+checks/site-gate.sh write the same files. llms.txt and robots.txt go into the site root, where
+a crawler looks for them. A copy of each also goes into <site>/<mainlanguage>/, because
+epirhandbook.com redirects every root path into /<mainlanguage>/ (checked on 2026-10-30) and
+serves them from there.
 
 A sitemap may list only URLs under its own folder, so each language gets its own
 <site>/<lang>/sitemap.xml with its own pages, and robots.txt names every one of them.
 
 `website: llms-txt: true` in each content/<lang>/_quarto.yaml makes Quarto write a Markdown
 copy of every page, <lang>/<stem>.llms.md, and llms.txt links to those copies. Quarto also
-writes a <lang>/llms.txt, but the build renders one chapter at a time, and that file then
-lists only the last page rendered (measured on Quarto 1.9.38). So this script writes the main
-language's llms.txt and deletes the others.
+writes a <lang>/llms.txt, but only at the first render of a fresh project, and no later render
+updates it. The build renders one chapter at a time, so that file lists only the first chapter
+rendered (measured on Quarto 1.9.38). So this script writes llms.txt itself and deletes the
+ones in the language folders.
 
 Every value comes from the file that already holds it:
 
@@ -102,10 +103,8 @@ def main(site, mainlang, langs):
             + ''.join('  <url><loc>%s</loc></url>\n' % html.escape(p) for p in pages)
             + '</urlset>\n', encoding='utf-8')
         total += len(pages)
-        if lang != mainlang:
-            site.joinpath(lang, 'llms.txt').unlink(missing_ok=True)
+        site.joinpath(lang, 'llms.txt').unlink(missing_ok=True)
 
-    out = site / mainlang
     project = parse(ROOT / 'content' / mainlang / '_quarto.yaml')
     website = project.get('website') if isinstance(project, dict) else None
     desc = website.get('description') if isinstance(website, dict) else None
@@ -126,13 +125,13 @@ def main(site, mainlang, langs):
         lines += ['## Other languages', '']
         lines += ['- [%s](%s/%s/index.html)' % (entries[c]['label'], url, c) for c in others]
         lines.append('')
-    out.joinpath('llms.txt').write_text('\n'.join(lines), encoding='utf-8')
-
-    out.joinpath('robots.txt').write_text(
-        'User-agent: *\nAllow: /\n\n'
-        + ''.join('Sitemap: %s/%s/sitemap.xml\n' % (url, c) for c in langs), encoding='utf-8')
+    robots = ('User-agent: *\nAllow: /\n\n'
+              + ''.join('Sitemap: %s/%s/sitemap.xml\n' % (url, c) for c in langs))
+    for out in (site, site / mainlang):
+        out.joinpath('llms.txt').write_text('\n'.join(lines), encoding='utf-8')
+        out.joinpath('robots.txt').write_text(robots, encoding='utf-8')
     print('site-index: wrote %d sitemap.xml files (%d pages), and llms.txt and robots.txt '
-          'into %s/' % (len(langs), total, mainlang))
+          'into the site root and %s/' % (len(langs), total, mainlang))
 
 
 if __name__ == '__main__':

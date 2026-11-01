@@ -13,8 +13,9 @@
 #
 # Every language lands under its own <lang>/, the main language included. Each one carries its
 # own images/ copy, so a language folder is a complete site on its own. The site root holds a
-# redirect stub to the main language and nothing else: no page, and no images/ copy. Each
-# language folder also gets a sitemap.xml, and the main one llms.txt and robots.txt, written last.
+# redirect stub to the main language, llms.txt and robots.txt: no page, and no images/ copy.
+# Each language folder also gets a sitemap.xml, and the main one a copy of llms.txt and
+# robots.txt, written last.
 #
 # This script reads <downloaded> and never writes to it. The artifacts are the render legs'
 # only output, and a second run must see what the first one saw.
@@ -120,7 +121,7 @@ print(f"rewrote the images path on {rewritten} page(s)")
 PY
 
 # The root redirect stub, byte-for-byte what build_all_chapters.sh writes for a whole-book
-# render. Four lines, and the only file at the site root.
+# render. Four lines, and the only page at the site root.
 printf '%s\n' \
   '<!DOCTYPE html>' \
   "<html lang=\"$mainlanguage\"><head><meta charset=\"utf-8\"><title>Redirect to $mainlanguage/</title>" \
@@ -129,6 +130,6 @@ printf '%s\n' \
   > "$site/index.html"
 
 # A sitemap.xml per language, and llms.txt and robots.txt, generated from the chapter lists and
-# the pages just assembled. None goes into the root: the published host redirects every root
-# path into the main language's folder. checks/site-index.py carries the details.
+# the pages just assembled. llms.txt and robots.txt go into the root and into the main
+# language's folder. checks/site-index.py carries the details.
 python3 "$repo/checks/site-index.py" "$site" "$mainlanguage" "$langs"
