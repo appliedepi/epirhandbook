@@ -29,6 +29,8 @@ of it, and that is expected of a changelog. Read it as a record, never as curren
 
 Each change is in all eight languages. The translated strings are agent-written and need native review.
 
+- The nonprofit band says 500 once. `np_trust` merged into `np_lead`, and the sentence "over 500 agencies choose Applied Epi to train and support their staff" is gone, in all eight `landing.yml` blocks and in the English `website: description`. The band now has one paragraph and one small line under it, and the small line stays in the column of the paragraph.
+
 - The English title is "The Epidemiologist R Handbook" again, as on the old site. The seven translated titles already matched the old site and are unchanged. The app bar reads each language's book title instead of a fixed English "Epi R Handbook".
 - The landing hero has the new subtitle and counts "1 million+ users" in place of "3 million+ page views". French omits the count and falls back to English, because it is the same string. Spanish and Portuguese now declare it, so their two pinned omissions are gone.
 - The nonprofit band has the new Applied Epi description, the full course name "Introduction to R for Applied Epidemiology", "500+" agencies, and a new `np_notify` line that links to LinkedIn and the email list (https://appliedepi.org/contact/contact.html). Check 15 reads `np_notify` as its 20th scalar slot.
