@@ -198,7 +198,7 @@ SCALAR_SLOTS = ('eyebrow', 'hero_title', 'subtitle', 'search_placeholder', 'sear
                 'btn_start_href', 'btn_start', 'btn_offline_href', 'btn_offline',
                 'stat_used_num', 'stat_used_label', 'stat_chapters_num',
                 'stat_chapters_label', 'stat_languages_num', 'stat_languages_label',
-                'np_brand', 'np_lead', 'np_notify', 'np_links')
+                'np_brand', 'np_lead', 'np_reach', 'np_notify', 'np_links')
 
 # The three slots landing.yml does not key. Each already has one home, and a second copy of
 # it is the thing that drifts. So rule 9 reads each one from its own home:
@@ -608,7 +608,8 @@ if want_slots:
         ('btn_offline_href', 'btn_offline'): r'<a class="btn out" href="([^"]*)">(.*?)</a>',
         ('np_brand',): r'<div class="nplockup">\s*<img src="[^"]*" alt="([^"]*)">',
         ('np_lead',): r'<p class="nplead">(.*?)</p>',
-        ('np_notify',): r'<div class="npnotify">(.*?)</div>\s*<div class="svcs">',
+        ('np_reach',): r'<p class="npreach">(.*?)</p>',
+        ('np_notify',): r'<p class="npnotify">(.*?)</p>',
         ('np_links',): r'<div class="nplinks">(.*?)</div>',
     }
     CARD_RE = (r'<div class="svc"><div class="svch">(.*?)</div><p class="svcp">(.*?)</p>'
