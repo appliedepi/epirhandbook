@@ -86,7 +86,8 @@ done
 # Each page carries the ../../images/ of content/<lang>/_quarto.yaml, which is relative to
 # that language's project directory. Rewrite it to a path relative to the page's OWN depth
 # under <site>/<lang>/: a chapter at <site>/en/gis.html gets images/, an alias stub at
-# <site>/en/new_pages/gis.en.html gets ../images/.
+# <site>/en/new_pages/gis.en.html gets ../images/. Quarto's Markdown copy of a page, <stem>.llms.md,
+# carries the same path as a Markdown link, ](../../images/, and gets the same rewrite.
 #
 # This step only rewrites. The check is a separate step, after the switcher injection,
 # because that injection is the last thing that rewrites a page.
@@ -118,6 +119,20 @@ for lang in langs:
             page.write_text(after, encoding="utf-8", errors="surrogateescape")
             rewritten += 1
 print(f"rewrote the images path on {rewritten} page(s)")
+
+markdown = re.compile(r'\]\((?:\./)?(?:\.\./)+images/')
+rewritten = 0
+for lang in langs:
+    root = site / lang
+    for page in root.rglob("*.llms.md"):
+        depth = len(page.relative_to(root).parts) - 1
+        prefix = "../" * depth
+        before = page.read_text(encoding="utf-8", errors="surrogateescape")
+        after = markdown.sub(f"]({prefix}images/", before)
+        if after != before:
+            page.write_text(after, encoding="utf-8", errors="surrogateescape")
+            rewritten += 1
+print(f"rewrote the images path on {rewritten} Markdown copies")
 PY
 
 # The root redirect stub, byte-for-byte what build_all_chapters.sh writes for a whole-book
