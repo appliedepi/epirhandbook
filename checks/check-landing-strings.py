@@ -596,8 +596,7 @@ if want_slots:
 
     # One pattern per rendered slot, keyed by the slot names its groups fill, in order. A
     # pattern anchors on the element that holds the value AND on its container where the page
-    # carries the element more than once. The band logo is one of five images on the page, so
-    # its pattern starts at the lockup that holds it.
+    # carries the element more than once.
     ONE = {
         ('eyebrow',): r'<div class="ael-eyebrow">(.*?)</div>',
         ('hero_title',): r'<h1 class="ael-htitle">(.*?)</h1>',
@@ -606,7 +605,7 @@ if want_slots:
             r'<input id="ael-hsearch-input".*?placeholder="(.*?)" aria-label="(.*?)">',
         ('btn_start_href', 'btn_start'): r'<a class="btn light" href="([^"]*)">(.*?)</a>',
         ('btn_offline_href', 'btn_offline'): r'<a class="btn out" href="([^"]*)">(.*?)</a>',
-        ('np_brand',): r'<div class="nplockup">\s*<img src="[^"]*" alt="([^"]*)">',
+        ('np_brand',): r'<span class="brandname">(.*?)</span>',
         ('np_lead',): r'<p class="nplead">(.*?)</p>',
         ('np_reach',): r'<p class="npreach">(.*?)</p>',
         ('np_notify',): r'<p class="npnotify">(.*?)</p>',

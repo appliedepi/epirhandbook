@@ -310,10 +310,6 @@ landing_hero <- function(lang, root = here::here()) {
 
   band <- paste0(
     '<div class="npband">\n',
-    '<div class="nplockup">\n',
-    '<img src="../../images/applied-epi-logo-2026.png" alt="',
-    s("np_brand"),
-    '">\n',
     '<div class="nptext">\n',
     '<p class="nplead">',
     lead,
@@ -323,7 +319,7 @@ landing_hero <- function(lang, root = here::here()) {
     "</p>\n",
     '<p class="npnotify">',
     s("np_notify"),
-    "</p>\n</div>\n</div>\n",
+    "</p>\n</div>\n",
     '<div class="svcs">\n',
     paste(vapply(svcs(), card, character(1)), collapse = "\n"),
     "\n</div>\n",
