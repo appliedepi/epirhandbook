@@ -310,10 +310,14 @@ landing_hero <- function(lang, root = here::here()) {
 
   band <- paste0(
     '<div class="npband">\n',
-    '<div class="nptext">\n',
+    '<div class="nplockup">\n',
+    '<img src="../../images/applied-epi-logo-2026.png" alt="',
+    s("np_brand"),
+    '">\n',
     '<p class="nplead">',
     lead,
-    "</p>\n",
+    "</p>\n</div>\n",
+    '<div class="nptext">\n',
     '<p class="npreach">',
     s("np_reach"),
     "</p>\n",
