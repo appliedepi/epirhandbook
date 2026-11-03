@@ -1,0 +1,179 @@
+# 36  Combinations analysis
+
+[![](combination_analysis_files/figure-html/combination_header-1.png)](combination_analysis_files/figure-html/combination_header-1.png)
+
+This analysis plots the frequency of different **combinations** of values/responses. In this example, we plot the frequency at which cases exhibited various combinations of symptoms.
+
+This analysis is also often called:
+
+- **“Multiple response analysis”**  
+- **“Sets analysis”**  
+- **“Combinations analysis”**
+
+In the example plot above, five symptoms are shown. Below each vertical bar is a line and dots indicating the combination of symptoms reflected by the bar above.
+
+The first method we show uses the package **ggupset**, and the second uses the package **UpSetR**.
+
+## 36.1 Preparation
+
+### Load packages
+
+This code chunk shows the loading of packages required for the analyses. In this handbook we emphasize `p_load()` from **pacman**, which installs the package if necessary *and* loads it for use. You can also load installed packages with `library()` from **base** R. See the page on [R basics](basics.llms.md) for more information on R packages.
+
+``` r
+pacman::p_load(
+  tidyverse,     # data management and visualization
+  UpSetR,        # special package for combination plots
+  ggupset,       # special package for combination plots
+  appliedepidata) # example datasets used in this handbook
+```
+
+### Import data
+
+To begin, we import the cleaned linelist of cases from a simulated Ebola epidemic. Load it directly with `appliedepidata::get_data(name = "linelist_cleaned_rds")` (see the [Download handbook and data](download.llms.md) page for details).
+
+``` r
+# import case linelist 
+linelist_sym <- appliedepidata::get_data(name = "linelist_cleaned_rds")
+```
+
+This linelist includes five “yes/no” variables on reported symptoms. We will need to transform these variables a bit to use the **ggupset** package to make our plot. View the data (scroll to the right to see the symptoms variables).
+
+### Re-format values
+
+To align with the format expected by **ggupset** we convert the “yes” and “no” the the actual symptom name, using `ifelse()` from base R. If “no”, we set the value as blank, so the values are either `NA` or the symptom.
+
+``` r
+# create column with the symptoms named, separated by semicolons
+linelist_sym_1 <- linelist_sym %>% 
+
+  # convert the "yes" and "no" values into the symptom name itself
+  # if old value is "yes", new value is "fever", otherwise set to missing (NA)
+mutate(fever = ifelse(fever == "yes", "fever", NA), 
+       chills = ifelse(chills == "yes", "chills", NA),
+       cough = ifelse(cough == "yes", "cough", NA),
+       aches = ifelse(aches == "yes", "aches", NA),
+       vomit = ifelse(vomit == "yes", "vomit", NA))
+```
+
+Now we make two final columns:
+
+1.  Concatenating (gluing together) all the symptoms of the patient (a character column)  
+2.  Convert the above column to class *list*, so it can be accepted by **ggupset** to make the plot
+
+See the page on [Characters and strings](characters_strings.llms.md) to learn more about the `unite()` function from **stringr**
+
+``` r
+linelist_sym_1 <- linelist_sym_1 %>% 
+  unite(col = "all_symptoms",
+        c(fever, chills, cough, aches, vomit), 
+        sep = "; ",
+        remove = TRUE,
+        na.rm = TRUE) %>% 
+  mutate(
+    # make a copy of all_symptoms column, but of class "list" (which is required to use ggupset() in next step)
+    all_symptoms_list = as.list(strsplit(all_symptoms, "; "))
+    )
+```
+
+View the new data. Note the two columns towards the right end - the pasted combined values, and the list
+
+## 36.2 **ggupset**
+
+Load the package
+
+``` r
+pacman::p_load(ggupset)
+```
+
+Create the plot. We begin with a `ggplot()` and `geom_bar()`, but then we add the special function `scale_x_upset()` from the **ggupset**.
+
+``` r
+# keep the 10 most frequent combinations, the ones that n_intersections = 10 shows
+top_combinations <- linelist_sym_1 %>% 
+  count(all_symptoms, sort = TRUE) %>% 
+  slice_head(n = 10) %>% 
+  pull(all_symptoms)
+
+ggplot(
+  data = filter(linelist_sym_1, all_symptoms %in% top_combinations),
+  mapping = aes(x = all_symptoms_list)) +
+geom_bar() +
+scale_x_upset(
+  reverse = FALSE,
+  n_intersections = 10,
+  sets = c("fever", "chills", "cough", "aches", "vomit"))+
+labs(
+  title = "Signs & symptoms",
+  subtitle = "10 most frequent combinations of signs and symptoms",
+  caption = "Caption here.",
+  x = "Symptom combination",
+  y = "Frequency in dataset")
+```
+
+[![](combination_analysis_files/figure-html/combination_ggupset-1.png)](combination_analysis_files/figure-html/combination_ggupset-1.png)
+
+More information on **ggupset** can be found [online](https://rdrr.io/cran/ggupset/man/scale_x_upset.html) or offline in the package documentation in your RStudio Help tab `?ggupset`.
+
+## 36.3 `UpSetR`
+
+The **UpSetR** package allows more customization of the plot, but it can be more difficult to execute:
+
+**Load package**
+
+``` r
+pacman::p_load(UpSetR)
+```
+
+**Data cleaning**
+
+We must convert the `linelist` symptoms values to 1 / 0.
+
+``` r
+linelist_sym_2 <- linelist_sym %>% 
+     # convert the "yes" and "no" values into 1s and 0s
+     mutate(fever = ifelse(fever == "yes", 1, 0), 
+            chills = ifelse(chills == "yes", 1, 0),
+            cough = ifelse(cough == "yes", 1, 0),
+            aches = ifelse(aches == "yes", 1, 0),
+            vomit = ifelse(vomit == "yes", 1, 0))
+```
+
+If you are interested in a more efficient command, you can take advantage of the `+()` function, which converts to 1s and 0s based on a logical statement. This command utilizes the `across()` function to change multiple columns at once (read more in [Cleaning data and core functions](cleaning.llms.md#clean_across)).
+
+``` r
+# Efficiently convert "yes" to 1 and 0
+linelist_sym_2 <- linelist_sym %>% 
+  
+  # convert the "yes" and "no" values into 1s and 0s
+  mutate(across(c(fever, chills, cough, aches, vomit), .fns = ~+(.x == "yes")))
+```
+
+Now make the plot using the custom function `upset()` - using only the symptoms columns. You must designate which “sets” to compare (the names of the symptom columns). Alternatively, use `nsets =` and `order.by = "freq"` to only show the top X combinations.
+
+``` r
+# Make the plot
+linelist_sym_2 %>% 
+  drop_na(fever, chills, cough, aches, vomit) %>% 
+  UpSetR::upset(
+       sets = c("fever", "chills", "cough", "aches", "vomit"),
+       order.by = "freq",
+       sets.bar.color = c("blue", "red", "yellow", "darkgreen", "orange"), # optional colors
+       empty.intersections = "on",
+       # nsets = 3,
+       number.angles = 0,
+       point.size = 3.5,
+       line.size = 2, 
+       mainbar.y.label = "Symptoms Combinations",
+       sets.x.label = "Patients with Symptom")
+```
+
+[![](combination_analysis_files/figure-html/combination_upsetr-1.png)](combination_analysis_files/figure-html/combination_upsetr-1.png)
+
+## 36.4 Resources
+
+[The github page on UpSetR](https://github.com/hms-dbmi/UpSetR)
+
+[A Shiny App version - you can upload your own data](https://gehlenborglab.shinyapps.io/upsetr/)
+
+[\*documentation - difficult to interpret](https://cran.r-project.org/web/packages/UpSetR/UpSetR.pdf)

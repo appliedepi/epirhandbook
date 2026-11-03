@@ -1,0 +1,294 @@
+# 2  Baixe o livro e os dados
+
+## 2.1 Baixe o livro offline
+
+Você pode baixar este livro e lê-lo sem conexão com a Internet. Cada idioma é um arquivo zip que contém o site inteiro: cada capítulo, cada imagem e a barra de navegação.
+
+- Baixe o arquivo zip do seu idioma e descompacte-o.
+- Abra `index.html` na pasta descompactada para começar a ler.
+- Veja a página [Pacotes sugeridos](packages_suggested.llms.md) para instalar os pacotes R de que você precisa antes de perder a conexão.
+
+**Para baixar o livro:**
+
+[Baixar o livro (zip)](https://github.com/appliedepi/epirhandbook/releases/download/offline/epirhandbook-pt.zip)
+
+O arquivo zip é reconstruído automaticamente, então ele sempre acompanha a versão mais recente do livro.
+
+## 2.2 Baixe os dados para acompanhar
+
+Para “acompanhar” as páginas do manual, você pode carregar os dados de exemplo diretamente no R com o nosso pacote R complementar, **appliedepidata**. Ele contém todos os conjuntos de dados de exemplo usados neste manual.
+
+### Instalar o pacote
+
+O **appliedepidata** não está no CRAN, então instale-o a partir do seu [repositório do Github](https://github.com/appliedepi/appliedepidata) com o **pak**:
+
+``` r
+# instalar a versão mais recente do pacote appliedepidata
+pak::pak("appliedepi/appliedepidata")
+```
+
+### Carregar um conjunto de dados diretamente
+
+Use `get_data()` com o `name =` do conjunto de dados para carregá-lo diretamente no R — sem download, sem caminho de arquivo, sem etapa de `import()`. A função retorna o conjunto de dados como um objeto do R (um data frame, um objeto `sf`, uma árvore `phylo`, etc., dependendo do conjunto de dados).
+
+``` r
+# carregar a linelist limpa diretamente no R
+linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds")
+```
+
+Cada página deste manual que usa dados de exemplo mostra a chamada `get_data(name = "...")` necessária para aquela página, exatamente onde os dados são usados pela primeira vez.
+
+### Salvar um conjunto de dados em um arquivo
+
+Algumas páginas ensinam a importar um *arquivo* (por exemplo uma planilha do Excel, ou uma pasta de arquivos) em vez de um objeto do R. Para essas, use `save_data()` com `name =` e `path =` para gravar os arquivos reais em uma pasta de sua escolha:
+
+``` r
+# gravar o arquivo Excel da linelist bruta no seu diretório de trabalho
+appliedepidata::save_data(name = "case_linelists_linelist_raw", path = getwd())
+```
+
+Depois você pode importá-lo com `import()` como qualquer arquivo do seu computador — veja a página [Importar e exportar](importing.llms.md) para mais detalhes. Observe que `save_data()` não descompacta automaticamente os conjuntos de dados distribuídos como um .zip (por exemplo shapefiles de vários arquivos, ou pastas de arquivos); use `utils::unzip()` no .zip salvo depois.
+
+### Explorar os dados disponíveis
+
+- `appliedepidata::search_data()` abre um aplicativo Shiny interativo para filtrar e pesquisar todos os conjuntos de dados do pacote por idioma e palavra-chave.
+- `appliedepidata::list_data()` retorna um data frame listando todos os nomes de conjuntos de dados, para uso em scripts.
+
+``` r
+# explorar os conjuntos de dados de forma interativa
+appliedepidata::search_data()
+
+# listar todos os nomes de conjuntos de dados
+appliedepidata::list_data()
+```
+
+Se desejar, você também pode revisar os arquivos de dados originais na **[pasta “data”](https://github.com/appliedepi/appliedepidata/tree/main/inst/extdata)** do repositório do Github do **appliedepidata**.
+
+### Referência de conjuntos de dados, por página
+
+Abaixo está o nome a ser usado com `get_data()`/`save_data()` para os dados de exemplo citados em cada página deste manual.
+
+#### “Linelist” de casos
+
+Este é um surto fictício de Ebola, expandido pela equipe do livro a partir do conjunto de dados de prática `ebola_sim` no pacote **outbreaks**.
+
+``` r
+# the "raw" linelist - an Excel spreadsheet with messy data
+# use this to follow along with the Cleaning data and core functions page
+raw_linelist <- appliedepidata::get_data(name = "case_linelists_linelist_raw")
+
+# the "clean" linelist - an R-specific .rds file that preserves column classes
+# use this for all other pages of this handbook that use the linelist
+linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds")
+
+# the "clean" linelist, as an Excel file instead
+linelist_excel <- appliedepidata::get_data(name = "linelist_cleaned_excel")
+```
+
+Parte da página de limpeza usa um “dicionário de limpeza” (arquivo .csv). Você pode carregá-lo diretamente no R executando os seguintes comandos:
+
+``` r
+cleaning_dict <- appliedepidata::get_data(name = "case_linelists_cleaning_dict")
+```
+
+#### Trabalhando com datas
+
+A página [Trabalhando com datas](dates.llms.md) usa contagens de casos por distrito e data:
+
+``` r
+counts <- appliedepidata::get_data(name = "example_district_weekly_count_data")
+```
+
+#### Escrevendo funções
+
+A página [Escrevendo funções](writing_functions.llms.md) usa uma linelist do surto de influenza H7N9 de 2013 na China:
+
+``` r
+flu_china <- appliedepidata::get_data(name = "fluH7N9_China_2013")
+```
+
+#### Iterações, loops e listas
+
+A página [Iterações, loops e listas](iteration.llms.md) importa uma pasta de trabalho do Excel com uma planilha por hospital. Salve-a primeiro como arquivo:
+
+``` r
+appliedepidata::save_data(name = "example_hospital_linelists", path = getwd())
+```
+
+#### Importar e exportar
+
+A página [Importar e exportar](importing.llms.md) importa a linelist a partir de arquivos Excel. Salve-os primeiro como arquivos:
+
+``` r
+# a linelist bruta
+appliedepidata::save_data(name = "linelist_raw", path = getwd())
+
+# a linelist limpa
+appliedepidata::save_data(name = "linelist_cleaned", path = getwd())
+```
+
+#### Dados de contagem de malária
+
+Esses dados são contagens fictícias de casos de malária por faixa etária, serviço e dia. Um arquivo .rds é um tipo de arquivo específico de R que preserva classes de coluna. Isso garante que você terá apenas uma limpeza mínima para fazer após importar os dados para R.
+
+``` r
+malaria_data <- appliedepidata::get_data(name = "malaria_facility_count_data")
+```
+
+#### Dados em escala Likert
+
+Estes são dados fictícios de uma pesquisa no estilo Likert, usados na página [Pirâmides demográficas e escalas Likert](age_pyramid.llms.md). Você pode carregar esses dados diretamente no R executando os seguintes comandos:
+
+``` r
+likert_data <- appliedepidata::get_data(name = "likert_data")
+```
+
+#### Painéis com flexdashboard
+
+Abaixo estão os links para o arquivo associado à página em [Painéis (Dashboards) com R Markdown](flexdashboard.llms.md). Estes são arquivos-fonte R Markdown/HTML, e não conjuntos de dados de exemplo, portanto não fazem parte do pacote **appliedepidata** - baixe-os diretamente do Github:
+
+- Para baixar o R Markdown para o painel de surto, clique com o botão direito neste [link](https://github.com/appliedepi/epirhandbook/raw/main/data/flexdashboard/outbreak_dashboard.Rmd) (Cmd + clique para Mac) e selecione “Salvar link como”.  
+- Para baixar o painel HTML, clique com o botão direito neste [link](https://github.com/appliedepi/epirhandbook/raw/main/data/flexdashboard/outbreak_dashboard_test.html) (Cmd + clique para Mac) e selecione “Salvar link como”.
+
+#### Rastreamento de contato
+
+A página [Rastreamento de contato](contact_tracing.llms.md) analisa dados de exemplo de rastreamento de contatos do [Go.Data](https://github.com/WorldHealthOrganization/godata/tree/master/analytics/r-reporting). Estes dados fazem parte do **appliedepidata**:
+
+``` r
+# dados de investigação dos casos
+cases <- appliedepidata::get_data(name = "cases_clean")
+
+# dados de registro dos contatos
+contacts <- appliedepidata::get_data(name = "contacts_clean")
+
+# dados de acompanhamento dos contatos
+followups <- appliedepidata::get_data(name = "followups_clean")
+
+# ligações entre casos e contatos
+relationships <- appliedepidata::get_data(name = "relationships_clean")
+```
+
+***NOTA:*** Dados de rastreamento de contato estruturado de outro software (por exemplo, KoBo, DHIS2 Tracker, CommCare) podem parecer diferentes. Se desejar contribuir com dados de amostra ou conteúdo alternativo para esta página, [entre em contato](index.llms.md).
+
+***DICA:*** Se você estiver implantando Go.Data e quiser se conectar à API da sua instância, consulte a página Importar e exportar [(seção API)](importing.llms.md#import_api) e a [Go.Data Community of Practice](https://community-godata.who.int/).
+
+#### GIS
+
+Os shapefiles têm muitos arquivos de subcomponentes, cada um com uma extensão diferente. Um arquivo terá a extensão “.shp”, mas outros podem ter “.dbf”, “.prj”, etc. O **appliedepidata** agrupa os subcomponentes de cada shapefile em um único .zip, então use `save_data()` e depois descompacte:
+
+``` r
+# carregar o shapefile admin-3 de Serra Leoa diretamente como objeto sf
+sle_adm3 <- appliedepidata::get_data(name = "sle_adm3")
+
+# carregar os pontos dos estabelecimentos de saúde como objeto sf
+sle_hf <- appliedepidata::get_data(name = "sle_hf")
+
+# carregar a tabela de população ADM3
+sle_adm3_pop <- appliedepidata::get_data(name = "sle_admpop_adm3_2020")
+
+# OU salvar os arquivos de subcomponentes originais do shapefile em uma pasta
+shp_dir <- "sle_adm3_files"
+dir.create(shp_dir)
+appliedepidata::save_data(name = "sle_adm3", path = shp_dir)
+utils::unzip(file.path(shp_dir, "sle_adm3.zip"), exdir = shp_dir)
+```
+
+A página [GIS básico](gis.llms.md) carrega os três conjuntos de dados: os limites admin-3 `sle_adm3`, os pontos dos estabelecimentos de saúde `sle_hf` e a tabela de população `sle_admpop_adm3_2020`. Para ler um shapefile a partir do seu próprio caminho de arquivo, use `read_sf()` do pacote **sf**. Essa página também traz links para o site *Humanitarian Data Exchange*, onde você pode baixar outros shapefiles como arquivos compactados. Os pontos dos estabelecimentos de saúde, por exemplo, estão [aqui](https://data.humdata.org/dataset/hotosm_sle_health_facilities).
+
+#### Árvores filogenéticas
+
+Veja a página sobre [Árvores filogenéticas](phylogenetic_trees.llms.md). Arquivo Newick da árvore filogenética construída a partir do sequenciamento do genoma completo de 299 amostras de Shigella sonnei e dados de amostra correspondentes (convertidos em um arquivo de texto). As amostras belgas e os dados resultantes são gentilmente fornecidos pelo NRC belga para Salmonella e Shigella no âmbito de um projeto conduzido por um bolsista ECDC EUPHEM, e também serão publicados em um manuscrito. Os dados internacionais estão disponíveis abertamente em bases de dados públicas (NCBI) e foram publicados previamente.
+
+``` r
+# a árvore filogenética, como objeto "phylo" (pacote ape)
+tree <- appliedepidata::get_data(name = "Shigella_tree")
+
+# informações adicionais sobre cada amostra
+sample_data <- appliedepidata::get_data(name = "sample_data_Shigella_tree")
+
+# a sub-árvore criada mais adiante na página
+subtree <- appliedepidata::get_data(name = "Shigella_subtree_2")
+```
+
+#### Padronização
+
+Consulte a página sobre [Taxas padronizadas](standardization.llms.md). Você pode carregar os dados diretamente com os seguintes comandos:
+
+``` r
+##############
+# Country A
+# País A
+# dados demográficos do país A
+A_demo <- appliedepidata::get_data(name = "country_demographics")
+
+# mortes do país A
+A_deaths <- appliedepidata::get_data(name = "deaths_countryA")
+
+# País B
+# dados demográficos do país B
+##############
+# demographics for country B
+B_demo <- appliedepidata::get_data(name = "country_demographics_2")
+
+# mortes do país B
+B_deaths <- appliedepidata::get_data(name = "deaths_countryB")
+
+
+# população padrão de referência
+# Reference Pop
+###############
+# world standard population, by sex
+standard_pop_data <- appliedepidata::get_data(name = "world_standard_population_by_sex")
+```
+
+#### Séries temporais e detecção de surto
+
+Consulte a página em [Séries temporais e detecção de surto](time_series.llms.md). Usamos casos de Campylobacter relatados na Alemanha 2002-2011, conforme disponível no pacote **surveillance** R. (*nb.* este conjunto de dados foi adaptado do original, em que 3 meses de dados foram excluídos do final de 2011 para fins de demonstração).
+
+``` r
+counts <- appliedepidata::get_data(name = "campylobacter_germany")
+```
+
+Também usamos dados climáticos da Alemanha 2002-2011 (temperatura em graus Celsius e queda de chuva em milímetros). Eles foram baixados do conjunto de dados de reanálise do satélite Copernicus da UE usando o pacote **ecmwfr**. O **appliedepidata** os agrupa em um único .zip com dez arquivos .nc anuais. `get_data()` lê o conjunto inteiro diretamente como um único objeto **stars**; `save_data()` fornece os arquivos .nc originais se você quiser inspecioná-los ou processá-los.
+
+``` r
+# ler os dados climáticos combinados diretamente como objeto stars
+weather_data <- appliedepidata::get_data(name = "germany_weather")
+
+# OU salvar os arquivos .nc anuais originais em uma pasta
+weather_dir <- "germany_weather_files"
+dir.create(weather_dir)
+appliedepidata::save_data(name = "germany_weather", path = weather_dir)
+utils::unzip(file.path(weather_dir, "germany_weather.zip"), exdir = weather_dir)
+```
+
+#### Análise da pesquisa
+
+Para a página [análise da pesquisa](survey_analysis.llms.md), usamos dados fictícios de pesquisa de mortalidade baseados em modelos de pesquisa OCA do MSF. Esses dados fictícios foram gerados como parte do [projeto “R4Epis”](https://r4epis.netlify.app/).
+
+``` r
+# dados fictícios da pesquisa
+survey_data <- appliedepidata::get_data(name = "survey_data")
+
+# dicionário de dados fictício da pesquisa
+survey_dict <- appliedepidata::get_data(name = "survey_dict")
+
+# dados populacionais fictícios da pesquisa
+population <- appliedepidata::get_data(name = "population")
+```
+
+#### Shiny
+
+A página em [Painéis com Shiny](shiny_basics.llms.md) demonstra a construção de um aplicativo simples para exibir dados da malária. Os dados do aplicativo fazem parte do **appliedepidata**:
+
+``` r
+malaria_data <- appliedepidata::get_data(name = "malaria_facility_count_data")
+```
+
+Os scripts R do aplicativo não são dados de exemplo, portanto não fazem parte do **appliedepidata** — baixe-os diretamente do Github:
+
+Você pode [clique aqui para baixar o arquivo app.R que contém a IU e o código do servidor para o aplicativo Shiny. ](https://github.com/appliedepi/epirhandbook/raw/main/data/malaria_app/app.R)
+
+Você pode [clique aqui para baixar o arquivo global.R](https://github.com/appliedepi/epirhandbook/raw/main/data/malaria_app/global.R) que deve ser executado antes da abertura do aplicativo, conforme explicado na página.
+
+Você pode [clique aqui para baixar o arquivo plot_epicurve.R](https://github.com/appliedepi/epirhandbook/raw/main/data/malaria_app/funcs/plot_epicurve.R) que é carregado com source() pelo global.R. Observe que pode ser necessário armazená-lo em uma pasta “funcs” para que os caminhos de arquivo here() funcionem corretamente.

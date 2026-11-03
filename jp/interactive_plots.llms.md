@@ -1,0 +1,204 @@
+# 39  動的な図の作成
+
+データの視覚化においては、データの受け取り手がデータと対話可能になることがますます求められています。そのため、動的な図を作成することが一般的になっています。これらを組み込む方法はいくつかありますが、最も一般的な方法は **plotly** パッケージと **shiny** パッケージの 2 つです。
+
+この章では、既存の `ggplot()` で作成したプロットを **plotly** パッケージで動的な図に変換することに焦点を当てます。**shiny** パッケージについては、 [Shiny で作るダッシュボード](shiny_basics.llms.md)の章を参照してください。特筆すべき点は、動的な図は HTML 形式の R Markdown 文書でのみ使用可能であり、PDF や Word 文書では使用できないということです。
+
+**ggplot2** パッケージと **plotly** パッケージの統合により、動的に変換された最低限の情報を持つ流行曲線（エピカーブ）を以下に示します（プロット上にマウスを置き、拡大したり、凡例の項目をクリックしたりします）。
+
+## 39.1 準備
+
+### パッケージの読み込み
+
+以下のコードを実行すると、分析に必要なパッケージが読み込まれます。このハンドブックでは、パッケージを読み込むために、**pacman** パッケージの `p_load()` を主に使用しています。`p_load()` は、必要に応じてパッケージをインストールし、現在の R セッションで使用するためにパッケージを読み込む関数です。また、すでにインストールされたパッケージは、R の基本パッケージである **base** （以下、**base** R）の `library()` を使用して読み込むこともできます。R のパッケージに関する詳細は [R の基礎](basics.llms.md) の章をご覧ください。
+
+``` r
+pacman::p_load(
+  rio,       # インポート・エクスポート
+  here,      # ファイルパス
+  lubridate, # 日付の操作
+  plotly,    # 動的な作図
+  scales,    # 軸やスケールの調整
+  tidyverse, # データの処理と可視化
+  appliedepidata # 本ハンドブックで使用するサンプルデータ
+  ) 
+```
+
+### はじめは `ggplot()` 関数から
+
+この章では、動的な図に変換したい図表を `ggplot()` 関数を用いて作成するところから始めることを想定しています。この章では、このハンドブックの多くの章で使われている `linelist` ケースを使って、このようなプロットをいくつか作ってみます。
+
+### データのインポート
+
+まず始めに、エボラ出血熱のシミュレーションで得られた症例がクリーニングされたラインリストの取り込みをします。`appliedepidata::get_data(name = "linelist_cleaned_rds")` で直接読み込めます（詳細は[ハンドブックとデータのダウンロード](download.llms.md)のページを参照）。
+
+``` r
+# 結果のラインリストの取り込み
+linelist <- appliedepidata::get_data(name = "linelist_cleaned_rds")
+```
+
+ラインリストの最初の50行を以下に表示します。
+
+## 39.2 `ggplotly()` 関数によるプロット
+
+**plotly** パッケージの `ggplotly()` 関数を使うと、`ggplot()` 関数の出力を動的な図へかんたんに変換できます。`ggplot()` 関数の出力を保存して、それを `ggplotly()` 関数にパイプするだけです。
+
+下の図は、ある週に死亡した症例の割合を表すシンプルな線をプロットしたものです。
+
+まず、疫学週毎のサマリーデータを作成し、結果が判明している症例のうち死亡した症例の割合を計算します。
+
+``` r
+weekly_deaths <- linelist %>%
+  group_by(epiweek = floor_date(date_onset, "week")) %>%  # 疫学週毎のデータの作成とグループ化
+  summarise(                                              # 新しいサマリーデータフレームの作成:
+    n_known_outcome = sum(!is.na(outcome), na.rm=T),      # 結果が判明しているグループごとの症例数
+    n_death  = sum(outcome == "Death", na.rm=T),          # 死亡したグループごとの症例数
+    pct_death = 100*(n_death / n_known_outcome)           # 結果が判明している症例のうち、死亡した症例の割合
+  )
+```
+
+`weekly_deaths` データセットの最初の50行を示します。
+
+そして、**ggplot2** パッケージで `geom_line()` 関数を使ってプロットを作成します。
+
+``` r
+deaths_plot <- ggplot(data = drop_na(weekly_deaths, epiweek, pct_death))+ # weekly_deaths データを使用する
+  geom_line(mapping = aes(x = epiweek, y = pct_death))  # 折れ線グラフの作成
+
+deaths_plot   # 出力
+```
+
+[![](interactive_plots_files/figure-html/unnamed-chunk-7-1.png)](interactive_plots_files/figure-html/unnamed-chunk-7-1.png)
+
+このプロットオブジェクトを以下のように `ggplotly()` 関数に渡すだけで、動的に表示できます。線の上にマウスを置くと、x と y の値が表示されます。図を拡大したり、ドラッグしたりすることができます。また、図の右上には、アイコンが表示されています。順に、以下のことができます。
+
+- 今表示されている図を PNG 画像としてダウンロードする
+- 選択範囲を指定して拡大
+- “Pan”, つまり図をクリック＆ドラッグすることで図を移動させる
+- 拡大、縮小、またはデフォルトの縮尺に戻る
+- 軸のスケールをデフォルトに戻す
+- 動的にグラフ上の点からx軸、y軸に伸びる点線である “spike lines” のオン・オフを切り替える
+- グラフ線上にカーソルを置いていないときにデータを表示するか否かの設定
+
+``` r
+deaths_plot %>% plotly::ggplotly()
+```
+
+グループ化されたデータも、`ggplotly()` 関数で動作します。下記の図は、結果ごとにグループ化された週毎の流行曲線（エピカーブ）を作成したものです。積み上げられた棒グラフは動的に表示されています。凡例の各項目をクリックしてみてください（現れたり消えたりします）。
+
+``` r
+# incidence2 パッケージを用いた流行曲線（エピカーブ）の作成
+p <- incidence2::incidence(
+  linelist,
+  date_index = date_onset,
+  interval = "weeks",
+  groups = outcome) %>% plot(fill = outcome)
+```
+
+``` r
+# 動的な図へ
+p %>% plotly::ggplotly()
+```
+
+## 39.3 変更・修正
+
+### ファイルサイズ
+
+R Markdown で生成された HTML にエクスポートする場合（本書のように！）、図をできるだけ小さなデータサイズにすることが望まれます（ほとんどの場合悪影響はありません）。そのためには、動的な図オブジェクトを **plotly** パッケージの `partial_bundle()` 関数にパイプします。
+
+``` r
+p <- p %>% 
+  plotly::ggplotly() %>%
+  plotly::partial_bundle()
+```
+
+### ボタン
+
+標準的な plotly のボタンの中には、余計なものや邪魔なものがあるので、それらを取り除くことができます。これは、作成した図を **plotly** パッケージの `config()` 関数にパイプでつなぎ、削除したいボタンを指定するだけで可能です。以下の例では、削除するボタンの名前をあらかじめ指定し、引数の `modeBarButtonsToRemove =` に渡しています。 また、`displaylogo = FALSE` とすることで、 **plotly** パッケージのロゴを削除しています。
+
+``` r
+## これらのボタンは不要なので削除する
+plotly_buttons_remove <- list('zoom2d','pan2d','lasso2d', 'select2d','zoomIn2d',
+                              'zoomOut2d','autoScale2d','hoverClosestCartesian',
+                              'toggleSpikelines','hoverCompareCartesian')
+
+p <- p %>%          # 上記のボタンを使わずに動的な図を再定義する
+  plotly::config(displaylogo = FALSE, modeBarButtonsToRemove = plotly_buttons_remove)
+```
+
+## 39.4 ヒートタイル
+
+ヒートタイルを含むほとんどの `ggplot()` プロットオブジェクトを動的に変えることができます。ある施設が州へデータを報告した日数の週あたりの割合を表示する下記の図の作成方法について[ヒートマップ](heatmaps.llms.md)の章で説明しています。
+
+ここでは詳細な説明はしませんが、コードを紹介します。
+
+``` r
+# データのインポート
+facility_count_data <- appliedepidata::get_data(name = "malaria_facility_count_data")
+
+# Spring 地区におけるデータを週毎に集約
+agg_weeks <- facility_count_data %>% 
+  filter(District == "Spring",
+         data_date < as.Date("2020-08-01")) %>% 
+  mutate(week = aweek::date2week(
+    data_date,
+    start_date = "Monday",
+    floor_day = TRUE,
+    factor = TRUE)) %>% 
+  group_by(location_name, week, .drop = F) %>%
+  summarise(
+    n_days          = 7,
+    n_reports       = n(),
+    malaria_tot     = sum(malaria_tot, na.rm = T),
+    n_days_reported = length(unique(data_date)),
+    p_days_reported = round(100*(n_days_reported / n_days))) %>% 
+  ungroup(location_name, week) %>% 
+  right_join(tidyr::expand(., week, location_name)) %>% 
+  mutate(week = aweek::week2date(week))
+
+# プロットの作成
+metrics_plot <- ggplot(agg_weeks,
+       aes(x = week,
+           y = location_name,
+           fill = p_days_reported))+
+  geom_tile(colour="white")+
+  scale_fill_gradient(low = "orange", high = "darkgreen", na.value = "grey80")+
+  scale_x_date(expand = c(0,0),
+               date_breaks = "2 weeks",
+               date_labels = "%d\n%b")+
+  theme_minimal()+ 
+  theme(
+    legend.title = element_text(size=12, face="bold"),
+    legend.text  = element_text(size=10, face="bold"),
+    legend.key.height = grid::unit(1,"cm"),
+    legend.key.width  = grid::unit(0.6,"cm"),
+    axis.text.x = element_text(size=12),
+    axis.text.y = element_text(vjust=0.2),
+    axis.ticks = element_line(linewidth=0.4),
+    axis.title = element_text(size=12, face="bold"),
+    plot.title = element_text(hjust=0,size=14,face="bold"),
+    plot.caption = element_text(hjust = 0, face = "italic")
+    )+
+  labs(x = "Week",
+       y = "Facility name",
+       fill = "Reporting\nperformance (%)",
+       title = "Percent of days per week that facility reported data",
+       subtitle = "District health facilities, April-May 2019",
+       caption = "7-day weeks beginning on Mondays.")
+
+metrics_plot # 出力
+```
+
+[![](interactive_plots_files/figure-html/unnamed-chunk-11-1.png)](interactive_plots_files/figure-html/unnamed-chunk-11-1.png)
+
+以下では、上記のグラフを動的にして、単純化したボタンやファイルサイズを修正しています。
+
+``` r
+metrics_plot %>% 
+  plotly::ggplotly() %>% 
+  plotly::config(displaylogo = FALSE, modeBarButtonsToRemove = plotly_buttons_remove)
+```
+
+## 39.5 参考文献
+
+Plotly はR だけではなく、Python でも問題なく動作します（Plotly は JavaScript で作られているため、実際にはあらゆるデータサイエンス言語で動作します）。詳しくは [plotly のウェブサイト](https://plotly.com/r/)をご覧ください。
