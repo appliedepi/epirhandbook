@@ -249,14 +249,16 @@ def wanted(stem, code, main):
     """The aliases one chapter file must carry.
 
     An alias keeps the chapter's old `/new_pages/` URL alive, so it spells the stem the way
-    that page spelled it. Only `transition_to_r` differs from its own stem: the old page was
-    `transition_to_R`. The English chapter shipped under both spellings and carries both.
+    that page spelled it. `transition_to_r` differs from its own stem: the old page was
+    `transition_to_R`. The English chapter shipped under both spellings and carries both. A
+    renamed chapter (RENAMED) keeps the old page's stem.
     """
-    old = 'transition_to_R' if stem == 'transition_to_r' else stem
+    old = 'transition_to_R' if stem == 'transition_to_r' else RENAMED.get(stem, stem)
     merged = MERGED.get(stem, [])
-    # A merged page also had a URL of its own in the current layout, /<lang>/<stem>.html.
-    # Quarto resolves an alias against the language's site root, so /<stem>.html is it.
-    current = ['/%s.html' % m for m in merged]
+    # A merged or renamed page also had a URL of its own in the current layout,
+    # /<lang>/<old stem>.html. Quarto resolves an alias against the language's site root,
+    # so /<old stem>.html is it.
+    current = ['/%s.html' % m for m in merged + ([RENAMED[stem]] if stem in RENAMED else [])]
     if code != main:
         return ['/new_pages/%s.%s.html' % (o, code) for o in [old] + merged] + current
     if stem == 'transition_to_r':
@@ -269,6 +271,10 @@ def wanted(stem, code, main):
 # bookmark to a merged page still lands on its content. about and acknowledgements merged
 # into editorial_style on 2026-10-02.
 MERGED = {'editorial_style': ['about', 'acknowledgements']}
+
+# Chapters renamed after they shipped: new stem -> old stem. The chapter carries the old
+# stem's /new_pages/ URL and its current-layout URL. data_used became download on 2026-10-30.
+RENAMED = {'download': 'data_used'}
 
 
 # Each project file is parsed once. A file that does not parse gives its DRIFT line once, and
@@ -449,6 +455,10 @@ python3 "$here/check-grid-tables.py" --summary | sed 's/^/   /' \
   || { python3 "$here/check-grid-tables.py" | sed 's/^/   /'; rc=1; }
 echo "== 21. Message counts: no check types a count into its message text"
 python3 "$here/check-message-counts.py" --summary | sed 's/^/   /' || rc=1
+echo "== 22. Lowercase names: every file name under content/, images/ and data/"
+python3 "$here/check-case.py" --summary | sed 's/^/   /' || rc=1
+echo "== 23. Interface strings: every language block in ael-extras.html has the keys of en"
+python3 "$here/check-ui-strings.py" --summary | sed 's/^/   /' || rc=1
 if [ -n "$base" ]; then
   echo "== 6. Render gate on every translated chapter changed since $base (quarto render --no-execute)"
   "$here/render-gate.sh" "$base" HEAD > "$log/render.txt" 2>&1 || rc=1

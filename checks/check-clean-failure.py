@@ -58,6 +58,8 @@ CASES = {
     'chunk-parse-gate.py': (['HEAD', 'HEAD'], ['languages.yml']),
     # Check 16 reads the English chapters and its list of exempt chunks. It needs R.
     'check-english-parse.py': (['--summary'], ['content', 'checks/parse-exceptions.tsv']),
+    'check-case.py': (['--summary'], ['content', 'images', 'data']),
+    'check-ui-strings.py': (['--summary'], ['ael-extras.html', 'languages.yml']),
     # Check 19 reads the stem list and the English chapters. It needs R too.
     'check-suggested-packages.py': (['--summary'], ['languages.yml', 'content']),
     'render-gate.sh': (['HEAD', 'HEAD'], ['languages.yml']),
@@ -109,6 +111,10 @@ def build(tmp):
         encoding='utf-8')
     (tmp / 'images').mkdir()
     (tmp / 'images' / 'real.png').write_bytes(b'PNG')
+    (tmp / 'data').mkdir()
+    (tmp / 'data' / 'real.csv').write_text('a\n1\n', encoding='utf-8')
+    (tmp / 'ael-extras.html').write_text(
+        "<script>\n  var UI = {\n    en: { dark: 'Dark mode' }\n  };\n</script>\n", encoding='utf-8')
     (tmp / 'languages.yml').write_text(
         'main: en\nlanguages:\n  - code: en\n    label: "English"\n    title: "T"\n', encoding='utf-8')
     (tmp / 'docker-images.yml').write_text('images:\n  - stem: index\n    image: epirhandbook-basics:2.9\n', encoding='utf-8')

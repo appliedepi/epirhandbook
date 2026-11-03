@@ -88,7 +88,7 @@ one. It rejects four link forms.
 ```
 DEAD content/en/basics.qmd:372 #objectstructure (no id objectstructure on this page)
 SAME-PAGE content/en/basics.qmd:372 basics.qmd#objects
-LANGUAGE-MISMATCH content/es/packages_suggested.qmd:158 ../en/data_used.qmd
+LANGUAGE-MISMATCH content/es/packages_suggested.qmd:158 ../en/download.qmd
 UNTERMINATED-LINK content/pt/basics.qmd:925 ... na seção [Importar e exportar](#importing.
 ```
 
@@ -621,9 +621,9 @@ Expected output:
 ```
 languages declared: 8 (en fr es vn jp pt tr ru)
 project files wired to the theme and the app bar: 8 of 8
-keys the hero reads: 16, plus the svc cards (from utils/landing-hero.R)
-keys declared: 194 across the 7 translated blocks; 'en' declares 32
-translated blocks complete: 7 of 7; a complete block declares 13 keys, and 2 pinned omissions are allowed
+keys the hero reads: 17, plus the svc cards (from utils/landing-hero.R)
+keys declared: 202 across the 7 translated blocks; 'en' declares 33
+translated blocks complete: 7 of 7; a complete block declares 14 keys, and 1 pinned omissions are allowed
 against 'en': 28 values match it and are service-card hrefs, which the href rule allows
 pairwise: 28 ordered language pairs; 112 service-card hrefs and 2 allowed cognates skipped
 problems: 0
@@ -632,8 +632,8 @@ problems: 0
 With `--slots`, after a render, three more lines sit before `problems: 0`:
 
 ```
-slots read: 245 across the 7 rendered page(s); 30 of them fall back to 'en'
-slots expected: 245, which is 7 page(s) x (19 scalar slots + 4 fields x 4 cards)
+slots read: 252 across the 7 rendered page(s); 29 of them fall back to 'en'
+slots expected: 252, which is 7 page(s) x (20 scalar slots + 4 fields x 4 cards)
 slot mismatches: 0
 ```
 
@@ -648,7 +648,7 @@ English after the tagline was removed.
 
 **A translatable key is one the hero reads and `INVARIANT` does not name.** That one line is
 what separates a block nobody translated from a key that falls back on purpose. It comes from
-`utils/landing-hero.R`, so no edit to `landing.yml` can lower it. Today it is 13: the 16 keys
+`utils/landing-hero.R`, so no edit to `landing.yml` can lower it. Today it is 14: the 17 keys
 the hero reads, less the 4 `INVARIANT` names, plus the `svc` list.
 
 Three omissions stay legal, and a rule that rejected every omission would break all three:
@@ -656,9 +656,9 @@ Three omissions stay legal, and a rule that rejected every omission would break 
 - **A language-invariant key.** `INVARIANT` names 4: `btn_start_href`, `btn_offline_href`,
   `np_brand` and `np_links`. Each is a path, a URL or a brand name, so
   a translation of it would be the same string. No block declares one, and rule 10 never asks.
-- **A pinned omission.** `OMISSIONS` names 2, both `stat_used_num`. The Spanish and Portuguese
-  source pages read "3 millón de veces" and "3 milhão de vezes", singular after three. A block
-  that copied one would carry the error into the hero, so the count falls back to English.
+- **A pinned omission.** `OMISSIONS` names 1: `stat_used_num` in French. French writes the user
+  count as English does, "1 million+", and rule 6 rejects a value byte-identical to English, so
+  the count falls back to English.
 - **The fallback itself.** The hero reads `en` for any key the language omits, so the page still
   renders. Rule 10 changes nothing about that. It reports the gap and leaves the choice to a
   reader.
@@ -705,13 +705,13 @@ computed counts, the hero title and 4 of the 6 nonprofit-band fields. Every one 
 rendered slot, `slots read:` counted none of them, and the printed count was honest about its
 own narrower coverage.
 
-**The total is an assertion, not a line of output.** Rule 9 computes it as pages x (19 scalar
+**The total is an assertion, not a line of output.** Rule 9 computes it as pages x (20 scalar
 slots + 4 fields x 4 cards) and fails on any deviation, in either direction. The 4 is pinned in
 the check, never read from `landing.yml`, so the data cannot move the expectation. A printed
 number nobody compares is decoration, and a slot that goes unread lowers the total in silence.
 
 **A pinned total stops the data moving it and cannot stop the slot list moving it.** Delete one
-name from `SCALAR_SLOTS` and `slots read:` and `slots expected:` both fall to 34 per page, in step, and
+name from `SCALAR_SLOTS` and `slots read:` and `slots expected:` both fall to 35 per page, in step, and
 the run stays green. So the check asks `utils/landing-hero.R` for its key list and names any
 key `SCALAR_SLOTS` omits. That assertion needs no rendered page, and it runs in every mode.
 
@@ -1036,3 +1036,25 @@ It is not in check 12. Its only input is `checks/` itself, which cannot be missi
 Expected output: `scripts read <n>, typed counts in messages 0`.
 
 Remedy: compute the number, or move it into this README with its date.
+
+## 22. Lowercase names
+
+`python3 checks/check-case.py [--summary]` reads every file under `content/`, `images/` and `data/`, and fails on a name with an uppercase letter, and on two names that differ only by case. The final extension MAY be `.R`, `.Rmd` or `.Rproj`, which is how R spells them. Files a local render writes, which `.gitignore` keeps out of git, are skipped.
+
+A web server and git on Linux treat `Dates.png` and `dates.png` as two files. macOS and Windows treat them as one. So a mixed-case name works on the published site and breaks for a reader who downloads the handbook or the data: two names that differ only by case overwrite each other when unzipped. On 2026-10-30 the English render artifact failed to unzip on macOS for this reason.
+
+`python3 checks/check-case.py --tree DIR` reads one built tree and fails when two of its files differ only by case. The deploy job runs it on each offline copy before zipping it, because that tree also holds third-party files under `site_libs/` that the rule above cannot reach. The offline copy leaves out `new_pages/`, the old-URL redirect stubs, which hold the one pair the site keeps on purpose: `transition_to_R.html` and `transition_to_r.html`.
+
+Expected output: `lowercase names: <n> file(s) in content, images, data, 0 not lowercase, 0 case clash(es)`.
+
+Remedy: rename the file in lowercase, with `_` in place of a space, and change every reference to it. Check 11 then confirms that every image a chapter names exists.
+
+## 23. Interface strings
+
+`python3 checks/check-ui-strings.py [--summary]` compares the language blocks of `var UI = { ... }` in `ael-extras.html`, which build the app bar and the help box beside every chapter. Every block MUST carry the keys of the `en` block and no others, and every `lang:` tag in `languages.yml` MUST have a block.
+
+A block that lacks a key shows the word "undefined" in its place. It does not fall back to English. Only a language with no block at all reads English.
+
+Expected output: `interface strings: <n> block(s), <k> key(s) each in en, 0 finding(s)`.
+
+Remedy: add the missing key to the block, translated.

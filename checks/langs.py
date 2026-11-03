@@ -126,6 +126,24 @@ def read_languages(path):
     return main, codes
 
 
+def read_site_url(path):
+    """The `site_url:` of one languages.yml, with no trailing slash.
+
+    Raises Unreadable when the file is missing, does not parse, or its `site_url:` is not an
+    https URL of a host alone. The build writes it into every sitemap and llms.txt link, so a
+    wrong value would publish dead links rather than fail.
+    """
+    if not os.path.isfile(path):
+        raise Unreadable('no %s. That file declares site_url:, the address the site is '
+                         'published at.' % path)
+    doc = parse(path)
+    url = doc.get('site_url') if isinstance(doc, dict) else None
+    if not isinstance(url, str) or not re.fullmatch(r'https://[a-z0-9.-]+\.[a-z]{2,}/?', url):
+        raise Unreadable('%s: site_url: is %r. It MUST be an https URL of a host alone, such '
+                         'as https://example.org.' % (path, url))
+    return url.rstrip('/')
+
+
 def read_stems(path):
     """The stems of one Quarto project file, in file order.
 

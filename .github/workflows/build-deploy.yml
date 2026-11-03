@@ -341,10 +341,21 @@ jobs:
         with:
           path: downloaded
 
+      # Before the assembly, because it writes the sitemaps, llms.txt and
+      # robots.txt with checks/site-index.py, which reads YAML.
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Install PyYAML
+        run: pip install --quiet pyyaml
+
       # Every language lands under its own <lang>/, the main language
       # included. Each one carries its own images/ copy, so a language folder
       # is a complete site on its own. The site root holds a redirect stub to
-      # the main language and nothing else: no page, and no images/ copy.
+      # the main language, llms.txt and robots.txt: no page, and no images/
+      # copy. Each language folder also gets a sitemap.xml, and the main one a
+      # copy of llms.txt and robots.txt.
       #
       # This step reads downloaded/ and never writes to it. The artifacts are
       # the render legs' only output, and a second run of this step must see
@@ -369,13 +380,6 @@ jobs:
           echo "${{ secrets.GITHUB_TOKEN }}" \
             | docker login ghcr.io -u "${{ github.actor }}" --password-stdin \
             || echo "::warning::GHCR login failed; continuing with anonymous pulls (the images are public)"
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
-      - name: Install PyYAML
-        run: pip install --quiet pyyaml
 
       - name: Read registry prefix from docker-images.yml
         id: registry
@@ -553,12 +557,20 @@ jobs:
             # unzipping. Name it, rather than leaving a bare "en".
             pkg="epirhandbook-$lang"
             cp -a "site/$lang" "/tmp/offline-pkg/$pkg"
+            # new_pages/ holds redirect stubs that keep the old web URLs alive.
+            # Nobody reaches an old web URL offline, and English holds transition_to_R.html
+            # beside transition_to_r.html: two names that differ only by case,
+            # which macOS and Windows unzip as one file.
+            rm -rf "/tmp/offline-pkg/$pkg/new_pages"
             # Quarto loads quarto.js as an ES module, which a browser refuses
             # on file://, and quarto.js builds the margin table of contents.
             python3 checks/offline-classic-scripts.py "/tmp/offline-pkg/$pkg"
             # quarto-search.js fetches search.json, which a browser also refuses
             # on file://. Ship the index as a script instead.
             python3 checks/offline-search.py "/tmp/offline-pkg/$pkg"
+            # Check 22 on the tree as zipped: no two files may differ only by
+            # case, third-party files included.
+            python3 checks/check-case.py --tree "/tmp/offline-pkg/$pkg"
             ( cd /tmp/offline-pkg && zip -qr "/tmp/offline-zips/$pkg.zip" "$pkg" )
             rm -rf "/tmp/offline-pkg/$pkg"
           done
@@ -606,7 +618,9 @@ jobs:
               if f"{root}index.html" not in names:
                   sys.exit(f"::error::{z.name} has no {root}index.html, which is the file the download page names")
 
-              source = {str(p.relative_to(site / lang)) for p in (site / lang).rglob("*") if p.is_file()}
+              # The packaging above leaves out new_pages/, the old-URL redirects.
+              source = {str(p.relative_to(site / lang)) for p in (site / lang).rglob("*")
+                        if p.is_file() and p.relative_to(site / lang).parts[0] != "new_pages"}
               packed = {n[len(root):] for n in names}
               packed_full = set(names)
               # checks/offline-search.py adds search.js to the offline copy
@@ -728,7 +742,7 @@ jobs:
         run: git push origin HEAD:staging --force
 
       # One rolling release, tag "offline", whose assets are replaced on every
-      # staging build. The download link in every data_used.qmd names that tag
+      # staging build. The download link in every download.qmd names that tag
       # directly, so the URL never changes and the download cannot silently
       # rot. The artefact it replaces, offline_long/, last rendered on
       # 2026-07-24 and five of its eight advertised links were dead.
