@@ -29,7 +29,8 @@ of it, and that is expected of a changelog. Read it as a record, never as curren
 
 Each change is in all eight languages. The translated strings are agent-written and need native review.
 
-- The nonprofit band says 500 once. `np_trust` merged into `np_lead`, and the sentence "over 500 agencies choose Applied Epi to train and support their staff" is gone, in all eight `landing.yml` blocks and in the English `website: description`. The band now has three paragraphs of one size in one column: `np_lead`, the new `np_reach` and `np_notify`. The logo aligns with the top of the text.
+- The nonprofit band says 500 once. `np_trust` merged into `np_lead`, and the sentence "over 500 agencies choose Applied Epi to train and support their staff" is gone, in all eight `landing.yml` blocks and in the English `website: description`. The band now has three paragraphs of one size in one column: `np_lead`, the new `np_reach` and `np_notify`. The logo aligns with the top of the text. The logo and the text use the grid of the service cards: the logo sits on the left edge of the first card, and the text starts on the left edge of the second card. The gap above the cards is 44px, up from 20px. The band text is 15px, the same as the card text, and the LinkedIn and email list links have normal weight.
+- In dark mode, the footer logo has a white ground, because its name is navy.
 
 - The English title is "The Epidemiologist R Handbook" again, as on the old site. The seven translated titles already matched the old site and are unchanged. The app bar reads each language's book title instead of a fixed English "Epi R Handbook".
 - The landing hero has the new subtitle and counts "1 million+ users" in place of "3 million+ page views". French omits the count and falls back to English, because it is the same string. Spanish and Portuguese now declare it, so their two pinned omissions are gone.
