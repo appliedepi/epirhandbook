@@ -671,7 +671,7 @@ if want_slots:
             if k not in blk:
                 fallbacks += 1
             if k == 'np_lead' and want is not None:
-                want = want.replace('{brand}', '<span class="brandname">%s</span>' % brand)
+                want = want.replace('{brand}', '<a href="https://appliedepi.org/">%s</a>' % brand)
             if want is None:
                 mismatches.append("%s: the rendered page shows a '%s' slot that neither '%s' nor "
                                   "'%s' declares" % (c, k, c, main))

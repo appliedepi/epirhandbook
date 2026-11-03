@@ -130,7 +130,7 @@ landing_hero <- function(lang, root = here::here()) {
 
   lead <- sub(
     "{brand}",
-    paste0('<span class="brandname">', s("np_brand"), "</span>"),
+    paste0('<a href="https://appliedepi.org/">', s("np_brand"), "</a>"),
     s("np_lead"),
     fixed = TRUE
   )
