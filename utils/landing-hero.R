@@ -31,8 +31,8 @@
 # The old Welcome page carried a live PayPal donation form. It is not here, and
 # it MUST NOT come back. Richard removed it on 2026-09-18. Its button id is in no
 # file of this repository, and the landing page gate fails on that string
-# anywhere in the hero source. The nonprofit band ends with the contact line, two
-# links to appliedepi.org and to the contact address, and that is the whole of it.
+# anywhere in the hero source. The nonprofit band ends with the service cards. The
+# links to appliedepi.org and to the contact address are in the page footer.
 
 landing_hero <- function(lang, root = here::here()) {
   as_text <- list("bool#yes" = function(x) x, "bool#no" = function(x) x)
@@ -236,6 +236,13 @@ landing_hero <- function(lang, root = here::here()) {
     "  }",
     '  window.addEventListener("load", mount);',
     '  wide.addEventListener("change", mount);',
+    # Quarto rebuilds its input when the page crosses 992px, without the placeholder.
+    '  wide.addEventListener("change", function () {',
+    '    setTimeout(function () {',
+    '      var input = document.querySelector("#quarto-search input");',
+    '      if (input && wide.matches) { input.setAttribute("placeholder", box.placeholder); }',
+    '    }, 50);',
+    '  });',
     '  if ("IntersectionObserver" in window) {',
     "    new IntersectionObserver(function (entries) {",
     "      inView = entries[0].isIntersecting;",
@@ -260,10 +267,21 @@ landing_hero <- function(lang, root = here::here()) {
     sep = "\n"
   )
 
+  # Each side of the separator is one span. The CSS keeps a span whole when the
+  # line has to break.
+  eyebrow_parts <- strsplit(s("eyebrow"), " \u00b7 ", fixed = TRUE)[[1]]
+  eyebrow <- paste0(
+    "<span>",
+    eyebrow_parts,
+    c(rep(" \u00b7", length(eyebrow_parts) - 1L), ""),
+    "</span>",
+    collapse = " "
+  )
+
   hero <- paste0(
     '<div class="ael-hero">\n',
     '<div class="ael-eyebrow">',
-    s("eyebrow"),
+    eyebrow,
     "</div>\n",
     '<h1 class="ael-htitle">',
     title,
@@ -310,28 +328,20 @@ landing_hero <- function(lang, root = here::here()) {
 
   band <- paste0(
     '<div class="npband">\n',
-    '<div class="nplockup">\n',
-    '<img src="../../images/applied-epi-logo-2026.png" alt="',
-    s("np_brand"),
-    '">\n',
+    '<div class="npintro">\n',
     '<p class="nplead">',
     lead,
-    "</p>\n</div>\n",
+    "</p>\n",
     '<div class="nptext">\n',
     '<p class="npreach">',
     s("np_reach"),
     "</p>\n",
     '<p class="npnotify">',
     s("np_notify"),
-    "</p>\n</div>\n",
+    "</p>\n</div>\n</div>\n",
     '<div class="svcs">\n',
     paste(vapply(svcs(), card, character(1)), collapse = "\n"),
-    "\n</div>\n",
-    '<div class="npfoot">\n',
-    '<div class="nplinks">',
-    s("np_links"),
-    "</div>\n",
-    "</div>\n</div>"
+    "\n</div>\n</div>"
   )
 
   paste(

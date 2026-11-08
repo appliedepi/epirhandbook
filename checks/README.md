@@ -633,7 +633,7 @@ With `--slots`, after a render, three more lines sit before `problems: 0`:
 
 ```
 slots read: 252 across the 7 rendered page(s); 29 of them fall back to 'en'
-slots expected: 252, which is 7 page(s) x (20 scalar slots + 4 fields x 4 cards)
+slots expected: 245, which is 7 page(s) x (19 scalar slots + 4 fields x 4 cards)
 slot mismatches: 0
 ```
 
@@ -649,12 +649,12 @@ English after the tagline was removed.
 **A translatable key is one the hero reads and `INVARIANT` does not name.** That one line is
 what separates a block nobody translated from a key that falls back on purpose. It comes from
 `utils/landing-hero.R`, so no edit to `landing.yml` can lower it. Today it is 14: the 17 keys
-the hero reads, less the 4 `INVARIANT` names, plus the `svc` list.
+the hero reads, less the 3 `INVARIANT` names, plus the `svc` list.
 
 Three omissions stay legal, and a rule that rejected every omission would break all three:
 
-- **A language-invariant key.** `INVARIANT` names 4: `btn_start_href`, `btn_offline_href`,
-  `np_brand` and `np_links`. Each is a path, a URL or a brand name, so
+- **A language-invariant key.** `INVARIANT` names 3: `btn_start_href`, `btn_offline_href`
+  and `np_brand`. Each is a path, a URL or a brand name, so
   a translation of it would be the same string. No block declares one, and rule 10 never asks.
 - **A pinned omission.** `OMISSIONS` names 1: `stat_used_num` in French. French writes the user
   count as English does, "1 million+", and rule 6 rejects a value byte-identical to English, so
@@ -705,7 +705,7 @@ computed counts, the hero title and 4 of the 6 nonprofit-band fields. Every one 
 rendered slot, `slots read:` counted none of them, and the printed count was honest about its
 own narrower coverage.
 
-**The total is an assertion, not a line of output.** Rule 9 computes it as pages x (20 scalar
+**The total is an assertion, not a line of output.** Rule 9 computes it as pages x (19 scalar
 slots + 4 fields x 4 cards) and fails on any deviation, in either direction. The 4 is pinned in
 the check, never read from `landing.yml`, so the data cannot move the expectation. A printed
 number nobody compares is decoration, and a slot that goes unread lowers the total in silence.

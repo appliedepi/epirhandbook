@@ -8,6 +8,13 @@ of it, and that is expected of a changelog. Read it as a record, never as curren
 
 ---
 
+## 2026-11-08: landing page option 03, for approval
+
+- The hero is flat navy and left aligned, with the stats in their own column, in place of the blue-to-green fade.
+- The nonprofit band has a tinted statement block at one text size, with no logo, and service rows on shared columns.
+- The appliedepi.org and contact line moved to the page footer, under the logo, and Cookie Preferences moved under the citation. `np_links` left `landing.yml` for that reason.
+- The search placeholder returns after the window crosses 992px.
+
 ## 2026-11-08: the help box arrows stay with their link text
 
 - In the "Need help with R?" box, a narrow column could leave a link's arrow alone on the last line. A no-break space now joins the arrow to the last word. `ael-extras.html` builds the box once, so this covers all eight languages.
