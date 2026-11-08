@@ -8,6 +8,10 @@ of it, and that is expected of a changelog. Read it as a record, never as curren
 
 ---
 
+## 2026-11-08: the help box arrows stay with their link text
+
+- In the "Need help with R?" box, a narrow column could leave a link's arrow alone on the last line. A no-break space now joins the arrow to the last word. `ael-extras.html` builds the box once, so this covers all eight languages.
+
 ## 2026-10-30: the sync check's timeout is 40 minutes
 
 - The 20-minute timeout on `check-sync` cancelled the check on a pull request that changed most chapter files, because check 6 renders every translated chapter the diff changes. It is now 40 minutes. The job installs nothing, so the install hang it was added for cannot recur.
