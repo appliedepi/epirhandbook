@@ -11,6 +11,7 @@ of it, and that is expected of a changelog. Read it as a record, never as curren
 ## 2026-11-08: the help box arrows stay with their link text
 
 - In the "Need help with R?" box, a narrow column could leave a link's arrow alone on the last line. A no-break space now joins the arrow to the last word. `ael-extras.html` builds the box once, so this covers all eight languages.
+- The four service card links on the landing page had the same fault, most often in the longer translations. Their 32 strings in `landing.yml` now join the arrow with `&nbsp;`.
 
 ## 2026-10-30: the sync check's timeout is 40 minutes
 
