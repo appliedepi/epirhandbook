@@ -8,6 +8,10 @@ of it, and that is expected of a changelog. Read it as a record, never as curren
 
 ---
 
+## 2026-11-08: the phone menu starts under the top bar
+
+- Below 992px the open book menu started 60px down and cut the app bar in half, because that offset assumes the app bar is at the top of the page. The sticky offset and height cap now apply only from 992px up, so Quarto's own values position the menu. Its end now also stays on the screen.
+
 ## 2026-11-08: the help box arrows stay with their link text
 
 - In the "Need help with R?" box, a narrow column could leave a link's arrow alone on the last line. A no-break space now joins the arrow to the last word. `ael-extras.html` builds the box once, so this covers all eight languages.
