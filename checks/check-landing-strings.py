@@ -159,7 +159,7 @@ COGNATES = {
 # This tuple is the whole of what rule 10 does not ask for, so read it as the exemption it
 # is. Add a key here and seven landing pages may ship that string in English, with nothing
 # left to report it.
-INVARIANT = ('btn_start_href', 'btn_offline_href', 'np_brand', 'np_links')
+INVARIANT = ('btn_start_href', 'btn_offline_href', 'np_brand')
 
 # The omission allowlist for rule 10. Each entry pins the key, the ONE language, and why
 # that language leaves the key to the English fallback. An entry weakens the gate for one
@@ -185,7 +185,7 @@ CARD = ('h', 'p', 'href', 'link')
 CARDS = 4
 
 # Every scalar slot rule 9 reads out of a rendered page, one value each, in the order
-# utils/landing-hero.R writes them. 17 of them are landing.yml keys and 3 are not. The
+# utils/landing-hero.R writes them. 16 of them are landing.yml keys and 3 are not. The
 # expected slot total is the count of this tuple plus the count of CARD times CARDS. So a
 # slot added to the markup must be added here, or the total stops matching.
 #
@@ -198,7 +198,7 @@ SCALAR_SLOTS = ('eyebrow', 'hero_title', 'subtitle', 'search_placeholder', 'sear
                 'btn_start_href', 'btn_start', 'btn_offline_href', 'btn_offline',
                 'stat_used_num', 'stat_used_label', 'stat_chapters_num',
                 'stat_chapters_label', 'stat_languages_num', 'stat_languages_label',
-                'np_brand', 'np_lead', 'np_reach', 'np_notify', 'np_links')
+                'np_brand', 'np_lead', 'np_reach', 'np_notify')
 
 # The three slots landing.yml does not key. Each already has one home, and a second copy of
 # it is the thing that drifts. So rule 9 reads each one from its own home:
@@ -596,8 +596,8 @@ if want_slots:
 
     # One pattern per rendered slot, keyed by the slot names its groups fill, in order. A
     # pattern anchors on the element that holds the value AND on its container where the page
-    # carries the element more than once. The band logo is one of five images on the page, so
-    # its pattern starts at the lockup that holds it.
+    # carries the element more than once. The brand name is one of several links on the page, so
+    # its pattern starts at the paragraph that holds it.
     ONE = {
         ('eyebrow',): r'<div class="ael-eyebrow">(.*?)</div>',
         ('hero_title',): r'<h1 class="ael-htitle">(.*?)</h1>',
@@ -606,11 +606,10 @@ if want_slots:
             r'<input id="ael-hsearch-input".*?placeholder="(.*?)" aria-label="(.*?)">',
         ('btn_start_href', 'btn_start'): r'<a class="btn light" href="([^"]*)">(.*?)</a>',
         ('btn_offline_href', 'btn_offline'): r'<a class="btn out" href="([^"]*)">(.*?)</a>',
-        ('np_brand',): r'<div class="nplockup">\s*<img src="[^"]*" alt="([^"]*)">',
+        ('np_brand',): r'<p class="nplead"><a href="https://appliedepi.org/">(.*?)</a>',
         ('np_lead',): r'<p class="nplead">(.*?)</p>',
         ('np_reach',): r'<p class="npreach">(.*?)</p>',
         ('np_notify',): r'<p class="npnotify">(.*?)</p>',
-        ('np_links',): r'<div class="nplinks">(.*?)</div>',
     }
     CARD_RE = (r'<div class="svc"><div class="svch">(.*?)</div><p class="svcp">(.*?)</p>'
                r'<a class="svclink" href="([^"]*)">(.*?)</a></div>')
@@ -645,6 +644,9 @@ if want_slots:
             else:
                 for k, value in zip(keys, hits[0]):
                     got[k] = value
+        # utils/landing-hero.R wraps each side of the eyebrow in a span, for line breaking.
+        if 'eyebrow' in got:
+            got['eyebrow'] = re.sub(r'</?span>', '', got['eyebrow'])
         nums = re.findall(r'<div class="statnum">(.*?)</div>', text, re.S)
         labels = re.findall(r'<div class="statlbl">(.*?)</div>', text, re.S)
         if len(nums) != 3 or len(labels) != 3:
