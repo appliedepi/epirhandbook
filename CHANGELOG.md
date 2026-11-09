@@ -8,6 +8,12 @@ of it, and that is expected of a changelog. Read it as a record, never as curren
 
 ---
 
+## 2026-11-09: translation table fixes in the basics chapter
+
+- Spanish section 3.12: a pipe table inside simple-table rules rendered with its cells cut apart. The two rule lines are gone.
+- Spanish: four stray `**` in table lines are gone, and "chunks" no longer reads "párrafos" in the working directory section.
+- Spanish and Japanese: the table of useful functions showed translated R argument names, such as `seq(de, a, por)`. It now shows the real names.
+
 ## 2026-11-08: the phone menu starts under the top bar
 
 - Below 992px the open book menu started 60px down and cut the app bar in half, because that offset assumes the app bar is at the top of the page. The sticky offset and height cap now apply only from 992px up, so Quarto's own values position the menu. Its end now also stays on the screen.
