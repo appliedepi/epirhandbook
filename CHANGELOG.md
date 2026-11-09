@@ -13,6 +13,7 @@ of it, and that is expected of a changelog. Read it as a record, never as curren
 - Spanish section 3.12: a pipe table inside simple-table rules rendered with its cells cut apart. The two rule lines are gone.
 - Spanish: four stray `**` in table lines are gone, and "chunks" no longer reads "párrafos" in the working directory section.
 - Spanish and Japanese: the table of useful functions showed translated R argument names, such as `seq(de, a, por)`. It now shows the real names.
+- Portuguese import chapter: a stray `_` in a separator line stopped a 34-row table from rendering. The separator is now valid.
 
 ## 2026-11-08: the phone menu starts under the top bar
 
