@@ -456,37 +456,23 @@ Remedy: add the image, correct the name, or delete the line.
 
 `checks/check-clean-failure.py`. Every check must report a missing input, not crash on it.
 
-A check that dies with a `FileNotFoundError` traceback still blocks, so the repository is not
-unsafe. It is unusable: the reader gets a stack trace instead of the one sentence naming the
-missing file. Two boxes of issue 455 were this, and one crashed four checks at once.
+A check that dies with a `FileNotFoundError` traceback still blocks, so the repository is not unsafe. It is unusable: the reader gets a stack trace instead of the one sentence naming the missing file. Two boxes of issue 455 were this, and one crashed four checks at once.
 
-It also covers the worse case. A check whose input is EMPTY rather than absent reports a clean
-tree and exits 0. Nothing is measured and the result says success.
+It also covers the worse case. A check whose input is EMPTY rather than absent reports a clean tree and exits 0. Nothing is measured and the result says success.
 
-For each check and each required input, it builds a fixture without that input. For
-`languages.yml` it also builds a fixture where that file does not parse. It then asserts that the
-run exits non-zero, prints no traceback, and names the full path of the missing input. A message
-that names only `checks` for a missing `checks/parse-exceptions.tsv` fails.
+For each check and each required input, it builds a fixture without that input. For `languages.yml` it also builds a fixture where that file does not parse. It then asserts that the run exits 2, prints no traceback, and names the full path of the missing input. The exit code MUST be 2, the exit status of a missing or unusable input. Exit 1 means a finding, and a missing input is not a finding.
 
-The two sync scripts run with `--dry-run`, so they write nothing. Checks 6 and 8 compare two
-commits, so they run with `HEAD HEAD` in a fixture that is a git repository. Checks 17 and 18
-read what a render wrote, so they run with the paths `html_outputs render.log` and `site`. Each of
-those three inputs is refused when it is absent and when it is empty. The other eight checks run
-with `--summary`. Checks 16 and 19 need `Rscript`, so check 12 needs it too.
+The message MUST hold the absolute path that check 12 builds for the input, with the fixture folder resolved. A relative name is not enough. Before issue 466 the test accepted the bare name, and `site` is part of the program name `check-site-links`, so every message of that check passed. The `--slots` case of check 15 and the empty translation folder of `sync-chunks.py` need the full path too.
 
-It does NOT pass `--fixture`. That flag makes a check derive its file set by globbing. Globbing
-bypasses `languages.yml`, and would exercise a path the repository never runs.
+The two sync scripts run with `--dry-run`, so they write nothing. Checks 6 and 8 compare two commits, so they run with `HEAD HEAD` in a fixture that is a git repository. Checks 17, 18 and 25 read what a render wrote. Check 17 runs with the paths `html_outputs render.log`, and checks 18 and 25 run with `site`. Each of those three inputs is refused when it is absent and when it is empty. The other 13 of the 20 scripts in `CASES` run with `--summary`, check 26 among them. Checks 16 and 19 need `Rscript`, so check 12 needs it too.
 
-Expected output: `cases: 73` and `checks that do not fail cleanly: 0`.
+It does NOT pass `--fixture`. That flag makes a check derive its file set by globbing. Globbing bypasses `languages.yml`, and would exercise a path the repository never runs.
 
-Remedy: guard the read. Say which file is missing and why the check needs it.
+Expected output: `cases: 77` and `checks that do not fail cleanly: 0`. There is one case per script, input and mode, plus the `--slots` case and the empty translation folder.
 
-**What it does not cover.** Checks 1, 4 and 9 are inline python inside `check-sync.sh`, not
-separate scripts, so check 12 never runs them. Check 9 was verified by hand on 2026-09-16 to
-degrade to a DRIFT line for a missing `languages.yml` and for a missing `docker-images.yml`.
-Checks 1 and 4 were verified by hand on 2026-09-24 to print one line for a missing
-`languages.yml` and for one that does not parse. Any new check written inline rather than as
-`checks/<name>.py` is outside this gate for the same reason.
+Remedy: guard the read. Say which file is missing, with its full path, and why the check needs it. Then exit 2. A script that reads its input through `checks/langs.py` catches `Unreadable` and calls its `stop()`.
+
+**What it does not cover.** Checks 1, 4 and 9 are inline python inside `check-sync.sh`, not separate scripts, so check 12 never runs them. Check 9 was verified by hand on 2026-09-16 to degrade to a DRIFT line for a missing `languages.yml` and for a missing `docker-images.yml`. Checks 1 and 4 were verified by hand on 2026-09-24 to print one line for a missing `languages.yml` and for one that does not parse. Any new check written inline rather than as `checks/<name>.py` is outside this gate for the same reason.
 
 ## 13. Language copies (removed)
 
@@ -1063,16 +1049,40 @@ Remedy: add the missing key to the block, translated.
 
 `python3 checks/check-translation-rules.py [--summary] [--lang <code>] [--self-test]` reads every declared chapter of each translated language. It also reads the block of that language in `landing.yml` and in the `var UI` object of `ael-extras.html`. `check-sync.sh` runs it as check 24 and reports DRIFT when it exits non-zero. It then prints every finding. `check-sync.sh` also runs `--self-test` in check 24 and reports DRIFT when a fixture fails.
 
-Each finding prints as `file:line: rule_id: text`. There are four rules:
+Each finding prints as `file:line: rule_id: text`. There are five rules:
 
 - `argument-names`: a call such as `seq(from, to, by)` outside code chunks MUST keep the argument names of the English chapter. The check compares a call only where each argument is one word, with an optional `= value` of one token. So a placeholder such as `criterio para filas` or a quoted value such as `"siyah"` passes. The docstring of the script gives the exact pairing.
 - `pipe-in-simple-table`: a pipe-table row between two simple-table rules (`----  ----`) fails. Pandoc then reads one table and cuts the cells apart. Spanish `basics` section 3.12 had this until 2026-11-09.
 - `unbalanced-bold`: a pipe-table line with an odd number of `**` outside inline code fails. The check skips grid tables, because bold text MAY span the lines of a grid cell.
-- the `banned:` regexes of `translation/all.yml`, for every translated language, and of `translation/<code>.yml`. They apply to prose and to code comments. They do not apply to code, inline code, URLs or HTML tags, and a tag MAY span several lines. A code comment starts at the first `#` outside every string literal. They also apply to the two blocks of interface strings. The `ael-extras.html` block has the `lang:` tag of `languages.yml` as its key, so `jp` reads `ja` and `vn` reads `vi`.
+- the `banned:` regexes of `translation/all.yml`, for every translated language, and of `translation/<code>.yml`. They apply to prose and to code comments. They do not apply to code, inline code, URLs or HTML tags, and a tag MAY span several lines. A code comment starts at the first `#` outside every string literal. They also apply to the two blocks of interface strings. The `ael-extras.html` block has the `lang:` tag of `languages.yml` as its key, so `jp` reads `ja` and `vn` reads `vi`. A regex matches case-insensitively unless its entry sets `case: sensitive`.
+- `all-untranslated-line`: a line of a translated chapter fails when it is identical to a line of the English chapter of the same stem. It fails only when it holds four or more words of letters. The comparison normalises whitespace. Prose lines, headings and table rows are in scope. Code, indented code, the YAML front matter and a line that is all HTML comment are not. The count of words leaves out links, URLs, HTML tags, code spans, math and quoted R output. Quoted R output is a line that starts with `Error in`, `Error:` or `Warning`. It also leaves out a table cell that names a file format, a file extension or a package. The docstring of the script gives the full definition.
+
+For `tr`, case-insensitive matching uses the Turkish mapping. The check folds the text and the regex, I to ı and İ to i, and then makes them lower case. An escape such as `\W` in the regex stays as written. So `sinir` does not match `sınır` or `SINIR`, and `sınır` matches `SINIR`. Python's `re.I` reads all four letters as one letter, so it cannot make that difference. The fixtures `t-tr-*` cover the mapping.
+
+Issue 466 added four banned rules. Each has a fail fixture and a pass fixture under `checks/fixtures/translation-rules/`.
+
+- `all-esquisse`, in `all.yml`: `equisse`, a typo of the package name `esquisse`, in every translated language.
+- `tr-arsa`, in `tr.yml`: `arsa`, which is a plot of land, for a ggplot2 plot, which is `grafik`. The regex is `\barsa`, so it also finds an inflected form such as `arsanın`.
+- `tr-fonkisyon`, in `tr.yml`: `fonkisyon`, a typo of `fonksiyon`.
+- `fr-methodes`, in `fr.yml`: `methodes`, which is `méthodes` without its accent.
+
+Check 24 does not read English, so `all-esquisse` does not protect the English chapter.
+
+`translation/all.yml` also holds `rules:`, the instructions that a translator reads. The check does not read them. Issue 466 added three:
+
+- `all-placeholder-code-span`: put a placeholder such as `<name>` in a code span. Check 26 finds a placeholder outside a code span.
+- `all-code-in-code-span`: put code in prose in a code span, such as `summary(dataset)`, and never in quotes. No regex checks it. The `review_log` of `all.yml` gives the reason.
+- `all-untranslated-line`: the instruction for the rule of the same id above.
 
 A rule id MUST NOT be in `all.yml` and in a language file, and such an id stops the run with exit 2. The check reads each inline code span as one NUL character. So a regex for a word between two code spans matches `\x00`, as the `all-untranslated-or` rule of `all.yml` does.
 
-`checks/translation-exceptions.tsv` excuses a banned-pattern hit. A row has the columns `lang`, `file`, `match_text`, `rule_id` and `reason`, and `match_text` is the full line, trimmed. A row that excuses no hit is itself a finding, `stale-exception`, so the file cannot grow without a reason.
+`checks/translation-exceptions.tsv` excuses a banned-pattern hit or an `all-untranslated-line` hit. A row has the columns `lang`, `file`, `match_text`, `rule_id` and `reason`, and `match_text` is the full line, trimmed. A row that excuses no hit is itself a finding, `stale-exception`, so the file cannot grow without a reason. The other three rules have no exception rows.
+
+An `all-untranslated-line` row is for a line that is correct as it is. On 2026-11-13 the file holds 15 such rows, in 6 languages:
+
+- 8 rows in `rmarkdown.qmd`: the rendered output of an `md` code example, which stays English because the example is code.
+- 4 rows in `phylogenetic_trees.qmd`: a reference-list citation, with its author list, title and journal as published.
+- 3 rows in `basics.qmd`: proper names, such as the book title R for Data Science.
 
 `--self-test` runs every fixture under `checks/fixtures/translation-rules/`. Each fixture is a small repository root with an `expect.txt` of `pass`, `fail <rule_id>` or `error <path>`, and it reads the rules of `translation/`. An `error` fixture MUST stop with an input error that names that path. The self-test also asserts that every `bad` and `more_bad` example of a banned entry gives a hit, and that no `good` or `more_good` example does. It prints one line for each rule of `all.yml` and of each language file.
 
@@ -1080,7 +1090,7 @@ The check reads every file as UTF-8 and parses `landing.yml`, `translation/all.y
 
 Expected output: one line per language, then `translation rules: languages <n>, findings 0`.
 
-Remedy: write the line in the register of its language. Keep the argument names and the table syntax of the English chapter. Where a hit is correct in that language, add a row to `checks/translation-exceptions.tsv` with the reason.
+Remedy: write the line in the register of its language. Keep the argument names and the table syntax of the English chapter. Translate a line that `all-untranslated-line` finds. Where a hit is correct in that language, add a row to `checks/translation-exceptions.tsv` with the reason.
 
 ## 25. Rendered tables
 
@@ -1110,3 +1120,31 @@ Expected output: one line per language, the main language first, then `rendered 
 To run the check locally, assemble a site with `checks/site-gate.sh` as in check 18, and give the check the folder that `site-gate.sh` prints. A render of a few chapters gives a `no-translated-page` finding for each chapter that it left out.
 
 Remedy: correct the table in the source chapter of that language, so that pandoc reads it as the English table. Where the English table is wrong, correct the English chapter first.
+
+## 26. Raw HTML
+
+`python3 checks/check-raw-html.py [--summary] [<tree>]` reads every declared chapter of every language, English included. It fails on a raw-HTML placeholder such as `<name>` in prose. A browser reads `<name>` as an unknown HTML element and shows nothing, so the reader loses the word. Check 24 skips English, so this check is separate from it. `check-sync.sh` runs it as check 26 and reports DRIFT when it exits non-zero. It then prints every finding. `check-sync.sh` also runs `--self-test` in check 26 and reports DRIFT when a fixture fails.
+
+A finding is `<`, a word and `>`. The word starts with a letter or `_`, and it holds letters, digits, `_`, `.` and `-`. The letters MAY be non-ASCII, so `<имя>` is a finding. A `<` with a backslash before it is escaped and is not a finding.
+
+The check skips these contexts, because they are not prose:
+
+- the YAML front matter
+- fenced code, with ```` ``` ```` or `~~~` and up to 3 spaces of indent, the chunk options included
+- indented code: a line with 4 spaces or a tab of indent after a blank line, outside a list. In a list, such a line continues the list item and is prose.
+- inline code spans, also across the lines of one block of non-blank lines
+- HTML comments, also across lines
+- a real HTML element such as `<br>` or `<div>`, compared case-insensitively. The docstring of the script lists the elements.
+
+The languages are the `code:` entries of `languages.yml`, and the chapters are the `.qmd` entries of `content/<code>/_quarto.yaml`. The check uses the Python standard library only, so it reads both files with line regular expressions. These need the block style that both files use: one `- code:` line per language, and one `.qmd` name per chapter line.
+
+`--self-test` runs every fixture under `checks/fixtures/raw-html/`. Each fixture is a small tree with its own `languages.yml`, `content/` and `expect.txt`. The first line of `expect.txt` is `pass` or `fail`, and a fail fixture lists each expected finding. A fail fixture MUST exit 1 with exactly those findings, and a pass fixture MUST exit 0 with no finding. Nine fixtures MUST exist:
+
+- a placeholder in prose, in a table cell, in a heading, and with a non-ASCII name, each of which MUST fail
+- fenced code, indented code, a code span, an HTML comment and a real HTML tag, each of which MUST pass
+
+The check exits 0 on no finding and 1 on a finding. It exits 2 on a missing or unusable input, with one message that names its full path.
+
+Expected output: one line per language, `scanned <code>: files <n>, lines with a placeholder 0`. Then one totals line, `raw html: languages <n>, files <f>, total 0 lines, 0 placeholders`.
+
+Remedy: put the placeholder in a code span, `` `<name>` ``. Where the word is not code, escape it as `\<name>`.

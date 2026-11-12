@@ -22,7 +22,8 @@ signature without being a defect:
   rendered code        <code>, <pre>       inline spans that survived as code
 
 Usage: python3 checks/check-unparsed-links.py [--summary] [--fixture <dir>] [--pandoc <cmd>]
-Exit 0 when every chapter is clean, 1 when any chapter holds an unparsed link.
+Exit 0 when every chapter is clean, 1 when any chapter holds an unparsed link, 2 when no
+chapter is found.
 """
 import pathlib
 import re
@@ -79,8 +80,9 @@ def strip_fences(text):
 
 chapters = sorted(root.glob('content/*/*.qmd'))
 if not chapters:
-    sys.exit(f"check-unparsed-links.py: no chapter found under {root}/content/<lang>/. "
-             "An empty file set would otherwise report a clean tree.")
+    print(f"check-unparsed-links.py: no chapter found under {root.resolve()}/content/<lang>/. "
+          "An empty file set would otherwise report a clean tree.", file=sys.stderr)
+    sys.exit(2)
 
 findings = []
 for chapter in chapters:

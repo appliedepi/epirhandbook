@@ -28,16 +28,16 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 def blocks(path):
     """{tag: [keys]} for each language block of `var UI = { ... };` in one file."""
     if not path.is_file():
-        raise Unreadable('no %s. It holds the interface strings this check compares.' % path.name)
+        raise Unreadable('no %s. It holds the interface strings this check compares.' % path)
     text = path.read_text(encoding='utf-8')
     m = re.search(r'var UI = \{(.*?)\n  \};', text, re.S)
     if not m:
-        raise Unreadable('%s has no `var UI = { ... };` object.' % path.name)
+        raise Unreadable('%s has no `var UI = { ... };` object.' % path)
     found = {}
     for tag, body in re.findall(r'^    ([a-z]{2,3}): \{(.*?)\}', m.group(1), re.S | re.M):
         found[tag] = re.findall(r"(\w+):\s*'", body)
     if not found:
-        raise Unreadable('%s: the UI object holds no language block.' % path.name)
+        raise Unreadable('%s: the UI object holds no language block.' % path)
     return found
 
 
@@ -46,9 +46,10 @@ def main():
     doc = parse(ROOT / 'languages.yml')
     tags = [e.get('lang') for e in doc.get('languages', [])] if isinstance(doc, dict) else []
     if not tags:
-        raise Unreadable('languages.yml declares no language.')
+        raise Unreadable('%s declares no language.' % (ROOT / 'languages.yml'))
     if 'en' not in found:
-        raise Unreadable('ael-extras.html has no en block, the reference for the others.')
+        raise Unreadable('%s has no en block, the reference for the others.'
+                         % (ROOT / 'ael-extras.html'))
     ref = set(found['en'])
     bad = []
     for tag, keys in found.items():
@@ -72,4 +73,7 @@ def main():
 if __name__ == '__main__':
     if sys.argv[1:] not in ([], ['--summary']):
         sys.exit('usage: checks/check-ui-strings.py [--summary]')
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except Unreadable as e:
+        e.stop()

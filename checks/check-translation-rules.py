@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Check 24. Every translated chapter keeps the R syntax and the register of its language.
+r"""Check 24. Every translated chapter keeps the R syntax and the register of its language.
 
-The check reads every declared chapter of every language other than the main one, and four
+The check reads every declared chapter of every language other than the main one, and five
 rule groups apply to it. A finding prints as `file:line: rule_id: text`.
 
 (a) argument-names. A call `name(a, b)` written outside code chunks, in prose or in inline
@@ -34,6 +34,11 @@ rule groups apply to it. A finding prints as `file:line: rule_id: text`.
 (d) banned patterns. Each regex under `banned:` in `translation/all.yml` and in
     `translation/<code>.yml` applies to one line at a time, case-insensitively unless the
     entry sets `case: sensitive`. The rules of `all.yml` apply to every translated language.
+    For `tr`, case-insensitive means the Turkish mapping, because Python's re.I reads ı, i,
+    I and İ as one letter. The text and the regex are both folded: I to ı, İ to i, then
+    str.lower(). In the regex, a backslash and the character after it stay as written, so
+    `\W` stays `\W`. The regex is then compiled without re.I. So `sinir` does not match
+    `sınır` or `SINIR`, and `sınır` matches `SINIR`.
     A rule id MUST NOT be in `all.yml` and in a language file. The scope:
       - the prose and the code comments of each chapter. Excluded are the YAML front
         matter, the code of fenced blocks and the chunk options (`#|`), inline code spans
@@ -47,9 +52,47 @@ rule groups apply to it. A finding prints as `file:line: rule_id: text`.
       - the language's block of `var UI` in `ael-extras.html`, keyed by the `lang:` tag of
         languages.yml (jp reads `ja`, vn reads `vi`). Each string value, single- or
         double-quoted, is read alone.
-    A hit is excused only by a row of `checks/translation-exceptions.tsv` with the same
-    lang, file, full line (trimmed) and rule id. A row that excuses no hit is itself a
-    finding, `stale-exception`. Rows excuse rule (d) only.
+(e) all-untranslated-line. A line of a translated chapter fails when all three hold. This
+    is the definition of plan amendments S4 and R6, ported from the phase 7 detector.
+      1. Scope. The line is outside code, so it is not in one of these:
+           - the YAML front matter;
+           - a fenced block (``` or ~~~, up to 3 spaces of indent, fence lines included);
+           - an indented code block. It starts with 4 spaces or a tab of indent after a
+             blank line, outside a list. It continues over the indented or blank lines after it;
+           - an HTML comment, when the comment holds all of the line.
+         Prose lines, headings and table rows are in scope. A blank line never fails.
+      2. Identity. The whitespace-normalised text of the line equals that of a line of the
+         English chapter of the same stem. Normalised means that each run of whitespace
+         reads as one space and the ends are trimmed. The English lines include code lines.
+      3. Threshold. It holds four or more words of letters. A word of letters is a maximal
+         run of Unicode letters (`[^\W\d_]+`). The words are counted after these steps, in
+         order:
+           a. Masked across the whole chapter: HTML comments, inline code spans and display
+              math `$$...$$`. A code span MAY cover the lines of one block of non-blank
+              lines. Display math MAY cover several lines.
+           b. Masked on the line:
+                - a link with its text and target: `[text](target)`, `![alt](target)` and
+                  `[text][ref]`;
+                - an autolink `<http...>` and a bare URL;
+                - an HTML tag `<...>` and an attribute block `{...}`;
+                - inline math `$...$`. The opening `$` has a non-space on its right. The
+                  closing `$` has a non-space on its left and no digit on its right.
+           c. Quoted R output counts 0 words. That is a line that starts with `Error in`,
+              `Error:` or `Warning` (case-sensitive). Leading spaces and the marks
+              `` ` `` `*` `_` `"` `'` `“` `‘` `>` are removed before this test.
+           d. Table cells. A line that holds a `|` is split at each `|`. A cell is dropped
+              when its text is one of these, after `*`, `_` and quotes are removed and the
+              ends trimmed:
+                - a file extension `.ext`, or a comma-separated list of them. ext is letters
+                  and digits and MAY have a second part, `.csv.gz`;
+                - a name in UT_FORMATS (case-insensitive);
+                - a name in UT_PACKAGES (case-sensitive).
+              The other cells are counted.
+    The finding text is the full line, trimmed.
+
+A row of `checks/translation-exceptions.tsv` is the only excuse for a hit of rule (d) or (e).
+The row MUST have the same lang, file, full line (trimmed) and rule id. A row that excuses no hit
+is itself a finding, `stale-exception`. Rules (a), (b) and (c) have no exception rows.
 
 Choices the brief left open:
   - The language files are read before `all.yml`, so an error in a language file is the
@@ -58,14 +101,24 @@ Choices the brief left open:
     because it is a fault of the rules files, not of a chapter.
   - `landing.yml` is keyed by the language code (`jp:`), because that is how the file is
     written. Only `ael-extras.html` is keyed by the `lang:` tag.
-  - Rows of the exceptions file excuse rule (d) only. Rules (a), (b) and (c) have no
-    exception, because a correct translation never needs one.
+  - Rows of the exceptions file excuse rules (d) and (e) only. Rules (a), (b) and (c) have
+    no exception, because a correct translation never needs one. A line of rule (e) can be
+    correct as it is: a reference-list citation, an author list or a proper name.
+  - Rule (e) reads the languages of languages.yml and the stems of the main language's
+    `_quarto.yaml` with langs.py, as rules (a) to (d) do. The phase 7 detector read the
+    folders under content/ and read the stems with a line regex. On this repository both
+    give the same languages and the same stems.
+  - The Turkish mapping applies to `tr` only, because no other declared language has a
+    dotless i. A regex of `case: sensitive` is not folded.
+  - For an inline flag group in a `tr` regex, such as `(?i)`, re applies its own case rules.
+    No shipped regex has one.
   - The fixtures read the rules from the repository's `translation/` folder, unless a
     fixture holds its own, so the self-test proves the rules that ship.
 
 --self-test asserts two things. Every `bad` and `more_bad` example of a banned entry in
 `translation/all.yml` and `translation/<code>.yml` hits its regex, and every `good` and
-`more_good` example does not. It prints one line for each rule.
+`more_good` example does not. An example of `all.yml` is tested in every translated
+language, so also under the Turkish mapping. It prints one line for each rule.
 Each directory under checks/fixtures/translation-rules/ is a small repository root with an
 `expect.txt` of `pass`, `fail <rule_id>` or `error <path>`. A fail fixture MUST give at
 least one finding, and every finding MUST carry that rule id. An error fixture MUST stop
@@ -294,10 +347,43 @@ def read_tsv(path):
 ALL_WHY = 'It holds the banned patterns of every translated language.'
 
 
-def read_rules(path, why='It holds the banned patterns of that language.'):
-    """[(rule id, compiled regex, examples)] of the banned entries in one rules file.
+def fold_tr(text):
+    """text in lower case by the Turkish mapping: I to ı, İ to i, then str.lower()."""
+    return text.replace('I', 'ı').replace('İ', 'i').lower()
 
-    The file is translation/<code>.yml or translation/all.yml. Both have the same schema.
+
+def fold_tr_regex(regex):
+    """regex with fold_tr applied to every character except a backslash and the one after it."""
+    out, i = [], 0
+    while i < len(regex):
+        if regex[i] == '\\':
+            out.append(regex[i:i + 2])
+            i += 2
+        else:
+            out.append(fold_tr(regex[i]))
+            i += 1
+    return ''.join(out)
+
+
+class Banned:
+    """One banned regex, compiled for one language. search() folds the text as compiled."""
+
+    def __init__(self, regex, sensitive, lang):
+        self.fold = lang == 'tr' and not sensitive
+        if self.fold:
+            self.rx = re.compile(fold_tr_regex(regex))
+        else:
+            self.rx = re.compile(regex, 0 if sensitive else re.I)
+
+    def search(self, text):
+        return self.rx.search(fold_tr(text) if self.fold else text)
+
+
+def read_rules(path, why='It holds the banned patterns of that language.', lang=None):
+    """[(rule id, Banned, examples)] of the banned entries in one rules file.
+
+    The file is translation/<code>.yml or translation/all.yml. Both have the same schema. Each
+    regex is compiled for lang, so `tr` gets the Turkish mapping.
     """
     need(path, why)
     doc = load_yaml(path)
@@ -308,9 +394,8 @@ def read_rules(path, why='It holds the banned patterns of that language.'):
     for n, e in enumerate(banned, 1):
         if not isinstance(e, dict) or not e.get('id') or not e.get('regex'):
             raise Unreadable('%s: banned item %d has no id or no regex.' % (path, n))
-        flags = 0 if e.get('case') == 'sensitive' else re.I
         try:
-            rx = re.compile(e['regex'], flags)
+            rx = Banned(e['regex'], e.get('case') == 'sensitive', lang)
         except re.error as err:
             raise Unreadable('%s: the regex of %s does not compile: %s'
                              % (path, e['id'], err)) from None
@@ -556,6 +641,155 @@ def rule_d(scope, rules):
     return out
 
 
+# --- rule (e) ---------------------------------------------------------------------------
+# The definition of /tmp/p7-466/untranslated.py (phase 7), with every R6 exclusion on.
+
+UNTRANSLATED = 'all-untranslated-line'
+UT_FENCE = re.compile(r'^ {0,3}(`{3,}|~{3,})(.*)$')
+UT_LIST_ITEM = re.compile(r'^\s*([-*+]|\d+[.)])\s+')
+UT_COMMENT = re.compile(r'<!--.*?-->', re.S)
+UT_DISPLAY_MATH = re.compile(r'\$\$.*?\$\$', re.S)
+UT_LINKS = [
+    re.compile(r'!?\[[^\]\n]*\]\([^)\n]*\)'),
+    re.compile(r'\[[^\]\n]*\]\[[^\]\n]*\]'),
+    re.compile(r'<https?://[^>\s]*>'),
+    re.compile(r'https?://\S+'),
+]
+UT_OTHER = [
+    re.compile(r'<[A-Za-z/!][^>]*>'),
+    re.compile(r'\{[^{}]*\}'),
+]
+UT_INLINE_MATH = re.compile(r'\$(?=\S)[^$\n]*?(?<=\S)\$(?!\d)')
+UT_R_OUTPUT = re.compile(r'^[\s`*_"\'“‘>]*(Error in\b|Error:|Warning)')
+UT_EXTENSION = re.compile(
+    r'^\.[A-Za-z0-9]+(\.[A-Za-z0-9]+)?(\s*,\s*\.[A-Za-z0-9]+(\.[A-Za-z0-9]+)?)*$')
+UT_FORMATS = {f.lower() for f in (
+    'SAS', 'XPORT', 'SPSS', 'SPSS Portable', 'Stata', 'Excel', 'Epiinfo', 'Minitab', 'Systat',
+    'XBASE', 'EViews', 'JSON', 'Matlab', 'YAML', 'CSV', 'CSVY', 'TSV', 'PSV', 'RDS', 'RData',
+    'DBF', 'ODS', 'Feather', 'Parquet', 'Weka', 'ARFF', 'HTML', 'XML', 'fst')}
+# The R packages that the rio import table names.
+UT_PACKAGES = {'base', 'utils', 'haven', 'foreign', 'readxl', 'openxlsx', 'data.table', 'csvy',
+               'hexView', 'feather', 'fst', 'jsonlite', 'rmatio', 'readODS', 'xml2', 'yaml',
+               'clipr', 'rio', 'arrow'}
+UT_WORD = re.compile(r'[^\W\d_]+')
+
+
+def ut_code_lines(lines):
+    """Indexes of the front matter, fenced code, indented code and HTML comments."""
+    skip = set()
+    start = 0
+    if lines and lines[0].strip() == '---':
+        for k in range(1, len(lines)):
+            if lines[k].strip() in ('---', '...'):
+                skip.update(range(k + 1))
+                start = k + 1
+                break
+    fence = None
+    in_list = in_indented = False
+    prev_blank = True
+    for k in range(start, len(lines)):
+        line = lines[k]
+        m = UT_FENCE.match(line)
+        if fence is not None:
+            skip.add(k)
+            if m and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence) \
+                    and not m.group(2).strip():
+                fence = None
+                prev_blank = False
+            continue
+        if m:
+            fence = m.group(1)
+            skip.add(k)
+            in_indented = False
+            continue
+        blank = not line.strip()
+        indented = line.startswith('    ') or line.startswith('\t')
+        if in_indented:
+            if blank or indented:
+                skip.add(k)
+                prev_blank = blank
+                continue
+            in_indented = False
+        if blank:
+            prev_blank = True
+            continue
+        if indented and prev_blank and not in_list:
+            in_indented = True
+            skip.add(k)
+            prev_blank = False
+            continue
+        if UT_LIST_ITEM.match(line):
+            in_list = True
+        elif not indented:
+            in_list = False
+        prev_blank = False
+    # A line wholly inside an HTML comment is not prose.
+    text = '\n'.join('' if k in skip else l for k, l in enumerate(lines))
+    text = UT_COMMENT.sub(lambda m: re.sub(r'[^\n]', NUL, m.group(0)), text)
+    for k, line in enumerate(text.split('\n')):
+        if line and not line.replace(NUL, '').strip():
+            skip.add(k)
+    return skip
+
+
+def ut_blank(m):
+    return re.sub(r'[^\n]', ' ', m.group(0))
+
+
+def ut_masked_lines(lines, skip):
+    """Each line with the chapter-wide masks of step 3a applied."""
+    text = '\n'.join('' if k in skip else l for k, l in enumerate(lines))
+    text = UT_COMMENT.sub(ut_blank, text)
+    blocks = re.split(r'(\n[ \t]*\n)', text)
+    text = ''.join(CODE_SPAN.sub(ut_blank, b) for b in blocks)
+    return UT_DISPLAY_MATH.sub(ut_blank, text).split('\n')
+
+
+def ut_mask_line(line):
+    """Step 3b."""
+    for rx in UT_LINKS + UT_OTHER:
+        line = rx.sub(' ', line)
+    return UT_INLINE_MATH.sub(' ', line)
+
+
+def ut_dropped(cell):
+    t = re.sub(r'[*_"\'“”‘’]', '', cell).strip()
+    return bool(t) and (UT_EXTENSION.match(t) is not None or t.lower() in UT_FORMATS
+                        or t in UT_PACKAGES)
+
+
+def ut_words(raw, masked):
+    """The words of letters of one line, by steps 3b to 3d."""
+    if UT_R_OUTPUT.match(raw):
+        return 0
+    line = ut_mask_line(masked)
+    if '|' in line:
+        line = ' '.join(c for c in line.split('|') if not ut_dropped(c))
+    return len(UT_WORD.findall(line))
+
+
+def ut_norm(line):
+    return ' '.join(line.split())
+
+
+def english_lines(en_lines):
+    """The whitespace-normalised non-blank lines of one English chapter, code included."""
+    return {ut_norm(l) for l in en_lines if l.strip()}
+
+
+def rule_e(lines, english):
+    """[(line index, rule id, trimmed line)] of the lines that pass steps 1 to 3."""
+    skip = ut_code_lines(lines)
+    masked = ut_masked_lines(lines, skip)
+    out = []
+    for k, line in enumerate(lines):
+        if k in skip or not line.strip() or ut_norm(line) not in english:
+            continue
+        if ut_words(line, masked[k]) >= 4:
+            out.append((k, UNTRANSLATED, line.strip()))
+    return out
+
+
 # --- the run ----------------------------------------------------------------------------
 
 def add_common(rules, rules_dir):
@@ -565,14 +799,13 @@ def add_common(rules, rules_dir):
     Raises Unreadable when a rule id is in all.yml and in a language file.
     """
     path = rules_dir / 'all.yml'
-    common = read_rules(path, ALL_WHY)
-    ids = {rid for rid, _, _ in common}
+    common = {l: read_rules(path, ALL_WHY, l) for l in rules}
     for l, own in rules.items():
-        both = sorted(ids & {rid for rid, _, _ in own})
+        both = sorted({rid for rid, _, _ in common[l]} & {rid for rid, _, _ in own})
         if both:
             raise Unreadable('%s and %s both define the rule id %s. A rule id MUST be in one '
                              'file only.' % (path, rules_dir / ('%s.yml' % l), ', '.join(both)))
-    return {l: common + own for l, own in rules.items()}
+    return {l: common[l] + own for l, own in rules.items()}
 
 
 def run(root, only=None, rules_dir=None):
@@ -608,12 +841,13 @@ def run(root, only=None, rules_dir=None):
     if absent:
         raise Unreadable(' '.join('no %s.' % f for f in absent)
                          + ' Every declared chapter is read.')
-    rules = {l: read_rules(rules_dir / ('%s.yml' % l)) for l in targets}
+    rules = {l: read_rules(rules_dir / ('%s.yml' % l), lang=l) for l in targets}
     rules = add_common(rules, rules_dir)
 
     lines_of = read_lines
 
     english = {s: lines_of(root / 'content' / main / ('%s.qmd' % s)) for s in stems}
+    english_set = {s: english_lines(english[s]) for s in stems}
     landing, ael = lines_of(root / 'landing.yml'), lines_of(root / 'ael-extras.html')
     raw, counts = [], {}
     for l in targets:
@@ -621,7 +855,8 @@ def run(root, only=None, rules_dir=None):
         for s in stems:
             rel = 'content/%s/%s.qmd' % (l, s)
             lines = lines_of(root / rel)
-            for k, rid, text in rule_a(lines, english[s]) + rule_b(lines) + rule_c(lines):
+            for k, rid, text in (rule_a(lines, english[s]) + rule_b(lines) + rule_c(lines)
+                                 + rule_e(lines, english_set[s])):
                 hits.append((l, rel, k + 1, rid, text))
             scope = sorted(chapter_scope(lines).items())
             for k, rid in rule_d(scope, rules[l]):
@@ -632,11 +867,12 @@ def run(root, only=None, rules_dir=None):
             for k, rid in sorted(set(rule_d(scope, rules[l]))):
                 hits.append((l, rel, k + 1, rid, src[k].strip()))
         raw.extend(hits)
-    banned_ids = {rid for l in targets for rid, _, _ in rules[l]}
+    # The rule ids that an exception row can excuse: rules (d) and (e).
+    excusable = {rid for l in targets for rid, _, _ in rules[l]} | {UNTRANSLATED}
     used, findings = set(), []
     for h in raw:
         l, rel, _, rid, text = h
-        row = next((e for e in exceptions if rid in banned_ids
+        row = next((e for e in exceptions if rid in excusable
                     and (e[1], e[2], e[3], e[4]) == (l, rel, text, rid)), None)
         if row:
             used.add(row[0])
@@ -660,21 +896,27 @@ def self_test():
     bad = []
     main, codes = read_languages(ROOT / 'languages.yml')
     examples = 0
-    files = [ROOT / 'translation' / 'all.yml'] + [
-        ROOT / 'translation' / ('%s.yml' % l) for l in codes if l != main]
-    for path in files:
+    targets = [l for l in codes if l != main]
+    files = [(ROOT / 'translation' / 'all.yml', targets)] + [
+        (ROOT / 'translation' / ('%s.yml' % l), [l]) for l in targets]
+    for path, langs in files:
         name = 'translation/%s' % path.name
-        for rid, rx, ex in (read_rules(path, ALL_WHY) if path.name == 'all.yml'
-                            else read_rules(path)):
+        # One compiled rule list per language: all.yml applies to every translated language.
+        compiled = [read_rules(path, ALL_WHY, l) if path.name == 'all.yml'
+                    else read_rules(path, lang=l) for l in langs]
+        for j, (rid, _, ex) in enumerate(compiled[0]):
             n, wrong = 0, len(bad)
             for key in ('bad', 'more_bad', 'good', 'more_good'):
                 for text in ex[key]:
                     n += 1
-                    hit = bool(rx.search(mask_rest(mask_code(text)).rstrip()))
-                    if hit != key.endswith('bad'):
-                        bad.append('%s %s: the %s example %r %s'
+                    masked = mask_rest(mask_code(text)).rstrip()
+                    off = [l for l, c in zip(langs, compiled)
+                           if bool(c[j][1].search(masked)) != key.endswith('bad')]
+                    if off:
+                        bad.append('%s %s: the %s example %r %s in %s'
                                    % (name, rid, key, text,
-                                      'gives no hit' if key.endswith('bad') else 'gives a hit'))
+                                      'gives no hit' if key.endswith('bad') else 'gives a hit',
+                                      ', '.join(off)))
             examples += n
             print('rule %s %s: examples %d, wrong %d' % (name, rid, n, len(bad) - wrong))
     print('rule examples %d, wrong %d' % (examples, len(bad)))

@@ -35,6 +35,9 @@
 # Each checkout then has its own folder, and the same checkout reuses it.
 # A file with an odd number of fence lines FAILS before render. Pandoc renders an unclosed
 # fence with exit 0, so the render alone cannot see that class. YAML damage does exit 1.
+# A file whose copy cannot be made is FAIL-placeholder, and the gate prints the cause on a line
+# that starts with FAIL-placeholder. The three causes are a changed line count, an inline R
+# expression that does not close, and a copy that cannot be written.
 # The gate needs quarto, git, and python3 with PyYAML, which reads languages.yml through
 # checks/langs.py. It runs no R: --no-execute skips the knitr engine.
 set -uo pipefail
@@ -100,7 +103,7 @@ tracked=$(git ls-files -- 'content/*/*.render-gate-tmp*' 'content/*/html_outputs
   'content/*/.quarto/*' 'content/*/.gitignore')
 if [ -n "$tracked" ]; then
   echo "render-gate: the repository tracks a path this gate deletes; refusing to delete it:" >&2
-  echo "$tracked" >&2
+  sed "s#^#$(pwd)/#" <<<"$tracked" >&2
   exit 2
 fi
 trap cleanup EXIT
@@ -152,13 +155,14 @@ for f in "${files[@]}"; do
   id="${stem#content/}"; id="${id//\//.}"  # es.gis, the per-file log name
   copy="$stem.render-gate-tmp.qmd"
   if git ls-files --error-unmatch "$copy" >/dev/null 2>&1; then
-    echo "render-gate: $copy is tracked; refusing to write over it" >&2; exit 2
+    echo "render-gate: $(pwd)/$copy is tracked; refusing to write over it" >&2; exit 2
   fi
   if [ -e "$copy" ]; then
-    echo "render-gate: $copy already exists; refusing to overwrite it" >&2; exit 2
+    echo "render-gate: $(pwd)/$copy already exists; refusing to overwrite it" >&2; exit 2
   fi
-  if ! python3 - "$f" "$copy" <<'PY'
-import io, re, sys
+  # The copy step writes its error to the per-file log, and the gate prints that cause below.
+  if ! python3 - "$f" "$copy" 2> "$out/$id.log" <<'PY'
+import io, os, re, sys
 
 src, dst = sys.argv[1], sys.argv[2]
 FENCE = re.compile(r'^( *)(`{3,}|~{3,})(.*)$')
@@ -205,10 +209,19 @@ left = [(n, l) for n, (is_prose, l) in enumerate(zip([p for p, _ in marked], out
 if left:
     sys.exit('%s: an inline R expression does not close inside its paragraph, line %d: %s'
              % (src, left[0][0], left[0][1].strip()[:120]))
-io.open(dst, 'w', encoding='utf-8', newline='').write('\n'.join(out))
+try:
+    with io.open(dst, 'w', encoding='utf-8', newline='') as fh:
+        fh.write('\n'.join(out))
+except OSError as e:
+    sys.exit('%s: the copy %s cannot be written: %s' % (src, os.path.abspath(dst), e))
 PY
   then
-    printf '%s\tFAIL-placeholder\t0\n' "$f" >> "$out/SUMMARY.tsv"; fail=$((fail+1)); continue
+    printf '%s\tFAIL-placeholder\t0\n' "$f" >> "$out/SUMMARY.tsv"; fail=$((fail+1))
+    # The cause is the last line of the log: one of the three sys.exit messages of the python
+    # step, or the last line of a traceback. check-sync.sh shows every check 6 line with FAIL.
+    cause=$(tail -1 "$out/$id.log")
+    echo "FAIL-placeholder $f: ${cause#"$f: "}"
+    continue
   fi
   t0=$(date +%s)
   if timeout 180 quarto render "$copy" --no-execute --to html > "$out/$id.log" 2>&1

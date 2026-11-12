@@ -12,7 +12,8 @@ nothing, so a second `main:` would replace the first in silence.
 
 A file this module cannot read raises `Unreadable`, which is a `SystemExit`. If no caller catches
 it, the script stops with exit status 1 and one line on stderr that names the file. A caller that
-needs its own words or its own exit status catches it and reads `why`.
+needs its own words or its own exit status catches it and reads `why`. A check catches it and
+calls its `stop()`, which prints that line and exits 2, the exit status of a missing input.
 """
 import os
 import re
@@ -42,6 +43,16 @@ class Unreadable(SystemExit):
     def __init__(self, why):
         self.why = why
         super().__init__('%s: %s' % (prog(), why))
+
+    def stop(self):
+        """Print the message on stderr and exit 2, the exit status of a missing input."""
+        stop(self.code)
+
+
+def stop(message):
+    """Print one message on stderr and exit 2, the exit status of a missing or unusable input."""
+    print(message, file=sys.stderr)
+    sys.exit(2)
 
 
 class NoDuplicates:
@@ -76,7 +87,7 @@ def parse(path):
         with open(path, encoding='utf-8') as f:
             text = f.read()
     except (OSError, UnicodeDecodeError) as e:
-        raise Unreadable('%s cannot be read: %s' % (path, e)) from None
+        raise Unreadable('%s cannot be read: %s' % (os.path.abspath(path), e)) from None
     try:
         return yaml.load(text, Loader=Loader)
     except yaml.YAMLError as e:
@@ -84,7 +95,7 @@ def parse(path):
         at = ', line %d' % (mark.line + 1) if mark else ''
         why = getattr(e, 'problem', None) or str(e)
         raise Unreadable('%s does not parse as YAML%s: %s'
-                         % (path, at, ' '.join(why.split()))) from None
+                         % (os.path.abspath(path), at, ' '.join(why.split()))) from None
 
 
 def read_languages(path):
@@ -99,30 +110,30 @@ def read_languages(path):
     """
     if not os.path.isfile(path):
         raise Unreadable('no %s. That file is the one declaration of which languages ship.'
-                         % path)
+                         % os.path.abspath(path))
     doc = parse(path)
     doc = doc if isinstance(doc, dict) else {}
     main = doc.get('main')
     if not isinstance(main, str) or not main:
         raise Unreadable('%s declares no main: language, and that language names the '
-                         'reference project file.' % path)
+                         'reference project file.' % os.path.abspath(path))
     entries = doc.get('languages')
     entries = entries if isinstance(entries, list) else []
     if not entries:
         raise Unreadable('%s declares no language. An empty list would check nothing and '
-                         'report a clean tree.' % path)
+                         'report a clean tree.' % os.path.abspath(path))
     codes = []
     for n, e in enumerate(entries, 1):
         code = e.get('code') if isinstance(e, dict) else None
         if not isinstance(code, str) or not re.fullmatch(r'[a-z]{2,3}', code):
             raise Unreadable('%s: languages item %d has code %r. A code is 2 or 3 lowercase '
-                             'letters.' % (path, n, code))
+                             'letters.' % (os.path.abspath(path), n, code))
         if code in codes:
-            raise Unreadable('%s declares the code %s twice.' % (path, code))
+            raise Unreadable('%s declares the code %s twice.' % (os.path.abspath(path), code))
         codes.append(code)
     if main not in codes:
         raise Unreadable('%s: main: %s is not one of the declared codes %s.'
-                         % (path, main, ' '.join(codes)))
+                         % (os.path.abspath(path), main, ' '.join(codes)))
     return main, codes
 
 
@@ -135,12 +146,12 @@ def read_site_url(path):
     """
     if not os.path.isfile(path):
         raise Unreadable('no %s. That file declares site_url:, the address the site is '
-                         'published at.' % path)
+                         'published at.' % os.path.abspath(path))
     doc = parse(path)
     url = doc.get('site_url') if isinstance(doc, dict) else None
     if not isinstance(url, str) or not re.fullmatch(r'https://[a-z0-9.-]+\.[a-z]{2,}/?', url):
         raise Unreadable('%s: site_url: is %r. It MUST be an https URL of a host alone, such '
-                         'as https://example.org.' % (path, url))
+                         'as https://example.org.' % (os.path.abspath(path), url))
     return url.rstrip('/')
 
 
@@ -153,10 +164,10 @@ def read_stems(path):
     """
     if not os.path.isfile(path):
         raise Unreadable('no %s. That project file holds the stem list, in book.chapters.'
-                         % path)
+                         % os.path.abspath(path))
     stems = project(parse(path))[0]
     if not stems:
-        raise Unreadable('%s declares no chapter in book.chapters.' % path)
+        raise Unreadable('%s declares no chapter in book.chapters.' % os.path.abspath(path))
     return stems
 
 

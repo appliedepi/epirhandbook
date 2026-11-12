@@ -14,9 +14,15 @@ For each check and each required input, this builds a fixture without that input
 three things about the run. For languages.yml it also builds a fixture where that file does not
 parse as YAML:
 
-  it exits non-zero            a missing input is not a pass
+  it exits 2                   a missing input is not a pass, and not a finding (exit 1)
   it prints no traceback       the reader gets a sentence, not a stack
-  it names the missing thing   the sentence is actionable
+  it names the full path       the sentence is actionable
+
+The third test needs the absolute path of the input as this script builds it, `str(target)`.
+A relative name is not enough. The word `site` is part of the program name `check-site-links`,
+so every message of that check held it. The fixture folder is resolved first, so the path is
+the one each check computes from its own resolved location. The two special cases below need
+the full path of their input too.
 
 One input cannot sit in that fixture. `check-landing-strings.py --slots` reads a rendered
 page, so it gets a second fixture: two declared languages, and no render in either.
@@ -26,7 +32,8 @@ translation folder drops out of its file set. A third fixture declares two langu
 empties the folder of the second.
 
 Usage: python3 checks/check-clean-failure.py [--summary]
-Exit 0 when every case is clean, 1 when any check crashes or passes on a missing input.
+Exit 0 when every case is clean, 1 when any check crashes, passes, exits other than 2 or
+names no full path on a missing input.
 """
 import os
 import pathlib
@@ -72,6 +79,8 @@ CASES = {
     'check-site-links.py': (['site'], ['site']),
     # Check 25 reads the assembled site as well. build() gives languages.yml its main language.
     'check-rendered-tables.py': (['site'], ['site']),
+    # Check 26 reads every language, English included, so build() is enough.
+    'check-raw-html.py': (['--summary'], ['languages.yml', 'content']),
 }
 
 # The inputs that MUST be refused when they are empty as well as when they are absent.
@@ -216,7 +225,7 @@ for script, (script_args, inputs) in sorted(CASES.items()):
                 continue
             cases += 1
             with tempfile.TemporaryDirectory() as raw:
-                tmp = pathlib.Path(raw) / 'fixture'
+                tmp = pathlib.Path(raw).resolve() / 'fixture'
                 tmp.mkdir()
                 BUILDERS.get(script, build)(tmp)
                 if 'HEAD' in script_args:
@@ -246,16 +255,19 @@ for script, (script_args, inputs) in sorted(CASES.items()):
                     failures.append(f"{label}: exited 0, so a missing input reads as a pass")
                 elif 'Traceback' in output:
                     failures.append(f"{label}: crashed with a traceback instead of a message")
-                elif missing not in output:
-                    failures.append(f"{label}: the message never names {missing}")
+                elif run.returncode != 2:
+                    failures.append(f"{label}: exited {run.returncode}, and a missing input MUST exit 2")
+                elif str(target) not in output:
+                    failures.append(f"{label}: the message never names the full path {target}")
 
 # The rendered page that `check-landing-strings.py --slots` reads. It is the one input
 # in this repository that a check can only see after a render, so build() cannot hold it.
 cases += 1
 with tempfile.TemporaryDirectory() as raw:
-    tmp = pathlib.Path(raw) / 'fixture'
+    tmp = pathlib.Path(raw).resolve() / 'fixture'
     tmp.mkdir()
     build_rendered(tmp)
+    target = tmp / 'content' / 'fr' / 'html_outputs'
     run = subprocess.run(
         [sys.executable, str(tmp / 'checks' / 'check-landing-strings.py'), '--summary', '--slots'],
         capture_output=True, text=True, cwd=tmp, timeout=120)
@@ -265,16 +277,19 @@ with tempfile.TemporaryDirectory() as raw:
         failures.append(f"{label}: exited 0, so a missing input reads as a pass")
     elif 'Traceback' in output:
         failures.append(f"{label}: crashed with a traceback instead of a message")
-    elif 'content/fr/html_outputs' not in output:
-        failures.append(f"{label}: the message never names content/fr/html_outputs")
+    elif run.returncode != 2:
+        failures.append(f"{label}: exited {run.returncode}, and a missing input MUST exit 2")
+    elif str(target) not in output:
+        failures.append(f"{label}: the message never names the full path {target}")
 
 # An empty translation folder. sync-chunks.py globs each folder, so the language would drop
 # out of the file set and the run would report no drift for a language it never read.
 cases += 1
 with tempfile.TemporaryDirectory() as raw:
-    tmp = pathlib.Path(raw) / 'fixture'
+    tmp = pathlib.Path(raw).resolve() / 'fixture'
     tmp.mkdir()
     build(tmp)
+    target = tmp / 'content' / 'fr'
     (tmp / 'languages.yml').write_text(
         'main: en\nlanguages:\n  - code: en\n    label: "English"\n    title: "T"\n'
         '  - code: fr\n    label: "Français"\n    title: "TF"\n', encoding='utf-8')
@@ -289,8 +304,10 @@ with tempfile.TemporaryDirectory() as raw:
         failures.append(f"{label}: exited 0, so a missing input reads as a pass")
     elif 'Traceback' in output:
         failures.append(f"{label}: crashed with a traceback instead of a message")
-    elif 'content/fr' not in output:
-        failures.append(f"{label}: the message never names content/fr")
+    elif run.returncode != 2:
+        failures.append(f"{label}: exited {run.returncode}, and a missing input MUST exit 2")
+    elif str(target) not in output:
+        failures.append(f"{label}: the message never names the full path {target}")
 
 print(f"cases: {cases}")
 print(f"checks that do not fail cleanly: {len(failures)}")

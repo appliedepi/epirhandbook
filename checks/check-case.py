@@ -50,12 +50,12 @@ def check_repo(summary):
         top = ROOT / folder
         if not top.is_dir():
             sys.stderr.write('check-case.py: no %s/ folder. The check reads every file name '
-                             'in content/, images/ and data/.\n' % folder)
+                             'in content/, images/ and data/.\n' % top)
             sys.exit(2)
         files = [p for p in top.rglob('*') if p.is_file() and not ignored(p.relative_to(ROOT))]
         if not files:
             sys.stderr.write('check-case.py: %s/ holds no file, so there is nothing to '
-                             'check.\n' % folder)
+                             'check.\n' % top)
             sys.exit(2)
         for p in files:
             seen += 1
@@ -76,7 +76,7 @@ def check_repo(summary):
 def check_tree(tree):
     tree = pathlib.Path(tree)
     if not tree.is_dir():
-        sys.stderr.write('check-case.py: %s is not a folder.\n' % tree)
+        sys.stderr.write('check-case.py: %s is not a folder.\n' % tree.resolve())
         sys.exit(2)
     groups = {}
     for p in tree.rglob('*'):
@@ -84,7 +84,7 @@ def check_tree(tree):
             rel = str(p.relative_to(tree))
             groups.setdefault(rel.lower(), []).append(rel)
     if not groups:
-        sys.stderr.write('check-case.py: %s holds no file.\n' % tree)
+        sys.stderr.write('check-case.py: %s holds no file.\n' % tree.resolve())
         sys.exit(2)
     clashes = sorted(v for v in groups.values() if len(v) > 1)
     for c in clashes:

@@ -122,19 +122,19 @@ def read_exceptions():
     """{(stem, first non-empty line): row number} from parse-exceptions.tsv."""
     if not EXCEPTIONS.exists():
         die('%s is missing. It lists the chunks that are pseudo-code on purpose.'
-            % EXCEPTIONS.relative_to(ROOT))
+            % EXCEPTIONS)
     out = {}
     with open(EXCEPTIONS, encoding='utf-8', newline='') as fh:
         rows = list(csv.reader(fh, delimiter='\t', quoting=csv.QUOTE_NONE))
     if not rows or [c.strip() for c in rows[0]] != ['stem', 'first_line', 'reason']:
         die('%s must start with the header line: stem, first_line, reason, tab-separated.'
-            % EXCEPTIONS.relative_to(ROOT))
+            % EXCEPTIONS)
     for i, r in enumerate(rows[1:], 2):
         if not any(c.strip() for c in r):
             continue
         if len(r) != 3 or not all(c.strip() for c in r):
             die('%s line %d needs three non-empty fields: stem, first_line, reason.'
-                % (EXCEPTIONS.relative_to(ROOT), i))
+                % (EXCEPTIONS, i))
         out[(r[0].strip(), r[1].strip())] = i
     return out
 
@@ -142,7 +142,7 @@ def read_exceptions():
 # The inputs come first, so a missing file is named even where R is also missing.
 files = sorted((ROOT / 'content' / 'en').glob('*.qmd'))
 if not files:
-    die('content/en/ holds no .qmd file, so there is nothing to parse.')
+    die('%s/ holds no .qmd file, so there is nothing to parse.' % (ROOT / 'content' / 'en'))
 exceptions = read_exceptions()
 
 rscript = shutil.which('Rscript')

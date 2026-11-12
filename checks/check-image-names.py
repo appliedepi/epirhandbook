@@ -15,7 +15,7 @@ This is deliberately a NAME check, not a render check. It reads the sources, so 
 second and runs with the other static checks rather than behind the render gate.
 
 Usage: python3 checks/check-image-names.py [--summary] [--fixture <dir>]
-Exit 0 when every named image exists, 1 when any is missing.
+Exit 0 when every named image exists, 1 when any is missing, 2 on a missing input.
 """
 import pathlib
 import re
@@ -37,10 +37,13 @@ images = root / 'images'
 
 chapters = sorted(root.glob('content/*/*.qmd'))
 if not chapters:
-    sys.exit(f"check-image-names.py: no chapter found under {root}/content/<lang>/. "
-             "An empty file set would otherwise report a clean tree.")
-if not images.is_dir():
-    sys.exit(f"check-image-names.py: no {images} directory. Every name would report missing.")
+    print(f"check-image-names.py: no chapter found under {root.resolve()}/content/<lang>/. "
+          "An empty file set would otherwise report a clean tree.", file=sys.stderr)
+    sys.exit(2)
+if not images.is_dir() or not any(images.iterdir()):
+    print(f"check-image-names.py: {images.resolve()} is missing or empty. "
+          "Every name would report missing.", file=sys.stderr)
+    sys.exit(2)
 
 named, missing = {}, []
 for chapter in chapters:

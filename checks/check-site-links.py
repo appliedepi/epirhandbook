@@ -88,7 +88,7 @@ def main(argv):
         die('expected 1 argument. Usage: %s' % __doc__.strip().split('Usage: ')[1])
     site = Path(argv[0])
     if not site.is_dir():
-        die('%s is not a directory. It is the assembled site.' % site)
+        die('%s is not a directory. It is the assembled site.' % site.resolve())
     site = site.resolve()
     pages = sorted(site.rglob('*.html'))
     if not pages:

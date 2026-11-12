@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Read-only: report how far the translated chapters have drifted from the English.
 # Runs every structural check the 2026-09 fix pass used. Changes nothing. Exit 1 on any drift.
-# Usage: checks/check-sync.sh                 (checks 1, 2, 3, 4, 5, 7, 9, 10, 11, 12, 14, 15, 16, 19, 20, 21, 22, 23, 24 and 25; about three minutes)
+# Usage: checks/check-sync.sh                 (checks 1, 2, 3, 4, 5, 7, 9, 10, 11, 12, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25 and 26; about three minutes)
 #        checks/check-sync.sh --base <sha>    (also checks 6 and 8, over the files changed since <sha>)
 #        checks/check-sync.sh --render        (also checks 6 and 8, over the whole tree, ~20 min)
 # Checks 6 and 8 are the render gate and the chunk parse gate. Both need a base commit. Without
@@ -475,6 +475,16 @@ if python3 "$here/check-rendered-tables.py" --self-test > "$log/rendered-tables-
 else
   grep -vE '^ok |, wrong 0$' "$log/rendered-tables-self-test.txt" | sed 's/^/   /'
   echo "   full output: $log/rendered-tables-self-test.txt"
+  rc=1
+fi
+echo "== 26. Raw HTML: no placeholder such as <name> outside code in any language"
+python3 "$here/check-raw-html.py" --summary 2>&1 | sed 's/^/   /' \
+  || { python3 "$here/check-raw-html.py" 2>&1 | grep -v '^scanned ' | sed 's/^/   /'; rc=1; }
+if python3 "$here/check-raw-html.py" --self-test > "$log/raw-html-self-test.txt" 2>&1; then
+  tail -1 "$log/raw-html-self-test.txt" | sed 's/^/   /'
+else
+  grep -vE '^ok |, wrong 0$' "$log/raw-html-self-test.txt" | sed 's/^/   /'
+  echo "   full output: $log/raw-html-self-test.txt"
   rc=1
 fi
 if [ -n "$base" ]; then

@@ -75,7 +75,7 @@ refuses to run when a rendered page is absent. A check that passes because it fo
 input reports a success it never measured.
 
 Usage: python3 checks/check-landing-strings.py [--summary] [--slots]
-Exit 0 when every rule holds, 1 on any problem.
+Exit 0 when every rule holds, 1 on any problem, 2 on a missing or unusable input.
 """
 import itertools
 import pathlib
@@ -94,7 +94,7 @@ except ImportError:
 # The duplicate-key refusal and the string-only loader. checks/langs.py holds both, and every
 # check that reads languages.yml uses that loader.
 # Rule 8 names its own loop variable `project`, so the walk takes another name here.
-from langs import NoDuplicates, Loader as Strings, project as walk_project
+from langs import NoDuplicates, Loader as Strings, project as walk_project, stop
 
 ARGS = sys.argv[1:]
 USAGE = ("Usage: check-landing-strings.py [--summary] [--slots] "
@@ -316,7 +316,7 @@ def project_paths(doc):
 def need(path, why):
     """Stop with one sentence when a required input is absent."""
     if not path.is_file():
-        sys.exit("check-landing-strings.py: no %s. %s" % (path, why))
+        stop("check-landing-strings.py: no %s. %s" % (path, why))
     return path
 
 
@@ -356,8 +356,8 @@ def load(path, loader=None):
     try:
         return yaml.load(path.read_text(encoding='utf-8'), Loader=loader or Loader)
     except yaml.YAMLError as e:
-        sys.exit("check-landing-strings.py: %s does not parse as YAML: %s"
-                 % (path, str(e).replace('\n', ' ')))
+        stop("check-landing-strings.py: %s does not parse as YAML: %s"
+             % (path, str(e).replace('\n', ' ')))
 
 
 need(ROOT / 'languages.yml',
@@ -372,26 +372,26 @@ langs_doc = load(ROOT / 'languages.yml', Strings)
 landing = load(ROOT / 'landing.yml')
 for path, doc in ((ROOT / 'languages.yml', langs_doc), (ROOT / 'landing.yml', landing)):
     if not isinstance(doc, dict):
-        sys.exit("check-landing-strings.py: %s is not a mapping at its top level. This check "
-                 "reads it by key, so it cannot measure a file of another shape." % path)
+        stop("check-landing-strings.py: %s is not a mapping at its top level. This check "
+             "reads it by key, so it cannot measure a file of another shape." % path)
 
 entries = langs_doc.get('languages') or []
 codes = [e.get('code') for e in entries if isinstance(e, dict) and e.get('code')]
 main = langs_doc.get('main')
 if not codes:
-    sys.exit("check-landing-strings.py: %s declares no language. An empty code list would "
-             "match an empty landing.yml and report agreement." % (ROOT / 'languages.yml'))
+    stop("check-landing-strings.py: %s declares no language. An empty code list would "
+         "match an empty landing.yml and report agreement." % (ROOT / 'languages.yml'))
 if main not in codes:
-    sys.exit("check-landing-strings.py: %s declares main: %r, which is not one of its own "
-             "codes. The fallback language must be one that ships."
-             % (ROOT / 'languages.yml', main))
+    stop("check-landing-strings.py: %s declares main: %r, which is not one of its own "
+         "codes. The fallback language must be one that ships."
+         % (ROOT / 'languages.yml', main))
 
 hero_text = (ROOT / 'utils' / 'landing-hero.R').read_text(encoding='utf-8')
 required = sorted(set(re.findall(r's\("([A-Za-z0-9_]+)"\)', hero_text)))
 if not required:
-    sys.exit("check-landing-strings.py: %s names no s(\"key\") call, so this check cannot "
-             "tell which keys the hero reads. Read the file, then repair the check or the "
-             "hero." % (ROOT / 'utils' / 'landing-hero.R'))
+    stop("check-landing-strings.py: %s names no s(\"key\") call, so this check cannot "
+         "tell which keys the hero reads. Read the file, then repair the check or the "
+         "hero." % (ROOT / 'utils' / 'landing-hero.R'))
 
 problems = []
 translated = [c for c in codes if c != main]
@@ -538,10 +538,10 @@ for a, b in pairs:
 # Rule 8: every language's project file names the theme layers and the app bar.
 gone = [c for c in codes if not (ROOT / 'content' / c / '_quarto.yaml').is_file()]
 if gone:
-    sys.exit("check-landing-strings.py: no %s. languages.yml declares that code, and rule 8 "
-             "reads each project file for the theme wiring. Without the file this check "
-             "measures no wiring, and it will not report a pass it did not measure."
-             % ', no '.join('content/%s/_quarto.yaml' % c for c in gone))
+    stop("check-landing-strings.py: no %s. languages.yml declares that code, and rule 8 "
+         "reads each project file for the theme wiring. Without the file this check "
+         "measures no wiring, and it will not report a pass it did not measure."
+         % ', no '.join(str(ROOT / 'content' / c / '_quarto.yaml') for c in gone))
 wired = 0
 for c in codes:
     project = ROOT / 'content' / c / '_quarto.yaml'
@@ -589,10 +589,10 @@ if want_slots:
 
     absent = [PAGES.format(code=c) for c in selected if not page(c).is_file()]
     if absent:
-        sys.exit("check-landing-strings.py --slots: no %s. Render each language first, with "
-                 "`cd content/<code> && quarto render index.qmd --to html`. This mode measures "
-                 "nothing without a rendered page, and it will not report success it did not "
-                 "measure." % ', no '.join(absent))
+        stop("check-landing-strings.py --slots: no %s. Render each language first, with "
+             "`cd content/<code> && quarto render index.qmd --to html`. This mode measures "
+             "nothing without a rendered page, and it will not report success it did not "
+             "measure." % ', no '.join(str(ROOT / a) for a in absent))
 
     # One pattern per rendered slot, keyed by the slot names its groups fill, in order. A
     # pattern anchors on the element that holds the value AND on its container where the page

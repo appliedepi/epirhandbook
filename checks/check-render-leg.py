@@ -288,14 +288,16 @@ def main(argv):
         die('expected 2 arguments. Usage: %s' % __doc__.strip().split('Usage: ')[1])
     root, log = Path(argv[0]), Path(argv[1])
     if not root.is_dir():
-        die('%s is not a directory. It is the output folder of the render.' % root)
+        die('%s is not a directory. It is the output folder of the render.' % root.resolve())
     if not log.is_file():
-        die('%s is missing. It is the log of the render, which carries the EHB lines.' % log)
+        die('%s is missing. It is the log of the render, which carries the EHB lines.'
+            % log.resolve())
     if log.stat().st_size == 0:
-        die('%s is empty. A render always writes to its log, so the tee did not run.' % log)
+        die('%s is empty. A render always writes to its log, so the tee did not run.'
+            % log.resolve())
     pages = sorted(root.rglob('*.html'))
     if not pages:
-        die('%s holds no .html file, so the render wrote no page.' % root)
+        die('%s holds no .html file, so the render wrote no page.' % root.resolve())
 
     failures, seen, messages = read_log(log)
     for entry in ALLOWED:

@@ -23,14 +23,14 @@ The check is lexical. It reads the source line, and it does not follow a path th
 variable. A chunk that builds the path on one line and reads it on another passes.
 
 Deterministic. No model and no network. `checks/langs.py` reads `languages.yml` and the stem
-list with PyYAML. Exit 1 on any flagged line.
+list with PyYAML. Exit 1 on any flagged line, 2 on a missing or unusable input.
 
 Usage: python3 checks/check-data-reads.py [--summary] [--fixture <dir>]
 """
 import os, re, sys
 from pathlib import Path
 
-from langs import read_languages, read_stems
+from langs import Unreadable, read_languages, read_stems
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -71,7 +71,10 @@ def languages():
     that list, not a position in it. `checks/langs.py` reads the file, and it stops the run
     with one line that names the file when it cannot.
     """
-    main, codes = read_languages(ROOT / 'languages.yml')
+    try:
+        main, codes = read_languages(ROOT / 'languages.yml')
+    except Unreadable as e:
+        e.stop()
     return codes, main
 
 
@@ -82,7 +85,10 @@ def declared():
     `index` is the first of them.
     """
     langs, main = languages()
-    stems = read_stems(ROOT / 'content' / main / '_quarto.yaml')
+    try:
+        stems = read_stems(ROOT / 'content' / main / '_quarto.yaml')
+    except Unreadable as e:
+        e.stop()
     return sorted(('content/%s/%s.qmd' % (l, s), l) for l in langs for s in stems), langs
 
 
@@ -168,7 +174,7 @@ else:
 
 missing = [f for f, _ in files if not (base / f).exists()]
 for f in missing:
-    print('MISSING %s' % f, file=sys.stderr)
+    print('MISSING %s' % (base / f).resolve(), file=sys.stderr)
 files = [(f, l) for f, l in files if f not in missing]
 
 rows = []
