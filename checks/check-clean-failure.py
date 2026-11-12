@@ -70,6 +70,8 @@ CASES = {
     # Checks 17 and 18 read what a render wrote, so they take paths, not the chapter set.
     'check-render-leg.py': (['html_outputs', 'render.log'], ['html_outputs', 'render.log']),
     'check-site-links.py': (['site'], ['site']),
+    # Check 25 reads the assembled site as well. build() gives languages.yml its main language.
+    'check-rendered-tables.py': (['site'], ['site']),
 }
 
 # The inputs that MUST be refused when they are empty as well as when they are absent.

@@ -477,7 +477,7 @@ with `--summary`. Checks 16 and 19 need `Rscript`, so check 12 needs it too.
 It does NOT pass `--fixture`. That flag makes a check derive its file set by globbing. Globbing
 bypasses `languages.yml`, and would exercise a path the repository never runs.
 
-Expected output: `cases: 71` and `checks that do not fail cleanly: 0`.
+Expected output: `cases: 73` and `checks that do not fail cleanly: 0`.
 
 Remedy: guard the read. Say which file is missing and why the check needs it.
 
@@ -1061,7 +1061,7 @@ Remedy: add the missing key to the block, translated.
 
 ## 24. Translation rules
 
-`python3 checks/check-translation-rules.py [--summary] [--lang <code>] [--self-test]` reads every declared chapter of each translated language. It also reads the block of that language in `landing.yml` and in the `var UI` object of `ael-extras.html`. `check-sync.sh` runs it as check 24 and reports DRIFT when it exits non-zero. It then prints every finding.
+`python3 checks/check-translation-rules.py [--summary] [--lang <code>] [--self-test]` reads every declared chapter of each translated language. It also reads the block of that language in `landing.yml` and in the `var UI` object of `ael-extras.html`. `check-sync.sh` runs it as check 24 and reports DRIFT when it exits non-zero. It then prints every finding. `check-sync.sh` also runs `--self-test` in check 24 and reports DRIFT when a fixture fails.
 
 Each finding prints as `file:line: rule_id: text`. There are four rules:
 
@@ -1081,3 +1081,32 @@ The check reads every file as UTF-8 and parses `landing.yml`, `translation/all.y
 Expected output: one line per language, then `translation rules: languages <n>, findings 0`.
 
 Remedy: write the line in the register of its language. Keep the argument names and the table syntax of the English chapter. Where a hit is correct in that language, add a row to `checks/translation-exceptions.tsv` with the reason.
+
+## 25. Rendered tables
+
+`python3 checks/check-rendered-tables.py [--main <code>] [--summary] <site dir>` compares the tables of every translated chapter page with the tables of the English page. The assemble-deploy job of `.github/workflows/build-deploy.yml` runs it on `site/` after check 18, with the main language that the `languages` job read. Each translated chapter page MUST have the table count of the English page. Each table MUST have the row count and the cell count of its English table.
+
+Pages pair by language folder and stem: `site/<lang>/<stem>.html` against `site/<main>/<stem>.html`. A chapter page is an `.html` file directly in a language folder that holds `<main id="quarto-document-content">`. The check therefore skips the redirect stubs, such as `index.fr.html` and `about.html`, and every page in `new_pages/`.
+
+Tables pair by their order on the page. A row is a `<tr>`, and a cell is a `<td>` or a `<th>`. Each cell counts once, whatever its `colspan` or `rowspan`. A table nested in a cell is its own table, in the order of its start tag. The docstring of the script gives the full rule. A table that JavaScript builds in the browser, such as a `DT::datatable()` htmlwidget, is not in the HTML, so the check cannot see it.
+
+The check fails on each of these findings:
+
+- `empty-site`: no language folder other than the main one holds a chapter page
+- `no-english-page`: a translated chapter page has no English chapter page of the same stem
+- `no-translated-page`: an English chapter page has no page of the same stem in a language folder that exists
+- `table-count`: a page pair has a different number of tables
+- `row-count`: a table pair has a different number of rows
+- `cell-count`: a table pair has the same number of rows and a different number of cells
+
+A `table-count`, `row-count` or `cell-count` finding names the language, the stem, the table, and the rows and cells of each side. A missing-page finding names the language, the stem, and the rows and cells of each table on the page that exists. After a `table-count` finding the check compares no table of that page pair, because each later table pairs with the wrong table.
+
+The default of `--main` is the `main:` line of `languages.yml`. The check uses the Python standard library only, so it reads that line with a regular expression. The check exits 2 when the site folder or the main-language folder is missing, or when a folder or a page cannot be read. It also exits 2 when no `--main` is given and `languages.yml` or its `main:` line is missing. The message names the full path.
+
+`--self-test` runs every fixture under `checks/fixtures/rendered-tables/`. Each fixture holds a `site/` folder and an `expect.txt` of `pass` or `fail <finding>`. The self-test asserts that each fail fixture exits 1 with its finding and no other, and that the pass fixture exits 0. In the pass fixture, an English header cell spans two columns and the French one spans one. `check-sync.sh` runs the self-test as check 25 and reports DRIFT when a fixture fails.
+
+Expected output: one line per language, the main language first, then `rendered tables: translated languages <n>, pages <p>, tables <t>, findings 0`.
+
+To run the check locally, assemble a site with `checks/site-gate.sh` as in check 18, and give the check the folder that `site-gate.sh` prints. A render of a few chapters gives a `no-translated-page` finding for each chapter that it left out.
+
+Remedy: correct the table in the source chapter of that language, so that pandoc reads it as the English table. Where the English table is wrong, correct the English chapter first.
