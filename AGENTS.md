@@ -26,6 +26,7 @@ them all. Run it from the repository root before you finish.
 - `languages.yml` is the language list, and `content/<lang>/_quarto.yaml` is the chapter list.
   The eight project files MUST declare the same stems in the same order. Every declared stem
   MUST exist as a file in every language folder.
+- Before you translate, read `translation/all.yml` and `translation/<lang>.yml`. The translation MUST pass check 24 (`checks/check-translation-rules.py`).
 
 # Visual design
 
