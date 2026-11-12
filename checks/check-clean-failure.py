@@ -60,6 +60,10 @@ CASES = {
     'check-english-parse.py': (['--summary'], ['content', 'checks/parse-exceptions.tsv']),
     'check-case.py': (['--summary'], ['content', 'images', 'data']),
     'check-ui-strings.py': (['--summary'], ['ael-extras.html', 'languages.yml']),
+    # Check 24 reads only translated languages, so build_translated() adds Spanish.
+    'check-translation-rules.py': (['--summary'], [
+        'languages.yml', 'content', 'landing.yml', 'ael-extras.html',
+        'checks/translation-exceptions.tsv', 'translation/es.yml']),
     # Check 19 reads the stem list and the English chapters. It needs R too.
     'check-suggested-packages.py': (['--summary'], ['languages.yml', 'content']),
     'render-gate.sh': (['HEAD', 'HEAD'], ['languages.yml']),
@@ -140,6 +144,26 @@ def build(tmp):
     shutil.copytree(HERE, tmp / 'checks')
 
 
+def build_translated(tmp):
+    """build() plus one translated language, es, with its chapter, strings and rules."""
+    build(tmp)
+    with open(tmp / 'languages.yml', 'a', encoding='utf-8') as f:
+        f.write('  - code: es\n    label: "Español"\n    title: "TE"\n')
+    (tmp / 'content' / 'es').mkdir()
+    (tmp / 'content' / 'es' / 'index.qmd').write_text('# Título\n', encoding='utf-8')
+    with open(tmp / 'landing.yml', 'a', encoding='utf-8') as f:
+        f.write('es:\n  eyebrow: "M"\n')
+    ui = tmp / 'ael-extras.html'
+    ui.write_text(ui.read_text(encoding='utf-8').replace(
+        "\n  };", ",\n    es: { dark: 'Modo oscuro' }\n  };"), encoding='utf-8')
+    (tmp / 'translation').mkdir()
+    (tmp / 'translation' / 'es.yml').write_text('banned: []\n', encoding='utf-8')
+
+
+# The checks whose fixture needs more than build() gives.
+BUILDERS = {'check-translation-rules.py': build_translated}
+
+
 def build_rendered(tmp):
     """A fixture for `check-landing-strings.py --slots`: two languages, no rendered page.
 
@@ -184,7 +208,7 @@ for script, (script_args, inputs) in sorted(CASES.items()):
             with tempfile.TemporaryDirectory() as raw:
                 tmp = pathlib.Path(raw) / 'fixture'
                 tmp.mkdir()
-                build(tmp)
+                BUILDERS.get(script, build)(tmp)
                 if 'HEAD' in script_args:
                     commit(tmp)
                 target = tmp / missing

@@ -1058,3 +1058,26 @@ A block that lacks a key shows the word "undefined" in its place. It does not fa
 Expected output: `interface strings: <n> block(s), <k> key(s) each in en, 0 finding(s)`.
 
 Remedy: add the missing key to the block, translated.
+
+## 24. Translation rules
+
+`python3 checks/check-translation-rules.py [--summary] [--lang <code>] [--self-test]` reads every declared chapter of each translated language. It also reads the block of that language in `landing.yml` and in the `var UI` object of `ael-extras.html`. `check-sync.sh` does not run it yet, because on 2026-11-12 Spanish, French, Portuguese, Turkish and Japanese still fail it (issue 466).
+
+Each finding prints as `file:line: rule_id: text`. There are four rules:
+
+- `argument-names`: a call such as `seq(from, to, by)` outside code chunks MUST keep the argument names of the English chapter. The check compares a call only where each argument is one word, with an optional `= value` of one token. So a placeholder such as `criterio para filas` or a quoted value such as `"siyah"` passes. The docstring of the script gives the exact pairing.
+- `pipe-in-simple-table`: a pipe-table row between two simple-table rules (`----  ----`) fails. Pandoc then reads one table and cuts the cells apart. Spanish `basics` section 3.12 had this until 2026-11-09.
+- `unbalanced-bold`: a pipe-table line with an odd number of `**` outside inline code fails. The check skips grid tables, because bold text MAY span the lines of a grid cell.
+- the `banned:` regexes of `translation/<code>.yml`. They apply to prose and to code comments. They do not apply to code, inline code, URLs or HTML tags, and a tag MAY span several lines. A code comment starts at the first `#` outside every string literal. They also apply to the two blocks of interface strings. The `ael-extras.html` block has the `lang:` tag of `languages.yml` as its key, so `jp` reads `ja` and `vn` reads `vi`.
+
+`translation/all.yml` is not read yet. Its one banned rule, an untranslated `or` between two code spans, fails today in the `basics` chapter of six translated languages, and phase 4 of issue 466 fixes them.
+
+`checks/translation-exceptions.tsv` excuses a banned-pattern hit. A row has the columns `lang`, `file`, `match_text`, `rule_id` and `reason`, and `match_text` is the full line, trimmed. A row that excuses no hit is itself a finding, `stale-exception`, so the file cannot grow without a reason.
+
+`--self-test` runs every fixture under `checks/fixtures/translation-rules/`. Each fixture is a small repository root with an `expect.txt` of `pass`, `fail <rule_id>` or `error <path>`, and it reads the rules of `translation/`. An `error` fixture MUST stop with an input error that names that path. The self-test also asserts that every `bad` and `more_bad` example of a banned entry gives a hit, and that no `good` or `more_good` example does.
+
+The check reads every file as UTF-8 and parses `landing.yml` and `translation/<code>.yml` with `yaml.safe_load`. A file that it cannot read or parse stops the run with exit 2 and one message that names the full path.
+
+Expected output: one line per language, then `translation rules: languages <n>, findings 0`.
+
+Remedy: write the line in the register of its language. Keep the argument names and the table syntax of the English chapter. Where a hit is correct in that language, add a row to `checks/translation-exceptions.tsv` with the reason.
