@@ -63,7 +63,7 @@ CASES = {
     # Check 24 reads only translated languages, so build_translated() adds Spanish.
     'check-translation-rules.py': (['--summary'], [
         'languages.yml', 'content', 'landing.yml', 'ael-extras.html',
-        'checks/translation-exceptions.tsv', 'translation/es.yml']),
+        'checks/translation-exceptions.tsv', 'translation/es.yml', 'translation/all.yml']),
     # Check 19 reads the stem list and the English chapters. It needs R too.
     'check-suggested-packages.py': (['--summary'], ['languages.yml', 'content']),
     'render-gate.sh': (['HEAD', 'HEAD'], ['languages.yml']),
@@ -145,8 +145,15 @@ def build(tmp):
 
 
 def build_translated(tmp):
-    """build() plus one translated language, es, with its chapter, strings and rules."""
+    """build() plus one translated language, es, with its chapter, strings and rules.
+
+    The rules are translation/es.yml and translation/all.yml, both with no banned entry.
+    The exceptions file holds its header row only. build() copies the real file, whose rows
+    excuse hits that this fixture does not have, and check 24 reports each such row as stale.
+    """
     build(tmp)
+    (tmp / 'checks' / 'translation-exceptions.tsv').write_text(
+        'lang\tfile\tmatch_text\trule_id\treason\n', encoding='utf-8')
     with open(tmp / 'languages.yml', 'a', encoding='utf-8') as f:
         f.write('  - code: es\n    label: "Español"\n    title: "TE"\n')
     (tmp / 'content' / 'es').mkdir()
@@ -158,6 +165,7 @@ def build_translated(tmp):
         "\n  };", ",\n    es: { dark: 'Modo oscuro' }\n  };"), encoding='utf-8')
     (tmp / 'translation').mkdir()
     (tmp / 'translation' / 'es.yml').write_text('banned: []\n', encoding='utf-8')
+    (tmp / 'translation' / 'all.yml').write_text('banned: []\n', encoding='utf-8')
 
 
 # The checks whose fixture needs more than build() gives.

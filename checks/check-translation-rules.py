@@ -31,8 +31,10 @@ rule groups apply to it. A finding prints as `file:line: rule_id: text`.
     fails. A pipe table is a block of non-blank lines that holds a delimiter row
     (`---|---`) under a line with a `|`. Grid tables, as checks/gridtables.py finds them,
     are excluded, because pandoc lets bold text span the lines of a grid cell.
-(d) banned patterns. Each regex under `banned:` in `translation/<code>.yml` applies to one
-    line at a time, case-insensitively unless the entry sets `case: sensitive`. The scope:
+(d) banned patterns. Each regex under `banned:` in `translation/all.yml` and in
+    `translation/<code>.yml` applies to one line at a time, case-insensitively unless the
+    entry sets `case: sensitive`. The rules of `all.yml` apply to every translated language.
+    A rule id MUST NOT be in `all.yml` and in a language file. The scope:
       - the prose and the code comments of each chapter. Excluded are the YAML front
         matter, the code of fenced blocks and the chunk options (`#|`), inline code spans
         (also across the lines of a paragraph or of a grid-table cell), URLs, link
@@ -50,9 +52,10 @@ rule groups apply to it. A finding prints as `file:line: rule_id: text`.
     finding, `stale-exception`. Rows excuse rule (d) only.
 
 Choices the brief left open:
-  - `translation/all.yml` is not read. Its one banned rule, the untranslated `or`, fails
-    today in the basics chapter of six translated languages, and phase 4 of issue 466
-    fixes them. Russian would then fail, and the plan requires Russian to pass now.
+  - The language files are read before `all.yml`, so an error in a language file is the
+    one reported. `all.yml` is read from the same folder as the language files.
+  - A rule id in `all.yml` and in a language file stops the run as an input error (exit 2),
+    because it is a fault of the rules files, not of a chapter.
   - `landing.yml` is keyed by the language code (`jp:`), because that is how the file is
     written. Only `ael-extras.html` is keyed by the `lang:` tag.
   - Rows of the exceptions file excuse rule (d) only. Rules (a), (b) and (c) have no
@@ -61,14 +64,15 @@ Choices the brief left open:
     fixture holds its own, so the self-test proves the rules that ship.
 
 --self-test asserts two things. Every `bad` and `more_bad` example of a banned entry in
-`translation/<code>.yml` hits its regex, and every `good` and `more_good` example does not.
+`translation/all.yml` and `translation/<code>.yml` hits its regex, and every `good` and
+`more_good` example does not. It prints one line for each rule.
 Each directory under checks/fixtures/translation-rules/ is a small repository root with an
 `expect.txt` of `pass`, `fail <rule_id>` or `error <path>`. A fail fixture MUST give at
 least one finding, and every finding MUST carry that rule id. An error fixture MUST stop
 with an input error whose message names the full path of <path> in the fixture.
 
-Every file is read as UTF-8, and `landing.yml` and `translation/<code>.yml` are parsed
-with yaml.safe_load. A file that cannot be read, decoded or parsed, and an
+Every file is read as UTF-8, and `landing.yml`, `translation/all.yml` and
+`translation/<code>.yml` are parsed with yaml.safe_load. A file that cannot be read, decoded or parsed, and an
 `ael-extras.html` with no block for the language, stop the run with one message that
 names the full path.
 
@@ -287,9 +291,15 @@ def read_tsv(path):
     return out
 
 
-def read_rules(path):
-    """[(rule id, compiled regex)] of the banned entries in one translation/<code>.yml."""
-    need(path, 'It holds the banned patterns of that language.')
+ALL_WHY = 'It holds the banned patterns of every translated language.'
+
+
+def read_rules(path, why='It holds the banned patterns of that language.'):
+    """[(rule id, compiled regex, examples)] of the banned entries in one rules file.
+
+    The file is translation/<code>.yml or translation/all.yml. Both have the same schema.
+    """
+    need(path, why)
     doc = load_yaml(path)
     banned = doc.get('banned') if isinstance(doc, dict) else None
     if not isinstance(banned, list):
@@ -548,6 +558,23 @@ def rule_d(scope, rules):
 
 # --- the run ----------------------------------------------------------------------------
 
+def add_common(rules, rules_dir):
+    """rules with the banned entries of rules_dir/all.yml added to every language.
+
+    The language files are read first, so an error in one of them is the one reported.
+    Raises Unreadable when a rule id is in all.yml and in a language file.
+    """
+    path = rules_dir / 'all.yml'
+    common = read_rules(path, ALL_WHY)
+    ids = {rid for rid, _, _ in common}
+    for l, own in rules.items():
+        both = sorted(ids & {rid for rid, _, _ in own})
+        if both:
+            raise Unreadable('%s and %s both define the rule id %s. A rule id MUST be in one '
+                             'file only.' % (path, rules_dir / ('%s.yml' % l), ', '.join(both)))
+    return {l: common + own for l, own in rules.items()}
+
+
 def run(root, only=None, rules_dir=None):
     """(findings, per-language counts). A finding is (lang, file, line, rule_id, text)."""
     rules_dir = rules_dir or root / 'translation'
@@ -582,6 +609,7 @@ def run(root, only=None, rules_dir=None):
         raise Unreadable(' '.join('no %s.' % f for f in absent)
                          + ' Every declared chapter is read.')
     rules = {l: read_rules(rules_dir / ('%s.yml' % l)) for l in targets}
+    rules = add_common(rules, rules_dir)
 
     lines_of = read_lines
 
@@ -632,18 +660,23 @@ def self_test():
     bad = []
     main, codes = read_languages(ROOT / 'languages.yml')
     examples = 0
-    for l in codes:
-        if l == main:
-            continue
-        for rid, rx, ex in read_rules(ROOT / 'translation' / ('%s.yml' % l)):
+    files = [ROOT / 'translation' / 'all.yml'] + [
+        ROOT / 'translation' / ('%s.yml' % l) for l in codes if l != main]
+    for path in files:
+        name = 'translation/%s' % path.name
+        for rid, rx, ex in (read_rules(path, ALL_WHY) if path.name == 'all.yml'
+                            else read_rules(path)):
+            n, wrong = 0, len(bad)
             for key in ('bad', 'more_bad', 'good', 'more_good'):
                 for text in ex[key]:
-                    examples += 1
+                    n += 1
                     hit = bool(rx.search(mask_rest(mask_code(text)).rstrip()))
                     if hit != key.endswith('bad'):
-                        bad.append('translation/%s.yml %s: the %s example %r %s'
-                                   % (l, rid, key, text,
+                        bad.append('%s %s: the %s example %r %s'
+                                   % (name, rid, key, text,
                                       'gives no hit' if key.endswith('bad') else 'gives a hit'))
+            examples += n
+            print('rule %s %s: examples %d, wrong %d' % (name, rid, n, len(bad) - wrong))
     print('rule examples %d, wrong %d' % (examples, len(bad)))
     dirs = sorted(p for p in FIXTURES.iterdir() if p.is_dir()) if FIXTURES.is_dir() else []
     if not dirs:

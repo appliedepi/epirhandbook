@@ -459,6 +459,9 @@ echo "== 22. Lowercase names: every file name under content/, images/ and data/"
 python3 "$here/check-case.py" --summary | sed 's/^/   /' || rc=1
 echo "== 23. Interface strings: every language block in ael-extras.html has the keys of en"
 python3 "$here/check-ui-strings.py" --summary | sed 's/^/   /' || rc=1
+echo "== 24. Translation rules: every language passes translation/all.yml and translation/<code>.yml"
+python3 "$here/check-translation-rules.py" --summary 2>&1 | sed 's/^/   /' \
+  || { python3 "$here/check-translation-rules.py" 2>&1 | sed 's/^/   /'; rc=1; }
 if [ -n "$base" ]; then
   echo "== 6. Render gate on every translated chapter changed since $base (quarto render --no-execute)"
   "$here/render-gate.sh" "$base" HEAD > "$log/render.txt" 2>&1 || rc=1
