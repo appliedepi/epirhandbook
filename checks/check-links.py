@@ -34,7 +34,7 @@ skips a fenced code block, an HTML comment and a code span.
 
 Deterministic. No model and no network. `checks/langs.py` reads `languages.yml` and the stem
 list with PyYAML. Exit 1 on a link that is dead, same-page in long form, across languages, or
-unterminated.
+unterminated. Exit 2 on a missing or unusable input.
 
 Usage: python3 checks/check-links.py [--summary] [--fixture <dir>] [--pandoc <cmd>]
 """
@@ -44,7 +44,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import unquote
 
-from langs import read_languages, read_stems
+from langs import Unreadable, read_languages, read_stems
 
 ROOT = Path(__file__).resolve().parent.parent
 POOL = 8
@@ -86,7 +86,10 @@ def languages():
     that list, not a position in it. `checks/langs.py` reads the file, and it stops the run
     with one line that names the file when it cannot.
     """
-    main, codes = read_languages(ROOT / 'languages.yml')
+    try:
+        main, codes = read_languages(ROOT / 'languages.yml')
+    except Unreadable as e:
+        e.stop()
     return codes, main
 
 
@@ -98,7 +101,10 @@ def declared():
     check 9 of `checks/check-sync.sh` reports a language that does not.
     """
     langs, main = languages()
-    stems = read_stems(ROOT / 'content' / main / '_quarto.yaml')
+    try:
+        stems = read_stems(ROOT / 'content' / main / '_quarto.yaml')
+    except Unreadable as e:
+        e.stop()
     return sorted(('content/%s/%s.qmd' % (l, s), l) for l in langs for s in stems), langs
 
 
@@ -319,7 +325,7 @@ else:
 
 missing = [f for f, _ in files if not (base / f).exists()]
 for f in missing:
-    print('MISSING %s' % f, file=sys.stderr)
+    print('MISSING %s' % (base / f).resolve(), file=sys.stderr)
 files = [(f, l) for f, l in files if f not in missing]
 
 with ThreadPoolExecutor(POOL) as ex:

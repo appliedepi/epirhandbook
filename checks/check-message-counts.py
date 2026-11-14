@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Report a count written into the message text of a check.
 
-Check 20. A check prints counts it measured. A count typed into its message text goes stale
+Check 21. A check prints counts it measured. A count typed into its message text goes stale
 when the repository changes, and it then misstates what the check did. On 2026-10-02
 `check-sync.sh` announced "the 416 declared chapter files" while it scanned 400.
 

@@ -75,7 +75,7 @@ refuses to run when a rendered page is absent. A check that passes because it fo
 input reports a success it never measured.
 
 Usage: python3 checks/check-landing-strings.py [--summary] [--slots]
-Exit 0 when every rule holds, 1 on any problem.
+Exit 0 when every rule holds, 1 on any problem, 2 on a missing or unusable input.
 """
 import itertools
 import pathlib
@@ -94,7 +94,7 @@ except ImportError:
 # The duplicate-key refusal and the string-only loader. checks/langs.py holds both, and every
 # check that reads languages.yml uses that loader.
 # Rule 8 names its own loop variable `project`, so the walk takes another name here.
-from langs import NoDuplicates, Loader as Strings, project as walk_project
+from langs import NoDuplicates, Loader as Strings, project as walk_project, stop
 
 ARGS = sys.argv[1:]
 USAGE = ("Usage: check-landing-strings.py [--summary] [--slots] "
@@ -168,10 +168,8 @@ INVARIANT = ('btn_start_href', 'btn_offline_href', 'np_brand', 'np_links')
 # A stale entry is a hole, so the gate names one. Declare the key again and the entry stops
 # matching anything. Rule 10 then reports the entry, and exempts nothing in silence.
 OMISSIONS = (
-    ("stat_used_num", "es",
-     'the pre-plan page reads "3 millón de veces", which is a number-agreement error'),
-    ("stat_used_num", "pt",
-     'the pre-plan page reads "3 milhão de vezes", which is a number-agreement error'),
+    ("stat_used_num", "fr",
+     'French writes the user count as English does, "1 million+"'),
 )
 
 # The four fields of one service card, in the order utils/landing-hero.R writes them into
@@ -187,7 +185,7 @@ CARD = ('h', 'p', 'href', 'link')
 CARDS = 4
 
 # Every scalar slot rule 9 reads out of a rendered page, one value each, in the order
-# utils/landing-hero.R writes them. 16 of them are landing.yml keys and 3 are not. The
+# utils/landing-hero.R writes them. 17 of them are landing.yml keys and 3 are not. The
 # expected slot total is the count of this tuple plus the count of CARD times CARDS. So a
 # slot added to the markup must be added here, or the total stops matching.
 #
@@ -200,7 +198,7 @@ SCALAR_SLOTS = ('eyebrow', 'hero_title', 'subtitle', 'search_placeholder', 'sear
                 'btn_start_href', 'btn_start', 'btn_offline_href', 'btn_offline',
                 'stat_used_num', 'stat_used_label', 'stat_chapters_num',
                 'stat_chapters_label', 'stat_languages_num', 'stat_languages_label',
-                'np_brand', 'np_lead', 'np_trust', 'np_links')
+                'np_brand', 'np_lead', 'np_reach', 'np_notify', 'np_links')
 
 # The three slots landing.yml does not key. Each already has one home, and a second copy of
 # it is the thing that drifts. So rule 9 reads each one from its own home:
@@ -318,7 +316,7 @@ def project_paths(doc):
 def need(path, why):
     """Stop with one sentence when a required input is absent."""
     if not path.is_file():
-        sys.exit("check-landing-strings.py: no %s. %s" % (path, why))
+        stop("check-landing-strings.py: no %s. %s" % (path, why))
     return path
 
 
@@ -358,8 +356,8 @@ def load(path, loader=None):
     try:
         return yaml.load(path.read_text(encoding='utf-8'), Loader=loader or Loader)
     except yaml.YAMLError as e:
-        sys.exit("check-landing-strings.py: %s does not parse as YAML: %s"
-                 % (path, str(e).replace('\n', ' ')))
+        stop("check-landing-strings.py: %s does not parse as YAML: %s"
+             % (path, str(e).replace('\n', ' ')))
 
 
 need(ROOT / 'languages.yml',
@@ -374,26 +372,26 @@ langs_doc = load(ROOT / 'languages.yml', Strings)
 landing = load(ROOT / 'landing.yml')
 for path, doc in ((ROOT / 'languages.yml', langs_doc), (ROOT / 'landing.yml', landing)):
     if not isinstance(doc, dict):
-        sys.exit("check-landing-strings.py: %s is not a mapping at its top level. This check "
-                 "reads it by key, so it cannot measure a file of another shape." % path)
+        stop("check-landing-strings.py: %s is not a mapping at its top level. This check "
+             "reads it by key, so it cannot measure a file of another shape." % path)
 
 entries = langs_doc.get('languages') or []
 codes = [e.get('code') for e in entries if isinstance(e, dict) and e.get('code')]
 main = langs_doc.get('main')
 if not codes:
-    sys.exit("check-landing-strings.py: %s declares no language. An empty code list would "
-             "match an empty landing.yml and report agreement." % (ROOT / 'languages.yml'))
+    stop("check-landing-strings.py: %s declares no language. An empty code list would "
+         "match an empty landing.yml and report agreement." % (ROOT / 'languages.yml'))
 if main not in codes:
-    sys.exit("check-landing-strings.py: %s declares main: %r, which is not one of its own "
-             "codes. The fallback language must be one that ships."
-             % (ROOT / 'languages.yml', main))
+    stop("check-landing-strings.py: %s declares main: %r, which is not one of its own "
+         "codes. The fallback language must be one that ships."
+         % (ROOT / 'languages.yml', main))
 
 hero_text = (ROOT / 'utils' / 'landing-hero.R').read_text(encoding='utf-8')
 required = sorted(set(re.findall(r's\("([A-Za-z0-9_]+)"\)', hero_text)))
 if not required:
-    sys.exit("check-landing-strings.py: %s names no s(\"key\") call, so this check cannot "
-             "tell which keys the hero reads. Read the file, then repair the check or the "
-             "hero." % (ROOT / 'utils' / 'landing-hero.R'))
+    stop("check-landing-strings.py: %s names no s(\"key\") call, so this check cannot "
+         "tell which keys the hero reads. Read the file, then repair the check or the "
+         "hero." % (ROOT / 'utils' / 'landing-hero.R'))
 
 problems = []
 translated = [c for c in codes if c != main]
@@ -540,10 +538,10 @@ for a, b in pairs:
 # Rule 8: every language's project file names the theme layers and the app bar.
 gone = [c for c in codes if not (ROOT / 'content' / c / '_quarto.yaml').is_file()]
 if gone:
-    sys.exit("check-landing-strings.py: no %s. languages.yml declares that code, and rule 8 "
-             "reads each project file for the theme wiring. Without the file this check "
-             "measures no wiring, and it will not report a pass it did not measure."
-             % ', no '.join('content/%s/_quarto.yaml' % c for c in gone))
+    stop("check-landing-strings.py: no %s. languages.yml declares that code, and rule 8 "
+         "reads each project file for the theme wiring. Without the file this check "
+         "measures no wiring, and it will not report a pass it did not measure."
+         % ', no '.join(str(ROOT / 'content' / c / '_quarto.yaml') for c in gone))
 wired = 0
 for c in codes:
     project = ROOT / 'content' / c / '_quarto.yaml'
@@ -591,10 +589,10 @@ if want_slots:
 
     absent = [PAGES.format(code=c) for c in selected if not page(c).is_file()]
     if absent:
-        sys.exit("check-landing-strings.py --slots: no %s. Render each language first, with "
-                 "`cd content/<code> && quarto render index.qmd --to html`. This mode measures "
-                 "nothing without a rendered page, and it will not report success it did not "
-                 "measure." % ', no '.join(absent))
+        stop("check-landing-strings.py --slots: no %s. Render each language first, with "
+             "`cd content/<code> && quarto render index.qmd --to html`. This mode measures "
+             "nothing without a rendered page, and it will not report success it did not "
+             "measure." % ', no '.join(str(ROOT / a) for a in absent))
 
     # One pattern per rendered slot, keyed by the slot names its groups fill, in order. A
     # pattern anchors on the element that holds the value AND on its container where the page
@@ -610,7 +608,8 @@ if want_slots:
         ('btn_offline_href', 'btn_offline'): r'<a class="btn out" href="([^"]*)">(.*?)</a>',
         ('np_brand',): r'<div class="nplockup">\s*<img src="[^"]*" alt="([^"]*)">',
         ('np_lead',): r'<p class="nplead">(.*?)</p>',
-        ('np_trust',): r'<div class="nptrust">(.*?)</div>\s*<div class="svcs">',
+        ('np_reach',): r'<p class="npreach">(.*?)</p>',
+        ('np_notify',): r'<p class="npnotify">(.*?)</p>',
         ('np_links',): r'<div class="nplinks">(.*?)</div>',
     }
     CARD_RE = (r'<div class="svc"><div class="svch">(.*?)</div><p class="svcp">(.*?)</p>'
@@ -672,7 +671,7 @@ if want_slots:
             if k not in blk:
                 fallbacks += 1
             if k == 'np_lead' and want is not None:
-                want = want.replace('{brand}', '<span class="brandname">%s</span>' % brand)
+                want = want.replace('{brand}', '<a href="https://appliedepi.org/">%s</a>' % brand)
             if want is None:
                 mismatches.append("%s: the rendered page shows a '%s' slot that neither '%s' nor "
                                   "'%s' declares" % (c, k, c, main))

@@ -29,7 +29,7 @@ import os
 import sys
 from pathlib import Path
 
-from langs import read_languages, read_stems
+from langs import Unreadable, read_languages, read_stems, stop
 from gridtables import problems, tables
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -53,8 +53,11 @@ fixture = opt('--fixture')
 
 def declared():
     """Every declared chapter file: [(path relative to root, language)]."""
-    main, codes = read_languages(ROOT / 'languages.yml')
-    stems = read_stems(ROOT / 'content' / main / '_quarto.yaml')
+    try:
+        main, codes = read_languages(ROOT / 'languages.yml')
+        stems = read_stems(ROOT / 'content' / main / '_quarto.yaml')
+    except Unreadable as e:
+        e.stop()
     return [('content/%s/%s.qmd' % (l, s), l) for l in codes for s in stems], codes
 
 
@@ -64,19 +67,19 @@ if fixture:
              for p in sorted(base.glob('*/*.qmd'))]
     langs = list(dict.fromkeys(l for _, l in files))
     if not files:
-        sys.exit('check-grid-tables.py --fixture %s: the fixture holds no <lang>/<stem>.qmd '
-                 'file, so nothing would be measured.' % fixture)
+        stop('check-grid-tables.py --fixture %s: the fixture holds no <lang>/<stem>.qmd '
+             'file, so nothing would be measured.' % base.resolve())
 else:
     base = ROOT
     files, langs = declared()
 
 missing = [f for f, _ in files if not (base / f).exists()]
 for f in missing:
-    print('MISSING %s' % f, file=sys.stderr)
+    print('MISSING %s' % (base / f).resolve(), file=sys.stderr)
 files = [(f, l) for f, l in files if f not in missing]
 if not files:
-    sys.exit('check-grid-tables.py: no declared chapter file exists under %s/content, so '
-             'nothing would be measured.' % base)
+    stop('check-grid-tables.py: no declared chapter file exists under %s/content, so '
+         'nothing would be measured.' % base.resolve())
 
 rows, counted = [], {}
 for f, lang in files:

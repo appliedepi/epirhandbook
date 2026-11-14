@@ -24,7 +24,7 @@ import os
 import re
 import sys
 
-from langs import read_languages
+from langs import Unreadable, read_languages, stop
 
 FENCE = re.compile(r'^(\s*)(`{3,})\s*\{r[ ,}]')
 LANDING = 'index.qmd'
@@ -32,7 +32,10 @@ LANDING = 'index.qmd'
 
 def languages():
     """The main language code and the translation codes, from `languages.yml`."""
-    main, codes = read_languages('languages.yml')
+    try:
+        main, codes = read_languages('languages.yml')
+    except Unreadable as e:
+        e.stop()
     return main, [c for c in codes if c != main]
 
 
@@ -171,20 +174,22 @@ def main():
                 ['git', 'cat-file', '-e', '%s:%s' % (args.from_ref, f)],
                 capture_output=True).returncode != 0 and f not in gone]
         if gone:
-            sys.exit('sync-chunks.py: --only names %d file(s) that do not exist in the working '
-                     'tree%s, first: %s'
-                     % (len(gone), ' or in %s' % args.from_ref if args.from_ref else '', gone[0]))
+            stop('sync-chunks.py: --only names %d file(s) that do not exist in the working '
+                 'tree%s, first: %s'
+                 % (len(gone), ' or in %s' % args.from_ref if args.from_ref else '',
+                    os.path.abspath(gone[0])))
     else:
         # The file set comes from a glob, so a folder with no chapter file drops out of it in
         # silence. The run would then report a clean tree for a language it never read.
         for l in [main_lang] + langs:
             if not chapters(l):
-                sys.exit('sync-chunks.py: content/%s/ is missing or holds no chapter file, so '
-                         'this run would compare nothing for that language.' % l)
+                stop('sync-chunks.py: %s/ is missing or holds no chapter file, so '
+                     'this run would compare nothing for that language.'
+                     % os.path.abspath('content/%s' % l))
         files = sorted(f for l in langs for f in chapters(l))
         if not files:
-            sys.exit('sync-chunks.py: no translation is selected, so this run would compare '
-                     'nothing. Check languages.yml and --langs.')
+            stop('sync-chunks.py: no translation is selected, so this run would compare '
+                 'nothing. Check %s and --langs.' % os.path.abspath('languages.yml'))
     changed, chunks_changed, kept_total, fallback_total, skipped = 0, 0, 0, 0, []
     for tr in files:
         en = 'content/%s/%s' % (main_lang, os.path.basename(tr))

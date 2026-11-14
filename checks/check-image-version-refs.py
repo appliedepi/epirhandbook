@@ -19,7 +19,8 @@ A version `docker-images.yml` names in a COMMENT counts as used. The manifest do
 a chapter back to an older image, and that is a real option, not a stale reference.
 
 Usage: python3 checks/check-image-version-refs.py [--summary] [--fixture <dir>]
-Exit 0 when every prose version is live, 1 when prose names one nothing uses.
+Exit 0 when every prose version is live, 1 when prose names one nothing uses, 2 on a missing
+or unusable input.
 """
 import pathlib
 import re
@@ -51,23 +52,28 @@ sources = {'docker-images.yml': root / 'docker-images.yml',
            '.devcontainer.json': root / '.devcontainer.json'}
 for name, path in sources.items():
     if not path.is_file():
-        sys.exit(f"check-image-version-refs.py: no {path}. That file is one of the two that "
-                 "decide which image line is live, so prose cannot be checked against it.")
+        print(f"check-image-version-refs.py: no {path.resolve()}. That file is one of the two that "
+              "decide which image line is live, so prose cannot be checked against it.",
+              file=sys.stderr)
+        sys.exit(2)
 
 live = set()
 for path in sources.values():
     live.update(VERSION.findall(path.read_text(encoding='utf-8')))
 if not live:
-    sys.exit("check-image-version-refs.py: neither docker-images.yml nor .devcontainer.json "
-             "names an image version. An empty set would match nothing and report agreement.")
+    print(f"check-image-version-refs.py: neither {sources['docker-images.yml'].resolve()} nor "
+          f"{sources['.devcontainer.json'].resolve()} names an image version. An empty set would match nothing and report agreement.",
+          file=sys.stderr)
+    sys.exit(2)
 
 # README.md is REQUIRED, not merely one of a list. With it absent and checks/README.md
 # present the doc list stays non-empty, so the check would pass while the file it was written
 # about had gone. Check 12 caught exactly that.
 main_doc = root / 'README.md'
 if not main_doc.is_file():
-    sys.exit(f"check-image-version-refs.py: no {main_doc}. That file is the prose this check "
-             "is about, and without it nothing is measured.")
+    print(f"check-image-version-refs.py: no {main_doc.resolve()}. That file is the prose this check "
+          "is about, and without it nothing is measured.", file=sys.stderr)
+    sys.exit(2)
 docs = [main_doc] + [p for p in [root / 'checks' / 'README.md'] if p.is_file()]
 
 stale = []

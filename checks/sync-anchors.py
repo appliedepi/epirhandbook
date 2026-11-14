@@ -16,7 +16,7 @@ with PyYAML. Usage: python3 checks/sync-anchors.py [--dry-run]
 """
 import os, re, glob, sys
 
-from langs import read_languages, read_stems
+from langs import Unreadable, read_languages, read_stems, stop
 
 USAGE = __doc__.strip().split('Usage: ')[1].strip()
 unknown = [a for a in sys.argv[1:] if a != '--dry-run']
@@ -24,10 +24,13 @@ if unknown:
     print('unknown argument %s\nUsage: %s' % (unknown[0], USAGE), file=sys.stderr)
     sys.exit(2)
 dry = '--dry-run' in sys.argv
-MAIN, LANGS = read_languages('languages.yml')
-LANGS = [l for l in LANGS if l != MAIN]
 LANDING = 'index'
-decl = [s for s in read_stems('content/%s/_quarto.yaml' % MAIN) if s != LANDING]
+try:
+    MAIN, LANGS = read_languages('languages.yml')
+    decl = [s for s in read_stems('content/%s/_quarto.yaml' % MAIN) if s != LANDING]
+except Unreadable as e:
+    e.stop()
+LANGS = [l for l in LANGS if l != MAIN]
 HEAD = re.compile(r'^(#{1,6}\s+.*?)(\s*\{[^}]*\})?\s*$')
 
 
@@ -72,8 +75,9 @@ def cross_link(stem, ident):
 # would otherwise stop the run with a KeyError. Check 9 of checks/check-sync.sh names each.
 missing = [chapter(s, l) for s in decl for l in [MAIN] + LANGS if not os.path.isfile(chapter(s, l))]
 if missing:
-    sys.exit('sync-anchors.py: %d declared chapter file(s) are missing, first: %s. '
-             'Check 9 of checks/check-sync.sh names each one.' % (len(missing), missing[0]))
+    stop('sync-anchors.py: %d declared chapter file(s) are missing, first: %s. '
+         'Check 9 of checks/check-sync.sh names each one.'
+         % (len(missing), os.path.abspath(missing[0])))
 texts = {f: open(f, encoding='utf-8').read() for f in glob.glob('content/*/*.qmd')}
 
 

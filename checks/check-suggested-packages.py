@@ -174,12 +174,13 @@ except Unreadable as e:
     die(e.why)
 ch5 = 'content/%s/%s.qmd' % (main, CHAPTER5)
 if CHAPTER5 not in stems:
-    die('content/%s/_quarto.yaml declares no %s.qmd, so no package list is checked.'
-        % (main, CHAPTER5))
+    die('%s declares no %s.qmd, so no package list is checked.'
+        % (ROOT / 'content' / main / '_quarto.yaml', CHAPTER5))
 missing = ['content/%s/%s.qmd' % (main, s) for s in stems
            if not os.path.isfile('content/%s/%s.qmd' % (main, s))]
 if missing:
-    die('%s is missing. content/%s/_quarto.yaml declares it.' % (missing[0], main))
+    die('%s is missing. %s declares it.'
+        % (ROOT / missing[0], ROOT / 'content' / main / '_quarto.yaml'))
 
 rscript = shutil.which('Rscript')
 if rscript is None:
@@ -197,7 +198,7 @@ try:
             Path(p).write_text('\n'.join(body) + '\n', encoding='utf-8')
             index.append((rel, n, role, p))
     if not any(r[2] == 'listed' for r in index):
-        die('%s holds no R chunk, so no package list is checked.' % ch5)
+        die('%s holds no R chunk, so no package list is checked.' % (ROOT / ch5))
     listing = os.path.join(tmp, 'files.txt')
     Path(listing).write_text('\n'.join(r[3] for r in index) + '\n', encoding='utf-8')
     roles = os.path.join(tmp, 'roles.txt')
@@ -225,7 +226,8 @@ for line in res.stdout.split('\n'):
 if r_version is None:
     die('Rscript printed no result line, so the parse did not finish:\n%s' % res.stderr.rstrip())
 if not listed:
-    die('%s names no package in a p_load() or p_install_gh() call, so nothing is checked.' % ch5)
+    die('%s names no package in a p_load() or p_install_gh() call, so nothing is checked.'
+        % (ROOT / ch5))
 
 unused = sorted(p for p in listed if p not in used)
 if summary:

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Read-only: report how far the translated chapters have drifted from the English.
 # Runs every structural check the 2026-09 fix pass used. Changes nothing. Exit 1 on any drift.
-# Usage: checks/check-sync.sh                 (checks 1, 2, 3, 4, 5, 7, 9, 10, 11, 12, 14, 15, 16 and 19; about three minutes)
+# Usage: checks/check-sync.sh                 (checks 1, 2, 3, 4, 5, 7, 9, 10, 11, 12, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28 and 29; about seven minutes)
 #        checks/check-sync.sh --base <sha>    (also checks 6 and 8, over the files changed since <sha>)
 #        checks/check-sync.sh --render        (also checks 6 and 8, over the whole tree, ~20 min)
 # Checks 6 and 8 are the render gate and the chunk parse gate. Both need a base commit. Without
@@ -249,14 +249,16 @@ def wanted(stem, code, main):
     """The aliases one chapter file must carry.
 
     An alias keeps the chapter's old `/new_pages/` URL alive, so it spells the stem the way
-    that page spelled it. Only `transition_to_r` differs from its own stem: the old page was
-    `transition_to_R`. The English chapter shipped under both spellings and carries both.
+    that page spelled it. `transition_to_r` differs from its own stem: the old page was
+    `transition_to_R`. The English chapter shipped under both spellings and carries both. A
+    renamed chapter (RENAMED) keeps the old page's stem.
     """
-    old = 'transition_to_R' if stem == 'transition_to_r' else stem
+    old = 'transition_to_R' if stem == 'transition_to_r' else RENAMED.get(stem, stem)
     merged = MERGED.get(stem, [])
-    # A merged page also had a URL of its own in the current layout, /<lang>/<stem>.html.
-    # Quarto resolves an alias against the language's site root, so /<stem>.html is it.
-    current = ['/%s.html' % m for m in merged]
+    # A merged or renamed page also had a URL of its own in the current layout,
+    # /<lang>/<old stem>.html. Quarto resolves an alias against the language's site root,
+    # so /<old stem>.html is it.
+    current = ['/%s.html' % m for m in merged + ([RENAMED[stem]] if stem in RENAMED else [])]
     if code != main:
         return ['/new_pages/%s.%s.html' % (o, code) for o in [old] + merged] + current
     if stem == 'transition_to_r':
@@ -269,6 +271,10 @@ def wanted(stem, code, main):
 # bookmark to a merged page still lands on its content. about and acknowledgements merged
 # into editorial_style on 2026-10-02.
 MERGED = {'editorial_style': ['about', 'acknowledgements']}
+
+# Chapters renamed after they shipped: new stem -> old stem. The chapter carries the old
+# stem's /new_pages/ URL and its current-layout URL. data_used became download on 2026-10-30.
+RENAMED = {'download': 'data_used'}
 
 
 # Each project file is parsed once. A file that does not parse gives its DRIFT line once, and
@@ -426,6 +432,13 @@ LAYOUT
 echo "== 10. Unparsed links: markdown that looks like a link but that pandoc never parsed"
 python3 "$here/check-unparsed-links.py" --summary | sed 's/^/   /' \
   || { python3 "$here/check-unparsed-links.py" | sed 's/^/   /'; rc=1; }
+if python3 "$here/check-unparsed-links.py" --self-test > "$log/unparsed-links-self-test.txt" 2>&1; then
+  tail -1 "$log/unparsed-links-self-test.txt" | sed 's/^/   /'
+else
+  grep -vE '^ok |, wrong 0$' "$log/unparsed-links-self-test.txt" | sed 's/^/   /'
+  echo "   full output: $log/unparsed-links-self-test.txt"
+  rc=1
+fi
 echo "== 11. Image names: every images/ file a chapter names, commented lines included"
 python3 "$here/check-image-names.py" --summary | sed 's/^/   /' \
   || { python3 "$here/check-image-names.py" | sed 's/^/   /'; rc=1; }
@@ -449,6 +462,66 @@ python3 "$here/check-grid-tables.py" --summary | sed 's/^/   /' \
   || { python3 "$here/check-grid-tables.py" | sed 's/^/   /'; rc=1; }
 echo "== 21. Message counts: no check types a count into its message text"
 python3 "$here/check-message-counts.py" --summary | sed 's/^/   /' || rc=1
+echo "== 22. Lowercase names: every file name under content/, images/ and data/"
+python3 "$here/check-case.py" --summary | sed 's/^/   /' || rc=1
+echo "== 23. Interface strings: every language block in ael-extras.html has the keys of en"
+python3 "$here/check-ui-strings.py" --summary | sed 's/^/   /' || rc=1
+echo "== 24. Translation rules: every language passes translation/all.yml and translation/<code>.yml"
+python3 "$here/check-translation-rules.py" --summary 2>&1 | sed 's/^/   /' \
+  || { python3 "$here/check-translation-rules.py" 2>&1 | sed 's/^/   /'; rc=1; }
+if python3 "$here/check-translation-rules.py" --self-test > "$log/translation-rules-self-test.txt" 2>&1; then
+  tail -1 "$log/translation-rules-self-test.txt" | sed 's/^/   /'
+else
+  grep -vE '^ok |, wrong 0$' "$log/translation-rules-self-test.txt" | sed 's/^/   /'
+  echo "   full output: $log/translation-rules-self-test.txt"
+  rc=1
+fi
+echo "== 25. Rendered tables: the check's fixtures pass its self-test (the check itself runs on site/ in build-deploy.yml)"
+if python3 "$here/check-rendered-tables.py" --self-test > "$log/rendered-tables-self-test.txt" 2>&1; then
+  tail -1 "$log/rendered-tables-self-test.txt" | sed 's/^/   /'
+else
+  grep -vE '^ok |, wrong 0$' "$log/rendered-tables-self-test.txt" | sed 's/^/   /'
+  echo "   full output: $log/rendered-tables-self-test.txt"
+  rc=1
+fi
+echo "== 26. Raw HTML: no placeholder such as <name> outside code in any language"
+python3 "$here/check-raw-html.py" --summary 2>&1 | sed 's/^/   /' \
+  || { python3 "$here/check-raw-html.py" 2>&1 | grep -v '^scanned ' | sed 's/^/   /'; rc=1; }
+if python3 "$here/check-raw-html.py" --self-test > "$log/raw-html-self-test.txt" 2>&1; then
+  tail -1 "$log/raw-html-self-test.txt" | sed 's/^/   /'
+else
+  grep -vE '^ok |, wrong 0$' "$log/raw-html-self-test.txt" | sed 's/^/   /'
+  echo "   full output: $log/raw-html-self-test.txt"
+  rc=1
+fi
+echo "== 27. Parity: every translated section carries the code spans, links, images and bold of its English section"
+python3 "$here/check-parity.py" --summary 2>&1 | sed 's/^/   /' \
+  || { python3 "$here/check-parity.py" 2>&1 | sed 's/^/   /'; rc=1; }
+if python3 "$here/check-parity.py" --self-test > "$log/parity-self-test.txt" 2>&1; then
+  tail -1 "$log/parity-self-test.txt" | sed 's/^/   /'
+else
+  grep -vE '^ok |, wrong 0$' "$log/parity-self-test.txt" | sed 's/^/   /'
+  echo "   full output: $log/parity-self-test.txt"
+  rc=1
+fi
+echo "== 28. Markdown form: the heading form, a blank line before each heading, no bold git command, no quoted call, the bold forms"
+python3 "$here/check-markdown-form.py" --summary 2>&1 | sed 's/^/   /' \
+  || { python3 "$here/check-markdown-form.py" 2>&1 | sed 's/^/   /'; rc=1; }
+if python3 "$here/check-markdown-form.py" --self-test > "$log/markdown-form-self-test.txt" 2>&1; then
+  tail -1 "$log/markdown-form-self-test.txt" | sed 's/^/   /'
+else
+  grep -vE '^ok |, wrong 0$' "$log/markdown-form-self-test.txt" | sed 's/^/   /'
+  echo "   full output: $log/markdown-form-self-test.txt"
+  rc=1
+fi
+echo "== 29. Rendered structure: the check's fixtures pass its self-test (the check itself runs on site/ in build-deploy.yml)"
+if python3 "$here/check-rendered-structure.py" --self-test > "$log/rendered-structure-self-test.txt" 2>&1; then
+  tail -1 "$log/rendered-structure-self-test.txt" | sed 's/^/   /'
+else
+  grep -vE '^ok |, wrong 0$' "$log/rendered-structure-self-test.txt" | sed 's/^/   /'
+  echo "   full output: $log/rendered-structure-self-test.txt"
+  rc=1
+fi
 if [ -n "$base" ]; then
   echo "== 6. Render gate on every translated chapter changed since $base (quarto render --no-execute)"
   "$here/render-gate.sh" "$base" HEAD > "$log/render.txt" 2>&1 || rc=1
