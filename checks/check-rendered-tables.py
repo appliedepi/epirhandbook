@@ -30,6 +30,7 @@ Pages pair by language folder and stem: `<site>/<lang>/<stem>.html` against
 Text inside a `<script>` element is not HTML, so a table in a script is not read.
 
 The check fails (exit 1) on each of these findings:
+  missing-language     a language that is declared has no folder in the site
   empty-site           no language folder other than the main one holds a chapter page
   no-english-page      a translated chapter page has no chapter page of the same stem in the
                        main language
@@ -43,16 +44,22 @@ The check fails (exit 1) on each of these findings:
 A table-count, row-count or cell-count finding names the language, the stem, the table, and
 the rows and cells of the English side and of the translated side. A missing-page finding names
 the language and the stem, and the rows and cells of each table on the page that exists. An
-empty-site finding names the site folder, because it has no language or stem.
+empty-site finding names the site folder, because it has no language or stem. A
+missing-language finding names the language and the folder that does not exist.
 
 The main language is `--main <code>`. The default is the `main:` line of `languages.yml` at
 the repository root. The check uses the Python standard library only, so it reads that line
 with a regular expression. CI passes the value that the `languages` job read.
 
+The declared languages are `--languages <code,code,...>`. The default is every `code:` line of
+`languages.yml` at the repository root, read with a regular expression. CI passes no
+`--languages`, so the check reads that file. The self-test passes the codes in the
+`languages.txt` of a fixture, or the folder names of its site when it has no such file.
+
 `--summary` prints one line per language and a totals line, and no finding. Without it, the
 check prints every finding first. `--self-test` runs every fixture under
-`checks/fixtures/rendered-tables/`. Each fixture holds a `site/` folder and an `expect.txt` of
-`pass` or `fail <finding>`. A fail fixture MUST exit 1 with that finding and no other, and a
+`checks/fixtures/rendered-tables/`. Each fixture holds a `site/` folder, an `expect.txt` of
+`pass` or `fail <finding>`, and MAY hold a `languages.txt`. A fail fixture MUST exit 1 with that finding and no other, and a
 pass fixture MUST exit 0. Each finding needs a fail fixture, and one pass fixture is needed.
 
 Exit 0 when every page pair matches and 1 on any finding. Exit 2 on a missing or unusable
@@ -61,9 +68,11 @@ input, with one message that names its full path:
   - a site folder or a language folder that cannot be read;
   - no main-language folder, whatever the translated folders hold;
   - a page that cannot be read;
-  - with no `--main`, no `languages.yml`, or no `main:` line in it.
+  - with no `--main`, no `languages.yml`, or no `main:` line in it;
+  - with no `--languages`, no `code:` line in `languages.yml`, or a code that is not 2 or 3
+    lowercase letters.
 
-Usage: python3 checks/check-rendered-tables.py [--main <code>] [--summary] <site dir>
+Usage: python3 checks/check-rendered-tables.py [--main <code>] [--languages <codes>] [--summary] <site dir>
        python3 checks/check-rendered-tables.py --self-test
 """
 import re
@@ -76,10 +85,11 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 FIXTURES = HERE / 'fixtures' / 'rendered-tables'
 PROG = 'check-rendered-tables'
-KINDS = ('empty-site', 'no-english-page', 'no-translated-page',
+KINDS = ('missing-language', 'empty-site', 'no-english-page', 'no-translated-page',
          'table-count', 'row-count', 'cell-count')
 CODE = re.compile(r'[a-z]{2,3}')
 MAIN_LINE = re.compile(r'''^main:[ \t]*["']?([^"'\s#]*)["']?[ \t]*(?:#.*)?$''', re.M)
+CODE_LINE = re.compile(r'''^[ \t]*(?:-[ \t]+)?code:[ \t]*["']?([^"'\s#]*)["']?[ \t]*(?:#.*)?$''', re.M)
 
 
 def die(msg):
@@ -146,6 +156,20 @@ def default_main():
     return m.group(1)
 
 
+def default_languages():
+    """The `code:` values of languages.yml at the repository root, in file order."""
+    path = ROOT / 'languages.yml'
+    try:
+        text = path.read_text(encoding='utf-8')
+    except OSError:
+        die('no %s, and no --languages. That file declares the languages.' % path)
+    codes = CODE_LINE.findall(text)
+    if not codes or not all(CODE.fullmatch(c) for c in codes):
+        die('%s has no `code:` line, or a code that is not 2 or 3 lowercase letters, and no '
+            '--languages was given.' % path)
+    return codes
+
+
 def shape(t):
     return '%d rows and %d cells' % (t[0], t[1]) if t else 'no such table'
 
@@ -180,7 +204,7 @@ def compare(lang, stem, eng, tr):
     return out
 
 
-def check(site, main):
+def check(site, main, declared):
     """(findings, summary lines) for one site folder. Each finding is (kind, text)."""
     site = site.resolve()
     try:
@@ -200,6 +224,12 @@ def check(site, main):
     findings, lines = [], []
     lines.append('%s (main): pages %d, tables %d'
                  % (main, len(ref), sum(len(v) for v in ref.values())))
+    # A declared language with no folder has no page to compare, so it is not clean.
+    for lang in declared:
+        if lang != main and not (site / lang).is_dir():
+            findings.append(('missing-language', 'language %s: %s is not a directory, so no '
+                             'page of this declared language was compared' % (lang, site / lang)))
+            lines.append('%s: no folder, findings 1' % lang)
     # With no translated chapter page, no page pair exists, so nothing is compared. The
     # empty-site finding belongs to no language, so each language line has 0 findings.
     compared = ref if pages else {}
@@ -227,6 +257,16 @@ def check(site, main):
     return findings, lines
 
 
+def fixture_languages(d):
+    """The declared codes of one fixture: its languages.txt, or else its site folders."""
+    path = d / 'languages.txt'
+    if path.is_file():
+        return path.read_text(encoding='utf-8').strip()
+    site = d / 'site'
+    names = [p.name for p in site.iterdir() if p.is_dir()] if site.is_dir() else []
+    return ','.join(sorted(n for n in names if not n.startswith('.')))
+
+
 def self_test():
     dirs = sorted(p for p in FIXTURES.iterdir() if p.is_dir()) if FIXTURES.is_dir() else []
     if not dirs:
@@ -249,7 +289,8 @@ def self_test():
             continue
         seen.add(' '.join(expect))
         run = subprocess.run([sys.executable, str(Path(__file__).resolve()),
-                              '--main', 'en', str(d / 'site')],
+                              '--main', 'en', '--languages', fixture_languages(d),
+                              str(d / 'site')],
                              capture_output=True, text=True, timeout=60)
         got = {line.split(':', 1)[0] for line in run.stdout.splitlines()
                if line.split(':', 1)[0] in KINDS}
@@ -275,7 +316,7 @@ def main(argv):
     usage = __doc__.strip().split('Usage: ')[1]
     if argv == ['--self-test']:
         return self_test()
-    summary, main, rest = False, None, []
+    summary, main, languages, rest = False, None, None, []
     i = 0
     while i < len(argv):
         a = argv[i]
@@ -283,6 +324,9 @@ def main(argv):
             summary = True
         elif a == '--main' and i + 1 < len(argv):
             main = argv[i + 1]
+            i += 1
+        elif a == '--languages' and i + 1 < len(argv):
+            languages = argv[i + 1]
             i += 1
         elif a.startswith('-'):
             die('unknown argument %s. Usage: %s' % (a, usage))
@@ -298,7 +342,14 @@ def main(argv):
         main = default_main()
     elif not CODE.fullmatch(main):
         die('--main %r is not a language code of 2 or 3 lowercase letters.' % main)
-    findings, lines = check(site, main)
+    if languages is None:
+        declared = default_languages()
+    else:
+        declared = [c for c in re.split(r'[,\s]+', languages) if c]
+        if not declared or not all(CODE.fullmatch(c) for c in declared):
+            die('--languages %r is not a list of language codes of 2 or 3 lowercase letters.'
+                % languages)
+    findings, lines = check(site, main, declared)
     if not summary:
         for kind, text in findings:
             print('%s: %s' % (kind, text))

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Read-only: report how far the translated chapters have drifted from the English.
 # Runs every structural check the 2026-09 fix pass used. Changes nothing. Exit 1 on any drift.
-# Usage: checks/check-sync.sh                 (checks 1, 2, 3, 4, 5, 7, 9, 10, 11, 12, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25 and 26; about three minutes)
+# Usage: checks/check-sync.sh                 (checks 1, 2, 3, 4, 5, 7, 9, 10, 11, 12, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28 and 29; about seven minutes)
 #        checks/check-sync.sh --base <sha>    (also checks 6 and 8, over the files changed since <sha>)
 #        checks/check-sync.sh --render        (also checks 6 and 8, over the whole tree, ~20 min)
 # Checks 6 and 8 are the render gate and the chunk parse gate. Both need a base commit. Without
@@ -432,6 +432,13 @@ LAYOUT
 echo "== 10. Unparsed links: markdown that looks like a link but that pandoc never parsed"
 python3 "$here/check-unparsed-links.py" --summary | sed 's/^/   /' \
   || { python3 "$here/check-unparsed-links.py" | sed 's/^/   /'; rc=1; }
+if python3 "$here/check-unparsed-links.py" --self-test > "$log/unparsed-links-self-test.txt" 2>&1; then
+  tail -1 "$log/unparsed-links-self-test.txt" | sed 's/^/   /'
+else
+  grep -vE '^ok |, wrong 0$' "$log/unparsed-links-self-test.txt" | sed 's/^/   /'
+  echo "   full output: $log/unparsed-links-self-test.txt"
+  rc=1
+fi
 echo "== 11. Image names: every images/ file a chapter names, commented lines included"
 python3 "$here/check-image-names.py" --summary | sed 's/^/   /' \
   || { python3 "$here/check-image-names.py" | sed 's/^/   /'; rc=1; }
@@ -485,6 +492,34 @@ if python3 "$here/check-raw-html.py" --self-test > "$log/raw-html-self-test.txt"
 else
   grep -vE '^ok |, wrong 0$' "$log/raw-html-self-test.txt" | sed 's/^/   /'
   echo "   full output: $log/raw-html-self-test.txt"
+  rc=1
+fi
+echo "== 27. Parity: every translated section carries the code spans, links, images and bold of its English section"
+python3 "$here/check-parity.py" --summary 2>&1 | sed 's/^/   /' \
+  || { python3 "$here/check-parity.py" 2>&1 | sed 's/^/   /'; rc=1; }
+if python3 "$here/check-parity.py" --self-test > "$log/parity-self-test.txt" 2>&1; then
+  tail -1 "$log/parity-self-test.txt" | sed 's/^/   /'
+else
+  grep -vE '^ok |, wrong 0$' "$log/parity-self-test.txt" | sed 's/^/   /'
+  echo "   full output: $log/parity-self-test.txt"
+  rc=1
+fi
+echo "== 28. Markdown form: the heading form, a blank line before each heading, no bold git command, no quoted call, the bold forms"
+python3 "$here/check-markdown-form.py" --summary 2>&1 | sed 's/^/   /' \
+  || { python3 "$here/check-markdown-form.py" 2>&1 | sed 's/^/   /'; rc=1; }
+if python3 "$here/check-markdown-form.py" --self-test > "$log/markdown-form-self-test.txt" 2>&1; then
+  tail -1 "$log/markdown-form-self-test.txt" | sed 's/^/   /'
+else
+  grep -vE '^ok |, wrong 0$' "$log/markdown-form-self-test.txt" | sed 's/^/   /'
+  echo "   full output: $log/markdown-form-self-test.txt"
+  rc=1
+fi
+echo "== 29. Rendered structure: the check's fixtures pass its self-test (the check itself runs on site/ in build-deploy.yml)"
+if python3 "$here/check-rendered-structure.py" --self-test > "$log/rendered-structure-self-test.txt" 2>&1; then
+  tail -1 "$log/rendered-structure-self-test.txt" | sed 's/^/   /'
+else
+  grep -vE '^ok |, wrong 0$' "$log/rendered-structure-self-test.txt" | sed 's/^/   /'
+  echo "   full output: $log/rendered-structure-self-test.txt"
   rc=1
 fi
 if [ -n "$base" ]; then

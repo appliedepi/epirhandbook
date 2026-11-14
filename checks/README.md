@@ -1,6 +1,6 @@
 # The repository's checks: what they cover, and how to run them
 
-Run `checks/check-sync.sh` from the repository root. It changes nothing, takes about three
+Run `checks/check-sync.sh` from the repository root. It changes nothing, takes about seven
 minutes, and ends with `IN SYNC` or `DRIFT`. Repeat after any English chapter changes, and every
 few months regardless.
 
@@ -420,24 +420,86 @@ instead.
 parsed into one.
 
 Check 5 asks pandoc which links it found, then checks their targets. Anything that never parses
-is invisible to it. Four defect forms came out of that blind spot, all found by reading:
+is invisible to it. Five defect forms came out of that blind spot, all found by reading:
 
 | form | example |
 |---|---|
 | reference link with no definition | `[R project][r_projects]` |
 | bracket and paren transposed | `[R project(r_projects.qmd)]` |
 | opening bracket missing | `R project](r_projects.qmd)` |
+| closing bracket missing | `[R project (r_projects.qmd)` |
 | two bare `$` pairing as TeX math | `table(d$col)` ... `[link](x.qmd)` ... `table(d$other)` |
 
-The rule is one line: a link that parsed leaves no brackets behind. Render the chapter, then look
-for a residual `](`, `][`, or a bracketed span whose content looks like a link target. Fenced code,
-HTML comments, inline R and rendered `<code>` are removed first, because each produces that
+The first rule is one line: a link that parsed leaves no brackets behind. Render the chapter, then
+look for a residual `](`, `][`, or a bracketed span whose content looks like a link target. Fenced
+code, HTML comments, inline R and rendered `<code>` are removed first, because each produces that
 signature without being a defect.
 
-Expected output: `unparsed links: 0`.
+A link with its closing bracket missing leaves neither signature, so a second rule finds it. The
+check removes every HTML tag from the rendered chapter, which leaves the text a reader sees. A
+finding is an opening `[` that is not closed before a `(` that opens a target. The text between the
+`[` and the `(` holds no bracket and at most 200 characters, and it MAY cross a line break. A target
+is one of these:
+
+- a URL: `http://`, `https://` or `mailto:`
+- a page: a relative path that ends in `.qmd` or `.html`, with or without a `#` fragment
+- a section: `#` and then a letter, a digit or `_`
+- an image: a path that ends in `.png`, `.jpg`, `.jpeg`, `.gif`, `.svg`, `.webp`, `.bmp`, `.tif` or `.tiff`
+
+`[sic]`, `x[1]` and a `[ ]` checkbox close their bracket, so they pass. A transposed link matches
+both rules, so it gives two findings. The check reads every `.qmd` file under `content/<lang>/`, so
+the rules hold in every language, English included.
+
+A finding has three fields, separated by tabs. A finding of the first rule gives the file, the
+signature and the rendered HTML around it. A finding of the second rule gives the file and the line,
+`missing ]`, and the text from the `[` to the target. This one is from the Turkish chapter at
+`09ef40bf`:
+
+```
+content/tr/collaboration.qmd:499	missing ]	[Happy Git with R (https://happygitwithr.com/pull-tricky.html
+```
+
+The line is the source line of the `(`. The check finds it by its target, outside fenced code and
+HTML comments, and it skips a `(` that follows `]`. Line 0 means that the source holds no such
+`(`. Then look for the `[` before the target in the source.
+
+A chapter that the check cannot read is an input error, never a clean chapter. The check stops at
+the first one with exit 2 and one message that names the full path of the chapter:
+
+- the chapter is not UTF-8
+- pandoc exits other than 0 on the chapter, for example on a YAML metadata block that does not
+  parse. The message holds the error that pandoc wrote.
+
+A missing pandoc, an unknown argument, and `--fixture` or `--pandoc` with no value also stop the
+check with exit 2 and one message. Until the second follow-up of issue 466, the check ignored the
+exit status of pandoc, so a chapter that pandoc failed on read as clean.
+
+`check-sync.sh` runs the check as check 10 and reports DRIFT when it exits non-zero. It then prints
+every finding. `check-sync.sh` also runs `--self-test` in check 10 and reports DRIFT when a fixture
+fails.
+
+`--self-test` runs the check on every fixture under `checks/fixtures/unparsed-links/`. Each fixture
+is a small tree with `content/<lang>/case.qmd` and `expect.txt`. The first line of `expect.txt` is
+`pass`, `fail` or `error`. A fail fixture lists the first two fields of each expected finding, and it
+MUST exit 1 with exactly those findings. A pass fixture MUST exit 0. An error fixture lists the text
+that its message MUST hold, with `{fixture}` for the full path of the fixture. It MUST exit 2 with one
+message line and no traceback. These fixtures MUST exist:
+
+- each target form of the second rule, and a link text across a line break, each of which MUST fail
+- each form of the first rule, each of which MUST fail
+- `[sic]`, `x[1]`, a `[ ]` checkbox and a correct link, each of which MUST pass
+- a YAML metadata block that does not parse and a chapter that is not UTF-8, each of which MUST stop
+  with exit 2
+- a YAML metadata block that parses, which MUST pass
+
+Two more pass fixtures hold a code span and a link text of 201 characters.
+
+Expected output: `links with a missing ]: 0` and `unparsed links: 0`. The second count holds the
+findings of both rules. The self-test prints `self-test: fixtures 21, wrong 0`.
 
 Remedy: fix the link. A reference link needs either a `[label]: target` definition or conversion to
-an inline link. A `$` swallowing a link means bare R code needs backticks.
+an inline link. A `$` swallowing a link means bare R code needs backticks. A missing `]` goes
+directly before the `(`, with no space between them: `[R project](r_projects.qmd)`.
 
 ## 11. Image names
 
@@ -447,6 +509,11 @@ Reads `knitr::include_graphics(here::here("images", ...))` and plain markdown im
 **Commented lines count.** The defect this was written for lived inside an R comment in all eight
 languages: `images/survanalysis.png`, absent, named by `survival_analysis.qmd`. Nothing rendered
 it, so nothing caught it.
+
+The check refuses an empty `images/`. When `images/` is missing, or holds no file and no folder,
+the check exits 2 with one message that names the full path of `images/`. Every name would
+otherwise report missing. It also exits 2 when it finds no `.qmd` file under `content/<lang>/`.
+Check 12 tests both inputs, absent and empty.
 
 Expected output: `missing from images/: 0`.
 
@@ -464,11 +531,22 @@ For each check and each required input, it builds a fixture without that input. 
 
 The message MUST hold the absolute path that check 12 builds for the input, with the fixture folder resolved. A relative name is not enough. Before issue 466 the test accepted the bare name, and `site` is part of the program name `check-site-links`, so every message of that check passed. The `--slots` case of check 15 and the empty translation folder of `sync-chunks.py` need the full path too.
 
-The two sync scripts run with `--dry-run`, so they write nothing. Checks 6 and 8 compare two commits, so they run with `HEAD HEAD` in a fixture that is a git repository. Checks 17, 18 and 25 read what a render wrote. Check 17 runs with the paths `html_outputs render.log`, and checks 18 and 25 run with `site`. Each of those three inputs is refused when it is absent and when it is empty. The other 13 of the 20 scripts in `CASES` run with `--summary`, check 26 among them. Checks 16 and 19 need `Rscript`, so check 12 needs it too.
+The two sync scripts run with `--dry-run`, so they write nothing. Checks 6 and 8 compare two commits, so they run with `HEAD HEAD` in a fixture that is a git repository. Checks 17, 18, 25 and 29 read what a render wrote. Check 17 runs with the paths `html_outputs render.log`, and checks 18, 25 and 29 run with `site`. Each of those inputs is refused when it is absent and when it is empty. Checks 25 and 29 read the declared languages out of `languages.yml`. That file is refused when it is absent and when it does not parse. The other 15 of the 23 scripts in `CASES` run with `--summary`, checks 26, 27 and 28 among them. Checks 27 and 28 get a fixture with a French chapter, because check 27 refuses a tree with no chapter to compare. Their name list of bold is refused when it is empty. Checks 16 and 19 need `Rscript`, so check 12 needs it too.
 
 It does NOT pass `--fixture`. That flag makes a check derive its file set by globbing. Globbing bypasses `languages.yml`, and would exercise a path the repository never runs.
 
-Expected output: `cases: 77` and `checks that do not fail cleanly: 0`. There is one case per script, input and mode, plus the `--slots` case and the empty translation folder.
+Check 10 renders each chapter with pandoc, so it has inputs that no file removal reaches. Six more cases break one of them each:
+
+- a chapter that pandoc fails on
+- a chapter that is not UTF-8
+- a `--pandoc` that names no command
+- no quarto and no pandoc on `PATH`
+- an unknown argument
+- `--fixture` with no value
+
+Each MUST exit 2 with no traceback and one message line. The line MUST name the full path of the chapter, or the command, where the case has one.
+
+Expected output: `cases: 102` and `checks that do not fail cleanly: 0`. There is one case per script, input and mode, plus the `--slots` case, the empty translation folder and the six check 10 cases.
 
 Remedy: guard the read. Say which file is missing, with its full path, and why the check needs it. Then exit 2. A script that reads its input through `checks/langs.py` catches `Unreadable` and calls its `stop()`.
 
@@ -1094,7 +1172,7 @@ Remedy: write the line in the register of its language. Keep the argument names 
 
 ## 25. Rendered tables
 
-`python3 checks/check-rendered-tables.py [--main <code>] [--summary] <site dir>` compares the tables of every translated chapter page with the tables of the English page. The assemble-deploy job of `.github/workflows/build-deploy.yml` runs it on `site/` after check 18, with the main language that the `languages` job read. Each translated chapter page MUST have the table count of the English page. Each table MUST have the row count and the cell count of its English table.
+`python3 checks/check-rendered-tables.py [--main <code>] [--languages <codes>] [--summary] <site dir>` compares the tables of every translated chapter page with the tables of the English page. The assemble-deploy job of `.github/workflows/build-deploy.yml` runs it on `site/` after check 18, with the main language that the `languages` job read. Each translated chapter page MUST have the table count of the English page. Each table MUST have the row count and the cell count of its English table.
 
 Pages pair by language folder and stem: `site/<lang>/<stem>.html` against `site/<main>/<stem>.html`. A chapter page is an `.html` file directly in a language folder that holds `<main id="quarto-document-content">`. The check therefore skips the redirect stubs, such as `index.fr.html` and `about.html`, and every page in `new_pages/`.
 
@@ -1102,6 +1180,7 @@ Tables pair by their order on the page. A row is a `<tr>`, and a cell is a `<td>
 
 The check fails on each of these findings:
 
+- `missing-language`: a declared language has no folder in the site
 - `empty-site`: no language folder other than the main one holds a chapter page
 - `no-english-page`: a translated chapter page has no English chapter page of the same stem
 - `no-translated-page`: an English chapter page has no page of the same stem in a language folder that exists
@@ -1111,13 +1190,15 @@ The check fails on each of these findings:
 
 A `table-count`, `row-count` or `cell-count` finding names the language, the stem, the table, and the rows and cells of each side. A missing-page finding names the language, the stem, and the rows and cells of each table on the page that exists. After a `table-count` finding the check compares no table of that page pair, because each later table pairs with the wrong table.
 
-The default of `--main` is the `main:` line of `languages.yml`. The check uses the Python standard library only, so it reads that line with a regular expression. The check exits 2 when the site folder or the main-language folder is missing, or when a folder or a page cannot be read. It also exits 2 when no `--main` is given and `languages.yml` or its `main:` line is missing. The message names the full path.
+The default of `--main` is the `main:` line of `languages.yml`. The check uses the Python standard library only, so it reads that line with a regular expression. The declared languages are `--languages <code,code,...>`, and the default is every `code:` line of `languages.yml`. CI passes no `--languages`. Until the second follow-up of issue 466, the check compared only the language folders that existed. It skipped a missing language in silence.
 
-`--self-test` runs every fixture under `checks/fixtures/rendered-tables/`. Each fixture holds a `site/` folder and an `expect.txt` of `pass` or `fail <finding>`. The self-test asserts that each fail fixture exits 1 with its finding and no other, and that the pass fixture exits 0. In the pass fixture, an English header cell spans two columns and the French one spans one. `check-sync.sh` runs the self-test as check 25 and reports DRIFT when a fixture fails.
+The check exits 2 when the site folder or the main-language folder is missing, or when a folder or a page cannot be read. It also exits 2 when no `--main` is given and `languages.yml` or its `main:` line is missing. With no `--languages`, it exits 2 when `languages.yml` is missing or has no `code:` line. The message names the full path.
+
+`--self-test` runs every fixture under `checks/fixtures/rendered-tables/`. Each fixture holds a `site/` folder and an `expect.txt` of `pass` or `fail <finding>`. A fixture MAY hold a `languages.txt` with the declared codes. The self-test passes them as `--languages`, or the folder names of the site when the file is absent. The self-test asserts that each fail fixture exits 1 with its finding and no other, and that each pass fixture exits 0. In the fixture `pass`, an English header cell spans two columns and the French one spans one. `check-sync.sh` runs the self-test as check 25 and reports DRIFT when a fixture fails.
 
 Expected output: one line per language, the main language first, then `rendered tables: translated languages <n>, pages <p>, tables <t>, findings 0`.
 
-To run the check locally, assemble a site with `checks/site-gate.sh` as in check 18, and give the check the folder that `site-gate.sh` prints. A render of a few chapters gives a `no-translated-page` finding for each chapter that it left out.
+To run the check locally, assemble a site with `checks/site-gate.sh` as in check 18, and give the check the folder that `site-gate.sh` prints. Pass `--languages` with the languages that you rendered, or each other language gives a `missing-language` finding. A render of a few chapters gives a `no-translated-page` finding for each chapter that it left out.
 
 Remedy: correct the table in the source chapter of that language, so that pandoc reads it as the English table. Where the English table is wrong, correct the English chapter first.
 
@@ -1148,3 +1229,153 @@ The check exits 0 on no finding and 1 on a finding. It exits 2 on a missing or u
 Expected output: one line per language, `scanned <code>: files <n>, lines with a placeholder 0`. Then one totals line, `raw html: languages <n>, files <f>, total 0 lines, 0 placeholders`.
 
 Remedy: put the placeholder in a code span, `` `<name>` ``. Where the word is not code, escape it as `\<name>`.
+
+## 27. Parity
+
+`python3 checks/check-parity.py [--summary] [--pandoc <cmd>] [<tree>]` compares each translated chapter with its English chapter, section by section. It fails when a translated section does not carry the code spans, link targets, images and bold of its English section. `check-sync.sh` runs it as check 27 and reports DRIFT when it exits non-zero. It then prints every finding. `check-sync.sh` also runs `--self-test` in check 27 and reports DRIFT when a fixture fails.
+
+The check reads the 50 declared chapters other than `index.qmd` in the 7 translated languages, the 350 pairs of check 1. Pandoc reads each chapter, as in checks 5 and 10. Fenced and indented code is not compared, because check 3 holds it identical to the English. Section 0 is the text before the first heading. Section n is the text after the n-th heading, up to the next heading of any level.
+
+It compares four kinds of item in each section:
+
+- `code`: the text of each code span, exactly. Inline R counts with its leading `r `.
+- `link`: the target of each link. A reference link counts by its target, and an `<a href>` in raw HTML counts too.
+- `image`: the target of each image, and the `src` of each `<img>` in raw HTML.
+- `bold`: a `name` bold, such as **dplyr**, is compared exactly. Every other bold is compared by count, because its text is translated. Check 28 gives the three bold forms.
+
+This finding is from the tree at `09ef40bf`, before phase 10 restored the spans:
+
+```
+tr cleaning.qmd section 5 "Load packages" code "p_load()": English 1, translation 0 [blocks: English 1; translation -]
+```
+
+It names the language, the chapter, the section ordinal and its English heading, the kind and the item. Then it gives the count of the item on each side. The bracket names the block of each occurrence, and the heading is block 0. It appears only when both sections have the same number of blocks, and it is a hint, not a location.
+
+`checks/parity-exceptions.tsv` excuses a difference. Its columns are `lang`, `file`, `section`, `kind`, `english`, `translation` and `reason`. A row removes one occurrence of `english` from the English section and one of `translation` from the translated section. One side MAY be empty. The reason MUST start with one of two causes:
+
+- `(a) `: a string literal in quotes inside a code span, which the code does not use, translated as an example value. A translated identifier or placeholder name is not cause (a).
+- `(b) `: a link to a resource in the reader's language that replaces an English-only resource.
+
+To add a row:
+
+1. Copy the language, the chapter file name, the section ordinal, the kind and the items from the finding.
+2. Put the English item in `english` and the translated item in `translation`.
+3. Write the cause, then one sentence that names the reason.
+
+A row that does not find each item it names is a `stale-exception` finding. A row with another cause, with equal sides or with a wrong field is an `invalid-exception` finding. Neither row excuses anything.
+
+**Limit.** The check compares the items of a section as a multiset. It cannot tell whether an item stands in the right sentence, so a code span that moves to another sentence of the same section passes.
+
+The check exits 2 on a chapter whose English and translated heading counts differ, and it does not compare that chapter. Check 1 reports the same chapter.
+
+`--self-test` runs every fixture under `checks/fixtures/parity/`. Each fixture is a small tree with its own `languages.yml`, `content/`, `checks/parity-exceptions.tsv` and `expect.txt`. A fail fixture lists each expected finding line, and it MUST exit 1 with exactly those findings. A pass fixture MUST exit 0. Each kind and each exception finding has a fail fixture. A translated bold, a changed code block and an applied exception each have a pass fixture.
+
+The check exits 0 on no finding and 1 on a finding. It exits 2 on a missing or unusable input, with one message that names its full path. The inputs are `languages.yml`, the declared chapters, `checks/parity-exceptions.tsv` and `checks/bold-names.txt`.
+
+Expected output: one line per translated language, then `parity: pairs 350 (7 languages x 50 stems), compared 350`, the pandoc command and `findings 0`.
+
+Remedy: restore the English item in the translated section. Where the difference has cause (a) or (b), add an exception row instead.
+
+## 28. Markdown form
+
+`python3 checks/check-markdown-form.py [--summary] [--pandoc <cmd>] [--rules <rule>[,...]] [<tree>]` reads every declared chapter of every language, English and `index.qmd` included. It fails on markdown that departs from the default form. `check-sync.sh` runs it as check 28 and reports DRIFT when it exits non-zero. It then prints every finding. `check-sync.sh` also runs `--self-test` in check 28 and reports DRIFT when a fixture fails.
+
+Each finding names its rule:
+
+- `heading-form`: a heading line MUST be `#` to `######`, one space, then the title. A trailing `{...}` block and trailing spaces are allowed. A heading line is any line that starts with 1 to 6 `#` outside code and HTML comments, so `##Title` is one. The finding names the fault: `tab`, `spaces`, `no-space` or `no-title`.
+- `heading-blank-before`: a heading line MUST follow a blank line, because pandoc reads it as paragraph text after a non-blank line. Six lines are exempt, because pandoc reads a heading after each of them:
+  - the end of an HTML comment that starts its line
+  - the end of a fenced code block
+  - the end of the front matter
+  - a heading
+  - a `:::` div fence
+  - a pipe-table line
+- `bold-command`: a bold that starts with `git` and a git subcommand, such as `**git commit**`, also across one line break. Write the command in a code span. The match is case-sensitive, so **Git** as a product name passes.
+- `bold-form`: a bold that is not one of the three forms below. Remove the bold and keep the text.
+- `quoted-call`: a call such as `f()`, `pkg::f()` or `f(x)` in quotes in prose, outside code spans. Seven quote forms count: straight double and single, curly double and single, `« »`, `„ “` and `「」`. A non-ASCII letter between the parentheses makes it no call, so a label with its translation, such as `"Stage(Aşama)"`, passes. Write the call in a code span, or remove the quotes where the English has no code span.
+
+A bold MUST have one of three forms, in every language:
+
+- `name`: the bold text is exactly one line of `checks/bold-names.txt`, such as **dplyr**, **data.table** or **RStudio**.
+- `lead-in`: from the start of a sentence up to and including a colon, such as **NOTE:** or **注意：**.
+- `sentence`: a whole sentence. A bold line with no closing mark, such as **Load packages**, is a whole sentence.
+
+`checks/bold-names.txt` holds one name per line, and a comment above each group names its source. These are the groups:
+
+- the packages that the English R chunks load
+- the base R packages, and R
+- a fixed list of tools and products, such as **Git** and **Excel**
+- the packages that the prose names, each found on CRAN, in the CRAN archive or on GitHub
+
+To add a name, add one line with the exact name. Add a package only when it exists on CRAN, Bioconductor or GitHub.
+
+**Limit.** A new package in bold needs a line in `checks/bold-names.txt`. Until it has one, check 28 reports the bold as `bold-form`, and check 27 counts it as a plain bold.
+
+A finding reads `<lang> content/<lang>/<stem>.qmd:<line> <rule> [<fault>] | <text>`. The text is the heading line, the matched text or the bold text, as a JSON string. Pandoc gives no source line for a bold, so the check finds the bold in the source by its text. A bold that it cannot find reports line 0, and the totals line counts it as `unlocated`.
+
+A run applies all five rules. `--rules <rule>[,...]` applies only the rules it names, such as `--rules quoted-call`.
+
+`--self-test` runs every fixture under `checks/fixtures/markdown-form/`. Each fixture is a small tree with its own `languages.yml`, `content/` and `expect.txt`. A fail fixture lists each expected finding as the part of its line before ` | `. Each rule has a fail fixture and a pass fixture. Each exemption of `heading-blank-before` has a pass fixture, and each quote form has a fail fixture. **Git** as a product name and `"Stage(Aşama)"` each have a pass fixture.
+
+The check exits 0 on no finding and 1 on a finding. It exits 2 on a missing or unusable input, with one message that names its full path. The inputs are `languages.yml`, the declared chapters and `checks/bold-names.txt`.
+
+Expected output: one line per language, then `markdown form: languages 8, files 408`, the pandoc command and `findings 0`.
+
+Remedy: correct the markdown in the chapter that the finding names.
+
+## 29. Rendered structure
+
+`python3 checks/check-rendered-structure.py [--main <code>] [--languages <codes>] [--summary] <site dir>` compares each section of every translated chapter page with the same section of the English page. The assemble-deploy job of `.github/workflows/build-deploy.yml` runs it on `site/` right after check 25, with the main language that the `languages` job read. A finding fails the build.
+
+The check reads the HTML that ships, so it sees what pandoc made of the markdown. Check 27 compares the markdown. This check finds markdown that pandoc reads differently in a translation. For example, a list with no blank line before it renders as paragraph text, and a stray indent renders as a code block.
+
+Pages pair as in check 25: `site/<lang>/<stem>.html` against `site/<main>/<stem>.html`, chapter pages only. The check does not compare `index.html`, because each language writes its own landing page. Check 25 still compares its tables. Section 0 is the content before the first heading. Section n starts at the n-th heading, `<h1>` to `<h6>`, and runs to the next heading of any level.
+
+In each section, the count of each of these kinds MUST equal the count in the English section:
+
+- `h1` to `h6`: a heading of that level
+- `a`: an `<a>` with an `href`
+- `img`: an `<img>`
+- `code-inline`: a `<code>` outside `<pre>`
+- `code-block`: a `<code>` inside `<pre>`
+- `table`: a `<table>`
+- `li`: an `<li>`
+
+Every kind is strict: no difference passes, and no exception file exists. Italics are not compared.
+
+The check does not count these parts of a page:
+
+- everything outside `<main id="quarto-document-content">`: the header with the language switcher, the sidebar, the margin table of contents and the footer. They are navigation, and each language has its own.
+- each `<nav>` inside `<main>`: the breadcrumbs and the page navigation, for the same reason.
+- an `<a>` inside `<pre>`. Quarto writes an anchor `<a href="#cb1-1">` on each line of a code block. A translated code block with one more blank line would otherwise read as one more link.
+- the text of `<script>` and `<style>`, which is not HTML.
+
+This finding is from a copy of the November 2026 site with one list item removed from the Turkish page:
+
+```
+li: language tr, stem cleaning, section 4 "8.1 Cleaning pipeline": English 5, translation 4
+```
+
+It names the kind, the language and the page stem. Then it names the section ordinal with its English heading, and the count on each side. To find the section, look up the English heading in `content/en/<stem>.qmd`, and go to the heading with the same ordinal in `content/<lang>/<stem>.qmd`.
+
+The check first compares the heading levels of the two pages, in order. Where they differ, one ordinal names different sections on the two pages. The check then reports each heading that does not align, and it compares no other kind on that page. Where two headings of the same level stand next to each other, the finding MAY name either of them.
+
+The check also has the four site and page findings of check 25: `missing-language`, `empty-site`, `no-english-page` and `no-translated-page`. They mean the same here. So the check fails on a site with no translated page, and on a declared language with no folder in the site.
+
+The default of `--main` is the `main:` line of `languages.yml`. The default of `--languages` is every `code:` line of `languages.yml`, as in check 25. The check exits 2 on a missing or unusable input, with one message that names its full path. The inputs are the site folder, the main-language folder, each page and, with no `--main` or no `--languages`, `languages.yml`.
+
+`--self-test` runs every fixture under `checks/fixtures/rendered-structure/`. Each fixture holds a `site/` folder and an `expect.txt`, and MAY hold a `languages.txt` as in check 25. The first line of `expect.txt` is `pass` or `fail`, and a fail fixture lists each expected finding line after it. A fail fixture MUST exit 1 with exactly those findings, and a pass fixture MUST exit 0. Each kind has a fail fixture that removes one element in one section. Five pass fixtures cover these cases:
+
+- a translated page with the English structure
+- a `languages.txt` that declares only the languages that the site holds
+- extra links in the header, the language switcher, the sidebar, the margin table of contents, the breadcrumbs, the page navigation and the footer
+- a code block with one more line, so one more `<a>` inside `<pre>`
+- an `index.html` with another structure than the English one
+
+`check-sync.sh` runs the self-test as check 29 and reports DRIFT when a fixture fails.
+
+Expected output: one line for the main language, with its count of each kind, and one line per translated language. The last line is `rendered structure: translated languages <n>, pages <p>, sections <s>, findings 0`.
+
+To run the check locally, assemble a site with `checks/site-gate.sh` as in check 18. Then give the check the folder that `site-gate.sh` prints, and pass `--languages` with the languages that you rendered. A render of a few chapters gives a `no-translated-page` finding for each chapter that it left out.
+
+Remedy: correct the markdown of that section in the translated chapter, so that pandoc renders the English structure. Where the English is wrong, correct the English chapter first.
