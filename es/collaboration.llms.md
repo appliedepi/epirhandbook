@@ -1,0 +1,686 @@
+# 46  Control de versiones y colaboración con Git y Github
+
+Este capítulo presenta una visión general del uso de Git para colaborar con otros. Puede encontrar tutoriales más extensos al final, en la sección de Recursos.
+
+## 46.1 ¿Qué es Git?
+
+Git es un software de control de versiones que permite seguir los cambios realizados en una carpeta. Se puede utilizar como la opción “control de cambios” de Word, LibreOffice o Google docs, pero para todo tipo de archivos. Es una de las opciones más potentes y más utilizadas para el control de versiones.
+
+¿Por qué nunca he oído hablar de Git? - Mientras que las personas con formación como desarrollador aprenden habitualmente a utilizar un software de control de versiones (Git, Mercurial, Subversion u otros), a pocas personas de las disciplinas cuantitativas se nos enseñan estas habilidades. En consecuencia, la mayoría de profesionales de la epidemiología nunca hemos oído hablar sobre esto en sus estudios, y tenemos que aprenderlo sobre la marcha.
+
+**Espera, he oído hablar de Github, ¿es lo mismo?** - No exactamente, pero a menudo se utilizan juntos, y veremos aquí cómo hacerlo. En resumen:
+
+- **Git** es el sistema de control de versiones, una pieza de software. Se puede utilizar localmente en el ordenador o para sincronizar una carpeta con un sitio web anfitrión. Por defecto, se utiliza una ventana de terminal para escribir las instrucciones de Git en la línea de comandos.
+
+- Se puede utilizar un cliente/interfaz Git para evitar la línea de comandos y realizar las mismas acciones (al menos para las más sencillas y supercomunes).
+
+- Si se quiere almacenar una carpeta en un sitio web para colaborar con otros, se puede utilizar una cuenta en Github, Gitlab, Bitbucket u otros.
+
+Se puede utilizar el cliente/interfaz Github Desktop, que utiliza **Git** en segundo plano para gestionar los archivos, tanto localmente en el ordenador, como remotamente en un servidor de **GitHub**.
+
+## 46.2 ¿Por qué utilizar la combinación de Git y Github?
+
+El uso de **Git** facilita:
+
+1.  Almacenar versiones de archivos con cambios incrementales de forma que permite volver fácilmente a cualquier estado anterior
+2.  Mantener *ramas* paralelas, es decir, versiones de desarrollo/“trabajo” que más adelante pueden integrar los cambios después de su revisión
+
+Esto también se puede hacer localmente en su ordenador, incluso si no colabora con otras personas. Alguna vez ….:
+
+- ¿se ha arrepentido de haber eliminado una sección de código, para darse cuenta dos meses después de que realmente la necesitaba?
+
+- ¿ha vuelto a un proyecto que había estado en pausa e intentado recordar si había hecho esa complicada modificación en uno de los modelos?
+
+- ¿tenía un archivo *modelo_1.R* y otro archivo *modelo_1_prueba.R* y un archivo *modelo_1_no_funciona.R* para probar las cosas?
+
+- ¿tenía un archivo report.*Rmd*, un archivo *report_full.Rmd*, un archivo *report_true_final.Rmd,* un archivo *report_final_20210304.Rmd*, un archivo *report_final_20210402.Rmd* y maldecía sus habilidades de almacenamiento?
+
+Git puede ayudar con todo eso, y vale la pena aprenderlo sólo por eso.
+
+Sin embargo, se vuelve aún más potente cuando se utiliza con un repositorio en línea como Github para apoyar proyectos de colaboración. Esto facilita:
+
+- Colaboración: otros pueden revisar, comentar y aceptar o rechazar los cambios
+
+- Compartir el código, los datos y los resultados, e invitar a hacer comentarios al público (o en privado, con su equipo)
+
+y evitar:
+
+- “Uy, me olvidé de enviar la última versión y ahora tiene que rehacer el trabajo de dos días en este nuevo archivo”
+
+- Mina, Henry y Oumar trabajaron al mismo tiempo en un script y necesitan fusionar manualmente sus cambios
+
+- Dos personas intentan modificar el mismo archivo en Dropbox y Sharepoint y esto crea un error de sincronización.
+
+### Esto suena complicado, yo no soy un programador
+
+Puede ser. Los ejemplos de usos avanzados pueden ser bastante aterradores. Sin embargo, al igual que ocurre con R, o incluso con Excel, no es necesario convertirse en un experto para aprovechar las ventajas de la herramienta. El aprendizaje de un *pequeño número de funciones y nociones le permite* seguir sus cambios, sincronizar los archivos en un repositorio en línea y colaborar con los colegas en muy poco tiempo.
+
+Debido a la curva de aprendizaje, el contexto de emergencia puede no ser el mejor momento para aprender estas herramientas. Pero el aprendizaje puede hacerse por pasos. Una vez que adquiera un par de nociones, su flujo de trabajo puede ser bastante eficiente y rápido. Si no está trabajando en un proyecto en el que la colaboración con personas a través de Git sea una necesidad, … en realidad es un buen momento para adquirir confianza en su uso en solitario antes de sumergirse en ello en un proyecto colaborativo.
+
+## 46.3 Configuración
+
+### Instalar Git
+
+*Git* es el motor que está de este control de cambios la computadora; rastrea los cambios, las ramas (versiones), las fusiones y las reversiones. **Primero debe instalar *Git* desde <https://git-scm.com/downloads>.**
+
+### Instalar una interfaz gráfica (opcional pero recomendable)
+
+Git tiene su propio lenguaje de comandos, que se pueden escribir en la línea de comandos de un terminal. Sin embargo, hay muchos clientes/interfaces que proporcionan una buena visualización de las modificaciones de archivos o ramas. Esto es recomendable ya que personas que no son desarrolladoras, en su uso diario, rara vez *necesitarán* interactuar directamente con Git.
+
+Existen muchas opciones, en todos los sistemas operativos, desde las amigables para los principiantes hasta las más complejas. Unas buenas opciones para principiantes son el panel Git de RStudio y [Github Desktop](https://desktop.github.com/), que mostraremos en este capítulo. Las opciones intermedias (más potentes, pero más complejas) incluyen Source Tree, Gitkracken, Smart Git y otras.
+
+Explicación rápida sobre [los clientes Git](https://happygitwithr.com/git-client.html#git-client).
+
+*Nota: dado que todas las interfaces utilizan Git internamente, puede probar varias de ellas, cambiar de una a otra en un proyecto determinado, utilizar la consola puntualmente para una acción que su interfaz no soporta, o incluso realizar una serie de acciones online en Github.*
+
+Como se indica más adelante, es posible que ocasionalmente tenga que escribir comandos Git en un terminal como en la pestaña “terminal” de RStudio (una pestaña adyacente a la consola de R) o la aplicación de terminal Git Bash.
+
+### Cuenta de Github
+
+Regístrese para obtener una cuenta gratuita en [github.com](https://github.com).
+
+Es posible que se le ofrezca configurar la autenticación de dos pasos con una aplicación en su teléfono. Lea más en [estos documentos de ayuda](https://docs.github.com/es/github/authenticating-to-github/securing-your-account-with-two-factor-authentication-2fa) de Github.
+
+Si usa Github Desktop, puede introducir sus credenciales de Github después de la instalación siguiendo estos [pasos](https://docs.github.com/es/desktop/installing-and-configuring-github-desktop/authenticating-to-github). Si no lo hace, las credenciales se le pedirán más tarde cuando intente clonar un proyecto desde Github.
+
+## 46.4 Vocabulario, conceptos y funciones básicas
+
+Al igual que cuando se aprende R, hay que recordar un poco de vocabulario para entender Git. Aquí están los [conceptos básicos para empezar](https://www.freecodecamp.org/news/an-introduction-to-git-for-absolute-beginners-86fa1d32ff71/) / [tutorial interactivo](https://learngitbranching.js.org). En las próximas secciones, mostraremos cómo usar las interfaces, pero es bueno tener el vocabulario y los conceptos en mente, para construir su modelo mental, ya que lo necesitará cuando más tarde, aunque use las interfaces de los programas.
+
+### Repositorio
+
+Un *repositorio* Git (“*repo”*) es una carpeta que contiene todas las subcarpetas y archivos de su proyecto (datos, código, imágenes, etc.) y sus historiales de revisión. Cuando empiece a seguir los cambios en el repositorio con él, Git creará una carpeta oculta que contiene toda la información de seguimiento. Un repositorio típico de Git es la carpeta de su proyecto R (ver la página del manual sobre [proyectos R](r_projects.llms.md)).
+
+Mostraremos cómo crear (*inicializar)* un repositorio Git desde Github, Github Desktop o Rstudio en las siguientes secciones. sections.
+
+### Commits (Consolidaciones)
+
+Cuando realice un cambio en el proyecto, hay que ejecutar commit para consolidar estos cambios (el delta) realizados en sus archivos. Por ejemplo, quizás haya editado algunas líneas de código y actualizado unos datos relacionados. Una vez guardados los cambios, puede agrupar y confirmar estos cambios en un solo “commit”.
+
+Cada consolidación (commit) tiene un ID único (un *hash*). Para el control de versiones, puede revertir su proyecto hacia atrás en base a estas Consolidaciones, así que es mejor mantenerlas relativamente pequeñas y coherentes. También realizará una breve descripción de los cambios llamada “commit message (mensaje de consolidación)”. En cierto modo, cada *commit* es una instantánea del proyecto en un momento dado.
+
+*¿Cambios por etapas (staged)*? Poner etapas en los cambios es añadirlos a la *zona de* preparación para la siguiente consolidación. La idea es que pueda decidir con precisión qué cambios incluir en un determinado commit. Por ejemplo, si trabaja en la especificación del modelo en un script, y más tarde en una figura en otro script, tendría sentido tener dos commits diferentes (sería más fácil en caso de que quisiera revertir los cambios en la figura pero no en el modelo).
+
+### Ramas (Branches)
+
+Una rama representa una *línea independiente* de cambios en su repo, una versión paralela y alternativa de los archivos del proyecto.
+
+Las ramas son útiles para probar los cambios antes de incorporarlos a la rama *principal (main, master),* que suele ser la versión primaria/final/“viva” de su proyecto. Cuando termine de experimentar en una rama, puede incorporar los cambios a su rama *principal*, *fusionándola*, o eliminarla, si los cambios no fueron tan exitosos.
+
+*Nota: no es necesario colaborar con otras personas para utilizar las ramas, ni es necesario tener un repositorio remoto en línea.*
+
+### Repositorios locales y remotos
+
+*Clonar* es crear una copia de un repositorio Git en otro lugar.
+
+Por ejemplo, puede *clonar* un repositorio en línea *desde* Github a su ordenador, o empezar con un repositorio local y clonarlo en línea *hacia* Github.
+
+Cuando ha clonado un repositorio, los archivos del proyecto existen en dos lugares:
+
+- el repositorio *LOCAL* en el ordenador físico. Aquí es donde se hacen los cambios reales a los archivos/código.
+
+- el repositorio *REMOTO*, en línea: las versiones de los archivos del proyecto en el repositorio Github (o en cualquier otro alojamiento web).
+
+Para sincronizar estos repositorios, utilizaremos más funciones. En efecto, a diferencia de Sharepoint, Dropbox u otro software de sincronización, Git no actualiza automáticamente el repositorio local en base a lo que está en línea, o viceversa. Usted elige cuándo y cómo sincronizarlo.
+
+- FETCH: `git fetch` descarga los cambios realizados en el repositorio remoto pero no cambia el repositorio local. Piense en ello para una comprobación del estado del repositorio remoto.
+
+- PULL:`git pull` descarga archivos cambiados en los repositorios remotos y actualiza el repositorio local.
+
+- PUSH: Actualiza el repositorio remoto. Cuando haya hecho uno o varios commits localmente, puede hacer `git push` de los commits al repositorio remoto. Esto envía sus cambios a Github para actualizar el repositorio y que otras personas puedan verlos y extraerlos si lo desean.
+
+## 46.5 Empezar: crear un nuevo repositorio
+
+Hay muchas formas de crear nuevos repositorios. Puede hacerlo desde la consola/terminal, desde Github, desde una interfaz gráfica.
+
+Hay dos enfoques generales para la puesta en marcha:
+
+- Crear un nuevo proyecto R a partir de un repositorio de Github existente o nuevo (*preferible para los principiantes*), o
+- Crear un repositorio Github para un proyecto R existente
+
+### Archivos de inicio
+
+Cuando crea un nuevo repositorio, puede crear opcionalmente todos los archivos siguientes, o puede añadirlos a su repositorio más adelante. Normalmente estarían en la carpeta “raíz” del repositorio.
+
+- Un archivo *README* es un archivo que alguien puede leer para entender por qué existe su proyecto y qué más deben saber para usarlo. Al principio estará vacío, pero debería completarlo más adelante.
+
+- Un archivo *.gitignore* es un archivo de texto donde cada línea contendría carpetas o archivos que Git debería ignorar (no rastrear los cambios). Lea más sobre esto y vea ejemplos [aquí](https://www.freecodecamp.org/news/gitignore-what-is-it-and-how-to-add-to-repo/).
+
+- Puede elegir un tipo de *licencia* para el trabajo, de modo que otras personas sepan en qué condiciones pueden utilizar o reproducir su obra. Para más información, consulte las [licencias Creative Commons](https://creativecommons.org/licenses/).
+
+### Crear un nuevo repositorio en Github
+
+Para crear un nuevo repositorio, entre en Github y busque el botón verde para crear un nuevo repositorio. Este repositorio, ahora vacío, puede ser clonado localmente en su ordenador (ver la siguiente sección).
+
+[![](images/github_new.png)](images/github_new.png)
+
+Debe elegir si quiere que su repositorio sea público (visible para todo el mundo en Internet) o privado (sólo visible para aquellos con permiso). Esto tiene importantes implicaciones si sus datos son sensibles. Si su repositorio es privado se encontrará con algunos límites en circunstancias especiales avanzadas, como por ejemplo si está usando *actions de* Github para ejecutar automáticamente su código en la nube.
+
+### Clonar desde un repositorio de Github
+
+Puede *clonar* un repositorio de Github existente para crear un nuevo proyecto R local en su ordenador.
+
+El repositorio de Github puede ser uno que ya existe y tiene contenido, o puede ser un repositorio vacío que acaba de crear. En este último caso, básicamente está creando el repositorio de Github y el proyecto local de R al mismo tiempo (ver las instrucciones anteriores).
+
+*Nota*: si no tiene derechos de contribución en un repositorio de Github, es posible primero *bifurcar (fork)* el repositorio hacia su perfil, y luego proceder con las otras acciones. La bifurcación se explica al final de este capítulo, pero recomendamos que lea primero las otras secciones.
+
+Paso 1: Navegue en Github hasta el repositorio, clique en el botón verde “Code” y copie la HTTPS clon URL (ver imagen inferior)
+
+[![](images/github_clone.png)](images/github_clone.png)
+
+El siguiente paso se puede realizar en cualquier interfaz. Lo ilustraremos con Rstudio y Github desktop.
+
+#### En Rstudio
+
+En RStudio, inicie un nuevo proyecto R clicando en *File\>New project \> Version control \> Git)* (Archivo \> Nuevo proyecto \> Control de versiones \> Git)
+
+- Cuando le pida la “URL del repositorio”, pegue la URL HTTPS de Github
+
+- Asigne al proyecto R un nombre corto e informativo
+
+- Elija dónde se guardará el nuevo proyecto R localmente
+
+- Marque “Abrir en una nueva sesión” y clique en “Crear proyecto”.
+
+Ahora está en un nuevo proyecto local de RStudio que es un clon del repositorio de Github. Este proyecto local y el repositorio de Github están ahora vinculados.
+
+#### En Github Desktop
+
+- Clique en *File\>Clone repository* (Archivo \> Clonar un repositorio)
+
+- Seleccione la pestaña URL
+
+- Pegue la URL HTTPS de Github en la primera casilla
+
+- Seleccione la carpeta en la que desea tener su repositorio local
+
+- Clique en “CLONE”
+
+[![](images/github_clone_desktop.png)](images/github_clone_desktop.png)
+
+### Nuevo repositorio de Github a partir de un proyecto R existente
+
+Un escenario alternativo de configuración es que ya tenga un proyecto R con contenido, y quiera crear un repositorio Github para él.
+
+1.  Crear un nuevo repositorio de Github vacío para el proyecto (ver instrucciones anteriores)
+
+2.  Clone este repositorio localmente (ver las instrucciones de HTTPS más arriba)
+
+3.  Copie todo el contenido de su proyecto R preexistente (códigos, datos, etc.) en este nuevo repositorio local vacío (por ejemplo, utilice copiar y pegar).
+
+4.  Abra su nuevo proyecto en RStudio, y vaya al panel Git. Los nuevos archivos deberían registrarse como cambios de archivo, ahora rastreados por Git. Por lo tanto, puede agrupar estos cambios bajo un *commit* y *push* a Github. Una vez hecho *push*, el repositorio en Github reflejará todos los archivos.
+
+Consulte la sección de flujo de trabajo de Github para obtener más detalles sobre este proceso.
+
+### ¿Qué aspecto tiene ahora?
+
+#### En RStudio
+
+Una vez que haya clonado un repositorio de Github a un nuevo proyecto R, ahora verá en RStudio una pestaña “Git”. Esta pestaña aparece en el mismo panel de RStudio que Environment:
+
+[![](images/git_console.png)](images/git_console.png)
+
+Fíjese en los botones rodeados con un círculo en la imagen anterior, ya que se mencionarán más adelante (de izquierda a derecha):
+
+- Botón *commit* para consolidar los cambios del archivo guardado en local (se abrirá una nueva ventana para añadir la descripción y confirmarlo)
+
+- Flecha azul *pull* (descarga los cambios realizados en la versión remota/Github de esa rama y actualiza su versión local de la rama)
+
+- Flecha verde *push* (enviar cualquier commits/cambio de su versión local de la rama y actualiza la versión remota/Github de esa rama)
+
+- La pestaña Git en RStudio
+
+- Botón para crear una rama NUEVA dependiente de la rama que se muestra a la derecha como base. *Casi siempre querrá bifurcarse desde la rama principal (después de haber tirado primero para actualizar la rama principal)*
+
+- La Rama en la que trabaja actualmente
+
+- A continuación aparecerán los cambios que haya realizado en el código o en otros archivos
+
+#### En Github Desktop
+
+Github Desktop es una aplicación independiente que le permite gestionar todos sus repositorios. Cuando la abre, la interfaz le permite elegir el repositorio en el que quiere trabajar, y luego realizar acciones básicas de Git desde allí.
+
+[![](images/github_desktop_interface.png)](images/github_desktop_interface.png)
+
+## 46.6 Flujo de trabajo Git + Github
+
+### Resumen del proceso
+
+Una vez que haya completado la configuración (descrita anteriormente), tendrá un repo de Github que está conectado (*clonado*) a un proyecto local de R. La rama principal (*main* por defecto) es la llamada versión “viva” de *todos* los archivos. Cuando quiera hacer modificaciones, es una buena práctica crear una *nueva rama* a partir de la rama *principal* (como “Hacer una copia”). Este es un flujo de trabajo típico en Git porque crear una rama es fácil y rápido.
+
+Un flujo de trabajo típico es el siguiente:
+
+1.  Asegúrese de que su repositorio local está actualizado, actualícelo si no es así
+
+2.  Vaya a la rama en la que estaba trabajando anteriormente, o cree una nueva rama para probar algunas cosas
+
+3.  Trabaje en los archivos localmente en su ordenador, haga uno o varios commits en esta rama
+
+4.  Actualice la versión remota de la rama con sus cambios (push)
+
+5.  Cuando esté satisfecho con su rama, puede fusionar la versión en línea de la rama de trabajo con la rama “principal” en línea para transferir los cambios
+
+Otros miembros del equipo pueden estar haciendo lo mismo con sus propias ramas, o quizás contribuyendo con commits en su rama de trabajo también.
+
+A continuación, repasamos el proceso anterior paso a paso con más detalle. Es un esquema que hemos desarrollado - está en el formato de una tabla de doble entrada, por lo que debería ayudarnos a entenderlo.
+
+[![](images/github_table.png)](images/github_table.png)
+
+Aquí hay [otro diagrama](https://build5nines.com/introduction-to-git-version-control-workflow/).
+
+*Nota: hasta hace poco, se utilizaba el término rama “master” (maestra), pero ahora se denomina rama “main” (principal).*
+
+[![](images/github-flow.png)](images/github-flow.png)
+
+[Fuente](https://build5nines.com/introduction-to-git-version-control-workflow/) de la imagen
+
+## 46.7 Crear una nueva rama
+
+Cuando selecciona una rama para trabajar, Git restablece su directorio de trabajo tal y como estaba la última vez que estuvo en esta rama.
+
+### En el panel Git de Rstudio
+
+Asegúrese de que se encuentra en la rama “main” (master, principal) y, a continuación, clique en el icono morado para crear una nueva rama (véase la imagen anterior).
+
+- Pedirá un nombre descriptivo para esa rama, de una palabra (se pueden usar barras bajas si es necesario).
+- Verá que localmente, sigue en el mismo proyecto R, pero ya no está trabajando en la rama “main”(principal).
+- Una vez creada, la nueva rama también aparecerá en el sitio web de Github como una rama.
+
+Puede visualizar las ramas en el panel Git de Rstudio tras clicar en “History”
+
+[![](images/github_rstudio_branchs.png)](images/github_rstudio_branchs.png)
+
+### En Github Desktop
+
+El proceso es muy similar, se pide que dé un nombre a su rama. Después, pedirá que “publique su rama en Github” para que la nueva rama aparezca también en el repositorio remoto.
+
+[![](images/github_desktop_new_branch.png)](images/github_desktop_new_branch.png)
+
+### En la consola
+
+Lo que realmente ocurre entre bastidores es que crea una nueva rama con `git branch`, y luego va a la rama con `git checkout` (*es decir*, le dice a Git que sus próximos commits se producirán allí). Desde su repositorio git:
+
+``` bash
+git branch my-new-branch  # Crear la nueva rama my-new-branch
+git checkout my-new-branch # Va a la rama
+git checkout -b my-new-branch # Ambos a la vez (atajo)
+```
+
+Para más información sobre el uso de la consola, consulte la sección sobre comandos Git al final.
+
+## 46.8 Consolidar los cambios (Commit)
+
+Ahora puede editar el código, añadir nuevos archivos, actualizar conjuntos de datos, etc.
+
+Cada uno de sus cambios es rastreado, *una vez que el archivo respectivo es guardado*. Los archivos modificados aparecerán en la pestaña Git de RStudio, en Github Desktop, o utilizando el comando `git status` en el terminal (ver más abajo).
+
+Siempre que haga cambios sustanciales (por ejemplo, añadir o actualizar una sección de código), haga una pausa y *consolide* esos cambios (Commit). Piense en una Consolidación como un “lote” de cambios relacionados con un propósito común. Siempre puede seguir revisando un archivo después de haber confirmado los cambios en él.
+
+*Consejo sobre los commits*: en general, es mejor hacer Consolidaciones pequeñas, que puedan revertirse fácilmente si surge un problema, y Consolidar juntas modificaciones relacionadas con un propósito común. Para lograr esto, verá que *debe hacer commits a menudo*. Al principio, es probable que se olvide de hacer commits a menudo, pero luego el hábito se impone.
+
+### En Rstudio
+
+El ejemplo siguiente muestra que, desde la última consolidación, el script de R Markdown “collaboration.Rmd” ha cambiado, y se han añadido varias imágenes PNG.
+
+[![](images/github_tracking2.png)](images/github_tracking2.png)
+
+Puede que se pregunte qué representan los cuadrados amarillo, azul, verde y rojo que aparecen junto a los nombres de los archivos. Aquí hay una captura de la [hoja de trucos de RStudio](https://www.rstudio.com/wp-content/uploads/2016/01/rstudio-IDE-cheatsheet.pdf) que explica su significado. Tenga en cuenta que los cambios con el amarillo “?” aún pueden ser puestos en escena, confirmados y enviados.
+
+[![](images/github_tracking.png)](images/github_tracking.png)
+
+- Clique el botón “Commit” en la pestaña Git, que abrirá una nueva ventana (mostrada a continuación)
+
+- Clique en un nombre de archivo en el cuadro superior izquierdo
+
+- Revise los cambios que ha realizado en ese archivo (resaltados en verde o rojo)
+
+- “Stage” (Poner en etapas) el archivo , lo que incluirá esos cambios en la consolidación. Para ello, marque la casilla situada junto al nombre del archivo. También puede marcar varios nombres de archivo y clicar en “Stage”.
+
+- Escriba un mensaje de consolidación breve pero descriptivo (obligatorio)
+
+- Clique el botón “Commit”. Aparecerá un cuadro emergente mostrando el éxito o un mensaje de error.
+
+Ahora puede hacer más cambios y más commits, tantas veces como quiera
+
+[![](images/github_commit.png)](images/github_commit.png)
+
+### En Github Desktop
+
+Puede ver la lista de los archivos que se han modificado a la izquierda. Si selecciona un archivo de texto, verá en el panel derecho un resumen de las modificaciones que se han hecho (la vista no funcionará en archivos más complejos como .docs o .xlsx).
+
+Para añadir los cambios, basta con marcar la pequeña casilla situada junto a los nombres de los archivos. Cuando haya seleccionado los archivos que quiere añadir a esta consolidación, dele un nombre a la consolidación, opcionalmente una descripción y luego clique en el botón de commit. button.
+
+[![](images/github_desktop_commit.png)](images/github_desktop_commit.png)
+
+### En la consola
+
+Las dos funciones que se utilizan entre bastidores son `git add` para seleccionar/poner en escena los archivos y `git commit` para hacer realmente el commit.
+
+``` bash
+git status # ver los cambios 
+
+git add content/en/collaboration.qmd  # seleccionar los ficheros a (= stage los cambioss)
+
+git commit -m "Describe commit from Github Desktop" # confirma (commit) los cambios con un mensaje
+
+git log  # ver información sobre los commits anteriores
+```
+
+### Modificar una consolidación anterior
+
+¿Qué sucede si confirma algunos cambios, sigue trabajando y se da cuenta de que hizo cambios que deberían “pertenecer” a la consolidación anterior (en su opinión)? ¡No tema! Puede añadir estos cambios a su consolidación anterior.
+
+En Rstudio, debería ser bastante obvio, ya que hay una casilla “Amend previous commit” (modificar una consolidación anterior) en la misma línea que el botón COMMIT.
+
+Por alguna razón poco clara, la funcionalidad no se ha implementado como tal en Github Desktop, pero hay una forma (conceptualmente incómoda pero fácil) de hacerlo. Si ha confirmado pero aún no ha enviado sus cambios, aparece un botón “UNDO” justo debajo del botón COMMIT. Clique en él y revertirá su consolidación (pero mantendrá sus archivos en etapa y su mensaje de consolidación). Guarde los cambios, añada nuevos archivos a la consolidación si es necesario y vuelva a confirmar.
+
+En la consola:
+
+``` bash
+git add [YOUR FILES] # Añadir los nuevos cambios
+
+git commit --amend  # Modifica la confirmación (commit) anterior
+
+git commit --amend -m "An updated commit message"  # Modifica la confirmación anterior Y actualiza el mensaje de confirmación
+```
+
+*Nota: piense antes de modificar confirmaciones (commits) que ya son públicas y están compartidas con sus colaboradores*.
+
+## 46.9 Actualizar los cambios con Github
+
+“Primero PULL (actualizar local), luego PUSH (actualizar reomto)”
+
+Es una buena práctica *fetch* y *pull* antes de empezar a trabajar en su proyecto, para actualizar la versión de la rama en su equipo local con los cambios que se han hecho en la versión remota/Github.
+
+Pull a menudo. No dude. *Pull siempre antes de Push*.
+
+Cuando los cambios estén hechos y confirmados y esté contento con el estado de su proyecto, puede *enviar* (push) sus consolidaciones a la versión remota/Github de su rama.
+
+Repita la operación mientras trabaja en el repositorio.
+
+**Nota:** es mucho más fácil revertir los cambios que fueron confirmados pero no empujados (es decir, siguen siendo locales) que revertir los cambios que fueron empujados al repositorio remoto (y tal vez ya sacados por otra persona), por lo que es mejor empujar cuando haya terminado de introducir cambios en la tarea en la que estaba trabajando.
+
+#### En Rstudio
+
+*PULL* - En primer lugar, clique en el icono “Pull” (flecha hacia abajo) que busca y tira al mismo tiempo.
+
+*PUSH –* Clicando en el icono verde “Push” (flecha hacia arriba). Es posible que pida que introduzca su nombre de usuario y contraseña de Github. La primera vez que la pida, es posible que tenga que introducir dos líneas de comando Git en el *Terminal*:
+
+- `git config --global user.email "you@example.com"` (su dirección de correo electrónico de Github), y  
+- `git config --global user.name "Su nombre de usuario de Github"`
+
+Para saber más sobre cómo introducir estos comandos, consulte la sección siguiente sobre comandos Git.
+
+***SUGERENCIA:*** ¿Le piden la contraseña muy a menudo? Consulte los capítulos 10 y 11 de este [tutorial](https://happygitwithr.com/credential-caching.html#credential-caching) para conectarse a un repositorio usando una clave SSH (más complicado)
+
+#### En Github Desktop
+
+Clique en el botón “Fetch origin” para comprobar si hay nuevos commits en el repositorio remoto.
+
+[![](images/github_desktop_fetch_button.png)](images/github_desktop_fetch_button.png)
+
+Si Git encuentra nuevos commits en el repositorio remoto, el botón cambiará a un botón “Pull”. Dado que el mismo botón se utiliza para Pull y Push, no puede enviar sus cambios si no descarga y actualiza antes.
+
+[![](images/github_desktop_pull_button.png)](images/github_desktop_pull_button.png)
+
+Puede ir a la pestaña “History” (cerca de la pestaña “Changes”) para ver todos los commits (los suyos y los de los demás). Esta es una buena manera de conocer lo que hicieron sus colaboradores. Puede leer el mensaje de consolidación, la descripción si la hay, y comparar el código de los dos archivos usando el panel *diff*.
+
+[![](images/github_desktop_history.png)](images/github_desktop_history.png)
+
+Una vez que se han extraído todos los cambios remotos y se ha consignado al menos un cambio local, se puede empujar clicando en el mismo botón.
+
+[![](images/github_desktop_push_button.png)](images/github_desktop_push_button.png)
+
+#### Consola
+
+Sin sorpresas, las órdenes son *fetch*, *pull* y *push*.
+
+``` bash
+git fetch  # ¿hay nuevos commits en el directorio remoto?
+git pull   # Trae los commits remotos a su rama local y la actualiza
+git push   # Envía los commits locales de esta rama a la rama remota
+```
+
+### Quiero actualizarme pero tengo trabajo local
+
+Esto puede ocurrir a veces: ha hecho algunos cambios en su repositorio local, pero el repositorio remoto tiene consolidaciones que no ha descargado.
+
+Git rechazará hacer un pull porque podría sobrescribir sus cambios. Hay varias estrategias para guardar sus cambios, bien descritas en [Happy Git with R](https://happygitwithr.com/pull-tricky.html), entre las cuales las dos principales son:
+
+- Confirmar sus cambios, obtener los cambios remotos, extraerlos, resolver los conflictos si es necesario (ver la sección más abajo), y hacer push de todo en línea
+- `stash` sus cambios, lo que en cierto modo los guarda a un lado, pull, unstash (restaurar), y luego confirmar, resolver cualquier conflicto, y push.
+
+Si los archivos afectados por los cambios remotos y los archivos afectados por sus cambios locales no se solapan, Git puede resolver los conflictos automáticamente.
+
+En Github Desktop, esto se puede hacer con botones. Para almacenar, vaya a *Branch \> Stash all changes.*
+
+[![](images/github_desktop_stash.png)](images/github_desktop_stash.png)
+
+## 46.10 Combinar la rama con la principal
+
+Si ha terminado de hacer cambios, puede comenzar el proceso de fusión de esos cambios en la rama principal. Dependiendo de su situación, esto puede ser rápido, o puede tener pasos deliberados de revisión y aprobación que involucren a compañeros de equipo.
+
+### Localmente en Github Desktop
+
+Se pueden fusionar ramas localmente usando Github Desktop. Primero, vaya a (checkout) la rama que será la destinataria de los commits, es decir, la rama que quiere actualizar. A continuación, clique en el menú *Branch \> Merge into current branch*. Un cuadro le permitirá seleccionar la rama desde la que quiere importar.
+
+[![](images/github_desktop_merge.png)](images/github_desktop_merge.png)
+
+### En la consola
+
+Primero, vuelva a la rama que será la destinataria de los cambios. Normalmente es *la rama maestra* (main), pero puede ser otra rama. Luego fusione su rama de trabajo con la maestra.
+
+``` bash
+git checkout master  # Go back to maste# Volver a master (o a la rama a la que se quiere moverla)
+git merge this_fancy_new_branch
+```
+
+[Esta página](https://git-scm.com/book/en/v2/Git-Branching-Basic-Branching-and-Merging) muestra un ejemplo más avanzado de bifurcación y explica un poco lo que ocurre entre bastidores.
+
+### En Github: envío de pull requests
+
+Aunque es totalmente posible fusionar dos ramas localmente, o sin informar a nadie, una fusión puede ser discutida o investigada por varias personas antes de ser integrada en la rama maestra. Para ayudar en el proceso, Github ofrece algunas funciones de discusión en torno a la fusión: el pull request.
+
+Un pull request (un “PR”) es una solicitud para fusionar una rama con otra (en otras palabras, una solicitud para que *su rama de trabajo se incorpore a la rama “principal”*). Una solicitud de extracción suele incluir varias consolidaciones. Un pull request suele iniciar un proceso de conversación y revisión antes de que sea aceptado y la rama sea fusionada. Por ejemplo, puede leer las discusiones sobre pull requests en [el github de dplyr](https://github.com/tidyverse/dplyr/pulls).
+
+Puede enviar una solicitud de extracción (PR) directamente desde el sitio web (como se ilustra a continuación) o desde Github Desktop.
+
+- Ir al repositorio Github (en línea)
+- Vaya a la pestaña “Pull Requests” y clique en el botón “New pull request”.
+- Seleccione en el menú desplegable para fusionar su rama en la principal
+- Escriba un comentario detallado sobre la solicitud de extracción y clique en “Crear solicitud de extracción”.
+
+En la imagen siguiente, se ha seleccionado la rama “forests” para fusionarla con la “principal”:
+
+[![](images/github_pull_request2.png)](images/github_pull_request2.png)
+
+Ahora se debería poder ver el pull request (imagen de ejemplo abajo):
+
+- Revise la pestaña “Files changed” (Archivos cambiados) para ver cómo cambiaría la rama “principal” si se fusionara la rama.  
+- A la derecha, puede solicitar una revisión a los miembros de su equipo etiquetando su ID de Github. Si quiere, puede configurar el repositorio para que se requiera una revisión de aprobación para poder fusionarlo con el principal.  
+- Una vez aprobada la solicitud de extracción, se activará un botón para “Merge pull request” (fusionar la solicitud de extracción). Clique en él.  
+- Una vez completado, elimine su rama como se explica a continuación.
+
+[![](images/github_pull_request.png)](images/github_pull_request.png)
+
+### Resolución de conflictos
+
+Cuando dos personas modifican la(s) misma(s) línea(s) al mismo tiempo, surge un conflicto de fusión. De hecho, Git se niega a tomar una decisión sobre qué versión mantener, pero le ayuda a encontrar dónde está el conflicto. **NO SE ASUSTE.** La mayoría de las veces, es bastante sencillo de resolver.
+
+Por ejemplo, en Github:
+
+[![](images/github_conflict2.png)](images/github_conflict2.png)
+
+Después de que la fusión haya planteado un conflicto, abra el archivo en su editor favorito. El conflicto se indicará con una serie de caracteres:
+
+[![](images/github_conflict3.png)](images/github_conflict3.png)
+
+El texto entre *\<\<\<\<\<\<\< HEAD* y *=======* proviene de *su* repositorio local, y el que está entre ======= y \>\>\>\>\>\>\> *de* la *otra rama* (que puede ser origin, master o cualquier rama de su elección).
+
+Tiene que decidir qué versión del código prefiere (o incluso escribir una tercera, incluyendo los cambios de ambas partes si es pertinente), borrar el resto y eliminar todas las marcas que Git ha añadido *(\<\<\<\<\<\<\< HEAD, =======, \>\>\>\>\>\>\> origin/master/su_nombre_de_rama).*
+
+A continuación, guarde el archivo, estadíelo y haga un commit: este es el commit que hace que la versión fusionada sea “oficial”. No se olvide de hacer push después.
+
+Cuanto más a menudo hagan pull y push usted y sus colaboradores, menores serán los conflictos.
+
+*Nota: Si se siente cómodo con la consola, existen [opciones avanzadas de fusión](https://git-scm.com/book/en/v2/Git-Tools-Advanced-Merging) (por ejemplo, ignorar los espacios en blanco, dar prioridad a un colaborador, etc.).*
+
+### Borrar su rama
+
+Una vez que una rama se ha fusionado con la maestra y ya no es necesaria, puede eliminarla.
+
+#### Github + Rstudio
+
+Vaya al repositorio en Github y clique en el botón para ver todas las ramas (junto al desplegable para seleccionar ramas). Ahora busque su rama y clique en el icono de la papelera junto a ella. Lea más detalles sobre cómo eliminar una rama [aquí](https://docs.github.com/en/free-pro-team@latest/github/collaborating-with-issues-and-pull-requests/creating-and-deleting-branches-within-your-repository#deleting-a-branch).
+
+Asegúrese de eliminar también la rama localmente en su ordenador. Esto no ocurrirá automáticamente.
+
+- Desde RStudio, asegúrese de estar en la rama principal
+- Cambie para escribir los comandos Git en la “Terminal” de RStudio (la pestaña adyacente a la consola de R), y escriba: `git branch -d branch_name`, donde “branch_name” es el nombre de la rama a eliminar
+- Actualice su pestaña Git y la rama debería desaparecer
+
+#### En Github Desktop
+
+Sólo tiene que cambiarse (checkout) a la rama que quiere eliminar, e ir al menú *Branch \> Delete*.
+
+### Bifurcación
+
+Puede bifurcar (fork) un proyecto si quiere contribuir a él pero no tiene los derechos para hacerlo, o si sólo quiere modificarlo para su uso personal. Puede encontrar una breve descripción de la bifurcación [aquí](https://guides.github.com/activities/forking/).
+
+En Github, clique en el botón “Fork”:
+
+[![](images/github_fork_1.png)](images/github_fork_1.png)
+
+Esto clonará el repositorio original, pero en su propio perfil. Así que ahora hay dos versiones del repositorio en Github: la original, que no puede modificar, y la versión clonada en su perfil.
+
+Entonces, puede clonar su versión del repositorio en línea localmente en su ordenador, utilizando cualquiera de los métodos descritos en las secciones anteriores. Luego, puede crear una nueva rama, hacer cambios, confirmarlos y empujarlos *a su repositorio remoto*.
+
+Una vez que esté contento con el resultado, puede crear un Pull Request desde Github o Github Desktop para iniciar la conversación con los propietarios/mantenedores del repositorio original.
+
+**¿Y si necesita algunos commits más recientes del repositorio oficial?**
+
+Imagine que alguien hace una modificación crítica en el repositorio oficial, que quiere incluir en su versión clonada. Es posible sincronizar su fork con el repositorio oficial. Implica usar el terminal, pero no es demasiado complicado. Principalmente necesita recordar que:
+
+- *upstream* = el repositorio oficial, el que no ha podido modificar
+- *origin* = su versión del repositorio en su perfil de Github
+
+Puede leer [este tutorial](https://docs.github.com/en/github/collaborating-with-issues-and-pull-requests/syncing-a-fork) o seguirlo a continuación:
+
+Primero, escriba en su terminal Git (dentro de su repo):
+
+``` bash
+git remote -v
+```
+
+Si aún no ha configurado el repositorio upstream debería ver dos líneas, que comienzan por *origin*. Muestran el repositorio remoto al que apuntan `fetch` y `push`. Recuerde que *origin* es el apodo convencional para su propia versión del repositorio en Github. Por ejemplo:
+
+[![](images/github_fork_2.png)](images/github_fork_2.png)
+
+Ahora, añada un nuevo repositorio remoto:
+
+``` bash
+git remote add upstream https://github.com/appliedepi/epirhandbook_eng.git
+```
+
+Aquí la dirección es la que genera Github cuando clona un repositorio (ver sección de clonación). Ahora tendrá cuatro punteros remotos:
+
+[![](images/github_fork_3.png)](images/github_fork_3.png)
+
+Ahora que la configuración está hecha, siempre que quiera obtener los cambios del repositorio original (*upstream)*, sólo tiene que ir (*checkout*) a la rama que quiere actualizar y teclear:
+
+``` bash
+git fetch upstream # Obtiene los nuevos commits del repositorio remoto
+git checkout the_branch_you_want_to_update
+git merge upstream/the_branch_you_want_to_update  # Fusiona la rama de upstream en su rama..
+git push # Actualiza su propia versión del repositorio remoto
+```
+
+Si hay conflictos, tendrá que resolverlos, tal y como se explica en la sección Resolución de conflictos.
+
+**Resumen:** forking es clonación, pero en el lado del servidor de Github. El resto de las acciones son las típicas del flujo de trabajo de colaboración (clonar, empujar, tirar, confirmar, fusionar, enviar solicitudes de extracción…).
+
+*Nota: aunque la bifurcación es un concepto, no un comando de Git, también existe en otros hosts web, como [Bitbucket](https://www.atlassian.com/git/tutorials/comparing-workflows/forking-workflow).*
+
+[![](images/github_fork_4.png)](images/github_fork_4.png)
+
+## 46.11 Lo que hemos aprendido
+
+Ha aprendido a:
+
+- Configurar Git para rastrear las modificaciones en sus carpetas,
+- Conectar su repositorio local a un repositorio remoto en línea,
+- Confirmar los cambios,
+- Sincronizar sus repositorios locales y remotos.
+
+Todo esto debería ayudar a ponerle en marcha y ser suficiente para la mayoría de sus necesidades de análisis epidemiológico. Normalmente no tenemos un uso tan avanzado como los desarrolladores.
+
+Sin embargo, debe saber que si quiere (o necesita) ir más allá, Git ofrece más potencia para simplificar los historiales de commit, revertir uno o varios commits, hacer cherry-pick de commits, etc. Algunas cosas pueden parecer pura magia, pero ahora que tiene los fundamentos, es más fácil construir sobre ellos.
+
+Tenga en cuenta que mientras el panel Git en Rstudio y Github Desktop son buenos para los principiantes / uso diario en nuestra línea de trabajo, no ofrecen una interfaz para algunas de las funciones intermedias / avanzadas de Git. Algunas interfaces más completas permiten hacer más cosas con apuntar y clicar (normalmente a costa de un diseño más complejo).
+
+Recuerde que, dado que puede utilizar cualquier herramienta en cualquier momento para realizar el seguimiento de su repositorio, puede instalar muy fácilmente una interfaz para probarla a veces, o para realizar alguna tarea compleja menos común ocasionalmente, mientras prefiere una interfaz simplificada para el resto del tiempo (por ejemplo, utilizando Github Desktop la mayor parte del tiempo, y cambiando a SourceTree o Gitbash para algunas tareas específicas).
+
+## 46.12 Comandos Git
+
+### Aprendizaje recomendado
+
+Para aprender los comandos de Git en un tutorial interactivo, consulte [este sitio web](https://learngitbranching.js.org/).
+
+### ¿Dónde escribir los comandos?
+
+Se introducen comandos en un entorno Git.
+
+*Opción 1* Puede abrir una nueva Terminal en RStudio. Esta pestaña está al lado de la Consola R. Si no puede escribir ningún texto en ella, clique en el menú desplegable debajo de “Terminal” y seleccione “Nueva terminal”. Escriba los comandos en el espacio parpadeante delante del signo de dólar “\$”.
+
+[![](images/github_terminal.png)](images/github_terminal.png)
+
+*Opción 2* También puede abrir un *shell* (un terminal para introducir comandos) clicando en el icono azul de “engranajes” en la pestaña Git (cerca del entorno de RStudio). Seleccione “Shell” en el menú desplegable. Se abrirá una nueva ventana en la que puede escribir los comandos después del signo de dólar “\$”.
+
+*Opción 3* Clique con el botón derecho para abrir “Git Bash here” que abrirá el mismo tipo de terminal, o abra *Git Bash* desde su lista de aplicaciones. [Más información para principiantes sobre Git Bash](https://happygitwithr.com/shell.html), cómo encontrarlo y algunos comandos bash que necesitará.
+
+### Ejemplos de comandos
+
+A continuación presentamos algunos comandos git comunes. Cuando los use, tenga en cuenta qué rama está activa (check-out), ¡ya que eso cambiará la acción!
+
+En los comandos de abajo, `<name>` representa un nombre de rama. `<commit_hash>` representa el hash ID de un commit específico. `<num>` representa un número. No escriba los símbolos \< o \>.
+
+| Comando Git | Acción |
+|----|----|
+| `git branch <name>` | Crear una nueva rama con el nombre `<name>` |
+| `git checkout <name>` | Cambiar la rama actual a `<name>` |
+| `git checkout -b <name>` | Atajo para crear una nueva rama *y* cambiar a ella |
+| `git status` | Ver los cambios no rastreados |
+| `git add <file>` | Preparar un archivo (estadiarlo) |
+| `git commit -m <message>` | Confirmar los cambios preparados a la rama actual con el mensaje |
+| `git fetch` | Obtener los commits del repositorio remoto. |
+| `git pull` | Actualizar desde el repositorio remoto en la rama actual |
+| `git push` | Enviar los commits locales al directorio remoto |
+| `git switch` | Una alternativa a `git checkout` que se está introduciendo progresivamente en Git |
+| `git merge <name>` | Fusionar la rama `<name>` en la rama actual |
+| `git rebase <name>` | Añadir los commits de la rama actual a la rama `<name>` |
+
+## 46.13 Recursos
+
+Gran parte de esta página está inspirada en [this “Happy Git with R” website](https://happygitwithr.com/) by Jenny Bryan. Hay una sección muy útil de este sitio web que le ayuda a solucionar errores comunes relacionados con Git y R.
+
+La [documentación y guía de inicio de Github.com.](https://docs.github.com/en/github).
+
+La hoja de trucos de RStudio [“IDE” cheatsheet](https://www.rstudio.com/wp-content/uploads/2016/01/rstudio-IDE-cheatsheet.pdf) que incluye consejos sobre Git con RStudio.
+
+<https://ohi-science.org/news/github-going-back-in-time>
+
+**Comandos Git para principiantes**
+
+Un [tutorial interactivo](https://learngitbranching.js.org) para aprender los comandos de Git.
+
+<https://www.freecodecamp.org/news/an-introduction-to-git-for-absolute-beginners-86fa1d32ff71/>: bueno para aprender los fundamentos absolutos para rastrear los cambios en una carpeta en en su propio ordenador.
+
+Buen esquema para entender las ramas: <https://speakerdeck.com/alicebartlett/git-for-humans>
+
+**Tutoriales que cubren temas básicos y más avanzados**
+
+<https://tutorialzine.com/2016/06/learn-git-in-30-minutes>
+
+<https://dzone.com/articles/git-tutorial-commands-and-operations-in-git> <https://swcarpentry.github.io/git-novice/> (short course) <https://rsjakob.gitbooks.io/git/content/chapter1.html>
+
+El libro [Pro Git](https://git-scm.com/book/en/v2) está considerado como una referencia oficial. Aunque algunos capítulos están bien, suele ser un poco *técnico*. Probablemente es un buen recurso una vez que haya usado un poco Git y quiera aprender con un poco más de precisión lo que sucede y cómo ir más allá.
