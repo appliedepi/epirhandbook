@@ -44,12 +44,17 @@ whitespace, or with `。`, `？` or `！`. The forms are tested in this order:
 
   name      the bold text is one entry of checks/bold-names.txt, exactly and case-sensitive.
             **dplyr**, **data.table**, **RStudio**.
-  lead-in   it starts a sentence, and its text ends in `:` or `：`, or the first character
-            after it, spaces skipped, is `:` or `：`. **NOTE:**, **注意：**, **Remarque** :.
+  mark-outside  it starts a sentence, and the first character after it, spaces skipped, is
+            a colon (`:`, `：`) or a closing mark (`.`, `?`, `!`, `。`, `？`, `！`). F1 B9
+            puts that colon or mark inside the bold, so **NOTE**: and **A sentence**. are
+            this form, not a lead-in or a sentence.
+  lead-in   it starts a sentence, and its text ends in `:` or `：`. **NOTE:**, **注意：**,
+            **Remarque :**.
   sentence  it starts a sentence, and its text ends in `.`, `?`, `!`, `。`, `？` or `！`. Or
-            one of those marks follows it, then the line end or a sentence start. Or nothing
-            but whitespace follows it on its line.
+            nothing but whitespace follows it on its line.
   phrase    anything else, for example **not** in mid-sentence.
+
+Check 28 reports a `mark-outside` or `phrase` bold. Check 27 counts it as a plain bold.
 
 A line is the block, or the part of it between two LineBreaks, because a LineBreak starts a
 new rendered line. A Strong inside a Strong belongs to the outer one. Bold in code and in raw
@@ -82,11 +87,12 @@ removes nothing, in each of these cases:
   - its kind is not code, link, image or bold;
   - both sides are empty, or both sides are equal;
   - its reason does not start with an allowed cause, `(a) ` or `(b) `;
+  - its cause does not fit its kind: cause (a) needs kind code, and cause (b) kind link (F1 P4a);
   - it names no translated pair in scope.
 Cause (a) is a string literal in quotes inside a code span that the code does not use. Cause
 (b) is a link to a resource in the reader's language that replaces an English-only resource.
-Q1 withdrew cause (c). `file` is the chapter file name, `cleaning.qmd`. A bold row names
-`bold`, `name:<text>` or nothing on each side.
+Q1 withdrew cause (c). No cause fits kind image or bold, so a row of either kind is
+invalid. `file` is the chapter file name, `cleaning.qmd`.
 
 INPUTS. The declared languages come from `languages.yml` (`main:` and every `- code:` line).
 The stems come from the `.qmd` entries of `book.chapters` in `content/<main>/_quarto.yaml`. A
@@ -135,12 +141,14 @@ FIXTURES = HERE / 'fixtures' / 'parity'
 PROG = 'check-parity.py'
 KINDS = ('code', 'link', 'image', 'bold')
 HEADER = ['lang', 'file', 'section', 'kind', 'english', 'translation', 'reason']
+# The one kind that each allowed cause fits (F1 P4a).
+CAUSE_KIND = {'a': 'code', 'b': 'link'}
 NAMES_FILE = HERE / 'bold-names.txt'
 # The fixtures that every kind and every exception outcome need, both ways.
 REQUIRED = ('pass-same', 'pass-translated-bold', 'pass-code-block', 'pass-exception',
-            'fail-code-missing', 'fail-code-extra', 'fail-link-missing', 'fail-raw-html-link',
-            'fail-image-missing', 'fail-bold-name', 'fail-bold-count', 'fail-stale-exception',
-            'fail-invalid-exception')
+            'pass-exception-code', 'fail-code-missing', 'fail-code-extra', 'fail-link-missing',
+            'fail-raw-html-link', 'fail-image-missing', 'fail-bold-name', 'fail-bold-count',
+            'fail-stale-exception', 'fail-invalid-exception', 'fail-invalid-exception-kind')
 
 
 def stop(message):
@@ -340,16 +348,13 @@ def stringify(node):
     return stringify(c)
 
 
-BOLD_FORMS = ('name', 'lead-in', 'sentence', 'phrase')
+BOLD_FORMS = ('name', 'lead-in', 'sentence', 'mark-outside', 'phrase')
 NAMES = frozenset()
 SENT_PUNCT = '.?!。？！'
 LEAD_END = ':：'
 # Text before a bold span that ends a sentence: ASCII . ? ! then whitespace, or a CJK
 # sentence mark with or without whitespace.
 PRE_END = re.compile(r'(?:[.?!]\s+|[。？！]\s*)$')
-# Text after a bold span that ends its sentence: one sentence mark, spaces before it allowed,
-# then the line end or a sentence start.
-POST_END = re.compile(r'\s*(?:[.?!](?:\s|$)|[。？！])')
 INLINE_TYPES = {'Str', 'Space', 'SoftBreak', 'LineBreak', 'Code', 'Math', 'Strong', 'Emph',
                 'Underline', 'Strikeout', 'Superscript', 'Subscript', 'SmallCaps', 'Quoted',
                 'Cite', 'Link', 'Image', 'Span', 'RawInline', 'Note'}
@@ -369,19 +374,21 @@ def load_names(path=None):
 
 
 def classify(text, start, end):
-    """The B8 form of the bold span text[start:end] of one block: name, lead-in, sentence or
-    phrase. text is the block text as flatten() builds it."""
+    """The B8 form of the bold span text[start:end] of one block: name, lead-in, sentence,
+    mark-outside or phrase. text is the block text as flatten() builds it."""
     b = text[start:end].strip()
     if b in NAMES:
         return 'name'
     # A LineBreak ends a rendered line, so the line a bold belongs to is what it sees.
     before, after = text[:start].rsplit('\n', 1)[-1], text[end:].split('\n', 1)[0]
     starts = not before.strip() or PRE_END.search(before) is not None
-    # A tuple, so an empty string (nothing after the bold) is not a member.
-    if b and starts and (b[-1] in LEAD_END or after.lstrip()[:1] in tuple(LEAD_END)):
+    # B9: a lead-in holds its colon and a sentence its closing mark inside the bold. A tuple,
+    # so an empty string (nothing after the bold) is not a member.
+    if b and starts and after.lstrip()[:1] in tuple(LEAD_END + SENT_PUNCT):
+        return 'mark-outside'
+    if b and starts and b[-1] in LEAD_END:
         return 'lead-in'
-    if b and starts and (b[-1] in SENT_PUNCT or POST_END.match(after) is not None
-                         or not after.strip()):
+    if b and starts and (b[-1] in SENT_PUNCT or not after.strip()):
         return 'sentence'
     return 'phrase'
 
@@ -570,8 +577,13 @@ def invalid(fields):
         return 'both sides are empty'
     if en == tr:
         return 'english and translation are equal'
-    if not re.match(r'\((a|b)\) ', reason):
+    m = re.match(r'\((a|b)\) ', reason)
+    if not m:
         return 'the reason does not start with the cause (a) or (b)'
+    # F1 P4a: cause (a) is a string literal in a code span, cause (b) a localized link.
+    need = CAUSE_KIND[m.group(1)]
+    if kind != need:
+        return 'cause (%s) needs kind %s, not %s' % (m.group(1), need, kind)
     return None
 
 

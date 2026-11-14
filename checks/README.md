@@ -1256,19 +1256,21 @@ It names the language, the chapter, the section ordinal and its English heading,
 - `(a) `: a string literal in quotes inside a code span, which the code does not use, translated as an example value. A translated identifier or placeholder name is not cause (a).
 - `(b) `: a link to a resource in the reader's language that replaces an English-only resource.
 
+Cause (a) fits only kind `code`, and cause (b) fits only kind `link`. So no row of kind `image` or `bold` is valid.
+
 To add a row:
 
 1. Copy the language, the chapter file name, the section ordinal, the kind and the items from the finding.
 2. Put the English item in `english` and the translated item in `translation`.
 3. Write the cause, then one sentence that names the reason.
 
-A row that does not find each item it names is a `stale-exception` finding. A row with another cause, with equal sides or with a wrong field is an `invalid-exception` finding. Neither row excuses anything.
+A row that does not find each item it names is a `stale-exception` finding. A row with another cause, a cause that does not fit its kind, equal sides or a wrong field is an `invalid-exception` finding. Neither row excuses anything.
 
 **Limit.** The check compares the items of a section as a multiset. It cannot tell whether an item stands in the right sentence, so a code span that moves to another sentence of the same section passes.
 
 The check exits 2 on a chapter whose English and translated heading counts differ, and it does not compare that chapter. Check 1 reports the same chapter.
 
-`--self-test` runs every fixture under `checks/fixtures/parity/`. Each fixture is a small tree with its own `languages.yml`, `content/`, `checks/parity-exceptions.tsv` and `expect.txt`. A fail fixture lists each expected finding line, and it MUST exit 1 with exactly those findings. A pass fixture MUST exit 0. Each kind and each exception finding has a fail fixture. A translated bold, a changed code block and an applied exception each have a pass fixture.
+`--self-test` runs every fixture under `checks/fixtures/parity/`. Each fixture is a small tree with its own `languages.yml`, `content/`, `checks/parity-exceptions.tsv` and `expect.txt`. A fail fixture lists each expected finding line, and it MUST exit 1 with exactly those findings. A pass fixture MUST exit 0. Each kind and each exception finding has a fail fixture, and so does a cause that does not fit its kind. A translated bold and a changed code block each have a pass fixture. An applied row of each cause has a pass fixture.
 
 The check exits 0 on no finding and 1 on a finding. It exits 2 on a missing or unusable input, with one message that names its full path. The inputs are `languages.yml`, the declared chapters, `checks/parity-exceptions.tsv` and `checks/bold-names.txt`.
 
@@ -1291,14 +1293,14 @@ Each finding names its rule:
   - a `:::` div fence
   - a pipe-table line
 - `bold-command`: a bold that starts with `git` and a git subcommand, such as `**git commit**`, also across one line break. Write the command in a code span. The match is case-sensitive, so **Git** as a product name passes.
-- `bold-form`: a bold that is not one of the three forms below. Remove the bold and keep the text.
+- `bold-form`: a bold that is not one of the three forms below. Remove the bold and keep the text. A bold with a colon or a closing mark directly after it, such as `**NOTE**:` or `**A sentence**.`, is a finding with the fault `mark-outside`. Move the colon or the mark inside the bold.
 - `quoted-call`: a call such as `f()`, `pkg::f()` or `f(x)` in quotes in prose, outside code spans. Seven quote forms count: straight double and single, curly double and single, `« »`, `„ “` and `「」`. A non-ASCII letter between the parentheses makes it no call, so a label with its translation, such as `"Stage(Aşama)"`, passes. Write the call in a code span, or remove the quotes where the English has no code span.
 
 A bold MUST have one of three forms, in every language:
 
 - `name`: the bold text is exactly one line of `checks/bold-names.txt`, such as **dplyr**, **data.table** or **RStudio**.
-- `lead-in`: from the start of a sentence up to and including a colon, such as **NOTE:** or **注意：**.
-- `sentence`: a whole sentence. A bold line with no closing mark, such as **Load packages**, is a whole sentence.
+- `lead-in`: from the start of a sentence up to and including a colon, such as **NOTE:** or **注意：**. The colon stands inside the bold. French keeps its space before the colon, as in **Remarque :**.
+- `sentence`: a whole sentence. Its closing mark (`.`, `?`, `!`, `。`, `？` or `！`) stands inside the bold. A bold line with no closing mark, such as **Load packages**, is a whole sentence.
 
 `checks/bold-names.txt` holds one name per line, and a comment above each group names its source. These are the groups:
 
@@ -1315,7 +1317,7 @@ A finding reads `<lang> content/<lang>/<stem>.qmd:<line> <rule> [<fault>] | <tex
 
 A run applies all five rules. `--rules <rule>[,...]` applies only the rules it names, such as `--rules quoted-call`.
 
-`--self-test` runs every fixture under `checks/fixtures/markdown-form/`. Each fixture is a small tree with its own `languages.yml`, `content/` and `expect.txt`. A fail fixture lists each expected finding as the part of its line before ` | `. Each rule has a fail fixture and a pass fixture. Each exemption of `heading-blank-before` has a pass fixture, and each quote form has a fail fixture. **Git** as a product name and `"Stage(Aşama)"` each have a pass fixture.
+`--self-test` runs every fixture under `checks/fixtures/markdown-form/`. Each fixture is a small tree with its own `languages.yml`, `content/` and `expect.txt`. A fail fixture lists each expected finding as the part of its line before ` | `. Each rule has a fail fixture and a pass fixture. Each exemption of `heading-blank-before` has a pass fixture, and each quote form has a fail fixture. A colon and a closing mark outside a bold each have a fail fixture, and inside a bold a pass fixture. **Git** as a product name and `"Stage(Aşama)"` each have a pass fixture.
 
 The check exits 0 on no finding and 1 on a finding. It exits 2 on a missing or unusable input, with one message that names its full path. The inputs are `languages.yml`, the declared chapters and `checks/bold-names.txt`.
 
@@ -1349,6 +1351,8 @@ The check does not count these parts of a page:
 - each `<nav>` inside `<main>`: the breadcrumbs and the page navigation, for the same reason.
 - an `<a>` inside `<pre>`. Quarto writes an anchor `<a href="#cb1-1">` on each line of a code block. A translated code block with one more blank line would otherwise read as one more link.
 - the text of `<script>` and `<style>`, which is not HTML.
+
+Unit H of issue 466 measured the `<nav>` and `<pre>` exclusions on a full render of the 8 languages, 51 pages each. The site held 91,330 `<a href>` inside `<pre>`, and each href had the form `#cb<n>-<n>`, so none was a real link. With these exclusions, the `a` count of each translated section equalled the English count. On a test page, H removed 5 links from the navigation, and the counts still matched. The 5 links came from the sidebar, the page navigation, the footer, the margin table of contents and the breadcrumbs.
 
 This finding is from a copy of the November 2026 site with one list item removed from the Turkish page:
 

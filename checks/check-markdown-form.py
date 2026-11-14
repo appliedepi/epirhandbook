@@ -2,8 +2,8 @@
 """Fail on markdown that departs from the default form, in every language.
 
 Check 28. It reads every declared chapter of every language, English and `index.qmd`
-included. The definition comes from issue 466, second follow-up, contract P6, P11, Q2 and B8.
-Five rules apply, and each finding names its rule:
+included. The definition comes from issue 466, second follow-up, contract P6, P11, Q2, B8 and
+F1. Five rules apply, and each finding names its rule:
 
   heading-form          A heading line MUST be 1 to 6 `#`, exactly one space, then the title
                         (P11). A trailing attribute block `{...}` and trailing spaces are
@@ -22,7 +22,10 @@ Five rules apply, and each finding names its rule:
   quoted-call           A call MUST NOT stand in quotes in prose outside code spans (P6),
                         because a call belongs in a code span. The match is case-sensitive.
   bold-form             A bold MUST be one of the three B8 forms: `name`, `lead-in` or
-                        `sentence`. A `phrase` bold is a finding.
+                        `sentence`. A `phrase` bold is a finding. A bold with its colon or
+                        closing mark directly after it, spaces skipped, is a finding with
+                        the detail `mark-outside` (F1 B9): **NOTE**: and **A sentence**.
+                        The colon or mark MUST stand inside the bold.
 
 A run applies the rules that `--rules <rule>[,<rule>...]` names. Without `--rules` it applies
 DEFAULT_RULES, which is all five rules. The self-test applies all five rules too.
@@ -121,7 +124,9 @@ RULES = ('heading-form', 'heading-blank-before', 'bold-command', 'quoted-call', 
 # The rules a run applies when --rules names none.
 DEFAULT_RULES = RULES
 # Each rule has a fixture that MUST fail and one that MUST pass. Each exemption of
-# heading-blank-before has a pass fixture, and each quote form has a fail fixture.
+# heading-blank-before has a pass fixture, and each quote form has a fail fixture. A colon
+# and a closing mark outside a bold each have a fail fixture, and inside a bold a pass fixture
+# (F1 B9).
 REQUIRED = (
     'fail-heading-form', 'pass-heading-form',
     'fail-blank-before-paragraph', 'fail-blank-before-list', 'pass-blank-before-comment',
@@ -133,7 +138,8 @@ REQUIRED = (
     'fail-quoted-call-curly-double', 'fail-quoted-call-curly-single',
     'fail-quoted-call-guillemets', 'fail-quoted-call-low-high', 'fail-quoted-call-corner',
     'pass-quoted-call-not-a-call', 'pass-quoted-call-code', 'pass-quoted-call-non-ascii-label',
-    'fail-bold-form-phrase', 'pass-bold-form')
+    'fail-bold-form-phrase', 'fail-bold-form-colon-outside', 'fail-bold-form-mark-outside',
+    'pass-bold-form', 'pass-bold-form-mark-inside')
 
 
 def die(message):
@@ -419,14 +425,16 @@ def locate(src, texts):
 
 
 def bold_form(path, pandoc):
-    """([(line number, 'bold-form', '', text)] of the phrase bolds, bolds, unlocated, None) for
-    one chapter, or (None, 0, 0, why)."""
+    """([(line number, 'bold-form', detail, text)] of the phrase and mark-outside bolds, bolds,
+    unlocated, None) for one chapter, or (None, 0, 0, why). The detail of a mark-outside bold
+    is `mark-outside`, and that of a phrase bold is empty."""
     doc, src, why = P.pandoc_json(path, pandoc)
     if why:
         return None, 0, 0, why
     bolds = P.bold_forms(doc['blocks'])
     where = locate(src, [t for _, t in bolds])
-    found = [(n, 'bold-form', '', t) for (f, t), n in zip(bolds, where) if f == 'phrase']
+    found = [(n, 'bold-form', '' if f == 'phrase' else f, t)
+             for (f, t), n in zip(bolds, where) if f in ('phrase', 'mark-outside')]
     return found, len(bolds), sum(1 for n in where if n == 0), None
 
 
